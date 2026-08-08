@@ -140,27 +140,28 @@ published `manifestDigest`. Asserted in CI. This pins the canonical form —
 recursively sorted keys, `JSON.stringify` primitives, UTF-8, lowercase hex
 SHA-256 — and the identifier shapes.
 
-**Receipt layer: NOT reconciled.** Jobrolo published three expected replay-key
-values without the derivation that produces them. An exhaustive search over
-every subset, ordering, separator, prefix, and receipt-type spelling of the
-eleven published identity fields — 6,408,192 candidates — reproduced none of the
-three, so at least one input to Jobrolo's derivation is absent from the
-published vectors (most likely `policyVersion`, `keyId`, `receiptId`, or a
-receipt-specific timestamp, none of which appear in the golden manifest).
+**Receipt layer: defined here.** Jobrolo's brief supplied three expected
+replay-key values without the derivation that produces them. An exhaustive
+search over every subset, ordering, separator, prefix, and receipt-type spelling
+of the eleven published identity fields — 6,408,192 candidates — reproduced none
+of them. Jobrolo's repository was then checked directly and contains **no
+homeowner-share implementation at all**: no branch, no pull request, and no
+occurrence of `homeowner_release`, `homeowner-share`, `hproj_`, `hshr_`,
+`hrcp_`, `replayKey`, or `manifestDigest` on main.
 
-Homesrolo therefore records those three values verbatim and **asserts no
-equality against them**. `receiptReplayKey` is a correct local replay key and
-nothing more. Certifying a guessed derivation in CI would make Homesrolo claim
-compatibility with a wire format Jobrolo never agreed to, which is the exact
-divergence this contract exists to prevent.
+There was no implementation to be compatible with, so waiting for the derivation
+could not terminate. Homesrolo therefore **defines** this layer, and Jobrolo
+implements against it. The specification is `docs/RECEIPT_WIRE_SPEC.md`; every
+value in it is produced by `homeowner-share.v1.ts` and asserted in CI, so the
+document and the code cannot drift.
 
-**To close it,** Jobrolo publishes the receipt field set, the signing-input
-construction, and the replay-key derivation (fields, order, domain separation).
-`receiptIdentity`, `receiptReplayKey`, and `receiptSigningInput` are then matched
-to it and `RECEIPT_WIRE_RECONCILIATION.receipts` flips to `reconciled`, at which
-point the golden replay keys become live CI assertions. Until then, **no receipt
-produced by either side is meaningful to the other**, and nothing in this repo
-should be read as claiming otherwise.
+The three original values are kept in `SUPERSEDED_REPLAY_KEYS` as a tripwire,
+with a test asserting this implementation never produces them. If a Jobrolo
+implementation ever emits one, the two sides have diverged.
+
+Until a Jobrolo implementation reproduces the vectors in the spec, **cross-repo
+receipt exchange is unbuilt**, and nothing in this repo should be read as
+claiming otherwise.
 
 ## Property identity
 

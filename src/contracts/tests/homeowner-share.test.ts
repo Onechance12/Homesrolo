@@ -16,6 +16,7 @@ import {
   PROJECTION_SOURCE,
   RECEIPT_WIRE_RECONCILIATION,
   SHARE_LIMITS,
+  SUPERSEDED_REPLAY_KEYS,
   STRUCTURAL_VALIDATION_WARNING,
   WIRE_GOLDEN,
   appendReceipt,
@@ -29,6 +30,7 @@ import {
   parseShareManifest,
   parseSignedReceipt,
   receiptReplayKey,
+  receiptSigningInput,
   type Ledger,
   type ManifestArtifact,
   type ReceiptCore,
@@ -154,23 +156,71 @@ test('canonicalization is insertion-order independent', () => {
   assert.equal(canonicalJson(reversed), WIRE_GOLDEN.manifestJson)
 })
 
-test('the receipt layer is recorded as unreconciled and asserts no golden equality', () => {
-  // The manifest layer is proven. The receipt layer is not: Jobrolo published
-  // three replay keys without the derivation that produces them, so Homesrolo
-  // records the values verbatim and refuses to certify a guessed derivation.
-  assert.equal(RECEIPT_WIRE_RECONCILIATION.manifest, 'reconciled')
-  assert.equal(RECEIPT_WIRE_RECONCILIATION.receipts, 'unreconciled')
-
-  for (const key of ['authorizationReplayKey', 'consentReplayKey', 'revocationReplayKey'] as const) {
-    assert.match(WIRE_GOLDEN[key], /^[0-9a-f]{64}$/, `${key} must be recorded verbatim for reconciliation`)
+test('the golden receipts parse under this contract', () => {
+  for (const core of [WIRE_GOLDEN.authorization, WIRE_GOLDEN.consent, WIRE_GOLDEN.revocation]) {
+    const parsed = parseSignedReceipt({ receipt: core, signature: SIGNATURE })
+    assert.equal(parsed.ok, true, parsed.ok ? '' : parsed.errors.join('; '))
   }
+})
 
-  // Documented divergence: the local key is stable and distinct per receipt,
-  // but it is NOT Jobrolo's. Flipping the flag above without matching the
-  // derivation would make this assertion fail, which is the intent.
-  const local = receiptReplayKey(authorization)
-  assert.match(local, /^[0-9a-f]{64}$/)
-  assert.notEqual(local, WIRE_GOLDEN.authorizationReplayKey)
+test('the golden receipts bind to the golden manifest', () => {
+  const parsed = parseShareManifest(JSON.parse(WIRE_GOLDEN.manifestJson))
+  assert.ok(parsed.ok)
+  const result = bindAuthorities(parsed.value, WIRE_GOLDEN.authorization, WIRE_GOLDEN.consent)
+  assert.equal(result.bound, true, result.bound ? '' : result.errors.join('; '))
+})
+
+test('the golden replay keys are reproduced exactly', () => {
+  // These are the values the other side must reproduce. They are produced by
+  // the functions in this file, so the published spec and the implementation
+  // cannot drift apart.
+  assert.equal(receiptReplayKey(WIRE_GOLDEN.authorization), WIRE_GOLDEN.authorizationReplayKey)
+  assert.equal(receiptReplayKey(WIRE_GOLDEN.consent), WIRE_GOLDEN.consentReplayKey)
+  assert.equal(receiptReplayKey(WIRE_GOLDEN.revocation), WIRE_GOLDEN.revocationReplayKey)
+})
+
+test('the golden signing inputs are reproduced exactly', () => {
+  assert.equal(sha256Hex(receiptSigningInput(WIRE_GOLDEN.authorization)), WIRE_GOLDEN.authorizationSigningInputDigest)
+  assert.equal(sha256Hex(receiptSigningInput(WIRE_GOLDEN.consent)), WIRE_GOLDEN.consentSigningInputDigest)
+  assert.equal(sha256Hex(receiptSigningInput(WIRE_GOLDEN.revocation)), WIRE_GOLDEN.revocationSigningInputDigest)
+})
+
+test('the signing input covers algorithm, key, and every receipt field', () => {
+  const base = WIRE_GOLDEN.authorization
+  const input = receiptSigningInput(base)
+  assert.ok(input.includes(base.algorithm), 'algorithm must be inside the signed region')
+  assert.ok(input.includes(base.keyId), 'keyId must be inside the signed region')
+  // Changing any receipt field changes the signed bytes.
+  for (const [field, value] of [
+    ['keyId', 'other-key-2026a'],
+    ['policyVersion', 'homeowner-disclosure.v2'],
+    ['issuedAt', '2026-08-08T12:00:01.000Z'],
+    ['manifestDigest', 'b'.repeat(64)],
+  ] as const) {
+    assert.notEqual(receiptSigningInput({ ...base, [field]: value } as ReceiptCore), input, `${field} must be signed`)
+  }
+})
+
+test('this repository defines the receipt layer, and says so', () => {
+  assert.equal(RECEIPT_WIRE_RECONCILIATION.manifest, 'reconciled_from_jobrolo')
+  assert.equal(RECEIPT_WIRE_RECONCILIATION.receipts, 'defined_by_homesrolo')
+})
+
+test('the superseded replay keys are never produced', () => {
+  // Tripwire. No derivation over the published fields reproduces these, and no
+  // code in either repository emits them. If one ever appears, the two sides
+  // have diverged and this fails.
+  const produced = new Set([
+    receiptReplayKey(WIRE_GOLDEN.authorization),
+    receiptReplayKey(WIRE_GOLDEN.consent),
+    receiptReplayKey(WIRE_GOLDEN.revocation),
+    receiptReplayKey(authorization),
+    receiptReplayKey(consent),
+  ])
+  for (const stale of SUPERSEDED_REPLAY_KEYS) {
+    assert.equal(produced.has(stale), false, `superseded key ${stale.slice(0, 12)}… must never be produced`)
+  }
+  assert.equal(SUPERSEDED_REPLAY_KEYS.length, 3)
 })
 
 test('the local replay key is stable and identity-sensitive', () => {

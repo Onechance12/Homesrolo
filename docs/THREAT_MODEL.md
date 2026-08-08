@@ -139,10 +139,9 @@ Before any real homeowner:
 2. Generate a dedicated Homesrolo consent-signing Ed25519 key, distinct from
    every other secret and never shared with Jobrolo. Publish only its public
    half, and agree a rotation and `keyId` scheme with Jobrolo first.
-3. Reconcile the receipt layer with Jobrolo (see `RECEIPT_WIRE_RECONCILIATION`
-   in `src/contracts/homeowner-share.v1.ts`) so both sides derive identical
-   signing input and replay keys. **Until that is done, no receipt produced by
-   one side is meaningful to the other.**
+3. Confirm a Jobrolo implementation reproduces every golden vector in
+   `docs/RECEIPT_WIRE_SPEC.md`. **Until that is done, no receipt produced by one
+   side is meaningful to the other.**
 4. Run a synthetic homeowner canary end to end.
 5. Prove that cross-share, cross-recipient, revoked, withdrawn, expired,
    replayed, conflicting, oversized, and malformed requests all fail closed, and

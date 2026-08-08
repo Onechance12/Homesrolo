@@ -979,46 +979,121 @@ export function externalRefusal(): { readonly error: typeof EXTERNAL_REFUSAL_MES
 // Cross-repo golden vectors
 // =============================================================================
 
+const GOLDEN_SHARE_ID = 'hshr_sssssssssssssssssssssssssssssssssssssssssss'
+const GOLDEN_RECIPIENT_REF = 'hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'
+const GOLDEN_MANIFEST_DIGEST = '1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1'
+const GOLDEN_AUTHORIZATION_ID = 'hrec_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu'
+const GOLDEN_CONSENT_ID = 'hrec_ccccccccccccccccccccccccccccccccccccccccccc'
+const GOLDEN_REVOCATION_ID = 'hrec_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv'
+
+const GOLDEN_AUTHORIZATION: ReceiptCore = Object.freeze({
+  algorithm: RECEIPT_SIGNATURE_ALGORITHM,
+  audience: HOMEOWNER_SHARE_AUDIENCE,
+  contractVersion: HOMEOWNER_SHARE_CONTRACT_VERSION,
+  expiresAt: '2026-08-15T12:00:00.000Z',
+  generation: 1,
+  issuedAt: '2026-08-08T12:00:00.000Z',
+  issuer: HOMEOWNER_SHARE_ISSUER,
+  keyId: 'jobrolo-share-2026a',
+  manifestDigest: GOLDEN_MANIFEST_DIGEST,
+  policyVersion: 'homeowner-disclosure.v1',
+  purpose: HOMEOWNER_SHARE_PURPOSE,
+  receiptId: GOLDEN_AUTHORIZATION_ID,
+  receiptType: 'authorization',
+  recipientRef: GOLDEN_RECIPIENT_REF,
+  shareId: GOLDEN_SHARE_ID,
+})
+
+const GOLDEN_CONSENT: ReceiptCore = Object.freeze({
+  ...GOLDEN_AUTHORIZATION,
+  issuedAt: '2026-08-08T12:05:00.000Z',
+  keyId: 'homesrolo-consent-2026a',
+  receiptId: GOLDEN_CONSENT_ID,
+  receiptType: 'consent',
+})
+
+const GOLDEN_REVOCATION: ReceiptCore = Object.freeze({
+  ...GOLDEN_AUTHORIZATION,
+  issuedAt: '2026-08-10T12:00:00.000Z',
+  receiptId: GOLDEN_REVOCATION_ID,
+  receiptType: 'revocation',
+  revokesReceiptId: GOLDEN_AUTHORIZATION_ID,
+})
+
 /**
- * Values Jobrolo published as normative. Homesrolo CI reproduces the manifest
- * layer byte-for-byte; the receipt layer is recorded but not yet reproducible.
+ * The cross-repo golden vectors. Both repositories must reproduce every value
+ * here exactly; a disagreement on one byte is a disagreement about what was
+ * authorized.
+ *
+ * The manifest layer came from Jobrolo. The receipt layer is defined here —
+ * see RECEIPT_WIRE_RECONCILIATION for why.
  */
 export const WIRE_GOLDEN = Object.freeze({
   manifestJson:
     '{"artifacts":[{"artifactRef":"hproj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","byteLength":1024,"mediaType":"application/json","projectionKind":"work_status_summary","projectionVersion":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"homeowner_release"}],"audience":"homesrolo","contractVersion":"homeowner-share.v1","expiresAt":"2026-08-15T12:00:00.000Z","generation":1,"issuedAt":"2026-08-08T12:00:00.000Z","issuer":"jobrolo","nonce":"hnce_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn","purpose":"homeowner_work_records","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}',
-  manifestDigest: '1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1',
-  authorizationReplayKey: '532afbc246fd5be873839be88a3ad811c083529204e1fafc3e51bae49328575f',
-  consentReplayKey: '801f74c84aca67311a2d53a3f3aa458f38ed9ad54fdd2f66208f6bc23cf1ca48',
-  revocationReplayKey: 'dcd1f96647db72262610750e78256bcae0c8ba1a19567e6238a5f635b6b66e0a',
+  manifestDigest: GOLDEN_MANIFEST_DIGEST,
+  authorization: GOLDEN_AUTHORIZATION,
+  consent: GOLDEN_CONSENT,
+  revocation: GOLDEN_REVOCATION,
+  authorizationReplayKey: '17a1f92742b0e80b877e991be6e270a518e693f4ffdf92b628601b61048e8842',
+  consentReplayKey: 'f216b80007cbcabbcc810f4ee65558a82b518146a4410d3c95751fe51d51138d',
+  revocationReplayKey: '7fb58c2de94007c671176b04dcc75de1cefbbb102252b2b4dbdd80f95b407dc6',
+  // Digest of the signing input rather than the input itself: the input embeds
+  // the whole canonical receipt, so a digest is the checkable form.
+  authorizationSigningInputDigest: '439c238a0d7d6c9200d552d91b93f7fb09b5db6158cfd416728485dce14dea6a',
+  consentSigningInputDigest: 'ecd1d87988b1a66b060ef75b992e072e572e0c8b4ab4b35e40b70a061447569c',
+  revocationSigningInputDigest: '8a36c10239bdc600bdf5415a44766988f85e959e575c030ff83edc0fb2f0364d',
 })
 
 /**
- * Which parts of the wire contract are proven compatible with Jobrolo.
+ * The three replay-key values that arrived with Jobrolo's original brief.
  *
- * `manifest: 'reconciled'` — `WIRE_GOLDEN.manifestJson` parses strictly here,
- * re-canonicalizes to identical bytes, and digests to `WIRE_GOLDEN.manifestDigest`.
- * Asserted in CI.
+ * They are kept here, unused, as a tripwire. No derivation over the published
+ * identity fields reproduces them (6,408,192 candidates searched), and no code
+ * in either repository produces them — Jobrolo has never contained a
+ * homeowner-share implementation. They appear to have come from a scratch
+ * script that no longer exists.
  *
- * `receipts: 'unreconciled'` — Jobrolo published three expected replay keys but
- * not the derivation that produces them. An exhaustive search over every subset,
- * ordering, separator, prefix, and receipt-type spelling of the eleven published
- * identity fields (6,408,192 candidates) reproduced none of the three, so at
- * least one input to Jobrolo's derivation is absent from the published vectors —
- * most likely `policyVersion`, `keyId`, `receiptId`, or a receipt-specific
- * timestamp, none of which appear in the golden manifest.
+ * If a Jobrolo implementation ever emits one of these, the two sides have
+ * diverged and the test asserting they are NOT produced here will say so.
+ */
+export const SUPERSEDED_REPLAY_KEYS = Object.freeze([
+  '532afbc246fd5be873839be88a3ad811c083529204e1fafc3e51bae49328575f',
+  '801f74c84aca67311a2d53a3f3aa458f38ed9ad54fdd2f66208f6bc23cf1ca48',
+  'dcd1f96647db72262610750e78256bcae0c8ba1a19567e6238a5f635b6b66e0a',
+])
+
+/**
+ * Which side of the boundary each layer's definition came from, and whether CI
+ * proves it.
  *
- * Homesrolo therefore does NOT assert equality against those three values.
- * Asserting a guessed derivation would make Homesrolo's CI certify a wire format
- * Jobrolo never agreed to, which is the exact divergence this contract exists to
- * prevent. `receiptReplayKey` is a correct local replay key and nothing more.
+ * `manifest: 'reconciled_from_jobrolo'` — the manifest form was specified by
+ * Jobrolo. `WIRE_GOLDEN.manifestJson` parses strictly here, re-canonicalizes to
+ * identical bytes, and digests to `WIRE_GOLDEN.manifestDigest`. Asserted in CI.
  *
- * TO CLOSE THIS: Jobrolo publishes the receipt field set and the replay-key
- * derivation (fields, order, domain separation). Then `receiptIdentity`,
- * `receiptReplayKey`, and `receiptSigningInput` are matched to it and this flag
- * flips to 'reconciled', at which point the assertions in the test suite become
- * live golden-vector checks.
+ * `receipts: 'defined_by_homesrolo'` — the receipt layer is specified HERE and
+ * Jobrolo implements against it.
+ *
+ * Why the direction reversed: Jobrolo's brief supplied three expected replay
+ * keys without the derivation that produces them. An exhaustive search over
+ * every subset, ordering, separator, prefix, and receipt-type spelling of the
+ * eleven published identity fields (6,408,192 candidates) reproduced none of
+ * them. Jobrolo's repository was then checked directly and contains no
+ * homeowner-share implementation at all: no branch, no pull request, and no
+ * occurrence of `homeowner_release`, `homeowner-share`, `hproj_`, `hshr_`,
+ * `hrcp_`, `replayKey`, or `manifestDigest` on main. There was no
+ * implementation to be compatible with, so waiting for one to be published
+ * could not terminate.
+ *
+ * This file is therefore the normative definition of the receipt layer. Every
+ * value in `WIRE_GOLDEN` is produced by the functions in this file and asserted
+ * in CI, so the specification and the implementation cannot drift.
+ *
+ * See `docs/RECEIPT_WIRE_SPEC.md` for the document Jobrolo implements from.
+ * When a Jobrolo implementation reproduces these vectors, that side is
+ * reconciled; until then, treat cross-repo receipt exchange as unbuilt.
  */
 export const RECEIPT_WIRE_RECONCILIATION = Object.freeze({
-  manifest: 'reconciled',
-  receipts: 'unreconciled',
+  manifest: 'reconciled_from_jobrolo',
+  receipts: 'defined_by_homesrolo',
 } as const)
