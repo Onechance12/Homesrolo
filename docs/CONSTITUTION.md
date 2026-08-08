@@ -90,13 +90,33 @@ Design properties, all asserted by tests:
   neighbor, "asking for a friend", retractions, and authority-override attempts
   are recorded for audit and then ignored: the wrapper is stripped and the
   residual request is judged on its own terms, with the original also scanned.
-- **Order independence.** Rules pair a topic signal with a trigger signal in the
-  same sentence, in any order, because people write "the offer was lowball" as
-  readily as "is the offer fair".
+- **Order independence.** Rules pair a topic signal with a trigger signal in one
+  window, in any order, because people write "the offer was lowball" as readily
+  as "is the offer fair".
+- **Adjacent sentences are one window.** "My carrier made an offer. Is it fair?"
+  is a single request wearing two sentences. Scoring each sentence alone finds a
+  topic with no trigger, a trigger with no topic, and answers it. The window
+  stops at two, so an unrelated topic five sentences back cannot combine with a
+  later trigger.
+- **Advice does not need the word "should".** The response auditor catches bare
+  imperatives — "Invoke appraisal immediately.", "Take the offer; twelve
+  thousand dollars is plenty." — because grammatical mood is not a boundary.
+- **A refusal that names the boundary is not a violation of it.** "I cannot tell
+  you that your policy covers this loss" contains the exact words of a coverage
+  conclusion while asserting the opposite. The auditor recognizes a first-person
+  epistemic refusal or a universal prohibition and does not flag what follows
+  it. The guard is narrow: a bare "not" does not qualify, so "you should not
+  accept that offer" is still caught — that is advocacy with a negative sign.
+  Advocacy that *precedes* the hedge is also still caught.
+- **All eleven categories are audited on both sides.** A request the classifier
+  refuses and an answer the auditor would publish is a hole; the test suite pins
+  a vector for every category in both directions.
 - **Over-refusal is a failure too.** Definition and general-education requests
-  must stay answerable, and a dedicated test list asserts they are.
+  must stay answerable. Every category carries a named safe-education vector
+  that must not be refused, alongside its prohibited vector.
 - **Mixed intent refuses.** A message that pairs a legitimate question with a
-  prohibited one is refused on the prohibited half.
+  prohibited one is refused on the prohibited half, and is not counted as
+  educational.
 - **Each turn is judged alone.** A benign opener cannot establish permission for
   a later prohibited turn.
 

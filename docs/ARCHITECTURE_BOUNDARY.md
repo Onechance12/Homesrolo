@@ -47,30 +47,54 @@ tenant data of its own and performs no claim work.
 
 ## Data direction
 
+Nothing is fetched by asking a question. Disclosure is described up front by an
+immutable **manifest** and unlocked by two independently signed **receipts**.
+
 ```
-  Homesrolo                         Jobrolo
-  ---------                         -------
-  homeowner identity                contractor tenants
-  consent and acceptance            jobs, documents, photos
-  education-only assistant          authorization to disclose
-        |                                  |
-        |  signed, versioned request       |
-        |  "what may this homeowner see    |
-        |   for this exact share?"         |
-        +--------------->------------------+
-                    answer or refusal
+  Jobrolo                                        Homesrolo
+  -------                                        ---------
+  contractor tenants                             homeowner identity
+  jobs, documents, photos                        acceptance and consent
+  builds homeowner_release projections           education-only assistant
+
+  1. manifest         immutable, names the exact projections for one share,
+                      each pinned by SHA-256, with its own expiry
+                          |
+                          v
+  2. authorization    Ed25519, signed by Jobrolo's key, binds to the
+     receipt          manifest digest
+                          |
+                          v
+  3. consent receipt  Ed25519, signed by Homesrolo's own independent key,
+                      binds to the SAME manifest digest
+                          |
+                          v
+  4. revocation       append-only, either side, terminal
+     receipts
 ```
 
-No shared database. No replication. No background synchronization. No
-Homesrolo write path into Jobrolo records. Homesrolo asks a narrow question and
-receives a narrow answer, or a refusal.
+Both receipts must be live and bound to the same manifest digest at read time.
+Either alone is nothing. Absence of a signal is never permission.
+
+No shared database. No replication. No background synchronization. No Homesrolo
+write path into Jobrolo records.
 
 ## Identity
 
-Homeowner identity lives only in Homesrolo. Jobrolo receives an opaque
-`homeownerRef` and never a phone number, email, or name. Homesrolo receives an
-opaque `shareId` and `issuerRef` and never a tenant name, project id, customer
-record, or storage path.
+Homeowner identity lives only in Homesrolo. Jobrolo never receives a phone
+number, email, or name; the homeowner appears in the contract only as an opaque
+`recipientRef`. Homesrolo receives an opaque `shareId` and `recipientRef` and
+never a tenant name, project id, customer record, filename, or storage path.
+
+Every identifier is a fixed prefix plus 43 base64url characters (`hshr_`,
+`hrcp_`, `hproj_`, `hnce_`, `hrec_`). Identifier shapes that could carry meaning
+are rejected, so an id can never become a side channel for an address, a phone
+number, or a claim number.
+
+**The signing keys are independent.** Jobrolo signs authorizations with its key;
+Homesrolo signs consent with its own. Neither side holds the other's key, so
+neither can manufacture the other's authority, and compromising one system does
+not produce a complete disclosure.
 
 ## Naming
 
@@ -82,14 +106,61 @@ not public branding and are out of scope for this rule.
 
 ## V1 sharing scope
 
-Work records only: inspection photos, roof measurements, scope of work,
-completion records, warranty documents, and job timeline events.
+**Projections, never records.** What crosses the boundary is a
+`homeowner_release` projection: a summary built for one recipient, one share,
+and one purpose. A raw document, a database row, or a storage object has no
+representation in the contract at all and fails strict parsing.
 
-Excluded by type, enumerated in `src/contracts/homeowner-share.v1.ts` and
-asserted by tests: insurance policies, policy declarations, carrier
-communications, claim-strategy material, claim files, internal notes, margin and
-cost detail, contractor memory, Thresher results, agent analysis, and any broad
-project access.
+Excluded by name in `src/contracts/homeowner-share.v1.ts` and asserted by tests:
+raw documents, database rows, storage objects, insurance policies, policy
+declarations, carrier communications, claim-strategy material, claim files,
+internal notes, margin and cost detail, contractor memory, Thresher results,
+agent analysis, and any broad project access. Field names that would leak an
+address, contact, claim number, URL, filename, label, note, metadata blob, or
+project id are rejected by name, and one bad field rejects the **entire**
+manifest rather than filtering the offending item out.
+
+**Phase 0 is inert.** The launch-approved projection set is frozen empty and the
+delivery decision's type cannot express success: `authorized` is the literal
+`false`. Making this contract deliver anything is a reviewable type change, not
+a configuration flip.
+
+Caps: 25 artifacts, 25 MiB per artifact, 100 MiB aggregate, 64 KiB canonical
+manifest, and a share lifetime between 1 and 30 days.
+
+## Cross-repo reconciliation status
+
+Two independently written implementations agree only where something proves they
+agree. `WIRE_GOLDEN` in `src/contracts/homeowner-share.v1.ts` holds the values
+Jobrolo published as normative, and CI checks Homesrolo against them.
+
+**Manifest layer: reconciled.** Jobrolo's golden manifest parses strictly here,
+re-canonicalizes to identical bytes (692 of them), and digests to Jobrolo's
+published `manifestDigest`. Asserted in CI. This pins the canonical form —
+recursively sorted keys, `JSON.stringify` primitives, UTF-8, lowercase hex
+SHA-256 — and the identifier shapes.
+
+**Receipt layer: NOT reconciled.** Jobrolo published three expected replay-key
+values without the derivation that produces them. An exhaustive search over
+every subset, ordering, separator, prefix, and receipt-type spelling of the
+eleven published identity fields — 6,408,192 candidates — reproduced none of the
+three, so at least one input to Jobrolo's derivation is absent from the
+published vectors (most likely `policyVersion`, `keyId`, `receiptId`, or a
+receipt-specific timestamp, none of which appear in the golden manifest).
+
+Homesrolo therefore records those three values verbatim and **asserts no
+equality against them**. `receiptReplayKey` is a correct local replay key and
+nothing more. Certifying a guessed derivation in CI would make Homesrolo claim
+compatibility with a wire format Jobrolo never agreed to, which is the exact
+divergence this contract exists to prevent.
+
+**To close it,** Jobrolo publishes the receipt field set, the signing-input
+construction, and the replay-key derivation (fields, order, domain separation).
+`receiptIdentity`, `receiptReplayKey`, and `receiptSigningInput` are then matched
+to it and `RECEIPT_WIRE_RECONCILIATION.receipts` flips to `reconciled`, at which
+point the golden replay keys become live CI assertions. Until then, **no receipt
+produced by either side is meaningful to the other**, and nothing in this repo
+should be read as claiming otherwise.
 
 ## Property identity
 
