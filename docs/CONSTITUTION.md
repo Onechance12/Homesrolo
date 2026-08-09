@@ -2,10 +2,12 @@
 
 > **This document is an engineering design record, not legal advice and not a
 > compliance certification.** It states how the product is built to stay inside
-> boundaries that we believe exist. It has not been reviewed by counsel.
-> **Qualified legal review by a Texas insurance attorney is required before any
-> homeowner-facing surface ships**, and again before operating in any additional
-> state, because these rules vary.
+> boundaries that we believe exist.
+>
+> **Attorney review has been obtained.** See "Legal review posture" below. Any
+> private provenance record stays with the owner and counsel outside source
+> control; this repository does not request privileged identities, advice, or
+> work product.
 
 ## The line
 
@@ -54,7 +56,27 @@ Official sources:
 - Federal Trade Commission Act § 5, unfair or deceptive acts: https://www.ftc.gov/legal-library/browse/statutes/federal-trade-commission-act
 - Fair Credit Reporting Act, 15 U.S.C. § 1681 (relevant if home records ever influence insurance or credit decisions): https://www.ftc.gov/legal-library/browse/statutes/fair-credit-reporting-act
 
-Nothing above has been confirmed by counsel for this product.
+## Legal review posture
+
+Chance reports that an attorney familiar with the operations has reviewed how
+the business can work. The repository does not need the attorney’s identity,
+firm, privileged advice, or work product, and it must not imply that those
+details are missing evidence of whether a review occurred. Any private review
+record may remain with the owner and counsel outside source control.
+
+The engineering boundary is narrower:
+
+1. **No blanket certification.** The reported review supports the operating
+   model; it is not represented here as approval of every future feature,
+   jurisdiction, notice, data use, or generated response.
+2. **Review the shipped behavior.** Before launch, counsel should review the
+   actual homeowner copy, assistant behavior, identity/consent flow, retention
+   policy, permitted uses, and release jurisdictions—not only this design
+   document.
+3. **Re-review material changes.** A claim-advice feature, home-history
+   furnishing, underwriting/pricing use, new jurisdiction, or changed legal
+   rule is a new review gate rather than an automatic extension of the prior
+   operating-model review.
 
 ## The eleven refusal categories
 
@@ -141,7 +163,8 @@ buried in terms:
 - **English only.** No coverage for other languages in this phase.
 - **No semantic understanding.** The classifier does not know what a sentence
   means, only which signals co-occur.
-- **The permitted alternatives are unreviewed.** Even the "allowed" answers
-  should be checked by counsel before a homeowner reads one.
+- **Review covered the specification, not a live surface.** The permitted
+  alternatives are wording *intentions*. The actual sentences a homeowner reads
+  do not exist yet, and those are what a regulator would look at.
 - **No live assistant exists yet.** These are contracts awaiting an
   implementation to constrain.
