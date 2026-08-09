@@ -5,12 +5,13 @@ education-first assistant that helps homeowners understand maintenance and
 work history without acting as a contractor CRM, public adjuster, insurer, or
 claim advocate.
 
-**Status: Phase 0.** This repository contains pure contracts, tests, and
-architecture policy only. There is no website, account system, database,
-upload route, property resolver, live assistant, share transport, or
-production connection to Jobrolo.
+**Status: Phase 0.5.** Contracts, architecture policy, and a statically
+exported public web experience. There is still no account system, database,
+API route, upload, property resolver, live assistant, share transport, payment,
+analytics, or production connection to Jobrolo. Every company and project on
+the site is synthetic.
 
-## Phase 0 contents
+## Contents
 
 | Path | Purpose |
 | --- | --- |
@@ -19,9 +20,31 @@ production connection to Jobrolo.
 | docs/CONSTITUTION.md | Education-never-advocacy rules |
 | docs/THREAT_MODEL.md | Privacy, security, deletion, failure, and launch gates |
 | docs/RECEIPT_WIRE_SPEC.md | Exact Jobrolo-aligned Phase 0 wire |
+| docs/PUBLIC_DIRECTORY_RFC.md | Neutrality, fact-level provenance, corrections, and external-source limits |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/constitution/ | Pure request and response boundary checks |
+| apps/web/lib/directory/ | Public profile contract, projection allowlist, neutral ordering, synthetic fixtures |
+| apps/web/app/ | Statically exported public site |
+| scripts/public-web-guard.mjs | Fails the build on any Phase 0.5 prohibition |
+
+## The public layer
+
+The wedge is the **Home Project Passport**: a homeowner releases a record of
+real work, and that release is the only thing that can substantiate a company's
+project proof. The public directory is downstream of it, and is deliberately not
+a general review site.
+
+- Verification is **five independent facts** — business identity, licence and
+  jurisdiction, insurance, project proof, review provenance — each with a
+  status, a source, and the date it was checked. There is no overall verified
+  badge and no field that could carry one.
+- Ordering is by name and reads nothing else, including verification, so
+  placement cannot be bought.
+- Outside providers are linked and attributed, never scraped or restated. V1
+  accepts synthetic `example.com` links only.
+- The public layer cannot reach the private ones: importing the share or
+  home-file contracts fails the guard.
 
 ## Core decisions
 
@@ -43,9 +66,21 @@ production connection to Jobrolo.
 Requires Node 22.6 or newer.
 
     npm install
+    npm --prefix apps/web install
     npm run verify
 
-verify runs TypeScript and all contract/adversarial tests.
+`verify` runs the contract typecheck, the constitution and contract tests, the
+public directory model tests, the static production web build, and the Phase 0.5
+prohibition guard.
+
+To preview the site locally:
+
+    npm --prefix apps/web run dev      # http://localhost:3000
+
+Or serve the built static export exactly as CI produces it:
+
+    npm run web:build
+    npx serve apps/web/out
 
 ## Legal status
 

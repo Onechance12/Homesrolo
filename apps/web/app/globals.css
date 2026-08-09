@@ -1,0 +1,392 @@
+/* =============================================================================
+   Homesrolo public experience — design tokens
+   =============================================================================
+   Warm, editorial, and deliberately not a SaaS dashboard. The product asks a
+   homeowner to trust it with the record of their home, and a cold analytics
+   surface is the wrong promise for that.
+
+   All colour is defined once here as tokens. Components reference tokens only,
+   so a palette change is one file. Values are oklch for perceptually even
+   steps between shades.
+   ========================================================================== */
+
+:root {
+  /* Warm neutrals — parchment through ink */
+  --paper: oklch(0.985 0.006 78);
+  --paper-raised: oklch(1 0.003 78);
+  --paper-sunken: oklch(0.962 0.009 76);
+  --ink: oklch(0.24 0.018 55);
+  --ink-soft: oklch(0.44 0.016 55);
+  --ink-faint: oklch(0.58 0.014 58);
+  --rule: oklch(0.9 0.012 72);
+  --rule-strong: oklch(0.82 0.016 70);
+
+  /* Clay — the single brand accent */
+  --clay: oklch(0.55 0.116 42);
+  --clay-deep: oklch(0.44 0.104 40);
+  --clay-wash: oklch(0.955 0.022 52);
+
+  /* Fact status. Never used as an overall verdict. */
+  --confirmed: oklch(0.5 0.078 152);
+  --confirmed-wash: oklch(0.955 0.024 152);
+  --caution: oklch(0.58 0.098 75);
+  --caution-wash: oklch(0.96 0.032 82);
+  --stale: oklch(0.52 0.088 28);
+  --stale-wash: oklch(0.958 0.024 32);
+  --neutral-fact: oklch(0.52 0.012 60);
+  --neutral-fact-wash: oklch(0.955 0.006 70);
+
+  --focus: oklch(0.52 0.14 250);
+
+  --font-display: ui-serif, Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1.25rem;
+
+  --measure: 68ch;
+  --shell: 74rem;
+
+  --shadow-soft: 0 1px 2px oklch(0.24 0.018 55 / 0.05), 0 8px 24px oklch(0.24 0.018 55 / 0.06);
+  --shadow-lift: 0 2px 4px oklch(0.24 0.018 55 / 0.06), 0 16px 40px oklch(0.24 0.018 55 / 0.09);
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.014em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+h1 { font-size: clamp(2.1rem, 1.5rem + 2.6vw, 3.5rem); }
+h2 { font-size: clamp(1.5rem, 1.2rem + 1.3vw, 2.1rem); }
+h3 { font-size: clamp(1.125rem, 1.02rem + 0.5vw, 1.35rem); }
+
+p { margin: 0; text-wrap: pretty; }
+
+a { color: var(--clay-deep); text-underline-offset: 0.18em; }
+a:hover { color: var(--clay); }
+
+/* One visible focus treatment everywhere, never removed. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.75rem 1.15rem;
+  border-radius: 0 0 var(--radius-sm) 0;
+  font-weight: 600;
+}
+.skip-link:focus { left: 0; color: var(--paper); }
+
+/* Visible to assistive technology only. Used where a link's purpose needs more
+   words than the visible label carries, such as "opens in a new tab". */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- layout ------------------------------------------------------------- */
+
+.shell {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+@media (min-width: 48rem) { .shell { padding-inline: 2rem; } }
+
+.stack > * + * { margin-top: var(--stack-gap, 1rem); }
+.prose { max-width: var(--measure); }
+.prose > * + * { margin-top: 1.05rem; }
+.prose p { color: var(--ink-soft); }
+
+.section { padding-block: clamp(3rem, 2rem + 5vw, 5.5rem); }
+.section--sunken { background: var(--paper-sunken); border-block: 1px solid var(--rule); }
+
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--clay-deep);
+  margin: 0 0 0.85rem;
+}
+
+.lede {
+  font-size: clamp(1.125rem, 1.04rem + 0.42vw, 1.3rem);
+  color: var(--ink-soft);
+  max-width: 56ch;
+}
+
+.grid { display: grid; gap: 1.25rem; }
+@media (min-width: 40rem) { .grid--2 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 62rem) { .grid--3 { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 62rem) { .grid--4 { grid-template-columns: repeat(4, 1fr); } }
+
+/* --- surfaces ------------------------------------------------------------ */
+
+.card {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-soft);
+}
+.card__title { margin-bottom: 0.5rem; }
+.card p { color: var(--ink-soft); }
+
+.note {
+  border-left: 3px solid var(--clay);
+  background: var(--clay-wash);
+  padding: 1rem 1.15rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+.note strong { color: var(--ink); }
+
+.synthetic-banner {
+  background: var(--caution-wash);
+  border: 1px solid color-mix(in oklch, var(--caution) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.3rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.97rem;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.btn--primary { background: var(--clay); color: oklch(0.99 0.01 60); }
+.btn--primary:hover { background: var(--clay-deep); color: oklch(0.99 0.01 60); }
+.btn--quiet { border-color: var(--rule-strong); color: var(--ink); background: transparent; }
+.btn--quiet:hover { background: var(--paper-sunken); color: var(--ink); }
+
+/* --- header / footer ----------------------------------------------------- */
+
+.masthead {
+  border-bottom: 1px solid var(--rule);
+  background: color-mix(in oklch, var(--paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.masthead__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4rem;
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+.wordmark span { color: var(--clay); }
+.nav { display: flex; flex-wrap: wrap; gap: 0.35rem 1.15rem; align-items: center; }
+.nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.94rem;
+  font-weight: 500;
+  padding: 0.35rem 0;
+}
+.nav a:hover { color: var(--clay-deep); text-decoration: underline; }
+.nav a[aria-current='page'] { color: var(--ink); font-weight: 650; }
+
+.colophon {
+  border-top: 1px solid var(--rule);
+  background: var(--paper-sunken);
+  padding-block: 3rem 2.5rem;
+  margin-top: 4rem;
+}
+.colophon h2 { font-size: 1rem; font-family: var(--font-body); letter-spacing: 0.02em; }
+.colophon a { color: var(--ink-soft); text-decoration: none; font-size: 0.94rem; display: block; padding: 0.2rem 0; }
+.colophon a:hover { color: var(--clay-deep); text-decoration: underline; }
+.disclosures {
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule-strong);
+  font-size: 0.88rem;
+  color: var(--ink-faint);
+  max-width: 76ch;
+}
+.disclosures li { margin-bottom: 0.4rem; }
+
+/* --- verification facts --------------------------------------------------- */
+
+.facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+
+.fact {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.fact__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.fact__dimension { font-weight: 650; font-size: 1rem; color: var(--ink); }
+.fact__statement { color: var(--ink-soft); font-size: 0.96rem; }
+.fact__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  font-size: 0.84rem;
+  color: var(--ink-faint);
+}
+.fact__meta dt { font-weight: 650; display: inline; }
+.fact__meta dd { display: inline; margin: 0 0 0 0.3rem; }
+.fact__meta > div { white-space: nowrap; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.chip::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+.chip--confirmed { color: var(--confirmed); background: var(--confirmed-wash); border-color: color-mix(in oklch, var(--confirmed) 30%, transparent); }
+.chip--caution { color: var(--caution); background: var(--caution-wash); border-color: color-mix(in oklch, var(--caution) 32%, transparent); }
+.chip--stale { color: var(--stale); background: var(--stale-wash); border-color: color-mix(in oklch, var(--stale) 30%, transparent); }
+.chip--neutral { color: var(--neutral-fact); background: var(--neutral-fact-wash); border-color: var(--rule-strong); }
+
+.tag {
+  display: inline-block;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin: 0 0.35rem 0.35rem 0;
+}
+
+/* --- passport / illustration ---------------------------------------------- */
+
+.passport {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, var(--paper-raised), var(--clay-wash));
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lift);
+}
+.passport__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px dashed var(--rule-strong);
+  font-size: 0.92rem;
+}
+.passport__row:last-child { border-bottom: 0; }
+.passport__row dt { color: var(--ink-faint); margin: 0; }
+.passport__row dd { color: var(--ink); font-weight: 600; margin: 0; text-align: right; }
+
+.figure {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--paper-sunken);
+  border: 1px solid var(--rule);
+}
+
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 1.25rem; }
+.steps > li { counter-increment: step; display: grid; grid-template-columns: 2.5rem 1fr; gap: 1rem; align-items: start; }
+.steps > li::before {
+  content: counter(step);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--clay-deep);
+  background: var(--clay-wash);
+  border: 1px solid color-mix(in oklch, var(--clay) 25%, transparent);
+  width: 2.5rem; height: 2.5rem;
+  display: grid; place-items: center;
+  border-radius: 50%;
+}
+
+.divider { height: 1px; background: var(--rule); border: 0; margin-block: 2.5rem; }
+
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.link-list__item {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  background: var(--paper-raised);
+}
+.link-list__attrib { font-size: 0.84rem; color: var(--ink-faint); margin-top: 0.25rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

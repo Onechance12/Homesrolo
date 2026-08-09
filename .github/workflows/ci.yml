@@ -15,9 +15,38 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
-      - name: Typecheck
+      - name: Typecheck contracts
         run: npm run typecheck
       - name: Constitution and contract tests
         run: npm test
+      - name: Public directory model tests
+        run: npm run test:directory
+
+  web:
+    name: Public web experience
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install web dependencies
+        run: npm --prefix apps/web ci
+      - name: Lint
+        run: npm run web:lint
+      - name: Typecheck web
+        run: npm run web:typecheck
+      - name: Static production build
+        run: npm run web:build
+      - name: Phase 0.5 prohibition guard
+        run: npm run guard:web
+      - name: Whitespace and conflict-marker check
+        run: git diff --check
