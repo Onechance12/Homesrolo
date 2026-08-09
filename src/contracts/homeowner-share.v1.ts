@@ -1,1131 +1,476 @@
-// =============================================================================
-// homeowner-share.v1 — wire contract (STRUCTURE ONLY, NOTHING IS DELIVERABLE)
-// =============================================================================
-// Pure types and validators for the future Jobrolo -> Homesrolo path. No
-// network code, no database, no credentials, no routes, no Jobrolo connection.
-// Both sides review and agree this shape before either builds against it.
-//
-// THE MODEL
-//
-//   manifest            Immutable. Names exactly which purpose-built projections
-//                       exist for one share, pinned by digest. Its canonical
-//                       bytes are the thing everything else is bound to.
-//
-//   authorization       Signed by Jobrolo. The contractor tenant permits
-//     receipt           disclosure of the projections in one exact manifest.
-//
-//   consent receipt     Signed by Homesrolo. The homeowner accepted that same
-//                       exact manifest.
-//
-//   revocation receipt  Append-only. Either side withdraws. Nothing is ever
-//                       edited or deleted; state is the fold over the ledger.
-//
-// Delivery requires BOTH authorities to be live at read time and bound to the
-// same manifest digest. Absence of a signal is never permission.
-//
-// SEVEN RULES THAT DO NOT BEND
-//
-//   1. PROJECTIONS ONLY. What crosses the boundary is a recipient-, share-, and
-//      purpose-specific `homeowner_release` projection built for disclosure.
-//      Raw documents, database rows, storage paths, filenames, labels, URLs,
-//      contact or claim identifiers, policy and carrier material, internal
-//      notes, margins, contractor memory, and AI/Thresher output have no
-//      representation in this contract and fail strict parsing.
-//
-//   2. ALL OR NOTHING. One invalid artifact rejects the entire manifest. The
-//      parser never filters bad siblings and returns the rest, because a caller
-//      handed a shortened list cannot tell it was shortened.
-//
-//   3. IMMUTABLE. Manifests and receipts are never mutated. A change is a new
-//      generation with a new manifest, a new digest, and new receipts.
-//
-//   4. NO GLOBAL PROPERTY IDENTITY. Scope is one Jobrolo-issued shareId. No
-//      address, parcel, geohash, or owner-name matching, and no auto-merge of
-//      two shares into one property.
-//
-//   5. FAIL CLOSED, AND FAIL WITHOUT INFORMING. Unknown, expired, revoked,
-//      oversized, replayed, or malformed is a refusal, and the external-facing
-//      refusal collapses to one non-enumerating reason so a caller cannot probe
-//      for the difference between "no such share" and "not permitted".
-//
-//   6. STRUCTURE IS NOT AUTHORIZATION. Everything here is shape checking.
-//      See STRUCTURAL_VALIDATION_WARNING.
-//
-//   7. PHASE 0 IS INERT. The launch-approved projection set is frozen empty and
-//      the delivery decision's type cannot express success. See
-//      `evaluateDelivery`.
-// =============================================================================
-
-import {
-  canonicalDigest,
-  canonicalJson,
-  instantToMillis,
-  isBase64Url,
-  isCanonicalInstant,
-  isSha256Hex,
-  utf8ByteLength,
-} from './canonical.ts'
-
-// --- identity of the contract -------------------------------------------------
+import { createHash } from 'node:crypto'
+import { z } from 'zod'
 
 export const HOMEOWNER_SHARE_CONTRACT_VERSION = 'homeowner-share.v1' as const
-export const HOMEOWNER_SHARE_ISSUER = 'jobrolo' as const
-export const HOMEOWNER_SHARE_AUDIENCE = 'homesrolo' as const
+export const HOMEOWNER_SHARE_AUTHORIZATION_VERSION = 'homeowner-share.authorization.v1' as const
+export const HOMEOWNER_SHARE_CONSENT_VERSION = 'homeowner-share.consent.v1' as const
+export const HOMEOWNER_SHARE_REVOCATION_VERSION = 'homeowner-share.revocation.v1' as const
 export const HOMEOWNER_SHARE_PURPOSE = 'homeowner_work_records' as const
+export const HOMEOWNER_SHARE_MAX_ARTIFACTS = 25
+export const HOMEOWNER_SHARE_MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
+export const HOMEOWNER_SHARE_MAX_TOTAL_ARTIFACT_BYTES = 100 * 1024 * 1024
+export const HOMEOWNER_SHARE_MAX_MANIFEST_BYTES = 64 * 1024
+export const HOMEOWNER_SHARE_MIN_LIFETIME_MS = 24 * 60 * 60 * 1000
+export const HOMEOWNER_SHARE_MAX_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000
 
-/**
- * Loud, exported, and asserted by tests so it cannot be quietly dropped from
- * the documentation as the implementation grows.
- */
-/**
- * Someone sees what they own, plus what has been shared with them. Nothing else.
- *
- * The home file (see `docs/HOME_FILE_RFC.md`) is a permanent per-property
- * record, and every upload lands in it whoever uploads it. **Being in the home
- * file is not being visible.** The file is a container, not a shared pool:
- * every contribution is owned by its uploader, default-deny to everyone else,
- * and this contract is how the exceptions are granted.
- *
- * So there are exactly two doors, and this file governs the second:
- *
- *   1. You own it. Handled by the home file's ownership layer, not here.
- *   2. It was shared with you. A manifest bound by a live authorization and a
- *      live consent, which is everything below.
- *
- * There is no third door. No browse, no search, no catalog of someone else's
- * contributions, no cross-share aggregate, and nothing derived, inferred, or
- * summarized on top of what was shared.
- *
- * This is why the contract has no entry point taking a `recipientRef` alone.
- * Every path that could lead to disclosure requires one specific manifest, so
- * "show me everything about this home" is not expressible here — asserted by
- * tests, so adding one later fails the build rather than passing review
- * unnoticed. Access to the home file itself must satisfy the same rule.
- */
-export const HOMEOWNER_VISIBILITY_RULE =
-  'Someone sees what they own, plus what was shared with them, and nothing else. Every upload lands in ' +
-  'the permanent home file, but being in the home file is not being visible: each contribution is owned ' +
-  'by its uploader and default-deny to everyone else. Disclosure beyond your own contributions requires a ' +
-  'manifest bound by a live authorization and a live consent. There is no browse, no catalog of another ' +
-  "party's contributions, and nothing derived on top of what was shared."
-
-export const STRUCTURAL_VALIDATION_WARNING =
-  'Structural validation proves shape and binding only. It does not verify any signature ' +
-  'against a trusted key, and it does not consult the current revocation ledger. A manifest ' +
-  'and receipt set that pass every check here may still be forged, revoked, or superseded.'
-
-// --- what may cross the boundary ----------------------------------------------
-
-/**
- * Projection kinds the contract can express. Every one is a summary built for
- * disclosure, never a pass-through of a stored record.
- *
- * Being known is not being permitted: see LAUNCH_APPROVED_PROJECTION_KINDS.
- */
-export const KNOWN_PROJECTION_KINDS = Object.freeze([
+// These are draft contract discriminators, not an activation allowlist. A
+// projection needs its own reviewed content and metadata policy before this
+// set can contain it. Keeping the activation set empty makes Phase 0 inert.
+export const HOMEOWNER_SHARE_DRAFT_PROJECTION_KINDS = Object.freeze([
   'work_status_summary',
-  'inspection_photo_projection',
-  'roof_measurement_summary',
-  'scope_of_work_summary',
-  'completion_record_summary',
-  'warranty_summary',
-  'job_timeline_summary',
+  'work_schedule_summary',
+  'work_document_copy',
+  'work_photo_set',
+  'work_completion_record',
+  'work_warranty_record',
+  'work_invoice_receipt',
 ] as const)
+export type HomeownerShareProjectionKind =
+  (typeof HOMEOWNER_SHARE_DRAFT_PROJECTION_KINDS)[number]
 
-export type ProjectionKind = (typeof KNOWN_PROJECTION_KINDS)[number]
+export const HOMEOWNER_SHARE_LAUNCH_APPROVED_PROJECTION_KINDS = Object.freeze(
+  [] as const satisfies readonly HomeownerShareProjectionKind[],
+)
 
-/**
- * PHASE 0 INERTNESS. Frozen empty: no projection kind is approved for launch,
- * so no manifest can produce a delivery. Adding a kind here is a deliberate,
- * reviewable act that changes what a homeowner can be shown.
- */
-export const LAUNCH_APPROVED_PROJECTION_KINDS: readonly ProjectionKind[] = Object.freeze([])
+const OPAQUE_TOKEN = '[A-Za-z0-9_-]{43}'
+const SHA256 = /^[a-f0-9]{64}$/
+const UTC_MILLISECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+const SIGNATURE = /^[A-Za-z0-9_-]{86}$/
 
-/**
- * Enumerated rather than merely omitted, so that widening the contract requires
- * deleting a named prohibition instead of quietly adding a kind. None of these
- * has a representation in the manifest; the list exists to be asserted against.
- */
-export const EXCLUDED_SOURCE_KINDS = Object.freeze([
-  'raw_document',
-  'database_row',
-  'storage_object',
-  'insurance_policy',
-  'policy_declarations',
-  'carrier_communication',
-  'claim_strategy_material',
-  'claim_file',
-  'internal_note',
-  'margin_or_cost_detail',
-  'contractor_memory',
-  'thresher_result',
-  'agent_analysis',
-  'broad_project_access',
-] as const)
-
-/** The only source a manifest artifact may declare. */
-export const PROJECTION_SOURCE = 'homeowner_release' as const
-
-/** Media types a projection may be encoded as. */
-export const ALLOWED_MEDIA_TYPES = Object.freeze([
-  'application/json',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-] as const)
-
-export type AllowedMediaType = (typeof ALLOWED_MEDIA_TYPES)[number]
-
-// --- caps ---------------------------------------------------------------------
-
-export const SHARE_LIMITS = Object.freeze({
-  maxArtifacts: 25,
-  maxArtifactBytes: 25 * 1024 * 1024,
-  maxAggregateBytes: 100 * 1024 * 1024,
-  maxCanonicalManifestBytes: 64 * 1024,
-  minLifetimeDays: 1,
-  maxLifetimeDays: 30,
-})
-
-const DAY_MS = 86_400_000
-
-// --- opaque identifiers -------------------------------------------------------
-
-export const ID_PREFIXES = Object.freeze({
-  projection: 'hproj_',
-  share: 'hshr_',
-  recipient: 'hrcp_',
-  nonce: 'hnce_',
-  receipt: 'hrec_',
-})
-
-export type IdKind = keyof typeof ID_PREFIXES
-
-/** 43 base64url characters carry 258 bits, so a valid id is unguessable. */
-const OPAQUE_BODY_LENGTH = 43
-const OPAQUE_BODY = /^[A-Za-z0-9_-]{43}$/
-
-/**
- * Identifier shapes that carry meaning are refused outright. The charset
- * already excludes '@', '+', '.', '/', and whitespace, so an email, a URL, or a
- * street address cannot survive; this catches the remaining digit-run shapes
- * (phone, policy, claim, and account numbers) that would otherwise fit.
- */
-const PII_SHAPED = /\d{10,}/
-
-export function isOpaqueId(value: unknown, kind: IdKind): value is string {
-  if (typeof value !== 'string') return false
-  const prefix = ID_PREFIXES[kind]
-  if (!value.startsWith(prefix)) return false
-  const body = value.slice(prefix.length)
-  if (body.length !== OPAQUE_BODY_LENGTH) return false
-  if (!OPAQUE_BODY.test(body)) return false
-  return !PII_SHAPED.test(body)
+function opaqueId(prefix: string) {
+  return z.string().regex(new RegExp(`^${prefix}_${OPAQUE_TOKEN}$`))
 }
 
-// --- the manifest -------------------------------------------------------------
+const utcTimestamp = z.string()
+  .regex(UTC_MILLISECONDS)
+  .refine(value => {
+    const parsed = new Date(value)
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
+  }, 'timestamp must be a real canonical UTC instant')
 
-export type ManifestArtifact = {
-  /** Opaque projection reference. Not a path, filename, or document id. */
-  readonly artifactRef: string
-  readonly byteLength: number
-  readonly mediaType: AllowedMediaType
-  readonly projectionKind: ProjectionKind
-  readonly projectionVersion: number
-  /** SHA-256 of the exact projection bytes, so substitution is detectable. */
-  readonly sha256: string
-  readonly source: typeof PROJECTION_SOURCE
-}
+const canonicalEd25519Signature = z.string().regex(SIGNATURE).refine(value => {
+  const decoded = Buffer.from(value, 'base64url')
+  return decoded.byteLength === 64 && decoded.toString('base64url') === value
+}, 'signature must be canonical base64url for exactly 64 bytes')
 
-export type ShareManifest = {
-  readonly artifacts: readonly ManifestArtifact[]
-  readonly audience: typeof HOMEOWNER_SHARE_AUDIENCE
-  readonly contractVersion: typeof HOMEOWNER_SHARE_CONTRACT_VERSION
-  readonly expiresAt: string
-  /** Increments when a share is reissued. A new generation is a new manifest. */
-  readonly generation: number
-  readonly issuedAt: string
-  readonly issuer: typeof HOMEOWNER_SHARE_ISSUER
-  readonly nonce: string
-  readonly purpose: typeof HOMEOWNER_SHARE_PURPOSE
-  readonly recipientRef: string
-  readonly shareId: string
-}
+const signingProofSchema = z.object({
+  algorithm: z.literal('Ed25519'),
+  keyId: z.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/),
+  signature: canonicalEd25519Signature,
+}).strict()
 
-const MANIFEST_KEYS = Object.freeze([
-  'artifacts',
-  'audience',
-  'contractVersion',
-  'expiresAt',
-  'generation',
-  'issuedAt',
-  'issuer',
-  'nonce',
-  'purpose',
-  'recipientRef',
-  'shareId',
-])
+const homeownerShareArtifactSchema = z.object({
+  artifactRef: opaqueId('hproj'),
+  source: z.literal('homeowner_release'),
+  projectionKind: z.enum(HOMEOWNER_SHARE_DRAFT_PROJECTION_KINDS),
+  projectionVersion: z.number().int().min(1).max(100),
+  mediaType: z.enum([
+    'application/json',
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+  ]),
+  byteLength: z.number().int().min(1).max(HOMEOWNER_SHARE_MAX_ARTIFACT_BYTES),
+  sha256: z.string().regex(SHA256),
+}).strict()
 
-const ARTIFACT_KEYS = Object.freeze([
-  'artifactRef',
-  'byteLength',
-  'mediaType',
-  'projectionKind',
-  'projectionVersion',
-  'sha256',
-  'source',
-])
+const homeownerShareManifestSchema = z.object({
+  contractVersion: z.literal(HOMEOWNER_SHARE_CONTRACT_VERSION),
+  issuer: z.literal('jobrolo'),
+  audience: z.literal('homesrolo'),
+  purpose: z.literal(HOMEOWNER_SHARE_PURPOSE),
+  shareId: opaqueId('hshr'),
+  recipientRef: opaqueId('hrcp'),
+  generation: z.literal(1),
+  issuedAt: utcTimestamp,
+  expiresAt: utcTimestamp,
+  nonce: opaqueId('hnce'),
+  artifacts: z.array(homeownerShareArtifactSchema)
+    .min(1)
+    .max(HOMEOWNER_SHARE_MAX_ARTIFACTS),
+}).strict()
 
-/**
- * Field names that must never appear anywhere in a manifest. Strict unknown-key
- * rejection already refuses every one of them; this list exists so the refusal
- * names what was wrong, and so a test can assert each specific leak is caught
- * rather than trusting the general rule to have covered them.
- */
-export const POISON_FIELD_NAMES = Object.freeze([
-  'address',
-  'street',
-  'city',
-  'state',
-  'zip',
-  'postalCode',
-  'parcel',
-  'geohash',
-  'latitude',
-  'longitude',
-  'customer',
-  'customerName',
-  'customerId',
-  'homeownerName',
-  'contact',
-  'phone',
-  'phoneNumber',
-  'email',
-  'claimNumber',
-  'policyNumber',
-  'carrier',
-  'url',
-  'downloadUrl',
-  'signedUrl',
-  'href',
-  'path',
-  'storagePath',
-  'bucket',
-  'key',
-  'filename',
-  'fileName',
-  'originalName',
-  'title',
-  'label',
-  'caption',
-  'notes',
-  'internalNotes',
-  'metadata',
-  'tags',
-  'projectId',
-  'projectRef',
-  'jobId',
-  'documentId',
-  'tenant',
-  'tenantId',
-  'tenantName',
-  'margin',
-  'cost',
-  'price',
-  'memory',
-  'thresher',
-  'analysis',
-  'aiSummary',
-])
+const homeownerShareAuthorizationReceiptSchema = z.object({
+  receiptVersion: z.literal(HOMEOWNER_SHARE_AUTHORIZATION_VERSION),
+  issuer: z.literal('jobrolo'),
+  audience: z.literal('homesrolo'),
+  purpose: z.literal(HOMEOWNER_SHARE_PURPOSE),
+  authorizationId: opaqueId('hauth'),
+  shareId: opaqueId('hshr'),
+  recipientRef: opaqueId('hrcp'),
+  manifestDigest: z.string().regex(SHA256),
+  manifestContractVersion: z.literal(HOMEOWNER_SHARE_CONTRACT_VERSION),
+  authorizedByRole: z.enum(['owner', 'admin']),
+  authorizedActorRef: opaqueId('hactor'),
+  authorizationPolicyVersion: z.literal('jobrolo-homeowner-disclosure.v1'),
+  authorizedAt: utcTimestamp,
+  expiresAt: utcTimestamp,
+  signing: signingProofSchema,
+}).strict()
 
-const POISON_SET: ReadonlySet<string> = new Set(POISON_FIELD_NAMES)
+const homeownerShareConsentReceiptSchema = z.object({
+  receiptVersion: z.literal(HOMEOWNER_SHARE_CONSENT_VERSION),
+  issuer: z.literal('homesrolo'),
+  audience: z.literal('jobrolo'),
+  purpose: z.literal(HOMEOWNER_SHARE_PURPOSE),
+  consentId: opaqueId('hcons'),
+  shareId: opaqueId('hshr'),
+  recipientRef: opaqueId('hrcp'),
+  manifestDigest: z.string().regex(SHA256),
+  manifestContractVersion: z.literal(HOMEOWNER_SHARE_CONTRACT_VERSION),
+  consentPolicyVersion: z.literal('homesrolo-share-consent.v1'),
+  acceptedAt: utcTimestamp,
+  expiresAt: utcTimestamp,
+  signing: signingProofSchema,
+}).strict()
 
-export type ParseResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly errors: readonly string[] }
+const homeownerShareRevocationReceiptSchema = z.object({
+  receiptVersion: z.literal(HOMEOWNER_SHARE_REVOCATION_VERSION),
+  issuer: z.enum(['jobrolo', 'homesrolo']),
+  audience: z.enum(['jobrolo', 'homesrolo']),
+  purpose: z.literal(HOMEOWNER_SHARE_PURPOSE),
+  revocationId: opaqueId('hrev'),
+  shareId: opaqueId('hshr'),
+  recipientRef: opaqueId('hrcp'),
+  manifestDigest: z.string().regex(SHA256),
+  revokedReceiptVersion: z.enum([
+    HOMEOWNER_SHARE_AUTHORIZATION_VERSION,
+    HOMEOWNER_SHARE_CONSENT_VERSION,
+  ]),
+  revokedReceiptRef: z.union([opaqueId('hauth'), opaqueId('hcons')]),
+  reasonCode: z.enum([
+    'authorization_withdrawn',
+    'source_unavailable',
+    'consent_withdrawn',
+    'account_deleted',
+    'security_response',
+  ]),
+  revokedAt: utcTimestamp,
+  signing: signingProofSchema,
+}).strict()
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
+export type HomeownerShareArtifact = z.infer<typeof homeownerShareArtifactSchema>
+export type HomeownerShareManifest = z.infer<typeof homeownerShareManifestSchema>
+export type HomeownerShareAuthorizationReceipt =
+  z.infer<typeof homeownerShareAuthorizationReceiptSchema>
+export type HomeownerShareConsentReceipt = z.infer<typeof homeownerShareConsentReceiptSchema>
+export type HomeownerShareRevocationReceipt = z.infer<typeof homeownerShareRevocationReceiptSchema>
 
-/**
- * Report every extra and missing key, naming poison fields specifically. Errors
- * accumulate for the report; the caller still rejects the whole manifest on the
- * first non-empty error list.
- */
-function checkKeys(
-  record: Record<string, unknown>,
-  expected: readonly string[],
-  where: string,
-  errors: string[],
-): void {
-  const present = Object.keys(record)
-  for (const key of present) {
-    if (expected.includes(key)) continue
-    if (POISON_SET.has(key)) {
-      errors.push(`${where}: prohibited field "${key}" must never cross the boundary`)
-    } else {
-      errors.push(`${where}: unknown field "${key}"`)
+function canonicalValue(value: unknown): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Homeowner share rejects non-finite numbers')
+    return value
+  }
+  if (Array.isArray(value)) return value.map(canonicalValue)
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('Homeowner share canonical JSON accepts plain objects only')
     }
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .filter(([, child]) => child !== undefined)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, child]) => [key, canonicalValue(child)]))
   }
-  for (const key of expected) {
-    if (!present.includes(key)) errors.push(`${where}: missing field "${key}"`)
-  }
+  throw new Error(`Homeowner share rejects ${typeof value}`)
 }
 
-function parseArtifact(value: unknown, index: number, errors: string[]): void {
-  const where = `artifacts[${index}]`
-  if (!isPlainObject(value)) {
-    errors.push(`${where}: not an object`)
-    return
-  }
-
-  checkKeys(value, ARTIFACT_KEYS, where, errors)
-
-  if (!isOpaqueId(value['artifactRef'], 'projection')) {
-    errors.push(`${where}.artifactRef: not an opaque ${ID_PREFIXES.projection} reference`)
-  }
-
-  const byteLength = value['byteLength']
-  if (!Number.isSafeInteger(byteLength) || (byteLength as number) < 1) {
-    errors.push(`${where}.byteLength: must be a positive integer`)
-  } else if ((byteLength as number) > SHARE_LIMITS.maxArtifactBytes) {
-    errors.push(`${where}.byteLength: exceeds the per-artifact cap`)
-  }
-
-  if (!(ALLOWED_MEDIA_TYPES as readonly unknown[]).includes(value['mediaType'])) {
-    errors.push(`${where}.mediaType: not an allowed media type`)
-  }
-
-  if (!(KNOWN_PROJECTION_KINDS as readonly unknown[]).includes(value['projectionKind'])) {
-    errors.push(`${where}.projectionKind: not a known projection kind`)
-  }
-
-  const projectionVersion = value['projectionVersion']
-  if (!Number.isSafeInteger(projectionVersion) || (projectionVersion as number) < 1) {
-    errors.push(`${where}.projectionVersion: must be a positive integer`)
-  }
-
-  if (!isSha256Hex(value['sha256'])) {
-    errors.push(`${where}.sha256: not a lowercase hex SHA-256 digest`)
-  }
-
-  if (value['source'] !== PROJECTION_SOURCE) {
-    errors.push(`${where}.source: only "${PROJECTION_SOURCE}" projections may be shared`)
-  }
+export function homeownerShareCanonicalJson(value: unknown) {
+  return JSON.stringify(canonicalValue(value))
 }
 
-/**
- * Strict, all-or-nothing manifest parse. Returns the manifest only when every
- * field of every artifact is valid; otherwise returns the full error list and
- * no value at all. There is deliberately no partial-success shape to destructure.
- */
-export function parseShareManifest(input: unknown): ParseResult<ShareManifest> {
-  const errors: string[] = []
+export function homeownerShareSha256(value: unknown) {
+  return createHash('sha256')
+    .update(typeof value === 'string' ? value : homeownerShareCanonicalJson(value), 'utf8')
+    .digest('hex')
+}
 
-  if (!isPlainObject(input)) {
-    return { ok: false, errors: ['manifest: not an object'] }
-  }
-
-  checkKeys(input, MANIFEST_KEYS, 'manifest', errors)
-
-  if (input['contractVersion'] !== HOMEOWNER_SHARE_CONTRACT_VERSION) {
-    errors.push('manifest.contractVersion: unsupported contract version')
-  }
-  if (input['issuer'] !== HOMEOWNER_SHARE_ISSUER) {
-    errors.push('manifest.issuer: unexpected issuer')
-  }
-  if (input['audience'] !== HOMEOWNER_SHARE_AUDIENCE) {
-    errors.push('manifest.audience: unexpected audience')
-  }
-  if (input['purpose'] !== HOMEOWNER_SHARE_PURPOSE) {
-    errors.push('manifest.purpose: unexpected purpose')
-  }
-  if (!isOpaqueId(input['shareId'], 'share')) {
-    errors.push('manifest.shareId: not an opaque share reference')
-  }
-  if (!isOpaqueId(input['recipientRef'], 'recipient')) {
-    errors.push('manifest.recipientRef: not an opaque recipient reference')
-  }
-  if (!isOpaqueId(input['nonce'], 'nonce')) {
-    errors.push('manifest.nonce: not an opaque nonce')
+function assertManifestSemantics(manifest: HomeownerShareManifest) {
+  const issuedAt = Date.parse(manifest.issuedAt)
+  const expiresAt = Date.parse(manifest.expiresAt)
+  const lifetime = expiresAt - issuedAt
+  if (lifetime < HOMEOWNER_SHARE_MIN_LIFETIME_MS
+    || lifetime > HOMEOWNER_SHARE_MAX_LIFETIME_MS) {
+    throw new Error('Homeowner share lifetime must be between one and 30 days')
   }
 
-  const generation = input['generation']
-  if (!Number.isSafeInteger(generation) || (generation as number) < 1) {
-    errors.push('manifest.generation: must be a positive integer')
-  }
-
-  const issuedAt = input['issuedAt']
-  const expiresAt = input['expiresAt']
-  if (!isCanonicalInstant(issuedAt)) {
-    errors.push('manifest.issuedAt: not a canonical UTC millisecond instant')
-  }
-  if (!isCanonicalInstant(expiresAt)) {
-    errors.push('manifest.expiresAt: not a canonical UTC millisecond instant')
-  }
-  if (isCanonicalInstant(issuedAt) && isCanonicalInstant(expiresAt)) {
-    const lifetime = instantToMillis(expiresAt) - instantToMillis(issuedAt)
-    if (lifetime <= 0) {
-      errors.push('manifest.expiresAt: must be after issuedAt')
-    } else if (lifetime < SHARE_LIMITS.minLifetimeDays * DAY_MS) {
-      errors.push('manifest: lifetime is shorter than the minimum')
-    } else if (lifetime > SHARE_LIMITS.maxLifetimeDays * DAY_MS) {
-      errors.push('manifest: lifetime exceeds the maximum')
+  const artifactRefs = new Set<string>()
+  let totalBytes = 0
+  for (const artifact of manifest.artifacts) {
+    if (artifactRefs.has(artifact.artifactRef)) {
+      throw new Error('Homeowner share artifact references must be unique')
+    }
+    artifactRefs.add(artifact.artifactRef)
+    totalBytes += artifact.byteLength
+    if (!Number.isSafeInteger(totalBytes)
+      || totalBytes > HOMEOWNER_SHARE_MAX_TOTAL_ARTIFACT_BYTES) {
+      throw new Error('Homeowner share aggregate artifact bytes exceed the contract cap')
     }
   }
 
-  const artifacts = input['artifacts']
-  if (!Array.isArray(artifacts)) {
-    errors.push('manifest.artifacts: must be an array')
-  } else {
-    if (artifacts.length < 1) errors.push('manifest.artifacts: must not be empty')
-    if (artifacts.length > SHARE_LIMITS.maxArtifacts) {
-      errors.push('manifest.artifacts: exceeds the artifact cap')
-    }
+  const manifestBytes = Buffer.byteLength(homeownerShareCanonicalJson(manifest), 'utf8')
+  if (manifestBytes > HOMEOWNER_SHARE_MAX_MANIFEST_BYTES) {
+    throw new Error('Homeowner share manifest exceeds the canonical byte cap')
+  }
+}
 
-    let aggregate = 0
-    const seenRefs = new Set<string>()
-    for (let index = 0; index < artifacts.length; index += 1) {
-      const artifact = artifacts[index]
-      parseArtifact(artifact, index, errors)
-      if (isPlainObject(artifact)) {
-        const byteLength = artifact['byteLength']
-        if (Number.isSafeInteger(byteLength)) aggregate += byteLength as number
-        const ref = artifact['artifactRef']
-        if (typeof ref === 'string') {
-          if (seenRefs.has(ref)) errors.push(`artifacts[${index}].artifactRef: duplicated in this manifest`)
-          seenRefs.add(ref)
-        }
-      }
-    }
-    if (aggregate > SHARE_LIMITS.maxAggregateBytes) {
-      errors.push('manifest.artifacts: aggregate size exceeds the cap')
-    }
+export function parseHomeownerShareManifest(input: unknown): HomeownerShareManifest {
+  const manifest = homeownerShareManifestSchema.parse(input)
+  assertManifestSemantics(manifest)
+  return manifest
+}
+
+function assertAuthorizationReceiptSemantics(receipt: HomeownerShareAuthorizationReceipt) {
+  const authorizedAt = Date.parse(receipt.authorizedAt)
+  const expiresAt = Date.parse(receipt.expiresAt)
+  if (authorizedAt >= expiresAt) throw new Error('Authorization receipt expiry is invalid')
+}
+
+function assertConsentReceiptSemantics(receipt: HomeownerShareConsentReceipt) {
+  const acceptedAt = Date.parse(receipt.acceptedAt)
+  const expiresAt = Date.parse(receipt.expiresAt)
+  if (acceptedAt >= expiresAt) throw new Error('Consent receipt expiry is invalid')
+}
+
+function assertRevocationReceiptSemantics(receipt: HomeownerShareRevocationReceipt) {
+  const jobroloRevocation = receipt.issuer === 'jobrolo'
+    && receipt.audience === 'homesrolo'
+    && receipt.revokedReceiptVersion === HOMEOWNER_SHARE_AUTHORIZATION_VERSION
+    && receipt.revokedReceiptRef.startsWith('hauth_')
+    && ['authorization_withdrawn', 'source_unavailable', 'security_response']
+      .includes(receipt.reasonCode)
+  const homesroloRevocation = receipt.issuer === 'homesrolo'
+    && receipt.audience === 'jobrolo'
+    && receipt.revokedReceiptVersion === HOMEOWNER_SHARE_CONSENT_VERSION
+    && receipt.revokedReceiptRef.startsWith('hcons_')
+    && ['consent_withdrawn', 'account_deleted', 'security_response']
+      .includes(receipt.reasonCode)
+  if (!jobroloRevocation && !homesroloRevocation) {
+    throw new Error('Homeowner share revocation issuer and target do not match')
+  }
+}
+
+export function parseHomeownerShareAuthorizationReceipt(input: unknown) {
+  const receipt = homeownerShareAuthorizationReceiptSchema.parse(input)
+  assertAuthorizationReceiptSemantics(receipt)
+  return receipt
+}
+
+export function parseHomeownerShareConsentReceipt(input: unknown) {
+  const receipt = homeownerShareConsentReceiptSchema.parse(input)
+  assertConsentReceiptSemantics(receipt)
+  return receipt
+}
+
+export function parseHomeownerShareRevocationReceipt(input: unknown) {
+  const receipt = homeownerShareRevocationReceiptSchema.parse(input)
+  assertRevocationReceiptSemantics(receipt)
+  return receipt
+}
+
+export function homeownerShareManifestDigest(manifest: HomeownerShareManifest) {
+  return homeownerShareSha256(parseHomeownerShareManifest(manifest))
+}
+
+export function homeownerShareAuthorizationSigningPayload(
+  receipt: HomeownerShareAuthorizationReceipt,
+) {
+  const parsed = parseHomeownerShareAuthorizationReceipt(receipt)
+  const { signature: _signature, ...signing } = parsed.signing
+  return homeownerShareCanonicalJson({ ...parsed, signing })
+}
+
+export function homeownerShareConsentSigningPayload(receipt: HomeownerShareConsentReceipt) {
+  const parsed = parseHomeownerShareConsentReceipt(receipt)
+  const { signature: _signature, ...signing } = parsed.signing
+  return homeownerShareCanonicalJson({ ...parsed, signing })
+}
+
+export function homeownerShareRevocationSigningPayload(receipt: HomeownerShareRevocationReceipt) {
+  const parsed = parseHomeownerShareRevocationReceipt(receipt)
+  const { signature: _signature, ...signing } = parsed.signing
+  return homeownerShareCanonicalJson({ ...parsed, signing })
+}
+
+export function homeownerShareAuthorizationReplayKey(
+  receipt: HomeownerShareAuthorizationReceipt,
+) {
+  const parsed = parseHomeownerShareAuthorizationReceipt(receipt)
+  return homeownerShareSha256([
+    parsed.receiptVersion,
+    parsed.issuer,
+    parsed.authorizationId,
+  ])
+}
+
+export function homeownerShareConsentReplayKey(receipt: HomeownerShareConsentReceipt) {
+  const parsed = parseHomeownerShareConsentReceipt(receipt)
+  return homeownerShareSha256([
+    parsed.receiptVersion,
+    parsed.issuer,
+    parsed.consentId,
+  ])
+}
+
+export function homeownerShareRevocationReplayKey(receipt: HomeownerShareRevocationReceipt) {
+  const parsed = parseHomeownerShareRevocationReceipt(receipt)
+  return homeownerShareSha256([
+    parsed.receiptVersion,
+    parsed.issuer,
+    parsed.revocationId,
+  ])
+}
+
+export function homeownerShareReplayDisposition(existing: unknown, incoming: unknown) {
+  return homeownerShareCanonicalJson(existing) === homeownerShareCanonicalJson(incoming)
+    ? 'exact_replay' as const
+    : 'conflict' as const
+}
+
+export type HomeownerSharePairFailure =
+  | 'contract_mismatch'
+  | 'manifest_mismatch'
+  | 'not_yet_valid'
+  | 'not_available'
+
+export type HomeownerSharePairDecision =
+  | { structurallyCompatible: true; manifestDigest: string }
+  | { structurallyCompatible: false; reason: HomeownerSharePairFailure }
+
+// This checks immutable wire compatibility only. It does not verify signatures,
+// trusted keys, current source authority, or either service's revocation ledger.
+// It must never be used as a delivery authorization decision.
+export function inspectHomeownerShareStructuralCompatibility(input: {
+  manifest: HomeownerShareManifest
+  authorization: HomeownerShareAuthorizationReceipt
+  consent: HomeownerShareConsentReceipt
+  now: Date
+}): HomeownerSharePairDecision {
+  let manifest: HomeownerShareManifest
+  let authorization: HomeownerShareAuthorizationReceipt
+  let consent: HomeownerShareConsentReceipt
+  try {
+    manifest = parseHomeownerShareManifest(input.manifest)
+    authorization = parseHomeownerShareAuthorizationReceipt(input.authorization)
+    consent = parseHomeownerShareConsentReceipt(input.consent)
+  } catch {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
   }
 
-  if (errors.length > 0) return { ok: false, errors }
-
-  const manifest = input as unknown as ShareManifest
-  const canonical = canonicalJson(manifest)
-  if (utf8ByteLength(canonical) > SHARE_LIMITS.maxCanonicalManifestBytes) {
-    return { ok: false, errors: ['manifest: canonical encoding exceeds the size cap'] }
+  const manifestDigest = homeownerShareManifestDigest(manifest)
+  if (authorization.shareId !== manifest.shareId
+    || consent.shareId !== manifest.shareId
+    || authorization.recipientRef !== manifest.recipientRef
+    || consent.recipientRef !== manifest.recipientRef
+    || authorization.purpose !== manifest.purpose
+    || consent.purpose !== manifest.purpose
+    || authorization.manifestContractVersion !== manifest.contractVersion
+    || consent.manifestContractVersion !== manifest.contractVersion
+    || authorization.expiresAt !== manifest.expiresAt
+    || consent.expiresAt !== manifest.expiresAt) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+  if (authorization.manifestDigest !== manifestDigest
+    || consent.manifestDigest !== manifestDigest) {
+    return { structurallyCompatible: false, reason: 'manifest_mismatch' }
+  }
+  if (Date.parse(authorization.authorizedAt) < Date.parse(manifest.issuedAt)
+    || Date.parse(consent.acceptedAt) < Date.parse(authorization.authorizedAt)) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
   }
 
-  return { ok: true, value: manifest }
+  const now = input.now.getTime()
+  if (!Number.isFinite(now)) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+  if (now < Date.parse(manifest.issuedAt)
+    || now < Date.parse(authorization.authorizedAt)
+    || now < Date.parse(consent.acceptedAt)) {
+    return { structurallyCompatible: false, reason: 'not_yet_valid' }
+  }
+  if (now >= Date.parse(manifest.expiresAt)) {
+    return { structurallyCompatible: false, reason: 'not_available' }
+  }
+  return { structurallyCompatible: true, manifestDigest }
 }
 
-/** Canonical manifest bytes. The only input to the manifest digest. */
-export function canonicalManifest(manifest: ShareManifest): string {
-  return canonicalJson(manifest)
+// This binds an immutable revocation event to the exact manifest and receipt
+// it names. It still does not verify signatures, trusted keys, or whether the
+// event is the authoritative latest state in either service's ledger.
+export function inspectHomeownerShareRevocationStructuralCompatibility(input: {
+  manifest: HomeownerShareManifest
+  target: HomeownerShareAuthorizationReceipt | HomeownerShareConsentReceipt
+  revocation: HomeownerShareRevocationReceipt
+  now: Date
+}): HomeownerSharePairDecision {
+  let manifest: HomeownerShareManifest
+  let target: HomeownerShareAuthorizationReceipt | HomeownerShareConsentReceipt
+  let revocation: HomeownerShareRevocationReceipt
+  try {
+    manifest = parseHomeownerShareManifest(input.manifest)
+    target = input.target.receiptVersion === HOMEOWNER_SHARE_AUTHORIZATION_VERSION
+      ? parseHomeownerShareAuthorizationReceipt(input.target)
+      : parseHomeownerShareConsentReceipt(input.target)
+    revocation = parseHomeownerShareRevocationReceipt(input.revocation)
+  } catch {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+
+  const manifestDigest = homeownerShareManifestDigest(manifest)
+  const targetRef = target.receiptVersion === HOMEOWNER_SHARE_AUTHORIZATION_VERSION
+    ? target.authorizationId
+    : target.consentId
+  const targetAt = target.receiptVersion === HOMEOWNER_SHARE_AUTHORIZATION_VERSION
+    ? target.authorizedAt
+    : target.acceptedAt
+  if (target.shareId !== manifest.shareId
+    || revocation.shareId !== manifest.shareId
+    || target.recipientRef !== manifest.recipientRef
+    || revocation.recipientRef !== manifest.recipientRef
+    || target.purpose !== manifest.purpose
+    || revocation.purpose !== manifest.purpose
+    || target.manifestContractVersion !== manifest.contractVersion
+    || target.expiresAt !== manifest.expiresAt
+    || revocation.revokedReceiptVersion !== target.receiptVersion
+    || revocation.revokedReceiptRef !== targetRef) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+  if (target.manifestDigest !== manifestDigest
+    || revocation.manifestDigest !== manifestDigest) {
+    return { structurallyCompatible: false, reason: 'manifest_mismatch' }
+  }
+  const now = input.now.getTime()
+  if (!Number.isFinite(now)) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+  if (Date.parse(revocation.revokedAt) < Date.parse(targetAt)) {
+    return { structurallyCompatible: false, reason: 'contract_mismatch' }
+  }
+  if (now < Date.parse(revocation.revokedAt)) {
+    return { structurallyCompatible: false, reason: 'not_yet_valid' }
+  }
+  return { structurallyCompatible: true, manifestDigest }
 }
 
-/** Manifest digest. Both receipts bind to this exact value. */
-export function manifestDigest(manifest: ShareManifest): string {
-  return canonicalDigest(manifest)
+export function homeownerShareExternalFailure(reason: HomeownerSharePairFailure) {
+  return reason === 'contract_mismatch' || reason === 'manifest_mismatch'
+    ? 'contract_mismatch' as const
+    : 'not_available' as const
 }
 
-// =============================================================================
-// Receipts
-// =============================================================================
-// Separate from the manifest and from each other. Immutable once signed.
-//
-// UNRECONCILED WITH JOBROLO — see RECEIPT_WIRE_RECONCILIATION below. Every
-// structural rule in this section is implemented from Jobrolo's written
-// requirements, but the exact receipt field set, the signing-input construction,
-// and the replay-key derivation have not been published, so none of it is
-// proven byte-compatible the way the manifest layer is.
-// =============================================================================
-
-export type ReceiptType = 'authorization' | 'consent' | 'revocation'
-
-export const RECEIPT_TYPES = Object.freeze(['authorization', 'consent', 'revocation'] as const)
-
-export const RECEIPT_SIGNATURE_ALGORITHM = 'ed25519' as const
-const ED25519_SIGNATURE_BYTES = 64
-
-/**
- * Fields common to all three receipts. Every one of them is part of the binding
- * between the two authorities: if any differs between the authorization and the
- * consent, they are not talking about the same disclosure.
- */
-export type ReceiptCore = {
-  readonly algorithm: typeof RECEIPT_SIGNATURE_ALGORITHM
-  readonly audience: typeof HOMEOWNER_SHARE_AUDIENCE
-  readonly contractVersion: typeof HOMEOWNER_SHARE_CONTRACT_VERSION
-  readonly expiresAt: string
-  readonly generation: number
-  readonly issuedAt: string
-  readonly issuer: typeof HOMEOWNER_SHARE_ISSUER
-  /** Identifies the signing key. Independent per side; never shared. */
-  readonly keyId: string
-  readonly manifestDigest: string
-  /** The disclosure-policy version in force when this receipt was issued. */
-  readonly policyVersion: string
-  readonly purpose: typeof HOMEOWNER_SHARE_PURPOSE
-  readonly receiptId: string
-  readonly receiptType: ReceiptType
-  readonly recipientRef: string
-  readonly shareId: string
-  /** Present only on a revocation, naming the receipt it withdraws. */
-  readonly revokesReceiptId?: string
-}
-
-export type SignedReceipt = {
-  readonly receipt: ReceiptCore
-  /** Unpadded base64url of the 64 raw Ed25519 signature bytes. */
-  readonly signature: string
-}
-
-/**
- * The identity of a receipt for replay purposes: what makes two receipts "the
- * same act" rather than two distinct acts. Two receipts with the same identity
- * must be byte-identical; if they are not, one of them is a forgery or a
- * mistake, and both are refused.
- */
-export type ReceiptIdentity = {
-  readonly contractVersion: string
-  readonly generation: number
-  readonly manifestDigest: string
-  readonly purpose: string
-  readonly receiptId: string
-  readonly receiptType: ReceiptType
-  readonly recipientRef: string
-  readonly shareId: string
-}
-
-export function receiptIdentity(receipt: ReceiptCore): ReceiptIdentity {
+export function homeownerSharePhase0DeliveryDecision(input: {
+  manifest: HomeownerShareManifest
+  authorization: HomeownerShareAuthorizationReceipt
+  consent: HomeownerShareConsentReceipt
+  now: Date
+}) {
+  const pair = inspectHomeownerShareStructuralCompatibility(input)
+  if (!pair.structurallyCompatible) {
+    return { authorized: false as const, reason: pair.reason }
+  }
   return {
-    contractVersion: receipt.contractVersion,
-    generation: receipt.generation,
-    manifestDigest: receipt.manifestDigest,
-    purpose: receipt.purpose,
-    receiptId: receipt.receiptId,
-    receiptType: receipt.receiptType,
-    recipientRef: receipt.recipientRef,
-    shareId: receipt.shareId,
+    authorized: false as const,
+    reason: 'phase0_no_projection_policy_approved' as const,
   }
 }
-
-/**
- * Stable replay key over a receipt's identity.
- *
- * NOT RECONCILED. Jobrolo published three expected replay-key values without
- * the derivation that produces them, and an exhaustive search over the
- * published identity fields does not reproduce any of the three, so at least
- * one input to Jobrolo's derivation is not in this contract. This function is
- * therefore Homesrolo's own stable key: correct for local replay detection,
- * and NOT asserted to equal Jobrolo's. See RECEIPT_WIRE_RECONCILIATION.
- */
-export function receiptReplayKey(receipt: ReceiptCore): string {
-  return canonicalDigest(receiptIdentity(receipt))
-}
-
-/**
- * Bytes a signer covers: the algorithm and key identifier are inside the signed
- * region, so a signature cannot be replayed under a different algorithm or
- * attributed to a different key.
- *
- * NOT RECONCILED — see RECEIPT_WIRE_RECONCILIATION.
- */
-export function receiptSigningInput(receipt: ReceiptCore): string {
-  return [
-    HOMEOWNER_SHARE_CONTRACT_VERSION,
-    receipt.algorithm,
-    receipt.keyId,
-    canonicalJson(receipt),
-  ].join('\n')
-}
-
-export function isCanonicalReceiptSignature(value: unknown): value is string {
-  return isBase64Url(value, ED25519_SIGNATURE_BYTES)
-}
-
-const RECEIPT_KEYS = Object.freeze([
-  'algorithm',
-  'audience',
-  'contractVersion',
-  'expiresAt',
-  'generation',
-  'issuedAt',
-  'issuer',
-  'keyId',
-  'manifestDigest',
-  'policyVersion',
-  'purpose',
-  'receiptId',
-  'receiptType',
-  'recipientRef',
-  'shareId',
-])
-
-const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,63}$/
-const KEY_ID = /^[a-z0-9][a-z0-9._-]{2,63}$/
-
-export function parseSignedReceipt(input: unknown): ParseResult<SignedReceipt> {
-  const errors: string[] = []
-
-  if (!isPlainObject(input)) return { ok: false, errors: ['receipt envelope: not an object'] }
-  checkKeys(input, ['receipt', 'signature'], 'receipt envelope', errors)
-
-  if (!isCanonicalReceiptSignature(input['signature'])) {
-    errors.push('receipt envelope.signature: not a canonical 64-byte base64url Ed25519 signature')
-  }
-
-  const receipt = input['receipt']
-  if (!isPlainObject(receipt)) {
-    errors.push('receipt: not an object')
-    return { ok: false, errors }
-  }
-
-  const receiptType = receipt['receiptType']
-  const isRevocation = receiptType === 'revocation'
-  const expected = isRevocation ? [...RECEIPT_KEYS, 'revokesReceiptId'] : RECEIPT_KEYS
-  checkKeys(receipt, expected, 'receipt', errors)
-
-  if (!(RECEIPT_TYPES as readonly unknown[]).includes(receiptType)) {
-    errors.push('receipt.receiptType: unknown receipt type')
-  }
-  if (receipt['algorithm'] !== RECEIPT_SIGNATURE_ALGORITHM) {
-    errors.push('receipt.algorithm: only ed25519 is accepted')
-  }
-  if (receipt['contractVersion'] !== HOMEOWNER_SHARE_CONTRACT_VERSION) {
-    errors.push('receipt.contractVersion: unsupported contract version')
-  }
-  if (receipt['issuer'] !== HOMEOWNER_SHARE_ISSUER) {
-    errors.push('receipt.issuer: unexpected issuer')
-  }
-  if (receipt['audience'] !== HOMEOWNER_SHARE_AUDIENCE) {
-    errors.push('receipt.audience: unexpected audience')
-  }
-  if (receipt['purpose'] !== HOMEOWNER_SHARE_PURPOSE) {
-    errors.push('receipt.purpose: unexpected purpose')
-  }
-  if (!isOpaqueId(receipt['receiptId'], 'receipt')) {
-    errors.push('receipt.receiptId: not an opaque receipt reference')
-  }
-  if (!isOpaqueId(receipt['shareId'], 'share')) {
-    errors.push('receipt.shareId: not an opaque share reference')
-  }
-  if (!isOpaqueId(receipt['recipientRef'], 'recipient')) {
-    errors.push('receipt.recipientRef: not an opaque recipient reference')
-  }
-  if (!isSha256Hex(receipt['manifestDigest'])) {
-    errors.push('receipt.manifestDigest: not a lowercase hex SHA-256 digest')
-  }
-  if (typeof receipt['keyId'] !== 'string' || !KEY_ID.test(receipt['keyId'])) {
-    errors.push('receipt.keyId: not a well-formed key identifier')
-  }
-  if (typeof receipt['policyVersion'] !== 'string' || !POLICY_VERSION.test(receipt['policyVersion'])) {
-    errors.push('receipt.policyVersion: not a well-formed policy version')
-  }
-
-  const generation = receipt['generation']
-  if (!Number.isSafeInteger(generation) || (generation as number) < 1) {
-    errors.push('receipt.generation: must be a positive integer')
-  }
-
-  const issuedAt = receipt['issuedAt']
-  const expiresAt = receipt['expiresAt']
-  if (!isCanonicalInstant(issuedAt)) errors.push('receipt.issuedAt: not a canonical UTC millisecond instant')
-  if (!isCanonicalInstant(expiresAt)) errors.push('receipt.expiresAt: not a canonical UTC millisecond instant')
-  if (isCanonicalInstant(issuedAt) && isCanonicalInstant(expiresAt)) {
-    if (instantToMillis(expiresAt) <= instantToMillis(issuedAt)) {
-      errors.push('receipt.expiresAt: must be after issuedAt')
-    }
-  }
-
-  if (isRevocation && !isOpaqueId(receipt['revokesReceiptId'], 'receipt')) {
-    errors.push('receipt.revokesReceiptId: a revocation must name the receipt it withdraws')
-  }
-
-  if (errors.length > 0) return { ok: false, errors }
-  return { ok: true, value: input as unknown as SignedReceipt }
-}
-
-// --- binding ------------------------------------------------------------------
-
-/** Every field the two authorities must agree on to be the same disclosure. */
-const BOUND_FIELDS = Object.freeze([
-  'audience',
-  'contractVersion',
-  'expiresAt',
-  'generation',
-  'issuer',
-  'manifestDigest',
-  'policyVersion',
-  'purpose',
-  'recipientRef',
-  'shareId',
-] as const)
-
-export type BindingResult = { readonly bound: true } | { readonly bound: false; readonly errors: readonly string[] }
-
-/**
- * Bind an authorization and a consent to each other and to one exact manifest.
- * A mismatch on any bound field means the two receipts describe different
- * disclosures and neither authorizes the other's manifest.
- */
-export function bindAuthorities(
-  manifest: ShareManifest,
-  authorization: ReceiptCore,
-  consent: ReceiptCore,
-): BindingResult {
-  const errors: string[] = []
-
-  if (authorization.receiptType !== 'authorization') errors.push('authorization: wrong receipt type')
-  if (consent.receiptType !== 'consent') errors.push('consent: wrong receipt type')
-
-  const digest = manifestDigest(manifest)
-  if (authorization.manifestDigest !== digest) errors.push('authorization: manifest digest mismatch')
-  if (consent.manifestDigest !== digest) errors.push('consent: manifest digest mismatch')
-
-  if (authorization.shareId !== manifest.shareId) errors.push('authorization: shareId does not match the manifest')
-  if (consent.shareId !== manifest.shareId) errors.push('consent: shareId does not match the manifest')
-  if (authorization.recipientRef !== manifest.recipientRef) {
-    errors.push('authorization: recipientRef does not match the manifest')
-  }
-  if (consent.recipientRef !== manifest.recipientRef) {
-    errors.push('consent: recipientRef does not match the manifest')
-  }
-  if (authorization.generation !== manifest.generation) {
-    errors.push('authorization: generation does not match the manifest')
-  }
-  if (consent.generation !== manifest.generation) {
-    errors.push('consent: generation does not match the manifest')
-  }
-
-  for (const field of BOUND_FIELDS) {
-    if (authorization[field] !== consent[field]) {
-      errors.push(`binding: authorization and consent disagree on "${field}"`)
-    }
-  }
-
-  // Chronology: a homeowner cannot consent to a disclosure that was not yet
-  // authorized, and neither authority may outlive the manifest.
-  const authIssued = instantToMillis(authorization.issuedAt)
-  const consentIssued = instantToMillis(consent.issuedAt)
-  const manifestIssued = instantToMillis(manifest.issuedAt)
-  const manifestExpires = instantToMillis(manifest.expiresAt)
-
-  if (authIssued < manifestIssued) errors.push('chronology: authorization predates the manifest')
-  if (consentIssued < authIssued) errors.push('chronology: consent predates the authorization')
-  if (instantToMillis(authorization.expiresAt) > manifestExpires) {
-    errors.push('chronology: authorization outlives the manifest')
-  }
-  if (instantToMillis(consent.expiresAt) > manifestExpires) {
-    errors.push('chronology: consent outlives the manifest')
-  }
-
-  if (errors.length > 0) return { bound: false, errors }
-  return { bound: true }
-}
-
-// =============================================================================
-// Append-only receipt ledger
-// =============================================================================
-
-export type LedgerEntry = {
-  readonly replayKey: string
-  /** Canonical bytes of the whole signed envelope, for exact-replay comparison. */
-  readonly canonicalBytes: string
-  readonly receipt: ReceiptCore
-}
-
-export type Ledger = {
-  readonly entries: readonly LedgerEntry[]
-}
-
-export const EMPTY_LEDGER: Ledger = Object.freeze({ entries: Object.freeze([]) })
-
-export type AppendOutcome =
-  | { readonly outcome: 'appended'; readonly ledger: Ledger }
-  /** Byte-identical resubmission of an act already recorded. State unchanged. */
-  | { readonly outcome: 'exact_replay'; readonly ledger: Ledger }
-  /** Same identity, different bytes. Refused: one of the two is not genuine. */
-  | { readonly outcome: 'conflict'; readonly ledger: Ledger; readonly errors: readonly string[] }
-  | { readonly outcome: 'rejected'; readonly ledger: Ledger; readonly errors: readonly string[] }
-
-/**
- * Append a signed receipt. The ledger is never edited in place and entries are
- * never removed: `appendReceipt` returns a new ledger and the input is
- * untouched, so "the current state" is always a fold over the full history.
- */
-export function appendReceipt(ledger: Ledger, signed: SignedReceipt): AppendOutcome {
-  const parsed = parseSignedReceipt(signed)
-  if (!parsed.ok) return { outcome: 'rejected', ledger, errors: parsed.errors }
-
-  const receipt = parsed.value.receipt
-  const replayKey = receiptReplayKey(receipt)
-  const canonicalBytes = canonicalJson(parsed.value)
-
-  const existing = ledger.entries.find(entry => entry.replayKey === replayKey)
-  if (existing) {
-    if (existing.canonicalBytes === canonicalBytes) {
-      return { outcome: 'exact_replay', ledger }
-    }
-    return {
-      outcome: 'conflict',
-      ledger,
-      errors: ['ledger: a different receipt already exists with this identity'],
-    }
-  }
-
-  if (receipt.receiptType === 'revocation') {
-    const targetId = receipt.revokesReceiptId
-    const target = ledger.entries.find(entry => entry.receipt.receiptId === targetId)
-    if (!target) {
-      return { outcome: 'rejected', ledger, errors: ['revocation: names a receipt this ledger has never seen'] }
-    }
-    if (target.receipt.receiptType === 'revocation') {
-      return { outcome: 'rejected', ledger, errors: ['revocation: a revocation cannot itself be revoked'] }
-    }
-    const mismatches: string[] = []
-    if (target.receipt.shareId !== receipt.shareId) mismatches.push('shareId')
-    if (target.receipt.recipientRef !== receipt.recipientRef) mismatches.push('recipientRef')
-    if (target.receipt.manifestDigest !== receipt.manifestDigest) mismatches.push('manifestDigest')
-    if (target.receipt.generation !== receipt.generation) mismatches.push('generation')
-    if (mismatches.length > 0) {
-      return {
-        outcome: 'rejected',
-        ledger,
-        errors: [`revocation: does not bind to its target (${mismatches.join(', ')})`],
-      }
-    }
-  }
-
-  return {
-    outcome: 'appended',
-    ledger: { entries: [...ledger.entries, { replayKey, canonicalBytes, receipt }] },
-  }
-}
-
-export type LedgerState = {
-  readonly authorizationActive: boolean
-  readonly consentActive: boolean
-  readonly revokedReceiptIds: readonly string[]
-}
-
-/**
- * Current state as a fold over the whole ledger. Revocation is terminal: once a
- * receipt id appears as a revocation target it can never become active again,
- * because there is no receipt type that un-revokes.
- */
-export function ledgerState(ledger: Ledger, shareId: string, manifestDigestValue: string, now: Date): LedgerState {
-  const revoked = new Set<string>()
-  for (const entry of ledger.entries) {
-    if (entry.receipt.receiptType === 'revocation' && entry.receipt.revokesReceiptId) {
-      revoked.add(entry.receipt.revokesReceiptId)
-    }
-  }
-
-  const live = (type: ReceiptType): boolean =>
-    ledger.entries.some(entry => {
-      const receipt = entry.receipt
-      if (receipt.receiptType !== type) return false
-      if (receipt.shareId !== shareId) return false
-      if (receipt.manifestDigest !== manifestDigestValue) return false
-      if (revoked.has(receipt.receiptId)) return false
-      return instantToMillis(receipt.expiresAt) > now.getTime()
-    })
-
-  return {
-    authorizationActive: live('authorization'),
-    consentActive: live('consent'),
-    revokedReceiptIds: [...revoked],
-  }
-}
-
-// =============================================================================
-// Delivery decision — Phase 0
-// =============================================================================
-
-export type DeliveryInput = {
-  readonly manifest: ShareManifest
-  readonly authorization: ReceiptCore
-  readonly consent: ReceiptCore
-  readonly ledger: Ledger
-}
-
-/**
- * The decision type cannot express success. `authorized` is the literal `false`,
- * so Phase 0 inertness is a compile-time property: making this contract deliver
- * anything requires editing this type, which is a reviewable change rather than
- * a runtime configuration slip.
- */
-export type DeliveryDecision = {
-  readonly authorized: false
-  readonly reasons: readonly string[]
-  /** Always present. Structure is not authorization. */
-  readonly warning: typeof STRUCTURAL_VALIDATION_WARNING
-}
-
-/**
- * Evaluate a would-be delivery. Every reason the request fails is collected for
- * the internal audit record; see `externalRefusal` for what a caller is told.
- */
-export function evaluateDelivery(input: DeliveryInput, now: Date): DeliveryDecision {
-  const reasons: string[] = []
-
-  const parsed = parseShareManifest(input.manifest)
-  if (!parsed.ok) {
-    reasons.push(...parsed.errors)
-  } else {
-    const binding = bindAuthorities(parsed.value, input.authorization, input.consent)
-    if (!binding.bound) reasons.push(...binding.errors)
-
-    const digest = manifestDigest(parsed.value)
-    const state = ledgerState(input.ledger, parsed.value.shareId, digest, now)
-    if (!state.authorizationActive) reasons.push('no live authorization for this manifest')
-    if (!state.consentActive) reasons.push('no live consent for this manifest')
-    if (instantToMillis(parsed.value.expiresAt) <= now.getTime()) reasons.push('manifest has expired')
-
-    for (const artifact of parsed.value.artifacts) {
-      if (!LAUNCH_APPROVED_PROJECTION_KINDS.includes(artifact.projectionKind)) {
-        reasons.push(`projection kind "${artifact.projectionKind}" is not launch-approved`)
-      }
-    }
-  }
-
-  reasons.push('phase 0: Homesrolo has no delivery path and authorizes nothing')
-
-  return { authorized: false, reasons, warning: STRUCTURAL_VALIDATION_WARNING }
-}
-
-/**
- * What a caller outside the trust boundary is told. Collapsed to one fixed
- * string: an attacker who can distinguish "no such share" from "revoked" from
- * "expired" can enumerate shares and learn the state of other people's claims
- * without ever being authorized. The detailed reasons stay in the audit record.
- */
-export const EXTERNAL_REFUSAL_MESSAGE = 'This request is not authorized.'
-
-export function externalRefusal(): { readonly error: typeof EXTERNAL_REFUSAL_MESSAGE } {
-  return { error: EXTERNAL_REFUSAL_MESSAGE }
-}
-
-// =============================================================================
-// Cross-repo golden vectors
-// =============================================================================
-
-const GOLDEN_SHARE_ID = 'hshr_sssssssssssssssssssssssssssssssssssssssssss'
-const GOLDEN_RECIPIENT_REF = 'hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'
-const GOLDEN_MANIFEST_DIGEST = '1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1'
-const GOLDEN_AUTHORIZATION_ID = 'hrec_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu'
-const GOLDEN_CONSENT_ID = 'hrec_ccccccccccccccccccccccccccccccccccccccccccc'
-const GOLDEN_REVOCATION_ID = 'hrec_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv'
-
-const GOLDEN_AUTHORIZATION: ReceiptCore = Object.freeze({
-  algorithm: RECEIPT_SIGNATURE_ALGORITHM,
-  audience: HOMEOWNER_SHARE_AUDIENCE,
-  contractVersion: HOMEOWNER_SHARE_CONTRACT_VERSION,
-  expiresAt: '2026-08-15T12:00:00.000Z',
-  generation: 1,
-  issuedAt: '2026-08-08T12:00:00.000Z',
-  issuer: HOMEOWNER_SHARE_ISSUER,
-  keyId: 'jobrolo-share-2026a',
-  manifestDigest: GOLDEN_MANIFEST_DIGEST,
-  policyVersion: 'homeowner-disclosure.v1',
-  purpose: HOMEOWNER_SHARE_PURPOSE,
-  receiptId: GOLDEN_AUTHORIZATION_ID,
-  receiptType: 'authorization',
-  recipientRef: GOLDEN_RECIPIENT_REF,
-  shareId: GOLDEN_SHARE_ID,
-})
-
-const GOLDEN_CONSENT: ReceiptCore = Object.freeze({
-  ...GOLDEN_AUTHORIZATION,
-  issuedAt: '2026-08-08T12:05:00.000Z',
-  keyId: 'homesrolo-consent-2026a',
-  receiptId: GOLDEN_CONSENT_ID,
-  receiptType: 'consent',
-})
-
-const GOLDEN_REVOCATION: ReceiptCore = Object.freeze({
-  ...GOLDEN_AUTHORIZATION,
-  issuedAt: '2026-08-10T12:00:00.000Z',
-  receiptId: GOLDEN_REVOCATION_ID,
-  receiptType: 'revocation',
-  revokesReceiptId: GOLDEN_AUTHORIZATION_ID,
-})
-
-/**
- * The cross-repo golden vectors. Both repositories must reproduce every value
- * here exactly; a disagreement on one byte is a disagreement about what was
- * authorized.
- *
- * The manifest layer came from Jobrolo. The receipt layer is defined here —
- * see RECEIPT_WIRE_RECONCILIATION for why.
- */
-export const WIRE_GOLDEN = Object.freeze({
-  manifestJson:
-    '{"artifacts":[{"artifactRef":"hproj_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","byteLength":1024,"mediaType":"application/json","projectionKind":"work_status_summary","projectionVersion":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"homeowner_release"}],"audience":"homesrolo","contractVersion":"homeowner-share.v1","expiresAt":"2026-08-15T12:00:00.000Z","generation":1,"issuedAt":"2026-08-08T12:00:00.000Z","issuer":"jobrolo","nonce":"hnce_nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn","purpose":"homeowner_work_records","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}',
-  manifestDigest: GOLDEN_MANIFEST_DIGEST,
-  authorization: GOLDEN_AUTHORIZATION,
-  consent: GOLDEN_CONSENT,
-  revocation: GOLDEN_REVOCATION,
-  authorizationReplayKey: '17a1f92742b0e80b877e991be6e270a518e693f4ffdf92b628601b61048e8842',
-  consentReplayKey: 'f216b80007cbcabbcc810f4ee65558a82b518146a4410d3c95751fe51d51138d',
-  revocationReplayKey: '7fb58c2de94007c671176b04dcc75de1cefbbb102252b2b4dbdd80f95b407dc6',
-  // Digest of the signing input rather than the input itself: the input embeds
-  // the whole canonical receipt, so a digest is the checkable form.
-  authorizationSigningInputDigest: '439c238a0d7d6c9200d552d91b93f7fb09b5db6158cfd416728485dce14dea6a',
-  consentSigningInputDigest: 'ecd1d87988b1a66b060ef75b992e072e572e0c8b4ab4b35e40b70a061447569c',
-  revocationSigningInputDigest: '8a36c10239bdc600bdf5415a44766988f85e959e575c030ff83edc0fb2f0364d',
-})
-
-/**
- * The three replay-key values that arrived with Jobrolo's original brief.
- *
- * They are kept here, unused, as a tripwire. No derivation over the published
- * identity fields reproduces them (6,408,192 candidates searched), and no code
- * in either repository produces them — Jobrolo has never contained a
- * homeowner-share implementation. They appear to have come from a scratch
- * script that no longer exists.
- *
- * If a Jobrolo implementation ever emits one of these, the two sides have
- * diverged and the test asserting they are NOT produced here will say so.
- */
-export const SUPERSEDED_REPLAY_KEYS = Object.freeze([
-  '532afbc246fd5be873839be88a3ad811c083529204e1fafc3e51bae49328575f',
-  '801f74c84aca67311a2d53a3f3aa458f38ed9ad54fdd2f66208f6bc23cf1ca48',
-  'dcd1f96647db72262610750e78256bcae0c8ba1a19567e6238a5f635b6b66e0a',
-])
-
-/**
- * Which side of the boundary each layer's definition came from, and whether CI
- * proves it.
- *
- * `manifest: 'reconciled_from_jobrolo'` — the manifest form was specified by
- * Jobrolo. `WIRE_GOLDEN.manifestJson` parses strictly here, re-canonicalizes to
- * identical bytes, and digests to `WIRE_GOLDEN.manifestDigest`. Asserted in CI.
- *
- * `receipts: 'defined_by_homesrolo'` — the receipt layer is specified HERE and
- * Jobrolo implements against it.
- *
- * Why the direction reversed: Jobrolo's brief supplied three expected replay
- * keys without the derivation that produces them. An exhaustive search over
- * every subset, ordering, separator, prefix, and receipt-type spelling of the
- * eleven published identity fields (6,408,192 candidates) reproduced none of
- * them. Jobrolo's repository was then checked directly and contains no
- * homeowner-share implementation at all: no branch, no pull request, and no
- * occurrence of `homeowner_release`, `homeowner-share`, `hproj_`, `hshr_`,
- * `hrcp_`, `replayKey`, or `manifestDigest` on main. There was no
- * implementation to be compatible with, so waiting for one to be published
- * could not terminate.
- *
- * This file is therefore the normative definition of the receipt layer. Every
- * value in `WIRE_GOLDEN` is produced by the functions in this file and asserted
- * in CI, so the specification and the implementation cannot drift.
- *
- * See `docs/RECEIPT_WIRE_SPEC.md` for the document Jobrolo implements from.
- * When a Jobrolo implementation reproduces these vectors, that side is
- * reconciled; until then, treat cross-repo receipt exchange as unbuilt.
- */
-export const RECEIPT_WIRE_RECONCILIATION = Object.freeze({
-  manifest: 'reconciled_from_jobrolo',
-  receipts: 'defined_by_homesrolo',
-} as const)

@@ -1,160 +1,121 @@
-# Threat model, privacy, and failure behavior
+# Threat Model, Privacy, and Failure Behavior
 
-Scope: the Homesrolo homeowner surface and the future `homeowner-share.v1` path
-to Jobrolo. Written before implementation so the controls are requirements
-rather than retrofits.
+Scope: Homesrolo Phase 0, the future home file, and the future
+homeowner-share.v1 path. No live system or homeowner data exists here.
 
-**Not a legal or security certification.** Attorney review of the design records
-has been obtained (see `CONSTITUTION.md`, "Legal review record"). An independent
-**security** review is still outstanding and is required before any real
-homeowner data exists — that is a separate discipline and a legal review does
-not substitute for it.
+Chance states that an attorney familiar with the operations has reviewed how
+the business can work. This repository does not request, publish, or require
+privileged attorney details. The design records are still not legal advice or
+a product-wide compliance certification. A specific future data use can need
+additional review even when the underlying business model was reviewed.
 
-## Assets worth protecting
+## Assets
 
-1. **Homeowner identity** (phone, name, address association). Consumer PII.
-2. **A contractor tenant's records** exposed through a share. Another business's
-   private data, disclosed only under explicit authorization.
-3. **The consent ledger.** The record of who allowed what, and when it stopped.
-4. **The boundary itself.** A Homesrolo that gives claim advice is a regulatory
-   incident even with zero data loss.
+1. Homeowner identity and account recovery.
+2. The mapping between a person and a home.
+3. Contribution payloads, their existence, and controller identity.
+4. Jobrolo contractor records released through an exact share.
+5. Authorization, consent, revocation, correction, merge/split, and deletion
+   receipts.
+6. Signing keys and authoritative current-state ledgers.
+7. The education-not-advocacy boundary.
 
 ## Threats and required controls
 
-| # | Threat | Control |
-|---|---|---|
-| T1 | Prompt manipulation pushes the assistant into advocacy | Code-owned constitution, adversarial and hardening suites, response audit before display, constrained scope |
-| T2 | Homeowner claims an address they do not own | Ownership is a claim, never self-asserted truth; access requires an authorization receipt issued by a contractor tenant |
-| T3 | Recycled phone number inherits a prior homeowner's record | Durable account id behind the number; phone alone never unlocks a record; re-verification after dormancy |
-| T4 | Revoked or expired access still readable | Both receipts rechecked at read time against the current ledger; manifest expiry, receipt expiry, and revocation each independently sufficient to refuse; nothing durable cached that cannot be re-verified |
-| T5 | Replay of a captured receipt | Stable replay key over receipt identity; a byte-identical resubmission is an idempotent no-op, and the same identity with different bytes is a conflict that refuses **both** |
-| T6 | Enumeration of share ids or recipient refs | Fixed-prefix 43-character opaque identifiers, validated by shape and refused if PII-shaped; every external failure collapses to one fixed string that names no cause; rate limits |
-| T7 | Over-disclosure through a broad grant | An immutable manifest names exact projections; no folder, project, or membership-implies-access grant; 25-artifact and 100 MiB caps |
-| T8 | Substitution of content behind an authorized reference | Per-projection SHA-256 and projection version pinned inside the manifest; the manifest digest is bound into both receipts, so changing one byte invalidates both authorities |
-| T9 | Internal identifiers leak to the homeowner surface | Strict all-or-nothing parsing; storage paths, buckets, document ids, filenames, labels, URLs, notes, metadata, project ids, tenant names, and customer contacts are rejected **by name** and reject the whole manifest |
-| T10 | Excluded material shared by mistake | Only `homeowner_release` projections are expressible; raw documents and database rows have no representation; excluded kinds enumerated by name and asserted by tests |
-| T11 | Address or parcel matching merges two households | **Highest-severity open problem** once the home file exists. No property matching in the share contract; scoping is by exact issued share id. For the home file: no silent merge, merges recorded rather than destructive, no fuzzy auto-merge, split always available (`HOME_FILE_RFC.md` §3) |
-| T11a | A permanent record collides with statutory deletion rights | Property facts and person facts stored separately; contributions carry an opaque owner reference, never an identity; deleting an account severs the link and tombstones ownership without anyone inheriting access |
-| T11b | The home file becomes a consumer report without the obligations of one | Open regulatory question (`HOME_FILE_RFC.md` §5). A dispute-and-correction path and permissible-purpose limits must be designed in before launch, not retrofitted |
-| T12 | Compromised Homesrolo pivots into Jobrolo | Read-only, purpose-limited path; no write path; Homesrolo holds only its own consent-signing key and never Jobrolo's; kill switch on the Jobrolo side |
-| T13 | Forged authority from one compromised system | The two signing keys are independent and held by different systems; a Jobrolo compromise cannot manufacture consent and a Homesrolo compromise cannot manufacture authorization |
-| T14 | Ledger rewritten to resurrect revoked access | Append-only; entries are never edited or removed; current state is a fold over the whole history and there is no receipt type that un-revokes |
-| T15 | Structural validation mistaken for authorization | `STRUCTURAL_VALIDATION_WARNING` is carried on every decision and asserted in CI: shape checking verifies no signature against a trusted key and consults no live ledger |
-| T16 | Payload or resource abuse | 25 artifacts, 25 MiB per artifact, 100 MiB aggregate, 64 KiB canonical manifest, 1–30 day lifetime, rate limits, bounded response shapes |
-| T17 | Silent boundary erosion over time | Contracts asserted in CI; weakening a rule fails the build; the Phase 0 delivery decision cannot express success at the type level |
+| Threat | Required control |
+| --- | --- |
+| False property match exposes another household | Opaque home ID; no address/parcel/fuzzy auto-merge; reviewed reversible merge and split receipts |
+| Claimed ownership becomes access | Identity/ownership claims are evidence only; current controller or exact active share required |
+| New owner inherits prior content | Property transfer creates no content grant; fresh identity and authority review |
+| Existence metadata leaks sensitive activity | No recipient-wide catalog; existence and count are default deny |
+| Uploader grants rights they do not hold | Separate submitting actor from verified controller; server-derived current rights basis |
+| Broad or mutable grant | Exact immutable manifest and release projections, pinned by digest/version; no project/folder/latest grant |
+| Cross-tenant confused deputy | Derive tenant, actor, source, and project on Jobrolo; derive user and consent on Homesrolo; recheck before serialization |
+| Receipt forgery or key downgrade | Independent Ed25519 keys, canonical encodings, trusted key registry, rotation, minimum versions, emergency revoke |
+| Replay or same-ID mutation | Stable replay identity plus full canonical-byte comparison; global receipt-ID uniqueness; conflict quarantine |
+| Revoked/expired authority serves stale bytes | Current authoritative ledger checks before and after bounded storage read; equality at expiry is expired |
+| Raw record or metadata leakage | Strict projection serializers; no filenames, URLs, paths, free text, contacts, claim data, costs, notes, memory, or provider output |
+| Deletion is falsely described as erasure | Classification-specific deletion/retention; explicit payload vs audit tombstone truth; backup/legal-hold SLA |
+| “Permanent” becomes indefinite personal-data storage | Durable logical identity, not forever raw bytes; data inventory and deletion policy before launch |
+| Home history is furnished for decisions without proper regime | V1 forbids underwriting, pricing, lending, purchase, tenant, employment, and adverse-action uses |
+| Assistant drifts into claim advice | Constitution classifier, response audit, education-only alternatives, no Claim Network/Thresher data |
+| Partial outage serves cached authority | Fail closed; no stale authorization fallback or partial-manifest success |
+| Resource exhaustion | Count/byte/time caps before allocation, bounded reads, concurrency and rate limits |
+| Phase 0 accidentally activates | Empty projection allowlist, delivery result literal false, no route/DB/env/import wiring |
 
-## Privacy and data inventory
+## Receipt truth
 
-**Homesrolo will hold** (none of it yet): homeowner account id (opaque, durable),
-phone number (identity and delivery), display name (optional), consent records
-(share id, status, timestamps), and audit events.
+The Phase 0 module validates shape, canonical bytes, binding, and chronology.
+It does not verify a signature against a trusted key or query an authoritative
+revocation ledger. Structural compatibility must never authorize delivery.
 
-**Homesrolo will not hold**: contractor tenant records, insurance policies,
-carrier communications, claim files, Thresher output, payment instruments, or
-government identifiers.
+A future ledger needs:
 
-**Crossing the boundary, Homesrolo sends** an opaque `recipientRef`, an opaque
-`shareId`, and a consent receipt bound to a manifest digest. **It never sends**
-the homeowner's phone number, email, name, or address.
+- globally unique receipt identity within the protocol domain;
+- byte-identical replay as idempotent;
+- same identity/different bytes as a durable conflict/quarantine condition,
+  not “first one wins”;
+- append-only revocation events bound to exact target receipt and manifest;
+- no un-revoke transition; and
+- online current-state checks in both services.
 
-**Jobrolo's manifest carries** opaque projection references, projection kind and
-version, media type, byte length, and content digest, plus the share's issuer,
-audience, purpose, nonce, generation, and expiry. **It never carries** storage
-paths, buckets, document ids, filenames, labels, URLs, titles, notes, metadata,
-project ids, customer contacts, tenant names, claim or policy numbers, margins,
-memories, or agent analysis — each of those is rejected by name, and one of them
-anywhere rejects the entire manifest.
+The present contract intentionally contains no live ledger implementation.
 
-## Consent, revocation, deletion
+## Privacy inventory
 
-**Consent** is explicit and per manifest. A homeowner accepts one exact set of
-projections, identified by digest. Silence is not acceptance, and consent to one
-manifest is not consent to the next generation of it.
+Future design must inventory, field by field:
 
-**Revocation** is unilateral from either side, append-only, and terminal. A
-contractor may withdraw the authorization; a homeowner may withdraw consent.
-Neither needs the other's agreement, and there is no receipt type that restores
-a revoked one. Current state is a fold over the whole ledger, so "is this still
-authorized" is always answered from history rather than from a mutable flag.
+- account/contact/identity-proof data;
+- home identity aliases and provenance;
+- contributions, source/controller rights, and content classifications;
+- manifests and three receipt families;
+- access, denial, revocation, correction, merge/split, and deletion events;
+- logs, metrics, traces, support tools, incident copies, backups, indexes, and
+  exports; and
+- every processor, region, encryption boundary, role, retention period, and
+  deletion path.
 
-**Revocation stops future access. It cannot claw back a copy already taken.**
-If a homeowner downloaded, screenshotted, exported, or forwarded a projection
-while the share was live, revoking the share does not reach that copy, and no
-technical control in this contract can. The same is true in the other
-direction. This has to be said in the homeowner-facing and contractor-facing
-notices in exactly these terms, because "revoke" reads to most people as
-"un-send", and a product that lets that misreading stand has misled both sides
-about what they were agreeing to.
+Opaque or pseudonymous identifiers can still be personal data when reasonably
+linkable. Audit fields must be minimized and may not reconstruct deleted
+payloads.
 
-**Deletion** distinguishes three things that are easy to conflate:
+## Consent, revocation, and deletion
 
-- A homeowner may delete their Homesrolo account, identity, and consent records.
-  That removes their access and their personal data from Homesrolo.
-- It does **not** delete the contractor's own job records in Jobrolo. Those are
-  the contractor's business records, kept for their own legal and warranty
-  obligations. Deletion revokes access; it does not reach into another party's
-  system.
-- It does **not** delete the append-only receipt ledger. The record that consent
-  was given and withdrawn is the evidence that the boundary was honored, and
-  erasing it would destroy the only proof either party has. Ledger entries carry
-  opaque identifiers only, so retaining them retains no personal data.
+- Consent is affirmative, exact-manifest, purpose-bound, and expiring.
+- Silence, login, link possession, home ownership, or earlier consent is not
+  current consent.
+- Either side may revoke its own authority through an immutable revocation
+  event.
+- Revocation stops future access but cannot claw back a legitimate prior
+  download, screenshot, export, or forward.
+- Account deletion removes or de-identifies personal data under the reviewed
+  policy and revokes consent; it does not delete another company’s Jobrolo
+  source record.
+- A minimal audit tombstone may remain only under a documented retention/legal
+  basis and may not restore the payload.
 
-All three must be stated plainly in the privacy notice, because a homeowner who
-believes "delete" erases the contractor's file has been misled.
+## External failures
 
-## Audit
+Externally, absent, inaccessible, expired, revoked, malformed, and unknown
+shares should collapse where distinguishing them would enumerate people,
+homes, or records. Internally, authorized audit lanes retain bounded reason
+codes without payloads or unnecessary personal fields.
 
-Append-only, with no in-place edit path: consent accepted or withdrawn,
-authorization issued or revoked, every disclosure read (share id, homeowner ref,
-artifact refs, outcome), every refusal with category, and every constitution
-refusal with the framing devices detected. Audit records carry opaque
-identifiers only.
+There is no partial success. One invalid artifact or receipt rejects the whole
+operation.
 
-## Failure behavior
-
-Fail closed, without exception:
-
-- Unknown contract version, unknown field, malformed payload, oversized payload:
-  refuse the **whole** manifest. Never filter the bad items and return the rest,
-  because a caller handed a shortened list cannot tell it was shortened.
-- Missing, expired, or revoked receipt on either side: refuse.
-- Manifest expired, or receipts not bound to the same manifest digest: refuse.
-- Two receipts with the same identity and different bytes: refuse both, because
-  one of them is not genuine and there is no way to tell which.
-- Projection kind not launch-approved: refuse. In Phase 0 that set is empty.
-- Jobrolo unreachable: refuse and say so. **Never serve stale cached records**,
-  because the cache cannot know whether consent was withdrawn a minute ago.
-- Constitution classifier uncertain: refuse and route to a licensed professional.
-
-**Internally, every reason is recorded. Externally, they all collapse to one.**
-The audit record keeps the specific cause; the caller is told only
-`This request is not authorized.` A caller who can distinguish "no such share"
-from "revoked" from "expired" can enumerate shares and learn the state of other
-people's claims without ever being authorized, so the external refusal names no
-cause and is byte-identical in every case.
-
-An empty result is always a refusal, never an empty success, so a caller cannot
-read "nothing came back" as "nothing was shared".
-
-## Canary and rollback
+## Launch gates
 
 Before any real homeowner:
 
-1. Apply and verify migrations in a non-production environment.
-2. Generate a dedicated Homesrolo consent-signing Ed25519 key, distinct from
-   every other secret and never shared with Jobrolo. Publish only its public
-   half, and agree a rotation and `keyId` scheme with Jobrolo first.
-3. Confirm a Jobrolo implementation reproduces every golden vector in
-   `docs/RECEIPT_WIRE_SPEC.md`. **Until that is done, no receipt produced by one
-   side is meaningful to the other.**
-4. Run a synthetic homeowner canary end to end.
-5. Prove that cross-share, cross-recipient, revoked, withdrawn, expired,
-   replayed, conflicting, oversized, and malformed requests all fail closed, and
-   that every one of them produces the identical external refusal.
-6. Prove the full lifecycle: authorize, accept, read, revoke from each side,
-   confirm access stops, confirm the ledger is complete and append-only.
-7. Confirm no tenant-specific identity appears anywhere in Homesrolo.
-
-**Rollback** is an environment kill switch on the Jobrolo side that stops issuing
-and honoring shares. Homesrolo degrades to education only. It must never degrade
-to serving cached records.
+1. Merge and publish one reviewed wire contract in both repositories.
+2. Add trusted signature verification, independent keys, rotation, and
+   authoritative ledgers.
+3. Design property identity, controller proof, merge/split, transfer,
+   correction, deletion, retention, and incident response.
+4. Approve at least one exact projection policy and adversarial serializer.
+5. Build a synthetic two-service test covering tamper, replay conflict,
+   cross-tenant, expiry, revocation races, caps, deletion, and key rotation.
+6. Perform privacy, security, and legal review of the exact launch data flow,
+   copy, jurisdictions, and permitted uses.
+7. Run a kill-switch canary with synthetic data before any private pilot.

@@ -1,212 +1,141 @@
-# Architecture boundary
+# Architecture Boundary
 
-Four systems, four jobs. This file is the agreed line between them. It is the
-document to check before adding anything to Homesrolo.
+Status: **Phase 0 contracts and policy only.**
 
 ## Systems
 
 ### Jobrolo
-The contractor operating system and the system of record for contractor work.
-Owns tenants, jobs, documents, photos, measurements, and the authorization to
-disclose any of it. Every record is tenant-scoped.
 
-### Claim Network (inside Jobrolo)
-A provider-neutral collaboration boundary that lets a Jobrolo host share exact,
-version-pinned evidence with an independent public adjuster or impartial
-appraiser inside case-scoped rooms. Its V1 lanes are `public_adjuster`,
-`contractor_partner`, and `independent_appraiser`. **Homeowner is not one of
-them**, and Homesrolo does not enter these rooms.
+The contractor operating system and source of record for contractor tenants,
+jobs, work records, documents, photos, measurements, and the contractor-side
+authority to disclose an exact homeowner release.
 
-### Thresher (inside Jobrolo)
-The internal, provider-neutral claim specialist. It runs for owner and admin
-users only, in a read-only workflow, and per Jobrolo's own Claim Network V1
-rules it is not exposed to external participants.
+### Claim Network
 
-Two rules follow, and they are not negotiable in Homesrolo:
+A separate Jobrolo collaboration boundary for explicitly invited independent
+professionals. Its case rooms, participants, grants, contributions, and
+receipts do not flow into Homesrolo and confer no homeowner authority.
 
-- **Thresher is internal to Jobrolo.** Homesrolo never calls it, never receives
-  its output, and never presents anything as a claim analysis.
-- **No tenant is Thresher's identity.** Thresher is a provider-neutral product
-  capability. No customer, deployment, or partner name appears in Homesrolo as
-  Thresher's identity or as a source of its authority.
+### Thresher
+
+An internal, provider-neutral Jobrolo claims-workflow capability. Homesrolo
+does not call it, receive its output, use its identity, or expose it publicly.
+No tenant or customer name is Thresher’s identity.
 
 ### Homesrolo
-The homeowner surface. Owns homeowner identity, the homeowner's acceptance and
-continuing consent, and an education-only assistant. It holds no contractor
-tenant data of its own and performs no claim work.
 
-## What Homesrolo must never become
+The homeowner product. It owns homeowner identity, independent consent,
+homeowner education boundaries, and—after a later implementation review—the
+home-file record described in HOME_FILE_RFC.md.
 
-- **A second contractor CRM.** No jobs, crews, scheduling, estimating, or
-  production. If a feature would help a contractor run work, it belongs in
-  Jobrolo.
-- **A shadow public adjuster.** No claim advice, no settlement evaluation, no
-  advocacy. See `CONSTITUTION.md`.
-- **A public version of Thresher.** No claim analysis surfaced to consumers,
-  under any name.
+Homesrolo is not a contractor CRM, public adjuster, claim advocate, insurer,
+consumer-reporting product, or public version of an internal Jobrolo tool.
 
-## Data direction
+## Two separate layers
 
-Nothing is fetched by asking a question. Disclosure is described up front by an
-immutable **manifest** and unlocked by two independently signed **receipts**.
+### Home file
 
-```
-  Jobrolo                                        Homesrolo
-  -------                                        ---------
-  contractor tenants                             homeowner identity
-  jobs, documents, photos                        acceptance and consent
-  builds homeowner_release projections           education-only assistant
+The home file is Homesrolo’s future logical record for a physical home. It
+separates identity, contribution control, payload retention, and visibility.
+It is not a shared folder. Membership and existence do not create access.
 
-  1. manifest         immutable, names the exact projections for one share,
-                      each pinned by SHA-256, with its own expiry
-                          |
-                          v
-  2. authorization    Ed25519, signed by Jobrolo's key, binds to the
-     receipt          manifest digest
-                          |
-                          v
-  3. consent receipt  Ed25519, signed by Homesrolo's own independent key,
-                      binds to the SAME manifest digest
-                          |
-                          v
-  4. revocation       append-only, either side, terminal
-     receipts
-```
+### Jobrolo homeowner share
 
-Both receipts must be live and bound to the same manifest digest at read time.
-Either alone is nothing. Absence of a signal is never permission.
+homeowner-share.v1 is one exact Jobrolo-to-Homesrolo disclosure protocol:
 
-No shared database. No replication. No background synchronization. No Homesrolo
-write path into Jobrolo records.
+1. Jobrolo creates a strict manifest of immutable recipient-specific
+   homeowner_release projections.
+2. A Jobrolo owner/admin authorization receipt binds the exact manifest digest.
+3. Homesrolo records independent consent bound to that same digest.
+4. Either service can later append a revocation receipt for its own authority.
+5. A future read must verify signatures, trusted keys, current ledger state,
+   expiry, exact bytes, and authorization again immediately before release.
 
-## Identity
+The protocol does not establish home ownership, property identity, a broad
+project grant, or home-file membership.
 
-Homeowner identity lives only in Homesrolo. Jobrolo never receives a phone
-number, email, or name; the homeowner appears in the contract only as an opaque
-`recipientRef`. Homesrolo receives an opaque `shareId` and `recipientRef` and
-never a tenant name, project id, customer record, filename, or storage path.
+## Normative cross-repository wire
 
-Every identifier is a fixed prefix plus 43 base64url characters (`hshr_`,
-`hrcp_`, `hproj_`, `hnce_`, `hrec_`). Identifier shapes that could carry meaning
-are rejected, so an id can never become a side channel for an address, a phone
-number, or a claim number.
+The Jobrolo Phase 0 contract is the protocol anchor. Homesrolo reproduces its
+literal canonical manifest, signing payloads, and replay keys. The current
+Homesrolo implementation is intentionally the same contract, not a competing
+translation.
 
-**The signing keys are independent.** Jobrolo signs authorizations with its key;
-Homesrolo signs consent with its own. Neither side holds the other's key, so
-neither can manufacture the other's authority, and compromising one system does
-not produce a complete disclosure.
+The exact receipt families are:
 
-## Naming
+| Receipt | Issuer → audience | ID |
+| --- | --- | --- |
+| authorization | Jobrolo → Homesrolo | hauth_ + 43 opaque characters |
+| consent | Homesrolo → Jobrolo | hcons_ + 43 opaque characters |
+| revocation | either side, for its own authority | hrev_ + 43 opaque characters |
 
-Public product surfaces say **Ask Homesrolo** and **Ask Jobrolo**. The bare word
-"Rolo" is not established as a public product name: it is crowded in software,
-including by an existing AI assistant in an adjacent category, and the coined
-compounds are the distinctive marks. Internal identifiers in either codebase are
-not public branding and are out of scope for this rule.
+Manifests use hshr_, hrcp_, hproj_, and hnce_ opaque references.
+Authorization actor references use hactor_. There is no generic hrec_
+receipt envelope in this version.
 
-## What a homeowner can see
+Every receipt carries a nested signing proof with:
 
-**Two doors: what you own, and what was shared with you. There is no third.**
+- algorithm: Ed25519;
+- a code-owned ASCII key ID; and
+- a canonical 64-byte base64url signature.
 
-Every home has a permanent file in Homesrolo, and every upload lands in it
-whoever uploads it — see `HOME_FILE_RFC.md`. But **being in the home file is not
-being visible.** The file is a container, not a shared pool: every contribution
-is owned by its uploader, default-deny to everyone else, and the share contract
-is how exceptions are granted.
+The signing payload includes algorithm and key ID and excludes only the
+signature bytes. Replay identity is stable from receipt version, issuer, and
+the receipt’s immutable ID; a different full receipt under the same replay
+identity is a conflict.
 
-So a party sees a contribution when they own it, or when it has been shared with
-them by a manifest bound by a live authorization and a live consent. Nothing
-else qualifies. Specifically, Homesrolo does not build:
+src/contracts/tests/homeowner-share.test.ts holds the literal normative
+vectors. Until both repositories publish reviewed branches and a later
+transport implements trusted verification, cross-repository exchange remains
+unbuilt.
 
-- a browse, search, or catalog of another party's contributions
-- an aggregate assembled across shares the viewer was not granted
-- a timeline, history, or summary derived from what was shared
-- any inferred, enriched, or AI-generated layer on top of a share
-- any disclosure path keyed on the recipient rather than on a specific manifest
+## Projection boundary
 
-This is enforced structurally, not just stated. The contract has **no entry
-point that takes a `recipientRef` alone** — every path that could lead to
-disclosure requires one specific manifest, so "show me everything about this
-home" cannot be written. A test scans the module's exported functions and fails
-the build if an enumerating entry point is ever added, and further tests prove
-that two shares to the same homeowner stay isolated: receipts for one share
-never make another live, and consent to one manifest is never consent to a
-different one. **Access to the home file must satisfy the same rule.**
+Only immutable homeowner_release projections are expressible. Raw Jobrolo
+documents, rows, storage objects, labels, filenames, URLs, customer/contact
+fields, addresses, claim/policy material, internal costs, notes, memory,
+Claim Network evidence, and Thresher/AI output are outside the wire.
 
-The consequence for homeowner-facing copy: revoking a share ends someone else's
-view, and it does not remove the contribution from the home file. The record is
-permanent; access is what changes. Both halves of that have to be said, because
-each one alone is a misleading promise.
+The draft projection discriminators are not a launch allowlist. The
+launch-approved set is frozen empty. Phase 0 delivery always returns
+authorized:false.
 
-## V1 sharing scope
+Caps are:
 
-**Projections, never records.** What crosses the boundary is a
-`homeowner_release` projection: a summary built for one recipient, one share,
-and one purpose. A raw document, a database row, or a storage object has no
-representation in the contract at all and fails strict parsing.
+- 25 artifacts;
+- 25 MiB per artifact;
+- 100 MiB aggregate;
+- 64 KiB canonical manifest; and
+- one to 30 days.
 
-Excluded by name in `src/contracts/homeowner-share.v1.ts` and asserted by tests:
-raw documents, database rows, storage objects, insurance policies, policy
-declarations, carrier communications, claim-strategy material, claim files,
-internal notes, margin and cost detail, contractor memory, Thresher results,
-agent analysis, and any broad project access. Field names that would leak an
-address, contact, claim number, URL, filename, label, note, metadata blob, or
-project id are rejected by name, and one bad field rejects the **entire**
-manifest rather than filtering the offending item out.
+## Identity and storage separation
 
-**Phase 0 is inert.** The launch-approved projection set is frozen empty and the
-delivery decision's type cannot express success: `authorized` is the literal
-`false`. Making this contract deliver anything is a reviewable type change, not
-a configuration flip.
+- No shared database, session, tenant, user ID, storage key, or private signing
+  key.
+- Homesrolo sends no homeowner name, phone, email, or address in this wire.
+- Jobrolo sends no tenant/project/document identity in this wire.
+- A recipient reference is not enough to enumerate shares.
+- A share ID is not authority.
+- An address or parcel is not a canonical home ID.
+- Home-file merge/split policy is separate and may never widen a share.
 
-Caps: 25 artifacts, 25 MiB per artifact, 100 MiB aggregate, 64 KiB canonical
-manifest, and a share lifetime between 1 and 30 days.
+## Visibility
 
-## Cross-repo reconciliation status
+There are two candidate visibility bases: current verified contribution
+controller, or an exact active share. Runtime authorization must derive and
+recheck either basis from authoritative state. Home ownership, occupancy,
+address match, upload action, home-file membership, and contribution existence
+do not create visibility.
 
-Two independently written implementations agree only where something proves they
-agree. `WIRE_GOLDEN` in `src/contracts/homeowner-share.v1.ts` holds the values
-Jobrolo published as normative, and CI checks Homesrolo against them.
+Tests protect the current contract surface, but an export-name scan is not a
+complete authorization system. Any future route, job, storage read, search
+index, or UI must independently enforce the same boundary.
 
-**Manifest layer: reconciled.** Jobrolo's golden manifest parses strictly here,
-re-canonicalizes to identical bytes (692 of them), and digests to Jobrolo's
-published `manifestDigest`. Asserted in CI. This pins the canonical form —
-recursively sorted keys, `JSON.stringify` primitives, UTF-8, lowercase hex
-SHA-256 — and the identifier shapes.
+## Dependency direction
 
-**Receipt layer: defined here.** Jobrolo's brief supplied three expected
-replay-key values without the derivation that produces them. An exhaustive
-search over every subset, ordering, separator, prefix, and receipt-type spelling
-of the eleven published identity fields — 6,408,192 candidates — reproduced none
-of them. Jobrolo's repository was then checked directly and contains **no
-homeowner-share implementation at all**: no branch, no pull request, and no
-occurrence of `homeowner_release`, `homeowner-share`, `hproj_`, `hshr_`,
-`hrcp_`, `replayKey`, or `manifestDigest` on main.
+Homesrolo may depend on its own policy and its copied wire contract. It must not
+import Jobrolo application code at runtime. Future interoperability should use
+a versioned independently published contract package or exact fixtures, not a
+cross-repository source import.
 
-There was no implementation to be compatible with, so waiting for the derivation
-could not terminate. Homesrolo therefore **defines** this layer, and Jobrolo
-implements against it. The specification is `docs/RECEIPT_WIRE_SPEC.md`; every
-value in it is produced by `homeowner-share.v1.ts` and asserted in CI, so the
-document and the code cannot drift.
-
-The three original values are kept in `SUPERSEDED_REPLAY_KEYS` as a tripwire,
-with a test asserting this implementation never produces them. If a Jobrolo
-implementation ever emits one, the two sides have diverged.
-
-Until a Jobrolo implementation reproduces the vectors in the spec, **cross-repo
-receipt exchange is unbuilt**, and nothing in this repo should be read as
-claiming otherwise.
-
-## Property identity
-
-**The share contract does not introduce a global property reference.** A share
-is scoped by an exact Jobrolo-issued share id. Nothing in
-`homeowner-share.v1.ts` matches on address, parcel, geohash, or owner name, and
-no two shares are ever merged into one record by it.
-
-**The home file does require property identity**, and that is now the
-highest-severity unsolved problem in the design, because a wrong match shows one
-household another household's home. `HOME_FILE_RFC.md` §3 sets the requirements:
-no silent merges, merges recorded rather than destructive, no fuzzy auto-merge,
-and a split always available. None of it is built, and the share contract stays
-free of property matching either way.
+Claim Network and Thresher never depend on Homesrolo.

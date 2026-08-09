@@ -1,49 +1,56 @@
 # Homesrolo
 
-The homeowner side of the Jobrolo network. A homeowner's record of their own
-home, and an assistant that explains how things work.
+The homeowner side of the Jobrolo network: a durable record of a home and an
+education-first assistant that helps homeowners understand maintenance and
+work history without acting as a contractor CRM, public adjuster, insurer, or
+claim advocate.
 
-**Status: Phase 0.** This repository currently contains contracts, tests, and
-architecture documents only. There is no website, no account system, no
-database, no live assistant, no uploads, and no connection to Jobrolo.
-
-## What this repository is for
-
-Homesrolo gives a homeowner one place that is theirs: the work done on their
-home, the photos and measurements behind it, and plain answers about how the
-process works. Contractors keep their own system. Homeowners get their own.
-
-Public surfaces say **Ask Homesrolo**.
-
-## What Homesrolo is not
-
-- Not a contractor CRM. Jobs, crews, scheduling, and estimating live in Jobrolo.
-- Not a public adjuster. It explains; it never advises on a claim, a policy, or
-  a settlement. See `docs/CONSTITUTION.md`.
-- Not a consumer version of any internal Jobrolo claim capability.
+**Status: Phase 0.** This repository contains pure contracts, tests, and
+architecture policy only. There is no website, account system, database,
+upload route, property resolver, live assistant, share transport, or
+production connection to Jobrolo.
 
 ## Phase 0 contents
 
 | Path | Purpose |
-|---|---|
-| `docs/ARCHITECTURE_BOUNDARY.md` | Who does what across Jobrolo, Claim Network, Thresher, Homesrolo |
-| `docs/CONSTITUTION.md` | The education-never-advocacy rule, its basis, and its limits |
-| `docs/THREAT_MODEL.md` | Threats, privacy inventory, consent and deletion, failure behavior |
-| `src/constitution/categories.ts` | The eleven refusal categories and required disclosures |
-| `src/constitution/detector.ts` | Request classifier and response auditor, pure functions |
-| `src/contracts/homeowner-share.v1.ts` | Draft sharing contract, types and validators only |
+| --- | --- |
+| docs/HOME_FILE_RFC.md | Home identity, control, visibility, transfer, retention, and permitted-use decisions |
+| docs/ARCHITECTURE_BOUNDARY.md | Boundaries across Homesrolo, Jobrolo, Claim Network, and Thresher |
+| docs/CONSTITUTION.md | Education-never-advocacy rules |
+| docs/THREAT_MODEL.md | Privacy, security, deletion, failure, and launch gates |
+| docs/RECEIPT_WIRE_SPEC.md | Exact Jobrolo-aligned Phase 0 wire |
+| src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
+| src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
+| src/constitution/ | Pure request and response boundary checks |
+
+## Core decisions
+
+- A home file is a durable logical record, not a shared folder or a promise to
+  retain every raw byte forever.
+- The uploader and the verified controller are separate.
+- Home-file membership and contribution existence are not visibility.
+- A new owner does not inherit prior content access.
+- Property matching never fuzzy auto-merges; merges are reviewed and
+  reversible.
+- V1 forbids insurance underwriting/pricing, lending, purchase, tenant,
+  employment, and adverse-action use.
+- Jobrolo’s reviewed Phase 0 contract is the wire anchor; Homesrolo reproduces
+  its literal vectors rather than inventing another receipt protocol.
+- Phase 0 authorizes no delivery.
 
 ## Development
 
-Requires Node 22.6 or newer. No runtime dependencies.
+Requires Node 22.6 or newer.
 
-```bash
-npm install
-npm run verify   # typecheck + tests
-```
+    npm install
+    npm run verify
+
+verify runs TypeScript and all contract/adversarial tests.
 
 ## Legal status
 
-The documents here are engineering design records, not legal advice and not a
-compliance certification. **Qualified legal review is required before any
-homeowner-facing surface ships.**
+Chance states that an attorney familiar with the operations has reviewed how
+the business can work. The documents here do not request or disclose privileged
+attorney information and are not legal advice or blanket compliance
+certification. The exact future identity, retention, furnishing, and launch
+data flows still require review before real homeowner data is used.

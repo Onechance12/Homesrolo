@@ -1,169 +1,231 @@
-# The home file: a permanent record for every home
+# Home File RFC
 
-**Status: design. Not implemented.** This RFC supersedes the position in
-`ARCHITECTURE_BOUNDARY.md` that Homesrolo keeps no durable record and that a
-homeowner's view ends when a share ends. That position was written to answer
-"what can a homeowner see", and the answer has changed.
+Status: **Phase 0 policy only. Not implemented.**
 
-**Not legal advice.** §4 flags a regulatory question that the attorney review
-already obtained almost certainly did not cover, because it reviewed the
-education-versus-advocacy constitution, not the operation of a property-history
-database. That question needs specific counsel before this is built.
+This RFC defines what Chance means by “the home needs a home” without turning
+that idea into an unsafe permanent data dump. There is no database, account
+system, property resolver, upload route, search index, share endpoint, or live
+Jobrolo connection in this repository.
 
-## 1. The model
+The governing sentence is:
 
-**Every home has a file. The file is permanent and belongs to the home, not to a
-job, a contractor, a claim, or a homeowner.**
+> A home file is a durable logical record for one home. It is not a shared
+> folder, and permanence does not mean retaining every raw byte forever.
 
-- **Every upload lands in the home file**, whoever uploads it.
-- **The uploader owns their contribution.** Owning it means seeing it, and
-  controlling who else does.
-- **Being in the home file is not being visible.** The file is a container, not
-  a shared pool. Default deny.
-- **Contributions are never lost.** Access changes constantly. The record does
-  not.
+## 1. The layers are different
 
-```
-  Home file  (permanent, per property, outlives every job and every owner)
-  |
-  +-- contribution   owner: A   -> A sees it. Others only by grant.
-  +-- contribution   owner: B   -> B sees it. Others only by grant.
-  +-- contribution   owner: A   -> shared with B, so B sees this one
-  |
-  grants are the existing homeowner-share contract:
-  a manifest of contributions, bound by an authorization and a consent
-```
+Homesrolo needs four concepts that must never be collapsed:
 
-That last line matters: **the share contract already built is the access layer
-for this.** A grant is an authorization receipt plus a consent receipt over a
-manifest of contributions. Nothing in `homeowner-share.v1.ts` needs to be
-undone. What is new is the store underneath it.
+1. **Home identity** — an opaque internal record representing one physical
+   home.
+2. **Contribution** — one controlled payload or projection associated with
+   that home.
+3. **Controller** — the person or organization currently authorized to decide
+   what happens to that contribution.
+4. **Visibility grant** — exact, time-bounded authority for another party to
+   see an exact contribution or release projection.
 
-## 2. What this changes
+The home file is the container underneath those records. The
+Jobrolo-to-Homesrolo homeowner-share.v1 contract is one explicit disclosure
+mechanism. It does not create property ownership, property-wide membership, or
+blanket access to everything ever associated with a home.
 
-| | Before | Now |
-|---|---|---|
-| Homesrolo storage | holds nothing | holds the home file |
-| Property identity | deliberately absent in V1 | **required** |
-| Homeowner view | only what was shared | what they own, **plus** what was shared |
-| Persistence | view ends with the share | contributions persist; access is what ends |
+## 2. What “permanent” means
 
-The visibility rule in code has been updated to two doors — what you own, and
-what was shared with you — with no third door. The "no browse, no catalog of
-another party's contributions, nothing derived on top" constraint survives
-intact and still applies to the home file itself.
+The durable part is the logical home identity, provenance, merge/split history,
+and the minimum audit needed to explain material events. Retention of payload
+bytes is classification-specific.
 
-## 3. Property identity: the highest-severity problem here
+- A raw photo, PDF, personal identifier, or revoked release may be deleted
+  under the reviewed retention, deletion, security-response, or legal-hold
+  policy.
+- A minimal pseudonymous tombstone may remain when necessary to prove that an
+  event happened, but it may not reconstruct deleted content.
+- Backups, derived indexes, exports, incident copies, and legal holds need an
+  explicit owner-reviewed schedule before launch.
+- User-facing copy may never say “deleted” when only access was revoked, or
+  “permanent” when a payload is still subject to deletion.
 
-A permanent per-property record requires deciding what "the same property" means,
-and that decision is now unavoidable. **This is the worst failure mode in the
-system**: a wrong match shows one household another household's home.
+This preserves the valuable history of a home without making the false promise
+that personal data or every uploaded byte is immortal.
 
-Addresses are hostile to this. Units and sub-addresses, hyphenated ranges, new
-construction that predates its address, subdivided and merged parcels, rural
-routes, PO boxes, renamed streets, annexations, and simple typos all produce
-either false merges or false splits.
+## 3. Contribution control
 
-Requirements, in priority order:
+The uploader is not automatically the controller. An employee may click
+Upload while the contractor organization owns the work product; a homeowner
+may upload a document that includes another party’s rights; an imported source
+may have contractual restrictions.
 
-1. **A merge is never silent.** Anything short of an exact, verified match
-   requires human confirmation before two records join.
-2. **Merges are recorded, not destructive.** A merge must be an event in the
-   history, so a wrong one can be split back apart. A destructive merge of two
-   households' records is unrecoverable and is a disclosure incident.
-3. **Never auto-merge on a fuzzy signal.** Not geocode proximity, not
-   normalized-string similarity, not owner-name match.
-4. **A split is always available.** If a file was wrongly joined, splitting must
-   restore both sides to their pre-merge contents.
+Every future contribution therefore needs separate, server-derived fields for:
 
-Cheap mitigation worth taking: authority to write into a home file should come
-from something stronger than typing an address — a Jobrolo job at that property,
-a verified parcel identifier, or a confirmed mail/utility check.
+- submitting actor;
+- verified controller;
+- source and rights basis;
+- purpose and content classification;
+- exact immutable payload/projection version and digest;
+- retention class;
+- visibility state; and
+- supersession/deletion/tombstone state.
 
-## 4. Permanence versus deletion rights, and how to have both
+Only a current verified controller or independently authorized delegate may
+initiate disclosure. A filename, upload action, customer-visible flag, AI
+classification, address, or presence in the home file is never authority.
 
-"The main home's file never gets lost" cannot be absolute for **personal** data.
-Texas's Data Privacy and Security Act (in effect since July 2024) and comparable
-state laws give consumers deletion rights over personal data, and a record keyed
-to someone's home is arguably personal data about whoever lives there.
+## 4. Visibility: exactly two candidate doors
 
-**The resolution is the one Carfax uses: separate property facts from person
-facts.**
+A contribution may become visible only because:
 
-- **Property facts persist.** Roof replaced in 2024, 30-year architectural
-  shingle, measurements, a hail event on a date, a permit. None of this is about
-  a named person.
-- **Person data is deletable.** Names, phone numbers, emails, account identity.
-  These live in the account layer, never inside a contribution.
-- **A contribution carries an opaque owner reference, not an identity.**
-  Deleting an account severs the link and tombstones the ownership. The
-  contribution stays in the home file; nobody inherits access to it.
+1. the viewer is its current verified controller; or
+2. the viewer holds an exact active share whose independent authorization and
+   consent remain valid.
 
-A Carfax record is durable precisely because it is about a VIN, not about a
-person. The same discipline is what makes a permanent home file lawful and
-survivable. **Design it in from the start** — retrofitting a person/property
-split onto a store that mixed them is close to impossible.
+Both are candidate bases, not client assertions. Runtime services must derive
+and recheck them from authoritative state immediately before release.
 
-## 5. The regulatory question that changes the regime
+Everything else is default deny. In particular:
 
-**A permanent per-property loss and repair history, consulted by insurers or by
-buyers, is the same shape as LexisNexis C.L.U.E. and Verisk A-PLUS.** Those are
-property loss-history databases, and they operate as consumer reporting agencies
-under the Fair Credit Reporting Act.
+- a homeowner does not automatically see a contractor’s photos or work
+  product;
+- a contractor does not automatically see homeowner uploads;
+- a person who buys or occupies the home does not inherit prior access;
+- a former owner does not retain property-wide access;
+- a typed address, parcel match, geocode, or claimed ownership is not access;
+- an expired or revoked share is not access; and
+- existence metadata is protected. Revealing that a report, claim-related
+  artifact, or inspection exists can itself be sensitive.
 
-If a Homesrolo home file is used in insurance underwriting or pricing, or in
-tenant or buyer decisions, FCRA obligations may attach: accuracy requirements, a
-dispute and correction process, adverse-action notices, and permissible-purpose
-limits on who may pull a file.
+There is no browse or recipient-wide catalog. The share protocol names one
+exact manifest; it cannot ask for “everything about this home.”
 
-**This is not a reason not to build it.** Those databases exist and are lawful,
-and being the honest version of one is a real business. It is a reason to decide
-deliberately and now, for two concrete reasons:
+## 5. Property identity
 
-1. **A dispute-and-correction mechanism has to be designed in, not bolted on.**
-   If a home file says something wrong — damage attributed to the wrong storm, a
-   repair recorded that never happened, a claim that was withdrawn — the
-   affected party needs a route to contest and correct it. That is a product
-   surface, a data model, and an audit trail, and it is far cheaper before
-   launch than after.
-2. **It determines who may read a file.** "Anyone with the address" and
-   "permissible purpose only" are different products.
+A future home reference must be opaque and must not encode an address, parcel,
+latitude/longitude, owner name, account number, or provider identifier.
 
-**Take this to counsel specifically.** The review already obtained covered the
-constitution: education, not advocacy, in what Homesrolo *says*. This is a
-different question about what Homesrolo *keeps and furnishes*, and it is the
-larger regulatory exposure of the two.
+Addresses, parcel identifiers, geocodes, utility evidence, and verified job
+edges are versioned identity evidence with provenance. None is the canonical
+home ID by itself.
 
-## 6. Decisions needed before this is built
+Required invariants:
 
-These are product decisions, not engineering ones, and each changes the schema.
+1. No fuzzy auto-merge.
+2. No merge based only on normalized address, geocode proximity, parcel
+   similarity, owner name, phone, or email.
+3. Potential matches remain separate until reviewed.
+4. A merge is an append-only event, not destructive row coalescing.
+5. Every merge records the evidence, actor, reason, and prior membership.
+6. A split is always possible and restores the pre-merge membership and access
+   boundaries.
+7. A wrong match is treated as a potential disclosure incident.
 
-1. **A contractor uploads roof photos. Does the homeowner see them
-   automatically, or only on grant?** Homeowners expect to see photos of their
-   own house. Contractors expect to control their work product. Both
-   expectations are reasonable and they collide. A defensible middle: the
-   homeowner always sees that a contribution *exists* and who owns it, and sees
-   the contents only on grant.
-2. **The home sells. Does the file follow the property, and what does the new
-   owner see?** This is the Carfax question and the whole value proposition. It
-   is also where the FCRA exposure is sharpest, because it is a disclosure about
-   a home that affects a purchase decision.
-3. **A homeowner moves out. Do they keep access to what they uploaded?** Under
-   "the uploader owns it", yes — which means a former owner retains a view into
-   a home someone else now lives in. That needs an explicit answer.
-4. **A contractor leaves the platform.** Their contributions stay in the home
-   file, per permanence. Confirm they understand that at upload time.
-5. **Can an owner delete their own contribution, or only revoke access?**
-   "Never gets lost" implies revoke-only. If so, say it plainly in the upload
-   flow — "delete" that does not delete is exactly the misreading that turns
-   into a complaint.
+Unit/sub-addresses, subdivisions, parcel combinations, rural routes, address
+renames, new construction, and shared structures need explicit test fixtures
+before a resolver can ship.
 
-## 7. What does not change
+## 6. Home sale, occupancy, and succession
 
-- No claim advice, ever. The constitution is untouched by any of this.
-- Excluded types stay excluded. Policies, carrier communications, and
-  claim-strategy material do not become shareable because there is now a place
-  to put them.
-- No third door. What you own, and what was shared with you.
-- Thresher stays internal to Jobrolo, and no tenant is its identity.
-- Structural validation still proves nothing about signatures or live state.
+A verified new owner receives a new account-to-home relationship. They do not
+inherit:
+
+- a prior owner’s personal information;
+- prior owner uploads;
+- contractor work product;
+- historical share receipts; or
+- property-wide search rights.
+
+They begin with contributions they control and exact releases newly shared with
+them. If Homesrolo later offers a transferable property-fact product, that is a
+new, separately versioned policy with its own provenance, correction, notice,
+and legal review.
+
+A prior owner keeps only contributions they still control or exact grants that
+remain active. Prior occupancy alone is never continuing authority.
+
+## 7. Person data and property data
+
+Separating person and property records is necessary, but it does not magically
+make property-linked data non-personal. A roof history, address, parcel, loss
+event, photo, or repair record can still be reasonably linkable to a household.
+
+Future storage must classify at least:
+
+- account/person identifiers;
+- sensitive contact and identity evidence;
+- controller/uploader organization data;
+- property facts;
+- restricted work product;
+- insurance/claim material prohibited from this lane;
+- released homeowner projections; and
+- minimal audit/tombstone data.
+
+Deletion and correction operate on the classification and authority, not on an
+assumption that “property fact” means unregulated public data.
+
+## 8. V1 use restriction
+
+V1 is for homeowner maintenance, warranty service, and the homeowner’s own
+recordkeeping. It must not furnish or score home-file data for:
+
+- insurance underwriting or pricing;
+- lending or credit;
+- buyer or property-purchase eligibility;
+- tenant screening;
+- employment screening;
+- automated adverse action; or
+- a public address-history lookup.
+
+Those uses can raise materially different consumer-reporting, privacy,
+accuracy, dispute, permissible-purpose, and notice obligations. Chance has
+stated that an attorney has reviewed the operating model. This repository does
+not request or store privileged attorney details. Before any furnishing or
+decision-use feature, counsel should review that exact data flow and intended
+jurisdictions; prior operational review is not treated as blanket product
+certification.
+
+## 9. Relationship to Jobrolo sharing
+
+Jobrolo remains the source and authorization authority for its contractor
+records. It creates only recipient/share/purpose-specific homeowner_release
+projections. Homesrolo owns independent consent.
+
+The two services do not share sessions, tenants, users, databases, storage
+paths, or private signing keys. Passing structural parsing proves only shape
+and binding. A future read must additionally verify trusted signatures, query
+both authoritative current-state/revocation stores, recheck immutable bytes,
+and fail closed after any storage read and before serialization.
+
+Claim Network and Thresher remain separate Jobrolo boundaries and provide no
+home-file authority.
+
+## 10. Phase 0 decisions
+
+The following are frozen for this phase:
+
+- logical home identity may be durable; raw payload retention is not forever;
+- uploader and controller are separate;
+- third-party contributions are not homeowner-visible by default;
+- contribution existence is not disclosed without authority;
+- new owners inherit no prior content access;
+- former owners keep no property-wide access;
+- fuzzy auto-merge is forbidden and every merge is reversible;
+- insurer/buyer/lender/tenant/employment decision uses are forbidden in V1;
+- the Jobrolo share wire is the cross-repository protocol anchor; and
+- no runtime is enabled.
+
+The code-owned policy lives in src/contracts/home-file.v1.ts, and its Phase 0
+decision always returns authorized:false.
+
+## 11. Required work before implementation
+
+1. Owner and counsel approve the identity, controller, retention, correction,
+   transfer, and permitted-use policy.
+2. A threat-modeled property resolver is designed with merge/split receipts.
+3. Each launch contribution/projection kind receives an exact content and
+   metadata allowlist plus hostile fixtures.
+4. Homesrolo identity proof and co-owner/tenant/trust/business roles are
+   designed.
+5. Storage, encryption, deletion SLAs, backups, legal holds, and support
+   procedures are specified.
+6. Trusted signature verification, key rotation, global receipt-ID conflict
+   quarantine, and authoritative revocation ledgers are implemented.
+7. Synthetic cross-repository lifecycle tests pass before any real data.

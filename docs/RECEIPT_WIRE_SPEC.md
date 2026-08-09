@@ -1,296 +1,167 @@
-# homeowner-share.v1 receipt wire specification
-
-**Status: normative. Homesrolo defines this layer; Jobrolo implements against
-it.** Every value below is produced by `src/contracts/homeowner-share.v1.ts` and
-asserted in Homesrolo CI, so this document and the implementation cannot drift.
-
-This is a wire format, not a deployment. Nothing here is built on the Jobrolo
-side yet, and nothing in Homesrolo transports a receipt anywhere.
-
-## Why this direction
-
-The manifest layer came from Jobrolo and is reconciled: Jobrolo's golden
-manifest parses here, re-canonicalizes to identical bytes, and digests to
-Jobrolo's published digest.
-
-The receipt layer did not survive the same check. Jobrolo's brief supplied three
-expected replay keys with no derivation. An exhaustive search over every subset,
-ordering, separator, prefix, and receipt-type spelling of the eleven published
-identity fields — 6,408,192 candidates — reproduced none of them. Jobrolo's
-repository was then checked directly: **no branch, no pull request, and no
-occurrence of `homeowner_release`, `homeowner-share`, `hproj_`, `hshr_`,
-`hrcp_`, `replayKey`, or `manifestDigest` on main.** There is no implementation
-to be compatible with, so waiting for the derivation to be published could not
-terminate.
-
-The three superseded values are retained in
-`SUPERSEDED_REPLAY_KEYS` as a tripwire, with a test asserting this
-implementation never produces them. If a Jobrolo implementation ever emits one,
-the two sides have diverged.
-
-## 1. Canonical primitives
-
-Everything derives through these. A disagreement on one byte is a disagreement
-about what was authorized.
-
-**Canonical JSON.** Object keys sorted ascending by UTF-16 code unit,
-recursively. Primitives as `JSON.stringify` emits them. No insignificant
-whitespace. UTF-8 bytes. Canonicalization **fails** rather than dropping
-anything: `undefined`, non-finite numbers, `-0`, bigint, functions, symbols, and
-non-plain objects (including `Date` and `Map`) are errors. A silently dropped
-key is a key one side signed and the other never saw.
-
-**Digests.** SHA-256 over UTF-8 bytes, lowercase hex, 64 characters. An
-uppercase digest is a different string and is refused.
-
-**Timestamps.** Exactly `YYYY-MM-DDTHH:MM:SS.mmmZ` — three fractional digits, a
-literal `Z`, and it must round-trip through `Date` unchanged.
-`2026-08-15T12:00:00Z` and `2026-08-15T12:00:00.000+00:00` name the same instant
-but are different bytes, and both are refused.
-
-**Signatures.** Ed25519, 64 raw bytes, unpadded base64url, exactly 86
-characters. Padding, the standard base64 alphabet, and any value that does not
-survive a decode/re-encode round trip are refused.
-
-**Identifiers.** A fixed prefix plus exactly 43 base64url characters
-(258 bits). Any identifier whose body contains a run of 10 or more digits is
-refused as PII-shaped.
-
-| Prefix | Names |
-|---|---|
-| `hshr_` | share |
-| `hrcp_` | recipient (the homeowner, opaque to Jobrolo) |
-| `hproj_` | projection artifact |
-| `hnce_` | manifest nonce |
-| `hrec_` | receipt |
-
-## 2. Receipt structure
-
-Fifteen fields on every receipt, plus `revokesReceiptId` on revocations only.
-**Strict:** any unknown field, any missing field, or `revokesReceiptId` on a
-non-revocation rejects the receipt.
-
-| Field | Value |
-|---|---|
-| `algorithm` | `"ed25519"` |
-| `audience` | `"homesrolo"` |
-| `contractVersion` | `"homeowner-share.v1"` |
-| `expiresAt` | canonical instant, after `issuedAt` |
-| `generation` | positive integer, equal to the manifest's |
-| `issuedAt` | canonical instant |
-| `issuer` | `"jobrolo"` |
-| `keyId` | `^[a-z0-9][a-z0-9._-]{2,63}$` |
-| `manifestDigest` | lowercase hex SHA-256 of the canonical manifest |
-| `policyVersion` | `^[a-z0-9][a-z0-9._-]{2,63}$` |
-| `purpose` | `"homeowner_work_records"` |
-| `receiptId` | `hrec_` + 43 |
-| `receiptType` | `"authorization"` \| `"consent"` \| `"revocation"` |
-| `recipientRef` | `hrcp_` + 43 |
-| `shareId` | `hshr_` + 43 |
-| `revokesReceiptId` | `hrec_` + 43 — **revocations only** |
-
-`issuer` and `audience` name the channel, not the signer. The signer is
-identified by `keyId`. Jobrolo signs authorizations and revocations of its own
-authorizations with its key; Homesrolo signs consent and revocations of its own
-consent with its own. **Neither side ever holds the other's private key**, so
-neither can manufacture the other's authority.
-
-The envelope is exactly two fields:
-
-```json
-{ "receipt": { ...the fifteen fields... }, "signature": "<86 chars base64url>" }
-```
+# homeowner-share.v1 Wire Specification
 
-## 3. Signing input
+Status: **normative Phase 0 contract; no transport or live authorization.**
 
-Four lines joined by a single `\n` (U+000A). No trailing newline.
+Jobrolo’s Phase 0 contract is the protocol anchor. Homesrolo reproduces its
+literal canonical manifest, three signing payloads, and three replay keys.
+src/contracts/tests/homeowner-share.test.ts is the byte-level conformance
+fixture.
 
-```
-homeowner-share.v1
-<algorithm>
-<keyId>
-<canonicalJson(receipt)>
-```
+## Manifest
+
+Exact fields:
 
-The algorithm and key identifier are inside the signed region, so a signature
-cannot be replayed under a different algorithm or attributed to a different key.
-The canonical receipt is the whole receipt, so every field is signed.
+| Field | Contract |
+| --- | --- |
+| contractVersion | homeowner-share.v1 |
+| issuer / audience | jobrolo / homesrolo |
+| purpose | homeowner_work_records |
+| shareId | hshr_ + 43 opaque base64url characters |
+| recipientRef | hrcp_ + 43 |
+| generation | literal 1 |
+| issuedAt / expiresAt | canonical UTC millisecond instants, 1–30 days |
+| nonce | hnce_ + 43 |
+| artifacts | 1–25 strict projection entries |
 
-Sign these UTF-8 bytes directly with Ed25519. Do **not** pre-hash.
+Artifact fields are artifactRef, source, projectionKind, projectionVersion,
+mediaType, byteLength, and sha256.
 
-## 4. Replay key
+- artifactRef is hproj_ + 43.
+- source is homeowner_release.
+- projectionVersion is an integer from 1 through 100.
+- mediaType is application/json, application/pdf, image/jpeg, or image/png.
+- byteLength is 1 through 25 MiB.
+- sha256 is lowercase hexadecimal SHA-256.
 
-```
-replayKey = sha256hex( canonicalJson( identity(receipt) ) )
-```
+Aggregate artifact bytes may not exceed 100 MiB. Canonical manifest bytes may
+not exceed 64 KiB. Duplicate references and unknown fields fail. The Phase 0
+launch-approved projection set is empty.
 
-`identity` is exactly eight fields, and canonical JSON sorts them, so no
-separate ordering rule is needed:
+## Authorization receipt
 
-```
-contractVersion, generation, manifestDigest, purpose,
-receiptId, receiptType, recipientRef, shareId
-```
+Jobrolo to Homesrolo:
 
-**Deliberately excluded**, and why:
+| Field | Contract |
+| --- | --- |
+| receiptVersion | homeowner-share.authorization.v1 |
+| issuer / audience | jobrolo / homesrolo |
+| authorizationId | hauth_ + 43 |
+| authorizedByRole | owner or admin |
+| authorizedActorRef | hactor_ + 43 |
+| authorizationPolicyVersion | jobrolo-homeowner-disclosure.v1 |
+| share/recipient/digest/version/expiry | exact manifest bindings |
+| signing | Ed25519 proof |
 
-- `keyId`, `algorithm` — re-signing the same act after a key rotation is the
-  same act, not a new one.
-- `issuedAt`, `expiresAt`, `policyVersion`, `issuer`, `audience` — two receipts
-  claiming the same identity with different values here are in conflict, and
-  that conflict must be *detected*, not turned into two separate valid acts.
-- `revokesReceiptId` — a revocation reusing a `receiptId` while pointing at a
-  different target is a conflict, not a new revocation. Excluding it makes
-  re-pointing detectable.
+## Consent receipt
 
-Identity answers "are these the same act?". Everything outside identity is
-compared bytewise once identity matches.
+Homesrolo to Jobrolo:
 
-## 5. Ledger semantics
+| Field | Contract |
+| --- | --- |
+| receiptVersion | homeowner-share.consent.v1 |
+| issuer / audience | homesrolo / jobrolo |
+| consentId | hcons_ + 43 |
+| consentPolicyVersion | homesrolo-share-consent.v1 |
+| share/recipient/digest/version/expiry | exact manifest bindings |
+| acceptedAt | canonical instant |
+| signing | Ed25519 proof |
 
-Append-only. Entries are never edited or removed. Current state is a fold over
-the whole history; there is no mutable status flag.
+## Revocation receipt
 
-On append, compute the replay key and the canonical bytes of the full envelope:
+An immutable revocation is homeowner-share.revocation.v1, uses hrev_, and
+binds the exact share, recipient, manifest digest, target receipt version,
+target receipt ID, reason code, revocation instant, and signing proof.
 
-| Condition | Outcome |
-|---|---|
-| Replay key unseen | **appended** |
-| Replay key seen, canonical envelope bytes identical | **exact_replay** — idempotent, no state change |
-| Replay key seen, bytes differ | **conflict** — refused; one of the two is not genuine and there is no way to tell which |
-| Receipt fails strict parsing | **rejected** |
+Jobrolo may revoke a Jobrolo authorization for:
 
-A revocation additionally requires that its `revokesReceiptId` names a receipt
-already in this ledger, that the target is not itself a revocation, and that
-target and revocation agree on `shareId`, `recipientRef`, `manifestDigest`, and
-`generation`. Otherwise **rejected**.
+- authorization_withdrawn;
+- source_unavailable; or
+- security_response.
 
-Revocation is terminal. No receipt type un-revokes, and re-submitting the
-original authorization is an `exact_replay` that changes nothing.
+Homesrolo may revoke Homesrolo consent for:
 
-An authority is live for a `(shareId, manifestDigest)` when a receipt of that
-type exists for it, is not a revocation target, and has not expired.
+- consent_withdrawn;
+- account_deleted; or
+- security_response.
 
-## 6. Binding
+Issuer, audience, target version/prefix, and reason must form an allowed pair.
 
-Disclosure requires an authorization **and** a consent, both live, both bound to
-the same manifest digest. Either alone is nothing.
+## Signing proof and payload
 
-They must agree on all ten of: `audience`, `contractVersion`, `expiresAt`,
-`generation`, `issuer`, `manifestDigest`, `policyVersion`, `purpose`,
-`recipientRef`, `shareId`.
+Every receipt contains a nested signing object with algorithm Ed25519, an ASCII
+code-owned key ID, and a canonical unpadded base64url signature for exactly 64
+bytes.
 
-Each must match the manifest on `shareId`, `recipientRef`, `generation`, and
-digest.
+The signing payload is canonical JSON of the strict receipt with
+signing.algorithm and signing.keyId retained and only signing.signature
+removed. This binds key selection and algorithm into the signed bytes.
 
-Chronology, all enforced:
+Phase 0 parses canonical signature encoding but does not verify it against a
+trusted key.
 
-- authorization `issuedAt` >= manifest `issuedAt`
-- consent `issuedAt` >= authorization `issuedAt` — a homeowner cannot consent to
-  a disclosure that was not yet authorized
-- neither receipt's `expiresAt` may exceed the manifest's
+## Canonicalization
 
-## 7. Golden vectors
+- recursively sort plain-object keys;
+- preserve array order;
+- accept JSON primitives only;
+- reject non-finite numbers and non-plain objects;
+- omit object properties whose value is undefined;
+- emit UTF-8 with no insignificant whitespace;
+- use lowercase hexadecimal SHA-256; and
+- accept timestamps only as YYYY-MM-DDTHH:MM:SS.mmmZ real instants.
 
-Reproduce every value exactly. All three receipts below bind to Jobrolo's
-existing golden manifest (digest
-`1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1`).
+Strict parsers reject unknown fields before signing or digest decisions.
 
-### Authorization
+## Replay identity
 
-Canonical receipt, 607 bytes:
+Replay identity is stable from receipt version, issuer, and immutable receipt
+ID. It is the SHA-256 of canonical JSON for this three-element array.
 
-```
-{"algorithm":"ed25519","audience":"homesrolo","contractVersion":"homeowner-share.v1","expiresAt":"2026-08-15T12:00:00.000Z","generation":1,"issuedAt":"2026-08-08T12:00:00.000Z","issuer":"jobrolo","keyId":"jobrolo-share-2026a","manifestDigest":"1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1","policyVersion":"homeowner-disclosure.v1","purpose":"homeowner_work_records","receiptId":"hrec_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu","receiptType":"authorization","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}
-```
+The exact golden values are:
 
-Canonical identity, 394 bytes:
+| Receipt | Replay key |
+| --- | --- |
+| authorization | 532afbc246fd5be873839be88a3ad811c083529204e1fafc3e51bae49328575f |
+| consent | 801f74c84aca67311a2d53a3f3aa458f38ed9ad54fdd2f66208f6bc23cf1ca48 |
+| revocation | dcd1f96647db72262610750e78256bcae0c8ba1a19567e6238a5f635b6b66e0a |
 
-```
-{"contractVersion":"homeowner-share.v1","generation":1,"manifestDigest":"1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1","purpose":"homeowner_work_records","receiptId":"hrec_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu","receiptType":"authorization","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}
-```
+Once replay identity matches, compare the entire parsed canonical receipt:
+byte-identical is an exact replay; any mutation is a conflict. A future
+authoritative ledger must quarantine conflicts and must not leave the first
+receipt silently active.
 
-- **replayKey** `17a1f92742b0e80b877e991be6e270a518e693f4ffdf92b628601b61048e8842`
-- signing input: 654 bytes; **sha256** `439c238a0d7d6c9200d552d91b93f7fb09b5db6158cfd416728485dce14dea6a`
+## Structural compatibility
 
-### Consent
+The manifest, authorization, and consent must agree on share, recipient,
+purpose, contract version, digest, and expiry. Authorization cannot predate the
+manifest; consent cannot predate authorization; equality at expiry is
+unavailable.
 
-Differs from the authorization in `issuedAt`, `keyId`, `receiptId`,
-`receiptType`. Canonical receipt, 605 bytes:
+Revocation compatibility additionally binds the target receipt version/ID,
+manifest, recipient, and time.
 
-```
-{"algorithm":"ed25519","audience":"homesrolo","contractVersion":"homeowner-share.v1","expiresAt":"2026-08-15T12:00:00.000Z","generation":1,"issuedAt":"2026-08-08T12:05:00.000Z","issuer":"jobrolo","keyId":"homesrolo-consent-2026a","manifestDigest":"1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1","policyVersion":"homeowner-disclosure.v1","purpose":"homeowner_work_records","receiptId":"hrec_ccccccccccccccccccccccccccccccccccccccccccc","receiptType":"consent","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}
-```
+These inspectors are explicitly non-authorizing. They do not verify trusted
+keys, current source authority, current consent, current revocation state,
+storage bytes, or service identity.
 
-- **replayKey** `f216b80007cbcabbcc810f4ee65558a82b518146a4410d3c95751fe51d51138d`
-- signing input: 656 bytes; **sha256** `ecd1d87988b1a66b060ef75b992e072e572e0c8b4ab4b35e40b70a061447569c`
+## Literal vectors
 
-### Revocation
+The test fixture locks eight exact values:
 
-Withdraws the authorization above. Canonical receipt, 674 bytes:
+1. canonical manifest JSON;
+2. manifest digest;
+3. authorization signing payload;
+4. consent signing payload;
+5. revocation signing payload;
+6. authorization replay key;
+7. consent replay key; and
+8. revocation replay key.
 
-```
-{"algorithm":"ed25519","audience":"homesrolo","contractVersion":"homeowner-share.v1","expiresAt":"2026-08-15T12:00:00.000Z","generation":1,"issuedAt":"2026-08-10T12:00:00.000Z","issuer":"jobrolo","keyId":"jobrolo-share-2026a","manifestDigest":"1530548c4c26130419afc759ea3520a6bd5e705664aedd0574e37b0bfbd084d1","policyVersion":"homeowner-disclosure.v1","purpose":"homeowner_work_records","receiptId":"hrec_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv","receiptType":"revocation","recipientRef":"hrcp_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr","revokesReceiptId":"hrec_uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu","shareId":"hshr_sssssssssssssssssssssssssssssssssssssssssss"}
-```
+Both repositories must reproduce all eight before transport work. A locally
+passing implementation with different vectors is a different protocol.
 
-- **replayKey** `7fb58c2de94007c671176b04dcc75de1cefbbb102252b2b4dbdd80f95b407dc6`
-- signing input: 721 bytes; **sha256** `8a36c10239bdc600bdf5415a44766988f85e959e575c030ff83edc0fb2f0364d`
+## Deliberately absent
 
-Note the identity is 391 bytes and **excludes** `revokesReceiptId`, per §4.
-
-## 8. Conformance checklist
-
-An implementation conforms when it reproduces:
-
-1. The golden manifest's canonical bytes (692) and digest.
-2. All three canonical receipt encodings, byte for byte.
-3. All three replay keys.
-4. All three signing-input digests.
-
-And when it refuses:
-
-5. Any unknown or missing receipt field; `revokesReceiptId` on a
-   non-revocation; a revocation without one.
-6. Non-canonical instants, uppercase digests, padded or standard-alphabet
-   signatures, wrong-length signatures.
-7. Identifiers with the wrong prefix, wrong width, or a 10+ digit run.
-8. Same replay key with different bytes (**conflict**, and it must refuse both
-   rather than pick one).
-9. A revocation whose target is unknown, is itself a revocation, or disagrees on
-   `shareId` / `recipientRef` / `manifestDigest` / `generation`.
-10. Any binding or chronology violation in §6.
-
-And when it demonstrates:
-
-11. Byte-identical resubmission is `exact_replay` and does not grow the ledger.
-12. Revocation is terminal — re-appending the original authorization does not
-    restore it.
-
-## 9. Deliberately not specified here
-
-- **Transport.** No endpoint, method, header, or auth scheme. Both sides are
-  contract-only.
-- **Key distribution and rotation.** Agree the `keyId` scheme, publication
-  mechanism, and rotation policy before either side generates a production key.
-- **Storage.** Ledger persistence is each side's own business.
-- **Signature verification against a trusted key.** Everything in
-  `homeowner-share.v1.ts` is structural. Passing every check here proves shape
-  and binding only — not that a signature is genuine, and not that the ledger is
-  current. See `STRUCTURAL_VALIDATION_WARNING`.
-- **Which projections exist.** Homesrolo's launch-approved set is frozen empty
-  in Phase 0, so no manifest can produce a delivery regardless of what Jobrolo
-  authorizes.
-
-## 10. Open questions for Jobrolo
-
-1. Does `policyVersion` mean the disclosure policy in force, as assumed here
-   (`homeowner-disclosure.v1`)? If it means something else, say what and it will
-   be renamed rather than reinterpreted.
-2. Is `generation` per-share or global? Assumed per-share and monotonic.
-3. Who issues `hrcp_` recipient references — Jobrolo or Homesrolo? Assumed
-   Jobrolo, since it appears in the manifest, but Homesrolo owns homeowner
-   identity, so this needs an explicit answer before either side mints one.
-4. The original brief asked for **eight** literal golden assertions and supplied
-   five values. This document publishes ten (one manifest, three canonical
-   receipts, three replay keys, three signing-input digests). Confirm that
-   covers what was intended.
+No route, service authentication, key registry, ledger database, storage,
+background sync, account mapping, property matching, UI, feature flag, or
+delivery path is defined here. Phase 0 always denies delivery.

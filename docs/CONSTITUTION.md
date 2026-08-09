@@ -56,32 +56,27 @@ Official sources:
 - Federal Trade Commission Act § 5, unfair or deceptive acts: https://www.ftc.gov/legal-library/browse/statutes/federal-trade-commission-act
 - Fair Credit Reporting Act, 15 U.S.C. § 1681 (relevant if home records ever influence insurance or credit decisions): https://www.ftc.gov/legal-library/browse/statutes/fair-credit-reporting-act
 
-## Legal review record
+## Legal review posture
 
-Chance reports that these documents have been reviewed by an attorney. What
-that review covered is not yet written down here, and it should be, because the
-value of a review is the record of it.
+Chance reports that an attorney familiar with the operations has reviewed how
+the business can work. The repository does not need the attorney’s identity,
+firm, privileged advice, or work product, and it must not imply that those
+details are missing evidence of whether a review occurred. Any private review
+record may remain with the owner and counsel outside source control.
 
-| | |
-|---|---|
-| Reviewing attorney and firm | not recorded |
-| Date of review | not recorded |
-| Commit or document version reviewed | not recorded |
-| States covered | not recorded |
-| Findings, and whether any remain unresolved | not recorded |
+The engineering boundary is narrower:
 
-Three things the review does **not** settle, whatever it covered:
-
-1. **It reviewed documents, not a product.** No homeowner-facing surface exists
-   yet. When one does, what it actually says to a homeowner is the thing that
-   needs reviewing, and this document is only the specification it was built
-   from.
-2. **It is state-specific.** Public adjusting and unauthorized-practice rules
-   vary. Review in Texas is not review in the next state, and expanding is a
-   new review, not a copy.
-3. **It is time-bound.** *Stonewater* was decided in 2024 and the licensing
-   scheme it upheld can be amended. A review is a snapshot, and the sources
-   below are the things to re-check on a schedule.
+1. **No blanket certification.** The reported review supports the operating
+   model; it is not represented here as approval of every future feature,
+   jurisdiction, notice, data use, or generated response.
+2. **Review the shipped behavior.** Before launch, counsel should review the
+   actual homeowner copy, assistant behavior, identity/consent flow, retention
+   policy, permitted uses, and release jurisdictions—not only this design
+   document.
+3. **Re-review material changes.** A claim-advice feature, home-history
+   furnishing, underwriting/pricing use, new jurisdiction, or changed legal
+   rule is a new review gate rather than an automatic extension of the prior
+   operating-model review.
 
 ## The eleven refusal categories
 
