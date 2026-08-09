@@ -104,6 +104,36 @@ including by an existing AI assistant in an adjacent category, and the coined
 compounds are the distinctive marks. Internal identifiers in either codebase are
 not public branding and are out of scope for this rule.
 
+## What a homeowner can see
+
+**A homeowner sees what was shared with them. That is the whole of it.**
+
+The manifest is the complete boundary of what exists on the homeowner surface,
+not a starting point for it. Specifically, Homesrolo does not build:
+
+- a browse, search, or catalog of anything
+- a "your property" or "your home" aggregate assembled across shares
+- a timeline, history, or summary derived from what was shared
+- any inferred, enriched, or AI-generated layer on top of a share
+- any view keyed on the homeowner rather than on a specific share
+
+If it is not named in a manifest bound by a live authorization and a live
+consent, it does not exist for that homeowner.
+
+This is enforced structurally, not just stated. The contract has **no entry
+point that takes a `recipientRef` alone** — every path that could lead to
+disclosure requires one specific manifest, so "show me everything for this
+homeowner" cannot be written. A test scans the module's exported functions and
+fails the build if an enumerating entry point is ever added, and further tests
+prove that two shares to the same homeowner stay isolated: receipts for one
+share never make another live, and consent to one manifest is never consent to
+a different one.
+
+The practical consequence, which must reach the homeowner-facing copy: when a
+share ends, the homeowner's view of that material ends. There is no permanent
+Homesrolo record of their home that survives it. A product that let a homeowner
+believe otherwise would be promising a home file it does not keep.
+
 ## V1 sharing scope
 
 **Projections, never records.** What crosses the boundary is a

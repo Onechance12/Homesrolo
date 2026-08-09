@@ -77,6 +77,26 @@ export const HOMEOWNER_SHARE_PURPOSE = 'homeowner_work_records' as const
  * Loud, exported, and asserted by tests so it cannot be quietly dropped from
  * the documentation as the implementation grows.
  */
+/**
+ * A homeowner sees what was shared with them, and nothing else.
+ *
+ * The manifest is the complete boundary of what exists on the homeowner
+ * surface, not a starting point for it. No browse, no search, no catalog, no
+ * "your property" aggregate, no cross-share merge, and no derived, inferred, or
+ * summarized view layered on top of a share. If it is not named in a manifest
+ * bound by two live receipts, it does not exist for that homeowner.
+ *
+ * This is why the contract has no entry point that takes a `recipientRef`
+ * alone. Every path that could lead to disclosure requires one specific
+ * manifest, so "show me everything for this homeowner" is not expressible —
+ * asserted by tests, so adding one later fails the build rather than passing
+ * review unnoticed.
+ */
+export const HOMEOWNER_VISIBILITY_RULE =
+  'A homeowner sees exactly what was shared with them. The manifest is the whole view: no browse, ' +
+  'no search, no aggregate across shares, and nothing derived on top of it. Anything not named in a ' +
+  'manifest bound by a live authorization and a live consent does not exist on the homeowner surface.'
+
 export const STRUCTURAL_VALIDATION_WARNING =
   'Structural validation proves shape and binding only. It does not verify any signature ' +
   'against a trusted key, and it does not consult the current revocation ledger. A manifest ' +

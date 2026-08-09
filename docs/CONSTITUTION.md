@@ -2,10 +2,12 @@
 
 > **This document is an engineering design record, not legal advice and not a
 > compliance certification.** It states how the product is built to stay inside
-> boundaries that we believe exist. It has not been reviewed by counsel.
-> **Qualified legal review by a Texas insurance attorney is required before any
-> homeowner-facing surface ships**, and again before operating in any additional
-> state, because these rules vary.
+> boundaries that we believe exist.
+>
+> **Attorney review has been obtained.** See "Legal review record" below. The
+> record is incomplete, and completing it matters: a compliance document whose
+> provenance is unrecorded cannot later be shown to a regulator as evidence of
+> anything.
 
 ## The line
 
@@ -54,7 +56,32 @@ Official sources:
 - Federal Trade Commission Act § 5, unfair or deceptive acts: https://www.ftc.gov/legal-library/browse/statutes/federal-trade-commission-act
 - Fair Credit Reporting Act, 15 U.S.C. § 1681 (relevant if home records ever influence insurance or credit decisions): https://www.ftc.gov/legal-library/browse/statutes/fair-credit-reporting-act
 
-Nothing above has been confirmed by counsel for this product.
+## Legal review record
+
+Chance reports that these documents have been reviewed by an attorney. What
+that review covered is not yet written down here, and it should be, because the
+value of a review is the record of it.
+
+| | |
+|---|---|
+| Reviewing attorney and firm | not recorded |
+| Date of review | not recorded |
+| Commit or document version reviewed | not recorded |
+| States covered | not recorded |
+| Findings, and whether any remain unresolved | not recorded |
+
+Three things the review does **not** settle, whatever it covered:
+
+1. **It reviewed documents, not a product.** No homeowner-facing surface exists
+   yet. When one does, what it actually says to a homeowner is the thing that
+   needs reviewing, and this document is only the specification it was built
+   from.
+2. **It is state-specific.** Public adjusting and unauthorized-practice rules
+   vary. Review in Texas is not review in the next state, and expanding is a
+   new review, not a copy.
+3. **It is time-bound.** *Stonewater* was decided in 2024 and the licensing
+   scheme it upheld can be amended. A review is a snapshot, and the sources
+   below are the things to re-check on a schedule.
 
 ## The eleven refusal categories
 
@@ -141,7 +168,8 @@ buried in terms:
 - **English only.** No coverage for other languages in this phase.
 - **No semantic understanding.** The classifier does not know what a sentence
   means, only which signals co-occur.
-- **The permitted alternatives are unreviewed.** Even the "allowed" answers
-  should be checked by counsel before a homeowner reads one.
+- **Review covered the specification, not a live surface.** The permitted
+  alternatives are wording *intentions*. The actual sentences a homeowner reads
+  do not exist yet, and those are what a regulator would look at.
 - **No live assistant exists yet.** These are contracts awaiting an
   implementation to constrain.

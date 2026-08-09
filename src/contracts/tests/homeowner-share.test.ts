@@ -1,7 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { canonicalJson, sha256Hex, utf8ByteLength } from '../canonical.ts'
+import * as contract from '../homeowner-share.v1.ts'
 import {
+  HOMEOWNER_VISIBILITY_RULE,
   ALLOWED_MEDIA_TYPES,
   EMPTY_LEDGER,
   EXCLUDED_SOURCE_KINDS,
@@ -721,6 +723,65 @@ test('external refusals do not distinguish absent from revoked from expired', ()
   // Externally they are indistinguishable, so shares cannot be enumerated.
   assert.deepEqual(externalRefusal(), { error: EXTERNAL_REFUSAL_MESSAGE })
   assert.doesNotMatch(EXTERNAL_REFUSAL_MESSAGE, /revoked|expired|not found|unknown|consent/i)
+})
+
+// =============================================================================
+// Visibility: a homeowner sees what was shared, and nothing else
+// =============================================================================
+
+test('the contract exposes no way to enumerate what a homeowner has', () => {
+  // "Show me everything for this homeowner" must not be expressible. If someone
+  // adds a listing entry point later, this fails rather than passing review
+  // unnoticed.
+  const enumerating = /^(list|search|browse|find|get|fetch|load|query|index|catalog|all|enumerate)/i
+  const callables = Object.entries(contract).filter(([, value]) => typeof value === 'function')
+  assert.ok(callables.length > 5, 'the export scan must actually be reaching the functions')
+  for (const [name] of callables) {
+    assert.doesNotMatch(
+      name,
+      enumerating,
+      `"${name}" reads as an enumerating entry point; the manifest is the whole view`,
+    )
+  }
+  assert.match(HOMEOWNER_VISIBILITY_RULE, /exactly what was shared/)
+})
+
+test('two shares to the same homeowner stay isolated', () => {
+  // Same recipient, two separate shares. Receipts for one must not make the
+  // other live, or a second share becomes a key to the first.
+  const otherShareId = `hshr_${body('q')}`
+  const otherManifest = manifest({ shareId: otherShareId, nonce: `hnce_${body('q')}` })
+  const otherDigest = manifestDigest(otherManifest)
+  assert.notEqual(otherDigest, DIGEST)
+
+  const ledger = liveLedger() // holds live receipts for SHARE only
+
+  const state = ledgerState(ledger, otherShareId, otherDigest, NOW)
+  assert.equal(state.authorizationActive, false, 'a receipt for one share must not authorize another')
+  assert.equal(state.consentActive, false)
+
+  const decision = evaluateDelivery(
+    { manifest: otherManifest, authorization, consent, ledger },
+    NOW,
+  )
+  assert.equal(decision.authorized, false)
+  assert.ok(decision.reasons.some(reason => reason.includes('no live authorization')))
+})
+
+test('a share is scoped by its own manifest, never by the recipient', () => {
+  // Swapping only the manifest, while keeping the same recipient and a ledger
+  // full of that recipient's live receipts, must not disclose anything.
+  const ledger = liveLedger()
+  const sameRecipientDifferentContent = manifest({
+    nonce: `hnce_${body('q')}`,
+    artifacts: [artifact({ artifactRef: `hproj_${body('q')}`, projectionKind: 'warranty_summary' })],
+  })
+  assert.equal(sameRecipientDifferentContent.recipientRef, RECIPIENT)
+  assert.notEqual(manifestDigest(sameRecipientDifferentContent), DIGEST)
+
+  const state = ledgerState(ledger, SHARE, manifestDigest(sameRecipientDifferentContent), NOW)
+  assert.equal(state.authorizationActive, false, 'consent to one manifest is not consent to another')
+  assert.equal(state.consentActive, false)
 })
 
 // =============================================================================

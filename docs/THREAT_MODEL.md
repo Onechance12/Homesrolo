@@ -4,8 +4,11 @@ Scope: the Homesrolo homeowner surface and the future `homeowner-share.v1` path
 to Jobrolo. Written before implementation so the controls are requirements
 rather than retrofits.
 
-**Not a legal or security certification.** Requires qualified legal review and,
-before any real homeowner data exists, an independent security review.
+**Not a legal or security certification.** Attorney review of the design records
+has been obtained (see `CONSTITUTION.md`, "Legal review record"). An independent
+**security** review is still outstanding and is required before any real
+homeowner data exists — that is a separate discipline and a legal review does
+not substitute for it.
 
 ## Assets worth protecting
 
