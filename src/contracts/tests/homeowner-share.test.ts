@@ -743,7 +743,10 @@ test('the contract exposes no way to enumerate what a homeowner has', () => {
       `"${name}" reads as an enumerating entry point; the manifest is the whole view`,
     )
   }
-  assert.match(HOMEOWNER_VISIBILITY_RULE, /exactly what was shared/)
+  // Two doors, and no third one: what you own, and what was shared with you.
+  assert.match(HOMEOWNER_VISIBILITY_RULE, /what they own/)
+  assert.match(HOMEOWNER_VISIBILITY_RULE, /what was shared with them/)
+  assert.match(HOMEOWNER_VISIBILITY_RULE, /being in the home file is not being visible/)
 })
 
 test('two shares to the same homeowner stay isolated', () => {

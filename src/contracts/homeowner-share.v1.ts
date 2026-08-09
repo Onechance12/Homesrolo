@@ -78,24 +78,36 @@ export const HOMEOWNER_SHARE_PURPOSE = 'homeowner_work_records' as const
  * the documentation as the implementation grows.
  */
 /**
- * A homeowner sees what was shared with them, and nothing else.
+ * Someone sees what they own, plus what has been shared with them. Nothing else.
  *
- * The manifest is the complete boundary of what exists on the homeowner
- * surface, not a starting point for it. No browse, no search, no catalog, no
- * "your property" aggregate, no cross-share merge, and no derived, inferred, or
- * summarized view layered on top of a share. If it is not named in a manifest
- * bound by two live receipts, it does not exist for that homeowner.
+ * The home file (see `docs/HOME_FILE_RFC.md`) is a permanent per-property
+ * record, and every upload lands in it whoever uploads it. **Being in the home
+ * file is not being visible.** The file is a container, not a shared pool:
+ * every contribution is owned by its uploader, default-deny to everyone else,
+ * and this contract is how the exceptions are granted.
  *
- * This is why the contract has no entry point that takes a `recipientRef`
- * alone. Every path that could lead to disclosure requires one specific
- * manifest, so "show me everything for this homeowner" is not expressible —
- * asserted by tests, so adding one later fails the build rather than passing
- * review unnoticed.
+ * So there are exactly two doors, and this file governs the second:
+ *
+ *   1. You own it. Handled by the home file's ownership layer, not here.
+ *   2. It was shared with you. A manifest bound by a live authorization and a
+ *      live consent, which is everything below.
+ *
+ * There is no third door. No browse, no search, no catalog of someone else's
+ * contributions, no cross-share aggregate, and nothing derived, inferred, or
+ * summarized on top of what was shared.
+ *
+ * This is why the contract has no entry point taking a `recipientRef` alone.
+ * Every path that could lead to disclosure requires one specific manifest, so
+ * "show me everything about this home" is not expressible here — asserted by
+ * tests, so adding one later fails the build rather than passing review
+ * unnoticed. Access to the home file itself must satisfy the same rule.
  */
 export const HOMEOWNER_VISIBILITY_RULE =
-  'A homeowner sees exactly what was shared with them. The manifest is the whole view: no browse, ' +
-  'no search, no aggregate across shares, and nothing derived on top of it. Anything not named in a ' +
-  'manifest bound by a live authorization and a live consent does not exist on the homeowner surface.'
+  'Someone sees what they own, plus what was shared with them, and nothing else. Every upload lands in ' +
+  'the permanent home file, but being in the home file is not being visible: each contribution is owned ' +
+  'by its uploader and default-deny to everyone else. Disclosure beyond your own contributions requires a ' +
+  'manifest bound by a live authorization and a live consent. There is no browse, no catalog of another ' +
+  "party's contributions, and nothing derived on top of what was shared."
 
 export const STRUCTURAL_VALIDATION_WARNING =
   'Structural validation proves shape and binding only. It does not verify any signature ' +

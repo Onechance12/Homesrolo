@@ -106,33 +106,37 @@ not public branding and are out of scope for this rule.
 
 ## What a homeowner can see
 
-**A homeowner sees what was shared with them. That is the whole of it.**
+**Two doors: what you own, and what was shared with you. There is no third.**
 
-The manifest is the complete boundary of what exists on the homeowner surface,
-not a starting point for it. Specifically, Homesrolo does not build:
+Every home has a permanent file in Homesrolo, and every upload lands in it
+whoever uploads it — see `HOME_FILE_RFC.md`. But **being in the home file is not
+being visible.** The file is a container, not a shared pool: every contribution
+is owned by its uploader, default-deny to everyone else, and the share contract
+is how exceptions are granted.
 
-- a browse, search, or catalog of anything
-- a "your property" or "your home" aggregate assembled across shares
+So a party sees a contribution when they own it, or when it has been shared with
+them by a manifest bound by a live authorization and a live consent. Nothing
+else qualifies. Specifically, Homesrolo does not build:
+
+- a browse, search, or catalog of another party's contributions
+- an aggregate assembled across shares the viewer was not granted
 - a timeline, history, or summary derived from what was shared
 - any inferred, enriched, or AI-generated layer on top of a share
-- any view keyed on the homeowner rather than on a specific share
-
-If it is not named in a manifest bound by a live authorization and a live
-consent, it does not exist for that homeowner.
+- any disclosure path keyed on the recipient rather than on a specific manifest
 
 This is enforced structurally, not just stated. The contract has **no entry
 point that takes a `recipientRef` alone** — every path that could lead to
-disclosure requires one specific manifest, so "show me everything for this
-homeowner" cannot be written. A test scans the module's exported functions and
-fails the build if an enumerating entry point is ever added, and further tests
-prove that two shares to the same homeowner stay isolated: receipts for one
-share never make another live, and consent to one manifest is never consent to
-a different one.
+disclosure requires one specific manifest, so "show me everything about this
+home" cannot be written. A test scans the module's exported functions and fails
+the build if an enumerating entry point is ever added, and further tests prove
+that two shares to the same homeowner stay isolated: receipts for one share
+never make another live, and consent to one manifest is never consent to a
+different one. **Access to the home file must satisfy the same rule.**
 
-The practical consequence, which must reach the homeowner-facing copy: when a
-share ends, the homeowner's view of that material ends. There is no permanent
-Homesrolo record of their home that survives it. A product that let a homeowner
-believe otherwise would be promising a home file it does not keep.
+The consequence for homeowner-facing copy: revoking a share ends someone else's
+view, and it does not remove the contribution from the home file. The record is
+permanent; access is what changes. Both halves of that have to be said, because
+each one alone is a misleading promise.
 
 ## V1 sharing scope
 
@@ -195,8 +199,14 @@ claiming otherwise.
 
 ## Property identity
 
-**V1 does not introduce a global property reference.** A share is scoped by an
-exact Jobrolo-issued share id. Homesrolo does not match on address, parcel,
-geohash, or owner name, and never merges two shares into one property record.
-Cross-share property linking is a later RFC requiring separate review, because a
-wrong match would cross-contaminate two households' records.
+**The share contract does not introduce a global property reference.** A share
+is scoped by an exact Jobrolo-issued share id. Nothing in
+`homeowner-share.v1.ts` matches on address, parcel, geohash, or owner name, and
+no two shares are ever merged into one record by it.
+
+**The home file does require property identity**, and that is now the
+highest-severity unsolved problem in the design, because a wrong match shows one
+household another household's home. `HOME_FILE_RFC.md` §3 sets the requirements:
+no silent merges, merges recorded rather than destructive, no fuzzy auto-merge,
+and a split always available. None of it is built, and the share contract stays
+free of property matching either way.
