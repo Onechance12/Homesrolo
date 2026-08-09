@@ -7,6 +7,16 @@ import { SYNTHETIC_PROFILES, SYNTHETIC_NOTICE, findSyntheticProfile } from '../.
 import { NO_BLANKET_VERIFICATION_NOTICE } from '../../../lib/directory/public-profile.v1.ts'
 import { toPublicProjection } from '../../../lib/directory/projection.ts'
 import { NEUTRAL_ORDERING_STATEMENT } from '../../../lib/directory/ordering.ts'
+import { DimensionSummary, ReviewList } from '../../../components/Reviews.tsx'
+import { CredentialList } from '../../../components/Credentials.tsx'
+import { REVIEW_POLICY_STATEMENTS } from '../../../lib/directory/review.v1.ts'
+import { CREDENTIAL_LIMITS } from '../../../lib/directory/credential.v1.ts'
+import { CLAIM_DOES_NOT_GRANT } from '../../../lib/directory/claiming.v1.ts'
+import {
+  claimForCompany,
+  credentialsForCompany,
+  reviewsForCompany,
+} from '../../../lib/directory/fixtures-engagement.ts'
 
 const TODAY = '2026-08-09'
 
@@ -57,6 +67,10 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
 
   // Render from the allowlisted projection, never from the raw record.
   const profile = toPublicProjection(found)
+  const reviews = reviewsForCompany(slug)
+  const credentials = credentialsForCompany(slug)
+  const claim = claimForCompany(slug)
+  const publishedCount = reviews.filter(review => review.state === 'published').length
 
   return (
     <>
@@ -80,6 +94,32 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           <p style={{ fontSize: '0.9rem', color: 'var(--ink-faint)', marginTop: '0.75rem' }}>
             Service areas: {profile.serviceAreas.join(' · ')}
           </p>
+
+          <dl className="statline" style={{ marginTop: '2rem' }}>
+            <div>
+              <dt>Verified-project reviews</dt>
+              <dd>{publishedCount}</dd>
+            </div>
+            <div>
+              <dt>Academy credentials</dt>
+              <dd>{credentials.filter(credential => credential.state === 'earned').length}</dd>
+            </div>
+            <div>
+              <dt>Released projects</dt>
+              <dd>{profile.portfolioPreview.filter(item => item.homeownerReleased).length}</dd>
+            </div>
+            <div>
+              <dt>Profile</dt>
+              <dd style={{ fontSize: '1.05rem' }}>{claim?.state === 'claimed' ? 'Claimed' : 'Unclaimed'}</dd>
+            </div>
+          </dl>
+          {claim?.state === 'claimed' ? (
+            <p style={{ fontSize: '0.86rem', color: 'var(--ink-faint)', marginTop: '0.75rem', maxWidth: '68ch' }}>
+              Claimed on {claim.claimedOn} after demonstrating control
+              ({claim.controlEvidence.map(kind => kind.replace(/_/g, ' ')).join(', ')}). Claiming lets a company
+              manage this listing and respond to reviews. It confirms no fact on it.
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -128,6 +168,61 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
 
       <section className="section section--sunken">
         <div className="shell">
+          <div className="prose" style={{ marginBottom: '1.5rem' }}>
+            <h2>Academy credentials</h2>
+            <p>
+              Earned through coursework and a passed assessment. A credential cannot be bought, does not affect
+              this company&rsquo;s position in any list, and is not a licence.
+            </p>
+          </div>
+          <CredentialList credentials={credentials} today={TODAY} />
+          <details style={{ marginTop: '1.25rem', fontSize: '0.9rem', color: 'var(--ink-soft)' }}>
+            <summary style={{ cursor: 'pointer', color: 'var(--clay-deep)' }}>What a credential does not mean</summary>
+            <ul style={{ paddingLeft: '1.15rem', marginTop: '0.75rem' }}>
+              {CREDENTIAL_LIMITS.map(limit => <li key={limit} style={{ marginBottom: '0.5rem' }}>{limit}</li>)}
+            </ul>
+          </details>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '1.5rem' }}>
+            <h2>Verified-project reviews</h2>
+            <p>
+              Every review below is attached to a project this homeowner released. There is no way to submit one
+              without a released project, which is what makes a fabricated review unrepresentable here rather
+              than merely against the rules.
+            </p>
+          </div>
+
+          {publishedCount > 0 ? (
+            <div className="card" style={{ marginBottom: '1.75rem' }}>
+              <h3 className="card__title" style={{ fontSize: '1.05rem' }}>
+                Averages across {publishedCount} published {publishedCount === 1 ? 'review' : 'reviews'}
+              </h3>
+              <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>
+                Shown per dimension. There is no single overall score, because one number hides which part went
+                wrong and is the figure every other platform then sorts by.
+              </p>
+              <DimensionSummary reviews={reviews} />
+            </div>
+          ) : null}
+
+          <ReviewList reviews={reviews} />
+
+          <div className="note" style={{ marginTop: '1.75rem' }}>
+            <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
+              {REVIEW_POLICY_STATEMENTS.map(statement => (
+                <li key={statement} style={{ marginBottom: '0.5rem' }}>{statement}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="section section--sunken">
+        <div className="shell">
           <div className="grid grid--2" style={{ gap: '3rem' }}>
             <div>
               <div className="prose" style={{ marginBottom: '1.25rem' }}>
@@ -166,10 +261,13 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
                 ))}
                 <li style={{ marginBottom: '0.5rem' }}>{LISTING_NOT_ENDORSEMENT}</li>
                 <li style={{ marginBottom: '0.5rem' }}>{NEUTRAL_ORDERING_STATEMENT}</li>
-                <li>
+                <li style={{ marginBottom: '0.5rem' }}>
                   This profile shows no private home record, address, claim detail, or data from any
                   contractor&rsquo;s own system.
                 </li>
+                {CLAIM_DOES_NOT_GRANT.map(line => (
+                  <li key={line} style={{ marginBottom: '0.5rem' }}>{line}</li>
+                ))}
               </ul>
             </div>
           </div>

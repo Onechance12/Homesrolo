@@ -168,10 +168,90 @@ review, as recorded in `HOME_FILE_RFC.md`.
 No AI assistant, no search ranking or recommendation engine, no reviews, no lead
 sales, no referrals, no payments, and no analytics or cookies.
 
-## 10. Next slice
+## 10. Verified-project reviews
 
-Real profiles require, in order: a claiming flow that confirms control without
-confirming facts, the corrections process in §6, a licence-registry check with a
-recorded source and cadence, and counsel review of the terminology in §4 as it
-will actually appear on a page. Verified-project reviews depend on released
-projects existing, which depends on the private home file, which is not built.
+**A review must reference a released project.** That single binding is the whole
+design. A released project exists only because a homeowner published a record of
+real work naming that company, so there is no path by which a competitor, a
+marketing agency, or a customer who never existed can write one. The schema has
+no field for a review without a project reference, which makes the fake case
+unrepresentable rather than merely prohibited.
+
+The cost is honest: this surface will always be sparser than Angi. Sparse and
+real is the product.
+
+**No aggregate star rating.** Reviews are scored across five dimensions — scope
+accuracy, schedule, communication, site care, warranty follow-through — and
+averaged per dimension with the count shown. There is deliberately no single
+figure, for the same reason there is no blanket verified badge: one number hides
+which part went wrong, and it is the number every other platform then sorts by,
+which is precisely how review scores become worth buying.
+
+**Suppression is structurally hard**, in line with the FTC rule on consumer
+reviews and testimonials (16 CFR part 465):
+
+- A removed review still appears, marked removed, with its reason. Silent
+  deletion is indistinguishable from suppression, so there is no `deleted` state
+  and no delete function.
+- A disputed review stays visible and is excluded from the averages until it
+  resolves. Hiding it or counting it would both be taking a side.
+- Companies may not screen which homeowners are invited to review.
+- Incentive, employment, and related-party relationships are disclosed on the
+  review itself, not in a policy page.
+- A company response is a sibling record holding only a body, a date, and a
+  role. It cannot edit, rescore, hide, or reorder the review it answers, and the
+  fixtures answer the critical review rather than removing it.
+
+Reviews never affect ordering.
+
+## 11. Homesrolo Academy: earned credentials
+
+Paid accreditation tells a homeowner that a company spent money. Two structural
+rules keep this from becoming the same thing:
+
+1. **A credential cannot be purchased.** There is no price, fee, tier, or
+   sponsorship field in the schema. Enrolment fees may fund the programme; they
+   buy a seat, never a pass. No payment can award, restore, or extend a
+   credential.
+2. **A credential cannot buy placement.** Ordering reads name and slug only. If
+   completing coursework moved a company up a list, the Academy would be a paid
+   ranking product wearing an educational hat.
+
+A credential requires completed hours, a passed assessment at a uniform mark,
+and a written conduct undertaking. It **expires** and must be re-earned, and it
+is suspended or withdrawn on a substantiated conduct finding — shown, not
+deleted. As with verification facts, expiry beats stored state.
+
+The curriculum targets the failure modes that harm homeowners and sink
+contractors: ethics and consumer protection, insurance claim boundaries, money
+management, estimating and scope documentation, warranty and handover, and
+communication. The claim-boundaries course exists because a contractor drifting
+into unlicensed adjusting is the most common way a competent company acquires a
+regulatory problem, and it teaches the same line `CONSTITUTION.md` draws.
+
+**A credential is not a licence, not a substitute for one, not a guarantee of
+workmanship, and not an endorsement.** That is stated in the model, on the
+Academy page, and on every profile that shows one.
+
+## 12. Claiming a profile
+
+Claiming answers exactly one question: does this person control this business?
+It answers nothing else.
+
+Every other directory blurs this — you claim a listing and a badge appears —
+which teaches homeowners that a claimed profile is a checked profile. Here,
+claiming grants the ability to respond to reviews, submit evidence for checking,
+correct factual details, contest a fact, and enrol in coursework. It confirms no
+verification fact, removes no review, changes no position, creates no tier, and
+requires no payment. A claimed profile with nothing verified looks exactly as
+thin as an unclaimed one.
+
+## 13. Next slice
+
+In order: the corrections and disputes process in §6, since reviews and facts
+both depend on it; a claiming flow that confirms control without confirming
+facts; a licence-registry check with a recorded source and cadence; and counsel
+review of the terminology in §4 and §11 as it will actually appear on a page,
+including whether "credential" or "certificate" carries unwanted implications in
+the trades. Reviews depend on released projects existing, which depends on the
+private home file, which is not built.

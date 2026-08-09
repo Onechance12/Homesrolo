@@ -11,6 +11,13 @@ export default [
     rules: {
       // The public layer must never reach for a network at build or run time.
       'no-restricted-globals': ['error', 'fetch', 'XMLHttpRequest', 'WebSocket'],
+      // A leading underscore marks a binding that exists only to be discarded,
+      // which is how the tests prove a required field is genuinely required.
+      '@typescript-eslint/no-unused-vars': ['error', {
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
     },
   },
 ]
