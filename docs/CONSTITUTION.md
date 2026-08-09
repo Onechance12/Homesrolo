@@ -4,10 +4,10 @@
 > compliance certification.** It states how the product is built to stay inside
 > boundaries that we believe exist.
 >
-> **Attorney review has been obtained.** See "Legal review record" below. The
-> record is incomplete, and completing it matters: a compliance document whose
-> provenance is unrecorded cannot later be shown to a regulator as evidence of
-> anything.
+> **Attorney review has been obtained.** See "Legal review posture" below. Any
+> private provenance record stays with the owner and counsel outside source
+> control; this repository does not request privileged identities, advice, or
+> work product.
 
 ## The line
 

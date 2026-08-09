@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
@@ -231,6 +232,10 @@ assert.equal(homeownerShareConsentReplayKey(validConsent),
 assert.equal(homeownerShareRevocationReplayKey(validRevocation),
   homeownerShareRevocationReplayKey(structuredClone(validRevocation)))
 assert.equal(homeownerShareReplayDisposition(validConsent, structuredClone(validConsent)), 'exact_replay')
+assert.throws(() => homeownerShareReplayDisposition({ a: 1, b: undefined }, { a: 1 }),
+  /undefined/)
+assert.throws(() => homeownerShareReplayDisposition({ value: -0 }, { value: 0 }),
+  /negative zero/)
 {
   const changed = structuredClone(validConsent)
   changed.shareId = opaque('hshr', 'x')
@@ -477,6 +482,8 @@ const contractSource = readFileSync(
   path.join(contractDirectory, 'homeowner-share.v1.ts'),
   'utf8',
 )
+assert.equal(createHash('sha256').update(contractSource, 'utf8').digest('hex'),
+  '38013ef4e1255026b7964732e79bfcee0df2e3d4430d897de3425f7c931daa9c')
 for (const forbiddenImport of [
   '@/lib/db',
   '@prisma/client',
