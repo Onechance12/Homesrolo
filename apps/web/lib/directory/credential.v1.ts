@@ -25,7 +25,31 @@
 
 import { z } from 'zod'
 
-export const CREDENTIAL_CONTRACT_VERSION = 'academy-credential.v1' as const
+export const CREDENTIAL_CONTRACT_VERSION = 'academy-credential.v1-draft' as const
+
+/**
+ * Machine-readable honesty, mirroring REVIEW_PROOF_STATUS. No part of the
+ * Academy exists: no enrolment, no course delivery, no assessment engine, no
+ * issuing authority, no identity verification, and no conduct process. Every
+ * credential in this repository is a hand-written synthetic fixture.
+ *
+ * Flipping any of these without building the thing is a test failure.
+ */
+export const CREDENTIAL_ISSUANCE_STATUS = Object.freeze({
+  courseDeliveryImplemented: false,
+  assessmentImplemented: false,
+  identityOfHolderVerified: false,
+  issuingAuthorityEstablished: false,
+  conductProcessImplemented: false,
+  /** The only line that matters for user-facing copy. */
+  presentableAsEarnedCredential: false,
+} as const)
+
+/** Rendered wherever a credential appears. */
+export const CREDENTIAL_DEMO_DISCLAIMER =
+  'Draft demonstration only. The Academy does not exist yet: there is no enrolment, coursework, assessment, '
+  + 'issuing authority, or identity check behind any credential shown here. These are synthetic examples of a '
+  + 'format, not records of anything a company did, and they are not a licence or an endorsement.'
 
 /**
  * The curriculum. Chosen for the failure modes that actually harm homeowners

@@ -34,40 +34,57 @@ build directly.
 show up, and a credible answer to "who should I call". It is not the business.
 Confusing the storefront for the business is how you end up as Angi.
 
-## 3. The aggregation constraint, honestly
+## 3. The aggregation constraint
 
-You want a hub of Google, Bing, Yelp, BBB, and Angi. Here is what is actually
-available, because this determines the design:
+### Research snapshot — checked 2026-08-09
 
-| Source | Reality |
-| --- | --- |
-| **Yelp Fusion** | 3 reviews max, 24-hour cache limit, attribution required, **blending their rating with other sources into an aggregate is expressly prohibited**, and the terms prohibit using the API **to build a competing business directory** |
-| **Google Places** | Limited reviews per place, attribution required, caching restrictions; no blended-score product |
-| **BBB** | No open public API. Ratings are licensed, and scraping violates their terms |
-| **Angi** | No public review API. Scraping violates their terms |
-| **Bing** | Not a review corpus of its own — it surfaces other providers' content. There is nothing to connect to |
+**This is a dated snapshot, not legal advice, and it is not a substitute for
+reading the current terms or getting permission.** Platform terms change without
+notice. Re-check every row before any integration work begins, and treat counsel
+review plus written platform permission as a launch gate.
 
-Three consequences, and I would rather say them now than after a build:
+Claims are separated into what a primary source states and what is inference.
 
-**A unified Homesrolo score is off the table.** Not "hard" — contractually
-prohibited by at least one source and misleading regardless. Averaging a Google
-4.6 (312 reviews, all time, unverified) with a Yelp 3.9 (11 reviews, filtered
-by an algorithm nobody understands) produces a number that means nothing.
+| Source | Status | What the primary source states | Checked |
+| --- | --- | --- | --- |
+| **Yelp Fusion** | **Verified** | Caching limited to 24 hours; API returns up to 3 reviews per business; attribution required with any business listing information; **blending Yelp star ratings with other sources into an aggregate rating is prohibited**; using the API to build a competing business directory is prohibited | 2026-08-09 |
+| **Google Places** | **Verified** | Pre-fetching, caching, or storing content is prohibited except for stated exceptions, with `place_id` exempt and storable indefinitely; author attribution required for reviews and photos, using avatar, name, and profile link where space allows, with the avatar as the stated minimum; Google logo attribution required | 2026-08-09 |
+| **BBB** | **Inference — not verified** | No public review API was located. Ratings appear to be licensed commercially. Treated as unavailable until BBB confirms in writing | 2026-08-09 |
+| **Angi** | **Inference — not verified** | No public review API was located. Treated as unavailable until Angi confirms in writing | 2026-08-09 |
+| **Bing** | **Inference — not verified** | Understood to surface other providers' review content rather than maintain its own corpus, so there is likely nothing to integrate. Not confirmed against a primary source | 2026-08-09 |
+| **Pinterest** | **Not researched** | Out of scope for this pass. Any inspiration-board integration needs its own terms review before design | — |
 
-**The Yelp competing-directory clause is a real legal question**, not a
-formality. Homesrolo is a business directory. Whether their API can be used by
-one at all needs counsel before any integration work — that is a cheap question
-to ask and an expensive one to skip.
+Primary sources consulted:
 
-**So the hub is side-by-side, never blended.** Each source appears as its own
-panel: its score, its count, its date, its logo, its link, fetched live and not
-stored. Exactly the fact-level discipline already built for verification — same
-principle, new surface.
+- Yelp API Terms of Use — https://terms.yelp.com/developers/api_terms/20250113_en_us/
+- Yelp Display Requirements — https://terms.yelp.com/developers/display_requirements/
+- Google Places API policies and attributions — https://developers.google.com/maps/documentation/places/web-service/policies
 
-And this is the better product anyway. "Here is what every platform says, side
-by side, unblended, plus the one thing only we have: reviews attached to work
-that provably happened." A meta-score would have been a worse, less honest
-version of that.
+### What follows from it
+
+**A unified Homesrolo score is off the table.** Yelp's terms prohibit blending
+their rating into an aggregate, and the result would be misleading regardless:
+averaging a Google 4.6 from 312 all-time unverified reviews with a Yelp 3.9 from
+11 algorithmically-filtered ones produces a number that means nothing.
+
+**The Yelp competing-directory clause is a live legal question.** Homesrolo is a
+business directory. Whether their API may be used by one at all is a question
+for counsel and for Yelp in writing, before any integration work.
+
+**Caching rules differ per source and are strict.** Yelp caps at 24 hours;
+Google prohibits caching outside stated exceptions. A stored cross-platform
+review corpus is not compatible with either.
+
+**So the hub is side-by-side, live, attributed, never blended, never stored.**
+Each source gets its own panel with its own score, count, date, required
+attribution, and link. This mirrors the fact-level discipline already built for
+verification, and it is the more honest product: here is what every platform
+says, unblended, plus the one thing only Homesrolo could have.
+
+**Launch gate.** No external provider integration ships without: current terms
+re-read and cited, counsel sign-off, written platform permission where the terms
+require it, and attribution implemented to each provider's stated minimum.
+Nothing is scraped, and no review content is copied into this repository.
 
 ## 4. The revenue problem, created on purpose
 

@@ -16,7 +16,24 @@
 
 import { z } from 'zod'
 
-export const CLAIM_CONTRACT_VERSION = 'profile-claim.v1' as const
+export const CLAIM_CONTRACT_VERSION = 'profile-claim.v1-draft' as const
+
+/**
+ * No claiming system exists. There is no account, no control check, no
+ * registered-agent lookup, no domain validation, and nobody to review a
+ * dispute. A `controlEvidence` entry is a label in a fixture, not evidence.
+ */
+export const CLAIM_VERIFICATION_STATUS = Object.freeze({
+  controlCheckImplemented: false,
+  identityOfClaimantVerified: false,
+  disputeProcessImplemented: false,
+  /** The only line that matters for user-facing copy. */
+  presentableAsVerifiedControl: false,
+} as const)
+
+export const CLAIM_DEMO_DISCLAIMER =
+  'Draft demonstration only. No claiming system exists: nobody checked a registry, a domain, or an identity, '
+  + 'and the control evidence listed is a synthetic label rather than something that was verified.'
 
 export const CLAIM_STATES = Object.freeze([
   'unclaimed',

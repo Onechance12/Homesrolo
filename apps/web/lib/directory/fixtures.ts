@@ -31,8 +31,8 @@ const demoProfile: PublicProfile = {
   serviceAreas: ['Sample Metro — North', 'Sample Metro — West'],
   summary:
     'A synthetic company profile used to show how Homesrolo presents a professional: neutral trade '
-    + 'categories, coarse service areas, fact-level verification with sources and dates, and project '
-    + 'records a homeowner chose to release. No part of this profile is real.',
+    + 'categories, coarse service areas, fact-level verification with sources and dates, and the shape a '
+    + 'released project record would take. No part of this profile is real and nothing on it was checked.',
   verificationFacts: [
     {
       dimension: 'business_identity',
@@ -64,11 +64,13 @@ const demoProfile: PublicProfile = {
     },
     {
       dimension: 'project_proof',
-      status: 'confirmed',
-      source: 'homeowner_released_project',
+      // Deliberately NOT confirmed. Release verification is not built, so no
+      // project reference in this repository evidences anything.
+      status: 'not_checked',
+      source: 'not_collected',
       statement:
-        'Two sample projects were released by the homeowner who owned the record, with materials, dates, and '
-        + 'approved photos attached to the release.',
+        'Two sample projects carry a release marker, but Homesrolo cannot yet verify a signed homeowner '
+        + 'release or check a current-state ledger, so nothing here is evidence of completed work.',
       checkedAt: '2026-07-02',
     },
     {
@@ -76,7 +78,7 @@ const demoProfile: PublicProfile = {
       status: 'not_checked',
       source: 'not_collected',
       statement:
-        'Homesrolo publishes no reviews for this listing. Verified-project reviews are not built yet, and '
+        'Homesrolo publishes no checked reviews for this listing. Review verification is not built, and '
         + 'reviews are never copied from other sites.',
       checkedAt: '2026-07-02',
     },
@@ -108,7 +110,7 @@ const demoProfile: PublicProfile = {
       homeownerReleased: true,
       summary:
         'Tear-off and replacement with a 30-year architectural shingle, new underlayment, and replaced pipe '
-        + 'boots. Materials, dates, and approved photos were released by the homeowner.',
+        + 'boots. A synthetic example of what a release would carry: materials, dates, and approved photos.',
       illustration: 'roofline',
     },
     {
@@ -131,8 +133,8 @@ const demoProfile: PublicProfile = {
       completedOn: '2026-06-27',
       homeownerReleased: false,
       summary:
-        'Sample project the company recorded but the homeowner has not released. It appears here without '
-        + 'project proof, which is what an unreleased record looks like.',
+        'A synthetic example of a record marked unreleased, shown so the difference between the two states is '
+        + 'visible in the format.',
       illustration: 'siding',
     },
   ],
@@ -171,7 +173,7 @@ const alsoSynthetic: PublicProfile[] = [
             ...fact,
             status: 'not_checked' as const,
             source: 'not_collected' as const,
-            statement: 'No homeowner-released project record exists for this sample listing yet.',
+            statement: 'No project record is marked released on this sample listing.',
           }
         : fact,
     ),

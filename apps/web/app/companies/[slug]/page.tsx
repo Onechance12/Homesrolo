@@ -9,9 +9,13 @@ import { toPublicProjection } from '../../../lib/directory/projection.ts'
 import { NEUTRAL_ORDERING_STATEMENT } from '../../../lib/directory/ordering.ts'
 import { DimensionSummary, ReviewList } from '../../../components/Reviews.tsx'
 import { CredentialList } from '../../../components/Credentials.tsx'
-import { REVIEW_POLICY_STATEMENTS } from '../../../lib/directory/review.v1.ts'
-import { CREDENTIAL_LIMITS } from '../../../lib/directory/credential.v1.ts'
-import { CLAIM_DOES_NOT_GRANT } from '../../../lib/directory/claiming.v1.ts'
+import {
+  REVIEW_ACTIVATION_REQUIREMENTS,
+  REVIEW_POLICY_INTENT,
+  REVIEW_PROOF_DISCLAIMER,
+} from '../../../lib/directory/review.v1.ts'
+import { CREDENTIAL_DEMO_DISCLAIMER, CREDENTIAL_LIMITS } from '../../../lib/directory/credential.v1.ts'
+import { CLAIM_DEMO_DISCLAIMER, CLAIM_DOES_NOT_GRANT } from '../../../lib/directory/claiming.v1.ts'
 import {
   claimForCompany,
   credentialsForCompany,
@@ -97,11 +101,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
 
           <dl className="statline" style={{ marginTop: '2rem' }}>
             <div>
-              <dt>Verified-project reviews</dt>
+              <dt>Sample reviews</dt>
               <dd>{publishedCount}</dd>
             </div>
             <div>
-              <dt>Academy credentials</dt>
+              <dt>Sample credentials</dt>
               <dd>{credentials.filter(credential => credential.state === 'earned').length}</dd>
             </div>
             <div>
@@ -110,14 +114,15 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
             </div>
             <div>
               <dt>Profile</dt>
-              <dd style={{ fontSize: '1.05rem' }}>{claim?.state === 'claimed' ? 'Claimed' : 'Unclaimed'}</dd>
+              <dd style={{ fontSize: '1.05rem' }}>{claim?.state === 'claimed' ? 'Sample claim' : 'Unclaimed'}</dd>
             </div>
           </dl>
           {claim?.state === 'claimed' ? (
             <p style={{ fontSize: '0.86rem', color: 'var(--ink-faint)', marginTop: '0.75rem', maxWidth: '68ch' }}>
-              Claimed on {claim.claimedOn} after demonstrating control
-              ({claim.controlEvidence.map(kind => kind.replace(/_/g, ' ')).join(', ')}). Claiming lets a company
-              manage this listing and respond to reviews. It confirms no fact on it.
+              Sample claim dated {claim.claimedOn}, listing{' '}
+              {claim.controlEvidence.map(kind => kind.replace(/_/g, ' ')).join(' and ')} as the intended
+              control checks. {CLAIM_DEMO_DISCLAIMER} In the intended design, claiming lets a company manage a
+              listing and respond to reviews, and confirms no fact on it.
             </p>
           ) : null}
         </div>
@@ -137,10 +142,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
         <section className="section">
           <div className="shell">
             <div className="prose" style={{ marginBottom: '1.5rem' }}>
-              <h2>Project records</h2>
+              <h2>Sample project records</h2>
               <p>
-                A released project is one the homeowner chose to publish, with materials and dates attached. An
-                unreleased project has no project proof, and that difference is shown rather than smoothed over.
+                In the intended design, a released project is one the homeowner chose to publish, with materials
+                and dates attached, and an unreleased one carries no project proof. The release flow is not
+                built, so the labels below are format examples and no release actually occurred.
               </p>
             </div>
             <div className="grid grid--3">
@@ -155,8 +161,8 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
                     {TRADE_LABELS[item.tradeCategory]} · {item.serviceArea} · completed {item.completedOn}
                   </p>
                   <p style={{ marginTop: '0.75rem' }}>
-                    <span className={item.homeownerReleased ? 'chip chip--confirmed' : 'chip chip--neutral'}>
-                      {item.homeownerReleased ? 'Homeowner released' : 'Not released'}
+                    <span className="chip chip--neutral">
+                      {item.homeownerReleased ? 'Sample: marked released' : 'Sample: not released'}
                     </span>
                   </p>
                 </article>
@@ -169,11 +175,15 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
       <section className="section section--sunken">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '1.5rem' }}>
-            <h2>Academy credentials</h2>
+            <h2>Sample credentials</h2>
             <p>
-              Earned through coursework and a passed assessment. A credential cannot be bought, does not affect
-              this company&rsquo;s position in any list, and is not a licence.
+              The intended design is a credential earned through coursework and a passed assessment, which
+              cannot be bought and never affects position in any list. None of that is built, so the entries
+              below are format examples rather than records of anything a company did.
             </p>
+          </div>
+          <div className="synthetic-banner" style={{ marginBottom: '1.5rem' }} role="note">
+            <strong>Nothing was issued.</strong> {CREDENTIAL_DEMO_DISCLAIMER}
           </div>
           <CredentialList credentials={credentials} today={TODAY} />
           <details style={{ marginTop: '1.25rem', fontSize: '0.9rem', color: 'var(--ink-soft)' }}>
@@ -188,12 +198,16 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
       <section className="section">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '1.5rem' }}>
-            <h2>Verified-project reviews</h2>
+            <h2>Sample reviews</h2>
             <p>
-              Every review below is attached to a project this homeowner released. There is no way to submit one
-              without a released project, which is what makes a fabricated review unrepresentable here rather
-              than merely against the rules.
+              Each review below carries a project reference, which is the shape a future implementation will
+              resolve against a signed homeowner release. That resolution does not exist yet, so these prove
+              nothing about any company and are shown only to demonstrate the format.
             </p>
+          </div>
+
+          <div className="synthetic-banner" style={{ marginBottom: '1.75rem' }} role="note">
+            <strong>Not proof of anything.</strong> {REVIEW_PROOF_DISCLAIMER}
           </div>
 
           {publishedCount > 0 ? (
@@ -212,12 +226,27 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           <ReviewList reviews={reviews} />
 
           <div className="note" style={{ marginTop: '1.75rem' }}>
+            <p style={{ marginBottom: '0.75rem' }}>
+              <strong>Design intent, not current behaviour.</strong> None of the following is enforced, because
+              there is no runtime to enforce it.
+            </p>
             <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
-              {REVIEW_POLICY_STATEMENTS.map(statement => (
+              {REVIEW_POLICY_INTENT.map(statement => (
                 <li key={statement} style={{ marginBottom: '0.5rem' }}>{statement}</li>
               ))}
             </ul>
           </div>
+
+          <details style={{ marginTop: '1.25rem', fontSize: '0.9rem', color: 'var(--ink-soft)' }}>
+            <summary style={{ cursor: 'pointer', color: 'var(--clay-deep)' }}>
+              What has to exist before a review here means anything
+            </summary>
+            <ul style={{ paddingLeft: '1.15rem', marginTop: '0.75rem' }}>
+              {REVIEW_ACTIVATION_REQUIREMENTS.map(item => (
+                <li key={item} style={{ marginBottom: '0.5rem' }}>{item}</li>
+              ))}
+            </ul>
+          </details>
         </div>
       </section>
 

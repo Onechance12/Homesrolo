@@ -24,7 +24,7 @@ the site is synthetic.
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/constitution/ | Pure request and response boundary checks |
-| apps/web/lib/directory/ | Public profile contract, verified-project reviews, Academy credentials, claiming, projection allowlist, neutral ordering, synthetic fixtures |
+| apps/web/lib/directory/ | Public profile contract, draft project-linked reviews, draft Academy credentials, draft claiming, projection allowlist, neutral ordering, synthetic fixtures |
 | apps/web/app/ | Statically exported public site |
 | scripts/public-web-guard.mjs | Fails the build on any Phase 0.5 prohibition |
 
@@ -43,17 +43,18 @@ a general review site.
   placement cannot be bought.
 - Outside providers are linked and attributed, never scraped or restated. V1
   accepts synthetic `example.com` links only.
-- **Reviews require a released project.** There is no field for a review without
-  one, so a fabricated review is unrepresentable rather than merely prohibited.
-  Scored across five dimensions with no aggregate star rating. A removed review
-  stays visible with its reason; a disputed one stays visible and uncounted.
-- **Academy credentials are earned, never bought.** Completed hours, a passed
-  assessment at a uniform mark, a conduct undertaking, and an expiry. No payment
-  can award, restore, or extend one, and credentials never affect ordering. A
-  credential is not a licence and not a guarantee of workmanship.
-- **Claiming confirms control, not quality.** It grants the ability to respond
-  and to submit evidence; it confirms no fact, removes no review, and changes no
-  position.
+- **Reviews, credentials, and claiming are DRAFT demonstrations and prove
+  nothing.** A review's project reference is a format-checked string: nothing
+  verifies a signed homeowner release, checks a current-state ledger, or binds
+  an author, and there is no account system. No review is presented as
+  verified-project proof, and a test fails the build if any string says
+  otherwise. The Academy has no enrolment, assessment, or issuing authority, and
+  no claiming system exists. `REVIEW_PROOF_STATUS`,
+  `CREDENTIAL_ISSUANCE_STATUS`, and `CLAIM_VERIFICATION_STATUS` record every
+  missing check as `false` and are asserted in CI.
+- Intended designs, none enforced: no aggregate star rating; removed reviews stay
+  visible with a reason; credentials earned rather than bought, expiring, and
+  never affecting ordering; claiming confirms control and never a fact.
 - The public layer cannot reach the private ones: importing the share or
   home-file contracts fails the guard.
 

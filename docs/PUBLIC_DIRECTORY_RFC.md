@@ -16,7 +16,7 @@ later substantiate a company's project proof, because it is the one claim a
 company cannot make about itself.
 
 Everything the public layer is allowed to become follows from that. Company
-profiles, verified-project reviews, discovery, guides, and inspiration are all
+profiles, project-linked reviews, discovery, guides, and inspiration are all
 downstream of released records. None of them is a reason to build a general
 review site, and this document exists to keep that distinction from eroding one
 feature at a time.
@@ -52,8 +52,8 @@ that could carry one. Verification is five independent dimensions:
 | `business_identity` | Does a registered entity matching this name exist? |
 | `license_jurisdiction` | Which licence, issued by whom, covering what and where? |
 | `insurance` | What cover was evidenced, by which certificate, through what period? |
-| `project_proof` | Has a homeowner released a project naming this company? |
-| `review_provenance` | Where does any review come from, and is it tied to a released project? |
+| `project_proof` | Has a homeowner released a project naming this company? **No check exists, so this stays `not_checked` on every fixture.** |
+| `review_provenance` | Where does any review come from, and is it tied to a released project? **No check exists.** |
 
 Every fact carries a `status`, a `source`, a `checkedAt` date, an optional
 `asOf` for when the underlying record speaks to, and an `expiresAt` for anything
@@ -81,8 +81,10 @@ entire product:
 - **Not checked** — Homesrolo has not looked. Stated explicitly rather than
   omitted.
 - **Expired** — there was evidence and its own period has ended.
-- **Released** — a homeowner chose to publish a project record. Only a homeowner
-  can release; a company cannot self-release.
+- **Released** — *intended* to mean a homeowner chose to publish a project
+  record, verified by signature. Only a homeowner would be able to release. **No
+  release or verification flow exists**, so today the word describes a fixture
+  marker and nothing more.
 - **Claimed profile** *(not built)* — a company asserting control of a listing.
   Claiming will never by itself confirm any fact.
 
@@ -168,46 +170,60 @@ review, as recorded in `HOME_FILE_RFC.md`.
 No AI assistant, no search ranking or recommendation engine, no reviews, no lead
 sales, no referrals, no payments, and no analytics or cookies.
 
-## 10. Verified-project reviews
+## 10. Project-linked reviews (draft, not proof)
 
-**A review must reference a released project.** That single binding is the whole
-design. A released project exists only because a homeowner published a record of
-real work naming that company, so there is no path by which a competitor, a
-marketing agency, or a customer who never existed can write one. The schema has
-no field for a review without a project reference, which makes the fake case
-unrepresentable rather than merely prohibited.
+**Retraction.** An earlier draft of this section claimed that requiring a
+project reference makes fabricated reviews "unrepresentable". That was wrong.
+`releasedProjectRef` is a slug-shaped string. Nothing verifies a signed
+homeowner release, nothing checks a current-state ledger, nothing binds the
+author to the releasing homeowner, and there is no account system, so there is
+no author to bind. The demo holds together because every fixture is
+hand-written.
 
-The cost is honest: this surface will always be sparser than Angi. Sparse and
-real is the product.
+**What the field is:** a draft activation invariant. It fixes the shape early
+and names the missing checks. `REVIEW_ACTIVATION_REQUIREMENTS` lists them and
+`REVIEW_PROOF_STATUS` records that all of them are unbuilt; both are asserted by
+tests and rendered on the page.
 
-**No aggregate star rating.** Reviews are scored across five dimensions — scope
-accuracy, schedule, communication, site care, warranty follow-through — and
-averaged per dimension with the count shown. There is deliberately no single
-figure, for the same reason there is no blanket verified badge: one number hides
-which part went wrong, and it is the number every other platform then sorts by,
-which is precisely how review scores become worth buying.
+**Hard rule: no review may be presented as verified-project proof until signed
+release verification and an authoritative current-state check exist.** The UI
+says "Sample — unverified", the chip is neutral rather than green, and a test
+fails the build if any exported string describes a review as verified-project
+proof.
 
-**Suppression is structurally hard**, in line with the FTC rule on consumer
-reviews and testimonials (16 CFR part 465):
+The remaining design intent — all of it unbuilt, none of it enforced — is in
+`REVIEW_POLICY_INTENT`, where every line is prefixed "Intended:" so it cannot be
+misread as current behaviour:
 
-- A removed review still appears, marked removed, with its reason. Silent
-  deletion is indistinguishable from suppression, so there is no `deleted` state
-  and no delete function.
-- A disputed review stays visible and is excluded from the averages until it
-  resolves. Hiding it or counting it would both be taking a side.
-- Companies may not screen which homeowners are invited to review.
-- Incentive, employment, and related-party relationships are disclosed on the
-  review itself, not in a policy page.
-- A company response is a sibling record holding only a body, a date, and a
-  role. It cannot edit, rescore, hide, or reorder the review it answers, and the
-  fixtures answer the critical review rather than removing it.
+- Reviews will require a signed, currently-live release naming the company,
+  checked at submission and rechecked at display.
+- No screening for happy customers before inviting feedback.
+- Nobody can pay to add, remove, reorder, or soften a review. Ordering already
+  reads company name only, so this half is true today.
+- One company response per review, beside it, never editing or rescoring it.
+- A removed review still appears, marked removed with a reason.
+- Incentive, employment, and related-party relationships disclosed on the review.
 
-Reviews never affect ordering.
+**No aggregate star rating**, now or later. Reviews score five dimensions,
+averaged per dimension with counts. One number hides which part went wrong and
+is the figure every other platform sorts by, which is how review scores become
+worth buying.
 
-## 11. Homesrolo Academy: earned credentials
+Design intent aims at the failure modes in the FTC rule on consumer reviews and
+testimonials (16 CFR part 465). Intent is not compliance, and nothing here has
+been reviewed by counsel.
 
-Paid accreditation tells a homeowner that a company spent money. Two structural
-rules keep this from becoming the same thing:
+## 11. Homesrolo Academy: earned credentials (design, not a programme)
+
+**Nothing in the Academy exists.** There is no enrolment, course delivery,
+assessment engine, issuing authority, identity check, or conduct process.
+`CREDENTIAL_ISSUANCE_STATUS` records each of those as unbuilt and is asserted by
+tests. Every credential in the repository is a synthetic fixture, and no
+credential may be presented as earned until issuance exists.
+
+The design below is the target. Paid accreditation tells a homeowner that a
+company spent money. Two structural rules are intended to keep this from
+becoming the same thing:
 
 1. **A credential cannot be purchased.** There is no price, fee, tier, or
    sponsorship field in the schema. Enrolment fees may fund the programme; they
@@ -233,10 +249,15 @@ regulatory problem, and it teaches the same line `CONSTITUTION.md` draws.
 workmanship, and not an endorsement.** That is stated in the model, on the
 Academy page, and on every profile that shows one.
 
-## 12. Claiming a profile
+## 12. Claiming a profile (design, not a system)
 
-Claiming answers exactly one question: does this person control this business?
-It answers nothing else.
+**No claiming system exists.** Nobody checks a registry, a domain, or an
+identity, and there is no dispute reviewer. `CLAIM_VERIFICATION_STATUS` records
+this and is asserted by tests; a `controlEvidence` entry in a fixture is a label,
+not evidence.
+
+The intended design answers exactly one question: does this person control this
+business? It answers nothing else.
 
 Every other directory blurs this — you claim a listing and a badge appears —
 which teaches homeowners that a claimed profile is a checked profile. Here,

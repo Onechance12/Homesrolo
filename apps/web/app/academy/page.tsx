@@ -10,35 +10,35 @@ import {
 export const metadata = {
   title: 'Homesrolo Academy',
   description:
-    'Credentials contractors earn through coursework and a passed assessment, not accreditation they buy. '
-    + 'Ethics, claim boundaries, money management, estimating, warranty, and communication.',
+    'A design for credentials contractors would earn through coursework and a passed assessment rather than '
+    + 'accreditation they buy. Not built: no enrolment, assessment, or issuing authority exists.',
 }
 
 const CONTRAST = [
   {
     axis: 'How the badge is obtained',
     others: 'Pay an annual accreditation or membership fee.',
-    here: 'Complete the hours, pass the assessment, agree to the conduct standard.',
+    here: 'Intended: complete the hours, pass the assessment, agree to the conduct standard. Not built.',
   },
   {
     axis: 'What it costs to keep',
     others: 'Keep paying. Stop paying and the badge disappears regardless of conduct.',
-    here: 'Re-earn it when it expires. Payment cannot award, restore, or extend it.',
+    here: 'Intended: re-earn it when it expires. Payment cannot award, restore, or extend it.',
   },
   {
     axis: 'Effect on placement',
     others: 'Higher tiers buy better position and more leads.',
-    here: 'None. Ordering reads company name only, and never reads credentials.',
+    here: 'None. Ordering already reads company name only and never reads credentials.',
   },
   {
     axis: 'What it claims about the work',
     others: 'Implies general trustworthiness without checking any job.',
-    here: 'States what was studied and passed. Nothing about any particular job.',
+    here: 'Intended: states what was studied and passed. Nothing about any particular job.',
   },
   {
     axis: 'When conduct is questioned',
     others: 'Often unaffected while fees are current.',
-    here: 'Suspended or withdrawn, and the change is shown rather than deleted.',
+    here: 'Intended: suspended or withdrawn, with the change shown rather than deleted.',
   },
 ]
 
@@ -52,22 +52,28 @@ export default function AcademyPage() {
           <PageHeader
             eyebrow="Homesrolo Academy"
             title="A credential you earn, not one you buy."
-            lede="Paid accreditation tells a homeowner that a company spent money. It says nothing about how
-              that company handles a deductible, a change order, or a callback. So this one cannot be bought
-              at any price."
+            lede="This is a design for a programme that does not exist yet. Paid accreditation tells a homeowner
+              that a company spent money and nothing about how it handles a deductible, a change order, or a
+              callback. The intent here is a credential that cannot be bought at any price."
           />
+
+          <div className="synthetic-banner" style={{ marginTop: '2rem', maxWidth: 'var(--measure)' }} role="note">
+            <strong>Nothing on this page is operational.</strong> There is no enrolment, coursework, assessment,
+            issuing authority, or identity check. The curriculum below is a proposal, the comparison describes
+            intended structure, and every credential shown anywhere on this site is a synthetic example.
+          </div>
 
           <dl className="statline" style={{ marginTop: '2.5rem' }}>
             <div>
-              <dt>Courses</dt>
+              <dt>Courses proposed</dt>
               <dd>{ACADEMY_COURSES.length}</dd>
             </div>
             <div>
-              <dt>Total hours</dt>
+              <dt>Hours proposed</dt>
               <dd>{totalHours}</dd>
             </div>
             <div>
-              <dt>Pass mark</dt>
+              <dt>Intended pass mark</dt>
               <dd>{ASSESSMENT_PASS_MARK}</dd>
             </div>
             <div>
@@ -148,7 +154,7 @@ export default function AcademyPage() {
           <div className="grid grid--2" style={{ gap: '3rem' }}>
             <div>
               <div className="prose" style={{ marginBottom: '1.5rem' }}>
-                <h2>How a credential is earned</h2>
+                <h2>How a credential would be earned</h2>
               </div>
               <ol className="steps">
                 {HOW_A_CREDENTIAL_IS_EARNED.map(step => (
@@ -172,8 +178,9 @@ export default function AcademyPage() {
           </div>
 
           <div className="synthetic-banner" style={{ marginTop: '2.5rem' }}>
-            <strong>Not open yet.</strong> The Academy is designed and not built. No enrolment, payment, course
-            delivery, or assessment exists, and every credential shown anywhere on this site is synthetic.
+            <strong>Not open yet.</strong> The Academy is a design. No enrolment, payment, course delivery,
+            assessment, issuing authority, or conduct process exists, and every credential shown anywhere on
+            this site is synthetic.
           </div>
 
           <p style={{ marginTop: '2rem' }}>

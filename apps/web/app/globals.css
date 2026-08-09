@@ -465,3 +465,44 @@ a:hover { color: var(--clay); }
 .compare td { color: var(--ink-soft); }
 .compare tbody tr:last-child th, .compare tbody tr:last-child td { border-bottom: 0; }
 .table-scroll { overflow-x: auto; }
+
+/* =============================================================================
+   Target size (WCAG 2.5.8, 24x24 minimum)
+   =============================================================================
+   Standalone links and controls get a real hit area. Links inline in a sentence
+   are exempt under that criterion and are deliberately left alone, because
+   padding them would wreck the line rhythm of the prose.
+   ========================================================================== */
+
+.nav a,
+.colophon a,
+.link-list__item > a,
+.card__title a,
+.nav-list a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* Suggested-page list on the 404 and any similar standalone link list. */
+.nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.nav-list a { padding-block: 0.3rem; }
+
+/* A disclosure control keeps its marker, so it gets padding rather than flex. */
+summary {
+  padding-block: 0.35rem;
+  min-height: 24px;
+}
+
+/* Directory rows: the company name is the primary target on a card. */
+.card__title a { padding-block: 0.15rem; }
+
+/* Dense profile: let the fact metadata wrap instead of holding one long line,
+   and stack the stat line into two readable columns on a narrow screen. */
+@media (max-width: 30rem) {
+  .fact__meta > div { white-space: normal; }
+  .statline { gap: 1.1rem 1.75rem; }
+  .statline dd { font-size: 1.3rem; }
+  .score-row { grid-template-columns: 1fr auto; }
+  .score-row .score-bar { grid-column: 1 / -1; order: 3; }
+}

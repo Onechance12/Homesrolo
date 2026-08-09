@@ -1,29 +1,80 @@
 /**
- * Verified-project reviews, V1 contract.
+ * Project-linked reviews, V1 DRAFT contract. Synthetic demonstration only.
  *
- * The problem with every existing review surface is that anyone can write one.
- * That is why they fill up with competitor sabotage, paid five-star padding,
- * and reviews from customers who never existed — and why platforms then have to
- * police content they have no way to check.
+ * ---------------------------------------------------------------------------
+ * WHAT THIS DOES NOT DO
+ * ---------------------------------------------------------------------------
+ * An earlier version of this file claimed that requiring `releasedProjectRef`
+ * makes fabricated reviews "unrepresentable". **That was wrong, and the claim
+ * is retracted.**
  *
- * Homesrolo does not police. It makes the fake case unrepresentable:
+ * `releasedProjectRef` is a slug-shaped string. Nothing in this repository:
  *
- *   A review must reference a released project. A released project only exists
- *   because a homeowner published a record of real work naming that company.
- *   No release, no review. There is no field for a review without one.
+ *   - verifies a signed homeowner release for that project;
+ *   - checks an authoritative current-state ledger that the release exists, is
+ *     still live, and names this company;
+ *   - binds the review author to the homeowner who made the release; or
+ *   - authenticates anyone at all, since there is no account system.
  *
- * That single binding removes the entire category. It also means this surface
- * will always be sparser than Angi, and sparse-and-real is the product.
+ * A format-validated reference proves format. Anyone able to construct a record
+ * could put any slug in that field. The demo holds together only because every
+ * fixture is hand-written and synthetic.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT IT ACTUALLY IS
+ * ---------------------------------------------------------------------------
+ * A **draft activation invariant**: a precondition a future implementation must
+ * satisfy before this surface may carry any weight. The field exists so the
+ * shape is fixed early and the missing checks are named, not so that today's
+ * data means anything.
+ *
+ * Until every item in REVIEW_ACTIVATION_REQUIREMENTS is implemented, **no
+ * review may be presented to anyone as verified-project proof.** See
+ * REVIEW_PROOF_STATUS, which is asserted by tests and rendered in the UI.
  *
  * The FTC's rule on consumer reviews and testimonials (16 CFR part 465) bans
  * fake and insider reviews, buying positive sentiment, and suppressing negative
- * reviews. The rules below are written to make each of those structurally hard
- * rather than a policy someone promises to follow.
+ * reviews. The design intent below is aimed at those failure modes. Intent is
+ * not enforcement, and none of it is enforced yet.
  */
 
 import { z } from 'zod'
 
-export const REVIEW_CONTRACT_VERSION = 'verified-project-review.v1' as const
+export const REVIEW_CONTRACT_VERSION = 'project-linked-review.v1-draft' as const
+
+/**
+ * The checks that must exist before a review can be described as proof of
+ * anything. Every one of them is missing today.
+ */
+export const REVIEW_ACTIVATION_REQUIREMENTS: readonly string[] = Object.freeze([
+  'A signed homeowner release for the referenced project, verified against a trusted key.',
+  'An authoritative current-state check that the release is live, not revoked, and names this company.',
+  'A binding between the review author and the homeowner who made that release.',
+  'An authenticated account system, so an author is a person rather than a string.',
+  'A moderation and corrections process with a recorded operator and audit trail.',
+])
+
+/**
+ * Machine-readable honesty. Asserted by tests and rendered on every surface
+ * that shows a review, so the UI cannot drift ahead of the implementation.
+ *
+ * Flipping any of these to true without building the corresponding check is a
+ * test failure, not a copy change.
+ */
+export const REVIEW_PROOF_STATUS = Object.freeze({
+  signedReleaseVerified: false,
+  currentStateLedgerChecked: false,
+  authorBoundToReleasingHomeowner: false,
+  authorAuthenticated: false,
+  /** The only line that matters for user-facing copy. */
+  presentableAsVerifiedProof: false,
+} as const)
+
+/** Rendered wherever reviews appear. Deliberately blunt. */
+export const REVIEW_PROOF_DISCLAIMER =
+  'Draft demonstration only. These reviews are synthetic and prove nothing. A project reference here is a '
+  + 'format-checked string, not a verified homeowner release: nothing checks a signature, a current-state '
+  + 'ledger, or who the author is. No review will be shown as verified-project proof until those checks exist.'
 
 /**
  * Reviews are scored per dimension. There is deliberately no overall star
@@ -103,8 +154,12 @@ export const verifiedProjectReviewSchema = z.object({
   contractVersion: z.literal(REVIEW_CONTRACT_VERSION),
   reviewId: z.string().regex(SLUG),
   /**
-   * The released project this review is about. Required, always. This is the
-   * field that makes a fabricated review unrepresentable.
+   * The project this review claims to be about.
+   *
+   * Format-validated only. This is a *draft activation invariant*: a future
+   * implementation must resolve it against a signed, currently-live homeowner
+   * release before the review means anything. Today it means nothing beyond
+   * "this string is slug-shaped".
    */
   releasedProjectRef: z.string().regex(SLUG),
   companySlug: z.string().regex(SLUG),
@@ -197,17 +252,21 @@ export function orderReviews(reviews: readonly VerifiedProjectReview[]): Verifie
   })
 }
 
-export const REVIEW_POLICY_STATEMENTS: readonly string[] = Object.freeze([
-  'A review can only be written by a homeowner who released a project record naming that company. There is no '
-    + 'way to submit a review without one, which is what makes fabricated reviews unrepresentable rather than '
-    + 'merely against the rules.',
-  'Homesrolo does not filter which homeowners are invited to review, and a company cannot choose who is asked. '
-    + 'Screening for happy customers before inviting feedback is prohibited.',
-  'Nobody can pay to add, remove, reorder, or soften a review, and no review affects a company’s position in '
-    + 'any list.',
-  'A company may respond once to any review. The response sits beside the review and never edits, hides, or '
-    + 'rescores it.',
-  'A removed review still appears, marked as removed with the reason. Silent deletion is indistinguishable '
-    + 'from suppression.',
-  'Any incentive, employment, or family relationship behind a review is disclosed on the review itself.',
+/**
+ * Design intent for a future implementation. These are commitments about what
+ * will be built, not descriptions of what runs today — nothing here is
+ * enforced, because there is no runtime.
+ */
+export const REVIEW_POLICY_INTENT: readonly string[] = Object.freeze([
+  'Intended: a review will require a signed, currently-live homeowner release naming the company, verified at '
+    + 'submission and rechecked at display. None of that verification exists yet, so today the project '
+    + 'reference is a format-checked string and proves nothing.',
+  'Intended: Homesrolo will not filter which homeowners are invited to review, and a company will not choose '
+    + 'who is asked. Screening for happy customers before inviting feedback is to be prohibited.',
+  'Intended: nobody can pay to add, remove, reorder, or soften a review. Ordering already reads company name '
+    + 'only, so no review affects position in any list.',
+  'Intended: a company may respond once to any review, beside it, without editing, hiding, or rescoring it.',
+  'Intended: a removed review still appears, marked removed with a reason, because silent deletion is '
+    + 'indistinguishable from suppression.',
+  'Intended: any incentive, employment, or family relationship behind a review is disclosed on the review.',
 ])

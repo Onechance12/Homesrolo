@@ -26,7 +26,7 @@ export default function NotFound() {
 
         <nav aria-label="Suggested pages" style={{ marginTop: '2.5rem' }}>
           <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Try one of these</h2>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '0.6rem' }}>
+          <ul className="nav-list">
             <li><Link href="/">Home</Link></li>
             {PRIMARY_NAV.map(item => (
               <li key={item.href}><Link href={item.href}>{item.label}</Link></li>

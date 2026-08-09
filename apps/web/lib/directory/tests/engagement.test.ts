@@ -1,8 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  REVIEW_ACTIVATION_REQUIREMENTS,
+  REVIEW_CONTRACT_VERSION,
   REVIEW_DIMENSIONS,
-  REVIEW_POLICY_STATEMENTS,
+  REVIEW_POLICY_INTENT,
+  REVIEW_PROOF_DISCLAIMER,
+  REVIEW_PROOF_STATUS,
   isBodyVisible,
   orderReviews,
   parseVerifiedProjectReview,
@@ -13,6 +17,9 @@ import * as reviewModule from '../review.v1.ts'
 import {
   ACADEMY_COMMERCIAL_RULES,
   ACADEMY_COURSES,
+  CREDENTIAL_CONTRACT_VERSION,
+  CREDENTIAL_DEMO_DISCLAIMER,
+  CREDENTIAL_ISSUANCE_STATUS,
   ASSESSMENT_PASS_MARK,
   CREDENTIAL_LIMITS,
   HOW_A_CREDENTIAL_IS_EARNED,
@@ -22,8 +29,11 @@ import {
 } from '../credential.v1.ts'
 import {
   CLAIM_COMMERCIAL_RULES,
+  CLAIM_CONTRACT_VERSION,
+  CLAIM_DEMO_DISCLAIMER,
   CLAIM_DOES_NOT_GRANT,
   CLAIM_GRANTS,
+  CLAIM_VERIFICATION_STATUS,
   parseProfileClaim,
 } from '../claiming.v1.ts'
 import {
@@ -39,10 +49,10 @@ import { auditResponse } from '../../../../../src/constitution/detector.ts'
 const TODAY = '2026-08-09'
 
 // =============================================================================
-// A review cannot exist without a released project
+// The project link: shape only, and the tests say so
 // =============================================================================
 
-test('every review references a project the homeowner actually released', () => {
+test('every fixture review points at a project marked released in the fixtures', () => {
   const demo = findSyntheticProfile(DEMO_PROFILE_SLUG)
   assert.ok(demo)
   const released = new Set(
@@ -53,17 +63,18 @@ test('every review references a project the homeowner actually released', () => 
   for (const review of SYNTHETIC_REVIEWS) {
     assert.ok(
       released.has(review.releasedProjectRef),
-      `${review.reviewId} points at "${review.releasedProjectRef}", which is not a released project`,
+      `${review.reviewId} points at "${review.releasedProjectRef}", which no fixture marks released. `
+        + 'This is fixture hygiene only: nothing in the code verifies a real release.',
     )
   }
 })
 
-test('a review without a released project reference is unrepresentable', () => {
+test('the project reference is required in shape, which is all it currently guarantees', () => {
   const [sample] = SYNTHETIC_REVIEWS
   assert.ok(sample)
   const { releasedProjectRef: _dropped, ...withoutProject } = sample
   assert.throws(() => parseVerifiedProjectReview(withoutProject),
-    'the field that makes fabrication impossible must be required')
+    'the project reference must be structurally required, even though it is only format-checked')
   assert.throws(() => parseVerifiedProjectReview({ ...sample, releasedProjectRef: '' }))
 })
 
@@ -319,7 +330,11 @@ test('claiming the demo profile did not confirm any fact on it', () => {
 
 test('all review, credential, and claim prose passes the response audit', () => {
   const prose = [
-    ...REVIEW_POLICY_STATEMENTS,
+    ...REVIEW_POLICY_INTENT,
+    REVIEW_PROOF_DISCLAIMER,
+    CREDENTIAL_DEMO_DISCLAIMER,
+    CLAIM_DEMO_DISCLAIMER,
+    ...REVIEW_ACTIVATION_REQUIREMENTS,
     ...CREDENTIAL_LIMITS,
     ...HOW_A_CREDENTIAL_IS_EARNED,
     ...CLAIM_GRANTS,
@@ -340,10 +355,80 @@ test('all review, credential, and claim prose passes the response audit', () => 
   }
 })
 
-test('the review policy names the practices it structurally prevents', () => {
-  const joined = REVIEW_POLICY_STATEMENTS.join(' ').toLowerCase()
-  assert.match(joined, /released a project record/)
+test('the review policy is stated as intent, never as current behaviour', () => {
+  const joined = REVIEW_POLICY_INTENT.join(' ').toLowerCase()
   assert.match(joined, /screening for happy customers/)
   assert.match(joined, /nobody can pay/)
   assert.match(joined, /removed review still appears/)
+  // Every line must be marked as intent so none of it reads as a live guarantee.
+  for (const line of REVIEW_POLICY_INTENT) {
+    assert.match(line, /^Intended: |Ordering already reads/,
+      `policy line must be marked as intent, not fact: "${line}"`)
+  }
+})
+
+// =============================================================================
+// Truth regressions: nothing here is operational, and the code says so
+// =============================================================================
+
+test('no proof, issuance, or control check claims to be implemented', () => {
+  for (const [field, value] of Object.entries(REVIEW_PROOF_STATUS)) {
+    assert.equal(value, false, `REVIEW_PROOF_STATUS.${field} must stay false until the check is built`)
+  }
+  for (const [field, value] of Object.entries(CREDENTIAL_ISSUANCE_STATUS)) {
+    assert.equal(value, false, `CREDENTIAL_ISSUANCE_STATUS.${field} must stay false until it exists`)
+  }
+  for (const [field, value] of Object.entries(CLAIM_VERIFICATION_STATUS)) {
+    assert.equal(value, false, `CLAIM_VERIFICATION_STATUS.${field} must stay false until it exists`)
+  }
+})
+
+test('the three engagement contracts are marked draft in their version strings', () => {
+  for (const version of [REVIEW_CONTRACT_VERSION, CREDENTIAL_CONTRACT_VERSION, CLAIM_CONTRACT_VERSION]) {
+    assert.match(version, /-draft$/, `${version} must be marked draft while nothing is enforced`)
+  }
+  // The old name asserted a property the code does not have.
+  assert.notEqual(REVIEW_CONTRACT_VERSION, 'verified-project-review.v1')
+})
+
+test('activation requirements name the missing checks concretely', () => {
+  const joined = REVIEW_ACTIVATION_REQUIREMENTS.join(' ').toLowerCase()
+  for (const missing of ['signed', 'current-state', 'author', 'authenticated']) {
+    assert.ok(joined.includes(missing), `activation requirements must name "${missing}"`)
+  }
+  assert.ok(REVIEW_ACTIVATION_REQUIREMENTS.length >= 4)
+})
+
+test('the disclaimers retract the proof claim in plain words', () => {
+  assert.match(REVIEW_PROOF_DISCLAIMER, /prove nothing|proves nothing/i)
+  assert.match(REVIEW_PROOF_DISCLAIMER, /format-checked string/i)
+  assert.match(CREDENTIAL_DEMO_DISCLAIMER, /does not exist yet/i)
+  assert.match(CREDENTIAL_DEMO_DISCLAIMER, /not a licence/i)
+  assert.match(CLAIM_DEMO_DISCLAIMER, /no claiming system exists/i)
+})
+
+test('no exported string presents a review as verified-project proof', () => {
+  const surfaces = [
+    ...REVIEW_POLICY_INTENT,
+    ...REVIEW_ACTIVATION_REQUIREMENTS,
+    ...CLAIM_GRANTS,
+    ...CLAIM_DOES_NOT_GRANT,
+    ...SYNTHETIC_REVIEWS.flatMap(review => [review.body, review.stateReason ?? '']),
+  ]
+  for (const text of surfaces) {
+    assert.doesNotMatch(text, /\bunrepresentable\b/i, `retracted claim reappeared: "${text}"`)
+    assert.doesNotMatch(text, /verified[- ]project (?:proof|review)/i,
+      `a review must not be described as verified-project proof: "${text}"`)
+  }
+})
+
+test('the demo profile does not claim confirmed project proof', () => {
+  const demo = findSyntheticProfile(DEMO_PROFILE_SLUG)
+  assert.ok(demo)
+  const proof = demo.verificationFacts.find(fact => fact.dimension === 'project_proof')
+  assert.ok(proof)
+  assert.notEqual(proof.status, 'confirmed',
+    'nothing verifies a release, so project proof cannot read as confirmed')
+  assert.notEqual(proof.source, 'homeowner_released_project',
+    'claiming a homeowner-released source implies a check that does not exist')
 })

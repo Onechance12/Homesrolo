@@ -7,7 +7,9 @@ import {
 } from '../lib/directory/review.v1.ts'
 
 const STATE_LABELS: Record<string, string> = {
-  published: 'Verified project',
+  // Deliberately NOT "Verified project". Nothing verifies the project link, so
+  // a chip saying otherwise would be the overclaim this pass exists to remove.
+  published: 'Sample — unverified',
   disputed_under_review: 'Disputed — under review',
   removed_policy_violation: 'Removed',
   removed_by_author: 'Withdrawn by the author',
@@ -20,7 +22,8 @@ const DISCLOSURE_LABELS: Record<string, string> = {
 }
 
 function stateChip(state: string): string {
-  if (state === 'published') return 'chip chip--confirmed'
+  // A published sample gets a neutral chip, not a green one. Green reads as
+  // "checked", and nothing here has been checked.
   if (state === 'disputed_under_review') return 'chip chip--caution'
   return 'chip chip--neutral'
 }

@@ -174,8 +174,8 @@ export const IDEAS_INTRO: readonly EducationalSection[] = Object.freeze([
       'Most inspiration collections show a photograph with no idea what it cost, what material it used, or '
         + 'whether it lasted. A released project entry carries the material, the date, and the work performed, so '
         + 'a saved idea can be traced to something real.',
-      'Boards are not built yet. When they are, they will be assembled only from projects a homeowner chose to '
-        + 'release, and never from images collected from other sites.',
+      'Boards are not built. When they are, the intent is to assemble them only from projects a homeowner chose '
+        + 'to release, and never from images collected from other sites.',
     ]),
   },
 ])
@@ -192,9 +192,9 @@ export const FOR_PROFESSIONALS: readonly EducationalSection[] = Object.freeze([
   {
     heading: 'Proof instead of adjectives',
     body: Object.freeze([
-      'A released project is a stronger statement than a marketing claim, because it names materials, dates, and '
-        + 'the homeowner who chose to release it. Project proof is the one verification dimension that cannot be '
-        + 'self-asserted.',
+      'The intent is that a released project becomes a stronger statement than a marketing claim, because it '
+        + 'names materials, dates, and the homeowner who chose to release it. Project proof is designed to be the '
+        + 'one dimension a company cannot assert about itself. The release and checking flow is not built yet.',
     ]),
   },
   {
