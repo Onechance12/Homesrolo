@@ -64,7 +64,7 @@ test('unknown refs are not_found, never fabricated', async () => {
   await syntheticPort.enterDemoSession('Test homeowner')
   const missingHome = await syntheticPort.getHome('hhom_' + 'x'.repeat(43))
   assert.deepEqual(missingHome, { ok: false, error: 'not_found' })
-  const missingProject = await syntheticPort.getProject(BIRCH_REF, 'hwrk_' + 'x'.repeat(43))
+  const missingProject = await syntheticPort.getProject(BIRCH_REF, 'hprj_' + 'x'.repeat(43))
   assert.deepEqual(missingProject, { ok: false, error: 'not_found' })
   const wrongHomeLists = await syntheticPort.listDocuments('hhom_' + 'y'.repeat(43))
   assert.deepEqual(wrongHomeLists, { ok: false, error: 'not_found' })
@@ -84,7 +84,7 @@ test('a created home and project exist in memory and feed the timeline', async (
   })
   assert.ok(added.ok)
   if (!added.ok) return
-  assert.equal(added.value.status, 'recorded')
+  assert.equal(added.value.status, 'completed')
 
   const timeline = await syntheticPort.listTimeline(created.value.homeRef)
   assert.ok(timeline.ok)
@@ -109,6 +109,30 @@ test('the empty fixture home renders the empty states, not errors', async () => 
   assert.ok(warranties.ok && warranties.value.length === 0)
   const timeline = await syntheticPort.listTimeline(COTTAGE_REF)
   assert.ok(timeline.ok && timeline.value.length === 1, 'only the file-opened entry')
+})
+
+test('minted refs use the runtime boundary vocabulary', async () => {
+  const session = await syntheticPort.enterDemoSession('Prefix check')
+  assert.match(session.principalRef, /^hprn_[A-Za-z0-9_-]{43}$/,
+    'sessions carry principal refs in the homeowner-runtime.v1 shape')
+
+  const home = await syntheticPort.createHome({
+    alias: 'Prefix House', locality: 'Sample Metro', homeType: 'house', yearBuilt: null,
+  })
+  assert.ok(home.ok)
+  if (!home.ok) return
+  assert.match(home.value.homeRef, /^hhom_[A-Za-z0-9_-]{43}$/)
+
+  const project = await syntheticPort.addProject(home.value.homeRef, {
+    title: 'Prefix project', trade: 'General', performedOn: '2026-08-01',
+    contractor: 'Prefix Co', summary: 'Prefix check.',
+  })
+  assert.ok(project.ok)
+  if (!project.ok) return
+  assert.match(project.value.projectRef, /^hprj_[A-Za-z0-9_-]{43}$/,
+    'projects mint hprj_ to match homeownerProjectSchema, never hwrk_')
+  assert.equal(project.value.status, 'completed',
+    'a demo-recorded past project lands as the runtime status "completed"')
 })
 
 test('signing out ends the session', async () => {

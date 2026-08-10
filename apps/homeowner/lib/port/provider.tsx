@@ -34,7 +34,13 @@ export function PortProvider({ children }: { children: React.ReactNode }) {
     setState(next)
   }, [])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    // The session read settles asynchronously, so the setState inside refresh
+    // is never synchronous within this effect.
+    let live = true
+    void port.getSession().then(next => { if (live) setState(next) })
+    return () => { live = false }
+  }, [])
 
   const sessionValue = useMemo(() => ({ state, refresh }), [state, refresh])
 

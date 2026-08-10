@@ -56,6 +56,32 @@ test('documents sort newest first and count both project and home papers', () =>
   assert.ok(documents.some(d => d.projectRef !== null), 'project documents exist')
 })
 
+test('opaque refs use the runtime boundary vocabulary', () => {
+  // Prefixes agreed with homeowner-runtime.v1: hhom_ homes, hprj_ projects.
+  // hwrk_ belongs to home-file-record work records, which these are not.
+  const OPAQUE = /^(hhom|hprj|hdoc|hwar|hphot|hmnt|hent)_[A-Za-z0-9_-]{43}$/
+  for (const home of FIXTURE_HOMES) {
+    assert.match(home.homeRef, /^hhom_/, home.alias)
+  }
+  for (const project of FIXTURE_PROJECTS) {
+    assert.match(project.projectRef, /^hprj_/, `${project.title} must use hprj_, not hwrk_`)
+    assert.match(project.projectRef, OPAQUE)
+  }
+  const everything = JSON.stringify([FIXTURE_HOMES, FIXTURE_PROJECTS, FIXTURE_HOME_DOCUMENTS, FIXTURE_WARRANTIES])
+  assert.ok(!everything.includes('hwrk_'), 'no fixture may mint a work-record ref')
+  assert.ok(!everything.includes('hacct_'), 'principals are hprn_, not hacct_')
+})
+
+test('project statuses use the runtime enum exactly', () => {
+  const RUNTIME_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled']
+  for (const project of FIXTURE_PROJECTS) {
+    assert.ok(RUNTIME_STATUSES.includes(project.status),
+      `${project.title} status "${project.status}" is not a homeowner-runtime.v1 status`)
+  }
+  const text = JSON.stringify(FIXTURE_PROJECTS)
+  assert.ok(!text.includes('"recorded"'), 'the retired UI-only status must not reappear')
+})
+
 test('every timeline link stays inside the app', () => {
   for (const entry of timelineFor(BIRCH_REF)) {
     if (entry.href === null) continue

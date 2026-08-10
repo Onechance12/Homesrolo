@@ -20,16 +20,22 @@ export function usePortCall<T>(
 ): { state: CallState<T>; retry: () => void } {
   const [state, setState] = useState<CallState<T>>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
-  const callRef = useRef(call)
-  callRef.current = call
-  const emptyRef = useRef(isEmpty)
-  emptyRef.current = isEmpty
+
+  // Latest-callable refs, synchronised after render (writing during render is
+  // not allowed under the react-hooks rules, and rightly so).
+  const callRef = useRef<typeof call>(null)
+  const emptyRef = useRef<typeof isEmpty>(null)
+  useEffect(() => {
+    callRef.current = call
+    emptyRef.current = isEmpty
+  })
 
   useEffect(() => {
     let live = true
-    setState({ status: 'loading' })
-    void callRef.current().then(result => {
-      if (!live) return
+    // The fetch settles asynchronously, so every setState below is async too;
+    // the loading state is set by `retry` and the initial state, never here.
+    void Promise.resolve().then(() => callRef.current?.()).then(result => {
+      if (!live || !result) return
       if (!result.ok) { setState({ status: 'error', error: result.error }); return }
       if (emptyRef.current?.(result.value)) { setState({ status: 'empty' }); return }
       setState({ status: 'ready', value: result.value })
@@ -39,6 +45,9 @@ export function usePortCall<T>(
     return () => { live = false }
   }, [attempt])
 
-  const retry = useCallback(() => setAttempt(a => a + 1), [])
+  const retry = useCallback(() => {
+    setState({ status: 'loading' })
+    setAttempt(a => a + 1)
+  }, [])
   return { state, retry }
 }

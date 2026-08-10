@@ -6,6 +6,7 @@ import { usePort } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconProjects } from '../../../../components/icons.tsx'
+import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
 import type { AddProjectInput } from '../../../../lib/port/types.ts'
 
 /** Projects: the recorded work on this home, plus the door to record more. */
@@ -56,9 +57,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
                   <span className="row__sub">{project.trade} · {project.photoCount} photos · {project.documentCount} documents</span>
                 </span>
                 <span className="row__end">
-                  <span className={project.status === 'recorded' ? 'pill pill--recorded' : 'pill pill--progress'}>
-                    {project.status === 'recorded' ? 'Recorded' : 'In progress'}
-                  </span>
+                  <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>
                   <span className="mono">{project.performedOn}</span>
                 </span>
               </Link>

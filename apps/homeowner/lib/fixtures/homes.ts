@@ -51,9 +51,9 @@ export const FIXTURE_HOMES: readonly HomeFile[] = [
   },
 ]
 
-const ROOF_REF = opaque('hwrk', 'r')
-const GUTTER_REF = opaque('hwrk', 'g')
-const WINDOW_REF = opaque('hwrk', 'w')
+const ROOF_REF = opaque('hprj', 'r')
+const GUTTER_REF = opaque('hprj', 'g')
+const WINDOW_REF = opaque('hprj', 'w')
 
 export const FIXTURE_PROJECTS: readonly Project[] = [
   {
@@ -62,7 +62,7 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     title: 'Roof replacement',
     trade: 'Roofing',
     performedOn: '2026-05-18',
-    status: 'recorded',
+    status: 'completed',
     photoCount: 3,
     documentCount: 3,
     summary: 'Full tear-off and replacement after hail damage. Decking inspected, two sheets replaced, '
@@ -102,7 +102,7 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     title: 'Gutter and downspout rerun',
     trade: 'Gutters',
     performedOn: '2026-06-02',
-    status: 'recorded',
+    status: 'completed',
     photoCount: 1,
     documentCount: 1,
     summary: 'Seamless 6-inch gutters on the north and west runs, two downspouts relocated to move '

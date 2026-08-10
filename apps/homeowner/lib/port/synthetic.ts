@@ -62,7 +62,7 @@ export const syntheticPort: HomeownerDataPort = {
   async enterDemoSession(displayName: string) {
     await wait()
     memory.session = {
-      accountRef: mint('hacct'),
+      principalRef: mint('hprn'),
       displayName: displayName.trim() || 'Sample homeowner',
       isSynthetic: true,
     }
@@ -143,12 +143,12 @@ export const syntheticPort: HomeownerDataPort = {
     if (gate) return gate
     if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
     const project: Project = {
-      projectRef: mint('hwrk'),
+      projectRef: mint('hprj'),
       homeRef,
       title: input.title.trim() || 'Untitled project',
       trade: input.trade.trim() || 'General',
       performedOn: input.performedOn,
-      status: 'recorded',
+      status: 'completed',
       photoCount: 0,
       documentCount: 0,
       summary: input.summary.trim() || 'No summary recorded.',

@@ -40,8 +40,8 @@ export type SessionState =
   | { readonly kind: 'signed_in'; readonly session: HomeownerSession }
 
 export interface HomeownerSession {
-  /** Opaque account reference. Shape mirrors the contract id style. */
-  readonly accountRef: string
+  /** Opaque principal reference; hprn_ to match homeowner-runtime.v1. */
+  readonly principalRef: string
   readonly displayName: string
   /** Always true in this shell; the mock adapter can mint nothing else. */
   readonly isSynthetic: true
@@ -75,7 +75,8 @@ export interface CreateHomeInput {
 
 // --- projects -----------------------------------------------------------------
 
-export type ProjectStatus = 'recorded' | 'in_progress'
+/** Mirrors homeownerProjectSchema.status in homeowner-runtime.v1 exactly. */
+export type ProjectStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
 
 export interface ProjectSummary {
   readonly projectRef: string

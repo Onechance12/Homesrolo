@@ -38,7 +38,7 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
         {session.kind === 'signed_in' ? (
           <div className="stack" style={{ ['--stack-gap' as never]: '0.6rem' }}>
             <p style={{ fontWeight: 650 }}>{session.session.displayName}</p>
-            <p className="mono">{session.session.accountRef.slice(0, 16)}… · demo session, memory only</p>
+            <p className="mono">{session.session.principalRef.slice(0, 16)}… · demo session, memory only</p>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
               <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
               <Link className="btn btn--quiet" href="/homes">Switch home</Link>

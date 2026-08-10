@@ -7,6 +7,7 @@ import { usePortCall } from '../../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../../components/states.tsx'
 import { PhotoPlate } from '../../../../../components/PhotoPlate.tsx'
 import { IconDocs } from '../../../../../components/icons.tsx'
+import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
 
 /**
  * A single project, rendered as the document it will one day be: the job's
@@ -44,8 +45,8 @@ export default function ProjectPage({
         </p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: '1.45rem' }}>{project.title}</h1>
-          <span className={project.status === 'recorded' ? 'stamp' : 'stamp stamp--muted'}>
-            {project.status === 'recorded' ? 'Recorded' : 'In progress'}
+          <span className={project.status === 'completed' ? 'stamp' : 'stamp stamp--muted'}>
+            {STATUS_LABEL[project.status]}
           </span>
         </div>
         <p style={{ color: 'var(--ink-soft)', fontSize: '0.94rem', marginTop: '0.6rem', maxWidth: '58ch' }}>
