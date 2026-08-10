@@ -24,8 +24,13 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: apps/homeowner/package-lock.json
-      - name: Install dependencies
+          cache-dependency-path: |
+            package-lock.json
+            apps/homeowner/package-lock.json
+      - name: Install shared contract dependencies
+        working-directory: .
+        run: npm ci
+      - name: Install homeowner app dependencies
         run: npm ci
       - name: Lint
         run: npm run lint
