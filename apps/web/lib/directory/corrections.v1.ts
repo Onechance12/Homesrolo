@@ -121,21 +121,44 @@ export function isTerminal(state: DisputeState): boolean {
   return TERMINAL.includes(state)
 }
 
+/** Fields that exist only because a decision was made. */
+const RESOLUTION_FIELDS = ['resolvedOn', 'resolutionNote', 'resolvedByRole'] as const
+
 export function parseFactDispute(input: unknown): FactDispute {
   const dispute = factDisputeSchema.parse(input)
 
   if (isTerminal(dispute.state)) {
-    if (!dispute.resolvedOn) throw new Error('A resolved dispute must record when it was resolved')
-    if (!dispute.resolutionNote) throw new Error('A resolved dispute must record why')
-    if (!dispute.resolvedByRole) throw new Error('A resolved dispute must record who decided')
-    if (dispute.resolvedOn < dispute.submittedOn) {
+    const missing = RESOLUTION_FIELDS.filter(field => dispute[field] === undefined)
+    if (missing.length > 0) {
+      throw new Error(
+        `A resolved dispute must record when, why, and who decided: missing ${missing.join(', ')}`,
+      )
+    }
+    if (dispute.resolvedOn! < dispute.submittedOn) {
       throw new Error('A dispute cannot be resolved before it was submitted')
     }
-  }
-  // While open, the fact must show as contested. Silence during review reads as
-  // endorsement of the published version.
-  if (!isTerminal(dispute.state) && !dispute.factIsContested) {
-    throw new Error('An open dispute must mark its fact contested')
+    // A decided dispute that still renders as contested tells a reader the
+    // review is ongoing when it has finished. The outcome — including "the fact
+    // stands" — is the answer, and leaving the caution badge up hides it.
+    if (dispute.factIsContested) {
+      throw new Error('A resolved dispute may not still mark its fact contested')
+    }
+  } else {
+    // The mirror of the rule above. Resolution fields on an open dispute mean
+    // either a decision that was reverted without a trace or a half-applied
+    // write, and a reader cannot tell which. Both must fail rather than let the
+    // state and the evidence disagree.
+    const premature = RESOLUTION_FIELDS.filter(field => dispute[field] !== undefined)
+    if (premature.length > 0) {
+      throw new Error(
+        `An unresolved dispute may not carry resolution fields: ${premature.join(', ')}`,
+      )
+    }
+    // While open, the fact must show as contested. Silence during review reads
+    // as endorsement of the published version.
+    if (!dispute.factIsContested) {
+      throw new Error('An open dispute must mark its fact contested')
+    }
   }
   return dispute
 }

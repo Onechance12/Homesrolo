@@ -175,16 +175,60 @@ export const workRecordSchema = z.object({
 
 export type WorkRecord = z.infer<typeof workRecordSchema>
 
+/** Optional fields that only a released record may carry. */
+const RELEASE_FIELDS = ['releasedByControllerRef', 'releasedAt'] as const
+/** Optional fields that only a revoked record may carry. */
+const REVOCATION_FIELDS = ['revokedAt'] as const
+
 export function parseWorkRecord(input: unknown): WorkRecord {
   const record = workRecordSchema.parse(input)
-  if (record.state === 'released' || record.state === 'release_revoked') {
-    if (!record.releasedByControllerRef || !record.releasedAt) {
-      throw new Error('A release must record who released it and when')
+
+  // Every optional field is checked against the state, in both directions.
+  //
+  // Requiring fields when the state needs them is the obvious half. The half
+  // that is usually missed is forbidding them when it does not: a `recorded`
+  // record carrying `releasedAt` is a record that was released and then walked
+  // backwards, or a partially-applied write. Either way the state and the
+  // evidence disagree, and any reader that trusts one over the other is
+  // guessing. A record whose state says private while its fields say published
+  // is precisely the bug that shows one household's work to the public.
+  const present = (fields: readonly (keyof WorkRecord)[]) =>
+    fields.filter(field => record[field] !== undefined)
+
+  switch (record.state) {
+    case 'recorded':
+    case 'release_proposed': {
+      const stray = present([...RELEASE_FIELDS, ...REVOCATION_FIELDS])
+      if (stray.length > 0) {
+        throw new Error(
+          `A ${record.state} work record may not carry release or revocation fields: ${stray.join(', ')}`,
+        )
+      }
+      break
+    }
+    case 'released': {
+      const missing = RELEASE_FIELDS.filter(field => record[field] === undefined)
+      if (missing.length > 0) {
+        throw new Error(`A release must record who released it and when: missing ${missing.join(', ')}`)
+      }
+      const stray = present(REVOCATION_FIELDS)
+      if (stray.length > 0) {
+        throw new Error(`A released work record may not carry revocation fields: ${stray.join(', ')}`)
+      }
+      break
+    }
+    case 'release_revoked': {
+      const missing = [...RELEASE_FIELDS, ...REVOCATION_FIELDS]
+        .filter(field => record[field] === undefined)
+      if (missing.length > 0) {
+        throw new Error(
+          `A revoked release must record the release it withdraws and when: missing ${missing.join(', ')}`,
+        )
+      }
+      break
     }
   }
-  if (record.state === 'release_revoked' && !record.revokedAt) {
-    throw new Error('A revoked release must record when it was revoked')
-  }
+
   // A release cannot predate the work it releases, and a revocation cannot
   // predate the release it withdraws. Both are impossible timelines that a
   // shape check happily accepts.

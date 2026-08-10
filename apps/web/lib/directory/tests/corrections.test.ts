@@ -143,6 +143,50 @@ test('a resolution date is validated as strictly as a submission date', () => {
     'resolution one day before submission must be rejected')
 })
 
+test('an open dispute may not carry resolution fields', () => {
+  // The mirror of the required-fields rule. A dispute still under review that
+  // already records a decision is either a reverted outcome with no trace or a
+  // half-applied write, and a reader cannot tell which — so both must fail
+  // rather than let the state and the evidence disagree.
+  for (const state of ['submitted', 'under_review'] as const) {
+    assert.ok(parseFactDispute({ ...open, state }))
+    assert.throws(() => parseFactDispute({ ...open, state, resolvedOn: '2026-08-05' }),
+      /may not carry resolution fields/)
+    assert.throws(() => parseFactDispute({
+      ...open, state, resolutionNote: 'The registry record was re-read and matches what is published here.',
+    }), /may not carry resolution fields/)
+    assert.throws(() => parseFactDispute({ ...open, state, resolvedByRole: 'directory_operator' }),
+      /may not carry resolution fields/)
+  }
+})
+
+test('a resolved dispute may not still render as contested', () => {
+  const resolved = {
+    ...open,
+    state: 'rejected_fact_stands' as const,
+    resolvedOn: '2026-08-06',
+    resolutionNote: 'The registry record was re-read on the resolution date and matches what is published.',
+    resolvedByRole: 'directory_operator' as const,
+    factIsContested: false,
+  }
+  assert.ok(parseFactDispute(resolved))
+  // A decided dispute still flying the caution badge tells a reader the review
+  // is ongoing when it has finished, which hides the outcome — including the
+  // outcome where the company lost.
+  assert.throws(() => parseFactDispute({ ...resolved, factIsContested: true }),
+    /may not still mark its fact contested/)
+
+  // And each resolution field is individually required, named in the error.
+  for (const state of ['upheld_fact_corrected', 'upheld_fact_withdrawn', 'partially_upheld'] as const) {
+    assert.ok(parseFactDispute({ ...resolved, state }))
+    assert.throws(() => parseFactDispute({ ...resolved, state, resolvedOn: undefined }), /missing resolvedOn/)
+    assert.throws(() => parseFactDispute({ ...resolved, state, resolutionNote: undefined }),
+      /missing resolutionNote/)
+    assert.throws(() => parseFactDispute({ ...resolved, state, resolvedByRole: undefined }),
+      /missing resolvedByRole/)
+  }
+})
+
 test('the promise is stated as intent and passes the constitutional audit', () => {
   for (const line of CORRECTIONS_PROMISE) {
     assert.match(line, /^Intended: /, `promise must be marked as intent: "${line}"`)

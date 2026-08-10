@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   COMPANY_LINK_ASSERTION_VERSION,
   COMPANY_LINK_BINDING_VERSION,
+  COMPANY_LINK_DESIGN_BLOCKERS,
   COMPANY_LINK_STATUS,
   COMPANY_LINK_STRUCTURAL_WARNING,
   CONTENT_MUST_NEVER_CARRY,
@@ -29,7 +30,10 @@ import {
   resolveVisibility,
   workRecordSchema,
 } from '../home-file-record.v1.ts'
-import { homeownerShareSha256 } from '../homeowner-share.v1.ts'
+import {
+  homeownerShareSha256,
+  parseHomeownerShareRevocationReceipt,
+} from '../homeowner-share.v1.ts'
 
 const body = (c: string) => c.repeat(43).slice(0, 43)
 const SIG = Buffer.alloc(64, 7).toString('base64url')
@@ -431,4 +435,195 @@ test('a contribution cannot supersede itself or be tombstoned before it existed'
     tombstonedAt: '2026-08-08T12:00:00.000Z',
   }), /tombstoned before/)
   assert.ok(parseContribution({ ...contribution, tombstonedAt: '2026-08-10T12:00:00.000Z' }))
+})
+
+// =============================================================================
+// Pre-merge hardening: signature canonicality and cross-field state consistency
+// =============================================================================
+
+/**
+ * The company-link signing proof must behave exactly as the reviewed
+ * homeowner-share proof does. Restating the rule in a second file is a drift
+ * risk, so this drives both validators over the same values rather than
+ * asserting the rule twice.
+ */
+const shareRevocation = {
+  receiptVersion: 'homeowner-share.revocation.v1' as const,
+  issuer: 'jobrolo' as const,
+  audience: 'homesrolo' as const,
+  purpose: 'homeowner_work_records' as const,
+  revocationId: `hrev_${body('v')}`,
+  shareId: `hshr_${body('s')}`,
+  recipientRef: `hrcp_${body('r')}`,
+  manifestDigest: 'a'.repeat(64),
+  revokedReceiptVersion: 'homeowner-share.authorization.v1' as const,
+  revokedReceiptRef: `hauth_${body('a')}`,
+  reasonCode: 'authorization_withdrawn' as const,
+  revokedAt: '2026-08-09T12:00:00.000Z',
+  signing: { algorithm: 'Ed25519' as const, keyId: 'jobrolo-2026-01', signature: SIG },
+}
+
+/**
+ * 86 base64url characters carry 516 bits; an Ed25519 signature is 512. The four
+ * spare bits in the final character are where a second spelling of the same
+ * signature hides — regex-valid, decoding to the right 64 bytes, and a distinct
+ * string. `Buffer.from` normalises them away, which is what makes the re-encode
+ * comparison the check that matters.
+ */
+function nonCanonicalVariant(canonical: string): string {
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const head = canonical.slice(0, 85)
+  for (const candidate of ALPHABET) {
+    const variant = `${head}${candidate}`
+    if (variant === canonical) continue
+    const decoded = Buffer.from(variant, 'base64url')
+    if (decoded.byteLength === 64 && decoded.equals(Buffer.from(canonical, 'base64url'))) {
+      return variant
+    }
+  }
+  throw new Error('no non-canonical variant exists for this signature')
+}
+
+test('company-link signature validation matches homeowner-share exactly', () => {
+  const shareAccepts = (signature: string) => {
+    try {
+      parseHomeownerShareRevocationReceipt({ ...shareRevocation, signing: { ...shareRevocation.signing, signature } })
+      return true
+    } catch { return false }
+  }
+  const linkAccepts = (signature: string) => {
+    try {
+      parseCompanyLinkAssertion({ ...assertion, signing: { ...assertion.signing, signature } })
+      return true
+    } catch { return false }
+  }
+
+  const wrongLength32 = Buffer.alloc(32, 9).toString('base64url')
+  const wrongLength65 = Buffer.alloc(65, 9).toString('base64url')
+  const padded = Buffer.alloc(64, 7).toString('base64')
+  const candidates = [
+    SIG,                                  // canonical, 64 bytes
+    Buffer.alloc(64, 0).toString('base64url'),
+    nonCanonicalVariant(SIG),             // regex-valid, decodes to 64 bytes, wrong spelling
+    wrongLength32,                        // 43 chars, fails the regex
+    wrongLength65,                        // 87 chars, fails the regex
+    padded,                               // standard base64: '+' '/' '=' outside the alphabet
+    `${wrongLength32}${wrongLength32}`,   // 86 chars of the right shape, 64.5 bytes of content
+    'z'.repeat(86),
+    '',
+  ]
+  for (const candidate of candidates) {
+    assert.equal(linkAccepts(candidate), shareAccepts(candidate),
+      `company-link and homeowner-share disagree about ${JSON.stringify(candidate.slice(0, 20))}`)
+  }
+
+  // And the specific rules, stated so a failure names the cause.
+  assert.ok(linkAccepts(SIG))
+  assert.equal(linkAccepts(nonCanonicalVariant(SIG)), false, 'a second spelling would give a replay cache two keys')
+  assert.equal(linkAccepts(wrongLength32), false, 'a 32-byte value is not an Ed25519 signature')
+  assert.equal(linkAccepts(wrongLength65), false, 'a 65-byte value is not an Ed25519 signature')
+  assert.equal(linkAccepts(padded), false, 'standard base64 is a different encoding')
+})
+
+test('every company-link receipt type rejects a non-canonical signature', () => {
+  const bad = nonCanonicalVariant(SIG)
+  assert.throws(() => parseCompanyLinkAssertion({ ...assertion, signing: { ...assertion.signing, signature: bad } }))
+  assert.throws(() => parseCompanyLinkBinding({
+    receiptVersion: COMPANY_LINK_BINDING_VERSION,
+    issuer: 'homesrolo',
+    audience: 'jobrolo',
+    purpose: 'company_profile_control',
+    bindingId: `hbnd_${body('b')}`,
+    companyRef: `hcmp_${body('c')}`,
+    tenantRef: `htnt_${body('t')}`,
+    assertionDigest: 'a'.repeat(64),
+    boundAt: '2026-08-09T12:00:00.000Z',
+    expiresAt: '2026-09-09T12:00:00.000Z',
+    signing: { algorithm: 'Ed25519', keyId: 'homesrolo-2026-01', signature: bad },
+  }))
+  assert.throws(() => parseCompanyLinkRevocation({
+    receiptVersion: COMPANY_LINK_REVOCATION_VERSION,
+    issuer: 'jobrolo',
+    audience: 'homesrolo',
+    purpose: 'company_profile_control',
+    revocationId: `hclr_${body('r')}`,
+    companyRef: `hcmp_${body('c')}`,
+    revokedReceiptVersion: COMPANY_LINK_ASSERTION_VERSION,
+    revokedReceiptRef: `hcla_${body('a')}`,
+    reasonCode: 'control_withdrawn',
+    revokedAt: '2026-08-10T12:00:00.000Z',
+    signing: { algorithm: 'Ed25519', keyId: 'jobrolo-2026-01', signature: bad },
+  }))
+})
+
+test('a work record may not carry evidence its state contradicts', () => {
+  const base = {
+    recordVersion: 'home-file-record.v1-draft' as const,
+    workRecordRef: `hwrk_${body('w')}`,
+    homeRef: `hhom_${body('h')}`,
+    companyRef: `hcmp_${body('c')}`,
+    performedOn: '2026-05-18',
+  }
+  const controller = `hctl_${body('v')}`
+  const releasedAt = '2026-05-20T12:00:00.000Z'
+  const revokedAt = '2026-06-01T12:00:00.000Z'
+
+  // Not-yet-released states carry no release or revocation evidence at all. A
+  // `recorded` row holding `releasedAt` is a published record wearing a private
+  // state, and every reader that trusts the state is then wrong.
+  for (const state of ['recorded', 'release_proposed'] as const) {
+    assert.ok(parseWorkRecord({ ...base, state }))
+    assert.throws(() => parseWorkRecord({ ...base, state, releasedAt }), /may not carry release or revocation/)
+    assert.throws(() => parseWorkRecord({ ...base, state, releasedByControllerRef: controller }),
+      /may not carry release or revocation/)
+    assert.throws(() => parseWorkRecord({ ...base, state, revokedAt }), /may not carry release or revocation/)
+  }
+
+  // Released requires both release fields and no revocation field.
+  assert.ok(parseWorkRecord({ ...base, state: 'released', releasedByControllerRef: controller, releasedAt }))
+  assert.throws(() => parseWorkRecord({ ...base, state: 'released', releasedAt }), /missing releasedByControllerRef/)
+  assert.throws(() => parseWorkRecord({ ...base, state: 'released', releasedByControllerRef: controller }),
+    /missing releasedAt/)
+  assert.throws(() => parseWorkRecord({
+    ...base, state: 'released', releasedByControllerRef: controller, releasedAt, revokedAt,
+  }), /may not carry revocation fields/)
+
+  // Revoked requires the whole history: what was released, by whom, and when it
+  // was withdrawn. A revocation with no release describes nothing.
+  assert.ok(parseWorkRecord({
+    ...base, state: 'release_revoked', releasedByControllerRef: controller, releasedAt, revokedAt,
+  }))
+  assert.throws(() => parseWorkRecord({ ...base, state: 'release_revoked', revokedAt }),
+    /missing releasedByControllerRef, releasedAt/)
+  assert.throws(() => parseWorkRecord({
+    ...base, state: 'release_revoked', releasedByControllerRef: controller, releasedAt,
+  }), /missing revokedAt/)
+})
+
+test('open design questions are recorded as blockers, not answered', () => {
+  // Item 4 of the pre-merge brief: document what is unsettled, invent nothing.
+  // These constants exist so that shipping transport without settling them is a
+  // visible omission. The test therefore checks both that the blockers are
+  // stated AND that the schemas still refuse to answer them.
+  assert.ok(COMPANY_LINK_DESIGN_BLOCKERS.length >= 6)
+  for (const blocker of COMPANY_LINK_DESIGN_BLOCKERS) {
+    assert.match(blocker, /^Blocker: /, `must read as unresolved: "${blocker}"`)
+  }
+  const joined = COMPANY_LINK_DESIGN_BLOCKERS.join(' ')
+  for (const topic of [/transport envelope/, /revision/, /digest/, /unsigned/, /TTL caps/, /revocation/]) {
+    assert.match(joined, topic)
+  }
+
+  // No transport, revision, or TTL cap was invented in the schemas.
+  const contentFields = Object.keys(companyLinkContentSchema.shape)
+  for (const invented of ['revision', 'sequence', 'signing', 'envelope', 'transport', 'digest']) {
+    assert.equal(contentFields.includes(invented), false,
+      `"${invented}" would be answering a blocker instead of recording it`)
+  }
+  // A ten-year assertion still validates, because no cap has been agreed. This
+  // asserts the gap deliberately: when Jobrolo settles a cap, this line must
+  // fail and be updated, rather than the gap persisting unnoticed.
+  assert.ok(parseCompanyLinkAssertion({ ...assertion, expiresAt: '2036-08-09T12:00:00.000Z' }),
+    'no TTL cap is agreed yet; COMPANY_LINK_DESIGN_BLOCKERS records this')
+  assert.equal(COMPANY_LINK_STATUS.transportImplemented, false)
 })

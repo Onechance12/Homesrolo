@@ -50,10 +50,29 @@ const utcInstant = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   .refine(v => new Date(v).toISOString() === v, 'must be a real canonical UTC instant')
 
+/**
+ * Byte-for-byte the rule `homeowner-share.v1` applies. It is restated here
+ * rather than imported because that file is the reviewed wire anchor and must
+ * stay hash-stable; exporting its internal validator would change it. A test
+ * asserts the two accept and reject exactly the same values, so the duplication
+ * cannot silently drift.
+ *
+ * The regex alone is not enough. 86 base64url characters carry 516 bits while an
+ * Ed25519 signature is 512, so the final character has four spare bits: a value
+ * can match the regex, decode to 64 bytes, and still be a second spelling of the
+ * same signature. Decoding is lenient and normalises those bits away, which is
+ * exactly why the re-encode comparison is the check that rejects it. Two
+ * spellings of one signature would give a replay cache two keys for one event.
+ */
+const canonicalEd25519Signature = z.string().regex(/^[A-Za-z0-9_-]{86}$/).refine(value => {
+  const decoded = Buffer.from(value, 'base64url')
+  return decoded.byteLength === 64 && decoded.toString('base64url') === value
+}, 'signature must be canonical base64url for exactly 64 bytes')
+
 const signingProof = z.object({
   algorithm: z.literal('Ed25519'),
   keyId: z.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/),
-  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+  signature: canonicalEd25519Signature,
 }).strict()
 
 /**
@@ -268,3 +287,35 @@ export const COMPANY_LINK_STRUCTURAL_WARNING =
   'Structural validation proves shape only. It does not verify a signature against a trusted key, does not '
   + 'consult a current-state ledger, and does not prove that any tenant controls any business. No company '
   + 'profile may be shown as claimed on the strength of these checks alone.'
+
+/**
+ * Open design questions, recorded as blockers rather than answered.
+ *
+ * Each of these is a decision that belongs to Jobrolo and Homesrolo jointly,
+ * because a wire contract settled unilaterally is the mistake that cost this
+ * repository a repair pass on homeowner-share. They are written down here so
+ * that building transport without settling them is a visible omission rather
+ * than an oversight — the schemas above are deliberately silent on all of them,
+ * and nothing in this file implements, simulates, or assumes an answer.
+ *
+ * A design blocker is not a TODO. Transport must not be built until each is
+ * agreed, because retrofitting any of them changes the signed bytes.
+ */
+export const COMPANY_LINK_DESIGN_BLOCKERS: readonly string[] = Object.freeze([
+  'Blocker: there is no transport envelope. The receipts above define what is signed, not how it is carried, '
+    + 'and an envelope added later that is itself unsigned would let a carrier alter routing, ordering, or '
+    + 'delivery metadata without breaking any signature.',
+  'Blocker: content has no revision identity. companyLinkContentSchema carries a submittedAt but no monotonic '
+    + 'revision, so two submissions cannot be ordered and a stale one cannot be distinguished from a retry. '
+    + 'Ordering by timestamp alone fails on equal timestamps and on clock skew between two systems.',
+  'Blocker: content is unsigned and undigested. Assertions, bindings, and revocations carry a signing proof; '
+    + 'a content envelope carries none, so nothing binds submitted text or photo references to the tenant that '
+    + 'approved them. The binding must be to a digest of the canonical content, not to the transport request.',
+  'Blocker: a binding names an assertionDigest but nothing states which canonicalization that digest is over, '
+    + 'or that a binding must be rejected when the digest does not match the assertion actually received.',
+  'Blocker: TTL caps are unbounded. The schemas require expiry to follow issuance and stop there, so a '
+    + 'ten-year assertion validates. homeowner-share.v1 pins explicit MIN and MAX lifetimes; company link has '
+    + 'no agreed equivalent, and control of a business is exactly the claim that must expire and be re-proved.',
+  'Blocker: revocation has no propagation or freshness rule. Append-only revocation is stated, but not how '
+    + 'stale a receiving system may be before it must refuse to rely on a link it has not re-checked.',
+])
