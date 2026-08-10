@@ -1,9 +1,13 @@
 /* =============================================================================
-   Homesrolo public experience — design tokens
+   Homesrolo public experience — "the drafting table"
    =============================================================================
-   Warm, editorial, and deliberately not a SaaS dashboard. The product asks a
-   homeowner to trust it with the record of their home, and a cold analytics
-   surface is the wrong promise for that.
+   The product is a document of record, so the interface is drawn as one:
+   archival paper with visible grain, drafting-grid underlays, architectural
+   leader lines that connect a fact to its provenance, and one deep blueprint
+   band per page for contrast. Deliberately not a SaaS dashboard, and not a
+   template. The homeowner is being asked to trust this thing with the record
+   of their home; it should look like something built by people who keep
+   records carefully.
 
    All colour is defined once here as tokens. Components reference tokens only,
    so a palette change is one file. Values are oklch for perceptually even
@@ -12,19 +16,34 @@
 
 :root {
   /* Warm neutrals — parchment through ink */
-  --paper: oklch(0.985 0.006 78);
-  --paper-raised: oklch(1 0.003 78);
-  --paper-sunken: oklch(0.962 0.009 76);
-  --ink: oklch(0.24 0.018 55);
-  --ink-soft: oklch(0.44 0.016 55);
-  --ink-faint: oklch(0.58 0.014 58);
-  --rule: oklch(0.9 0.012 72);
-  --rule-strong: oklch(0.82 0.016 70);
+  --paper: oklch(0.982 0.007 80);
+  --paper-raised: oklch(0.997 0.004 84);
+  --paper-sunken: oklch(0.958 0.011 78);
+  --ink: oklch(0.235 0.02 55);
+  --ink-soft: oklch(0.43 0.018 55);
+  --ink-faint: oklch(0.565 0.016 58);
+  --rule: oklch(0.895 0.014 74);
+  --rule-strong: oklch(0.815 0.018 70);
 
   /* Clay — the single brand accent */
-  --clay: oklch(0.55 0.116 42);
-  --clay-deep: oklch(0.44 0.104 40);
-  --clay-wash: oklch(0.955 0.022 52);
+  --clay: oklch(0.55 0.118 42);
+  --clay-deep: oklch(0.43 0.106 40);
+  --clay-wash: oklch(0.952 0.024 52);
+  --clay-line: oklch(0.55 0.118 42 / 0.34);
+
+  /* The night band — drafting blueprint, one per page at most */
+  --night: oklch(0.238 0.032 258);
+  --night-raised: oklch(0.285 0.034 256);
+  --night-ink: oklch(0.955 0.012 84);
+  --night-soft: oklch(0.78 0.02 84);
+  --night-faint: oklch(0.62 0.024 250);
+  --night-rule: oklch(0.42 0.03 254 / 0.55);
+  --night-grid: oklch(0.62 0.05 240 / 0.14);
+  --night-accent: oklch(0.78 0.11 65);
+
+  /* Drafting-grid line on paper */
+  --grid-line: oklch(0.45 0.05 250 / 0.055);
+  --grid-line-major: oklch(0.45 0.05 250 / 0.1);
 
   /* Fact status. Never used as an overall verdict. */
   --confirmed: oklch(0.5 0.078 152);
@@ -38,8 +57,9 @@
 
   --focus: oklch(0.52 0.14 250);
 
-  --font-display: ui-serif, Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, ui-serif, Georgia, serif;
   --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Liberation Mono', monospace;
 
   --radius: 0.75rem;
   --radius-sm: 0.5rem;
@@ -49,7 +69,9 @@
   --shell: 74rem;
 
   --shadow-soft: 0 1px 2px oklch(0.24 0.018 55 / 0.05), 0 8px 24px oklch(0.24 0.018 55 / 0.06);
-  --shadow-lift: 0 2px 4px oklch(0.24 0.018 55 / 0.06), 0 16px 40px oklch(0.24 0.018 55 / 0.09);
+  --shadow-lift: 0 2px 4px oklch(0.24 0.018 55 / 0.07), 0 18px 44px oklch(0.24 0.018 55 / 0.11);
+  --shadow-doc: 0 1px 0 oklch(0.24 0.018 55 / 0.05), 0 12px 28px oklch(0.24 0.018 55 / 0.09),
+    0 32px 64px oklch(0.24 0.018 55 / 0.07);
 }
 
 *,
@@ -67,20 +89,49 @@ body {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  position: relative;
 }
+
+/* Paper grain. One inline turbulence tile, self-contained, faint enough to be
+   felt rather than seen. Sits under everything and ignores the pointer. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.38 0 0 0 0 0.33 0 0 0 0 0.27 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23p)'/%3E%3C/svg%3E");
+}
+body > * { position: relative; z-index: 1; }
+
+::selection { background: var(--clay-wash); color: var(--clay-deep); }
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.014em;
+  line-height: 1.12;
+  letter-spacing: -0.016em;
   margin: 0;
   text-wrap: balance;
 }
 
-h1 { font-size: clamp(2.1rem, 1.5rem + 2.6vw, 3.5rem); }
-h2 { font-size: clamp(1.5rem, 1.2rem + 1.3vw, 2.1rem); }
+h1 { font-size: clamp(2.35rem, 1.45rem + 3.6vw, 4.1rem); }
+h2 { font-size: clamp(1.55rem, 1.2rem + 1.5vw, 2.3rem); }
 h3 { font-size: clamp(1.125rem, 1.02rem + 0.5vw, 1.35rem); }
+
+/* The one allowed flourish inside a heading: an italic word carrying a
+   hand-drawn underline, penned as an inline SVG stroke. */
+h1 em, h2 em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--clay-deep);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 9' preserveAspectRatio='none'%3E%3Cpath d='M2 6.5 C 24 3.5, 60 2.5, 87 4.5 S 114 6.5, 118 4.5' fill='none' stroke='oklch(0.55 0.118 42 / 0.55)' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 0.32em;
+  padding-bottom: 0.08em;
+}
 
 p { margin: 0; text-wrap: pretty; }
 
@@ -136,8 +187,53 @@ a:hover { color: var(--clay); }
 .prose > * + * { margin-top: 1.05rem; }
 .prose p { color: var(--ink-soft); }
 
-.section { padding-block: clamp(3rem, 2rem + 5vw, 5.5rem); }
+.section { padding-block: clamp(3rem, 2rem + 5vw, 5.75rem); position: relative; }
 .section--sunken { background: var(--paper-sunken); border-block: 1px solid var(--rule); }
+
+/* The drafting underlay: fine grid with a heavier line every fifth, faded out
+   radially so it reads as a work surface, not wallpaper. */
+.section--drafting::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, var(--grid-line-major) 0 1px, transparent 1px 130px),
+    repeating-linear-gradient(to bottom, var(--grid-line-major) 0 1px, transparent 1px 130px),
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px 26px);
+  -webkit-mask-image: radial-gradient(120% 100% at 72% 0%, black 30%, transparent 78%);
+  mask-image: radial-gradient(120% 100% at 72% 0%, black 30%, transparent 78%);
+}
+
+/* The blueprint band. Inverts everything inside it; used at most once a page. */
+.section--night {
+  background: var(--night);
+  color: var(--night-ink);
+  border-block: 1px solid oklch(0.32 0.03 256);
+}
+.section--night::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, var(--night-grid) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(to bottom, var(--night-grid) 0 1px, transparent 1px 26px);
+  -webkit-mask-image: radial-gradient(110% 120% at 30% 10%, black 25%, transparent 80%);
+  mask-image: radial-gradient(110% 120% at 30% 10%, black 25%, transparent 80%);
+}
+.section--night > * { position: relative; }
+.section--night h2, .section--night h3 { color: var(--night-ink); }
+.section--night .prose p, .section--night p { color: var(--night-soft); }
+.section--night .eyebrow { color: var(--night-accent); }
+.section--night a { color: var(--night-ink); }
+.section--night .kicker { color: var(--night-faint); }
+.section--night .kicker::before, .section--night .kicker::after { background: var(--night-rule); }
+.section--night h2 em {
+  color: var(--night-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 9' preserveAspectRatio='none'%3E%3Cpath d='M2 6.5 C 24 3.5, 60 2.5, 87 4.5 S 114 6.5, 118 4.5' fill='none' stroke='oklch(0.78 0.11 65 / 0.6)' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+}
 
 .eyebrow {
   font-family: var(--font-body);
@@ -149,8 +245,26 @@ a:hover { color: var(--clay); }
   margin: 0 0 0.85rem;
 }
 
+/* Sheet-margin kicker: a numbered label between hairlines, the way a drawing
+   sheet names itself in its own margin. */
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 1.1rem;
+}
+.kicker::before { content: ''; width: 2.25rem; height: 1px; background: var(--rule-strong); flex: none; }
+.kicker::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+.kicker strong { color: var(--clay-deep); font-weight: 700; }
+
 .lede {
-  font-size: clamp(1.125rem, 1.04rem + 0.42vw, 1.3rem);
+  font-size: clamp(1.125rem, 1.04rem + 0.42vw, 1.32rem);
   color: var(--ink-soft);
   max-width: 56ch;
 }
@@ -168,7 +282,26 @@ a:hover { color: var(--clay); }
   border-radius: var(--radius);
   padding: 1.5rem;
   box-shadow: var(--shadow-soft);
+  position: relative;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
+/* A clay hairline draws itself across the top on hover — the pen finding the
+   card, not a glow. */
+.card::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 1rem;
+  right: 1rem;
+  height: 2px;
+  background: var(--clay);
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--rule-strong); }
+.card:hover::after { transform: scaleX(1); }
 .card__title { margin-bottom: 0.5rem; }
 .card p { color: var(--ink-soft); }
 
@@ -181,6 +314,13 @@ a:hover { color: var(--clay); }
   color: var(--ink-soft);
 }
 .note strong { color: var(--ink); }
+
+.section--night .note {
+  background: var(--night-raised);
+  border-left-color: var(--night-accent);
+  color: var(--night-soft);
+}
+.section--night .note strong { color: var(--night-ink); }
 
 .synthetic-banner {
   background: var(--caution-wash);
@@ -197,18 +337,28 @@ a:hover { color: var(--clay); }
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.7rem 1.3rem;
+  padding: 0.72rem 1.35rem;
   border-radius: 999px;
   font-weight: 600;
   font-size: 0.97rem;
   text-decoration: none;
   border: 1px solid transparent;
-  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease,
+    box-shadow 140ms ease;
 }
-.btn--primary { background: var(--clay); color: oklch(0.99 0.01 60); }
+.btn:active { transform: translateY(1px); }
+.btn--primary {
+  background: var(--clay);
+  color: oklch(0.99 0.01 60);
+  box-shadow: 0 1px 0 oklch(0.24 0.018 55 / 0.08), 0 8px 20px oklch(0.55 0.118 42 / 0.28);
+}
 .btn--primary:hover { background: var(--clay-deep); color: oklch(0.99 0.01 60); }
 .btn--quiet { border-color: var(--rule-strong); color: var(--ink); background: transparent; }
 .btn--quiet:hover { background: var(--paper-sunken); color: var(--ink); }
+
+/* A quiet arrow that leans into the travel on hover. */
+.btn .btn__arrow { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+.btn:hover .btn__arrow { transform: translateX(3px); }
 
 /* --- header / footer ----------------------------------------------------- */
 
@@ -220,6 +370,25 @@ a:hover { color: var(--clay); }
   top: 0;
   z-index: 20;
 }
+/* Reading progress as a drafted hairline along the masthead's bottom edge.
+   Pure CSS scroll-driven animation; browsers without support simply never see
+   the line. */
+@supports (animation-timeline: scroll()) {
+  .masthead::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 2px;
+    width: 100%;
+    background: linear-gradient(to right, var(--clay-deep), var(--clay));
+    transform-origin: left;
+    transform: scaleX(0);
+    animation: masthead-progress linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes masthead-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+}
 .masthead__inner {
   display: flex;
   align-items: center;
@@ -230,13 +399,17 @@ a:hover { color: var(--clay); }
 }
 .wordmark {
   font-family: var(--font-display);
-  font-size: 1.3rem;
+  font-size: 1.32rem;
   font-weight: 600;
   color: var(--ink);
   text-decoration: none;
   letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
 }
-.wordmark span { color: var(--clay); }
+.wordmark__accent { color: var(--clay); }
+.wordmark svg { display: block; }
 .nav { display: flex; flex-wrap: wrap; gap: 0.35rem 1.15rem; align-items: center; }
 .nav a {
   color: var(--ink-soft);
@@ -244,28 +417,89 @@ a:hover { color: var(--clay); }
   font-size: 0.94rem;
   font-weight: 500;
   padding: 0.35rem 0;
+  position: relative;
 }
 .nav a:hover { color: var(--clay-deep); text-decoration: underline; }
 .nav a[aria-current='page'] { color: var(--ink); font-weight: 650; }
+.nav a[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.1rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--clay);
+}
 
+/* The colophon is drawn as a drawing sheet's title block: a boxed grid with
+   ruled cells, sheet metadata in the margin, and the disclosures given a full
+   ruled panel of their own rather than fine print. */
 .colophon {
   border-top: 1px solid var(--rule);
   background: var(--paper-sunken);
-  padding-block: 3rem 2.5rem;
+  padding-block: 3.25rem 2.5rem;
   margin-top: 4rem;
 }
-.colophon h2 { font-size: 1rem; font-family: var(--font-body); letter-spacing: 0.02em; }
+.colophon h2 {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
 .colophon a { color: var(--ink-soft); text-decoration: none; font-size: 0.94rem; display: block; padding: 0.2rem 0; }
 .colophon a:hover { color: var(--clay-deep); text-decoration: underline; }
-.disclosures {
-  margin-top: 2.25rem;
-  padding-top: 1.5rem;
+
+.titleblock {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  overflow: hidden;
+}
+.titleblock__grid { display: grid; }
+@media (min-width: 48rem) { .titleblock__grid { grid-template-columns: 1.4fr 1fr 1fr; } }
+.titleblock__cell { padding: 1.35rem 1.5rem; border-bottom: 1px solid var(--rule); }
+@media (min-width: 48rem) {
+  .titleblock__cell { border-bottom: 0; }
+  .titleblock__cell + .titleblock__cell { border-left: 1px solid var(--rule); }
+}
+.titleblock__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  padding: 0.85rem 1.5rem;
   border-top: 1px solid var(--rule-strong);
+  background: var(--paper-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.disclosures {
+  margin-top: 1.75rem;
+  padding: 1.35rem 1.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
   font-size: 0.88rem;
   color: var(--ink-faint);
-  max-width: 76ch;
 }
 .disclosures li { margin-bottom: 0.4rem; }
+
+/* --- provenance ledger metadata ------------------------------------------ */
+
+/* Dates, sources, and checked-on lines are the product's whole argument, so
+   they get their own voice: small caps mono, the register of a ledger entry. */
+.provenance {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
 
 /* --- verification facts --------------------------------------------------- */
 
@@ -274,11 +508,15 @@ a:hover { color: var(--clay); }
 .fact {
   background: var(--paper-raised);
   border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule-strong);
   border-radius: var(--radius);
   padding: 1.15rem 1.25rem;
   display: grid;
   gap: 0.5rem;
 }
+.fact--confirmed { border-left-color: color-mix(in oklch, var(--confirmed) 55%, transparent); }
+.fact--caution { border-left-color: color-mix(in oklch, var(--caution) 60%, transparent); }
+.fact--stale { border-left-color: color-mix(in oklch, var(--stale) 55%, transparent); }
 .fact__head {
   display: flex;
   align-items: center;
@@ -292,7 +530,9 @@ a:hover { color: var(--clay); }
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
-  font-size: 0.84rem;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
   color: var(--ink-faint);
 }
 .fact__meta dt { font-weight: 650; display: inline; }
@@ -327,14 +567,41 @@ a:hover { color: var(--clay); }
   margin: 0 0.35rem 0.35rem 0;
 }
 
-/* --- passport / illustration ---------------------------------------------- */
+/* --- the passport document ------------------------------------------------ */
 
+/* Drawn as a physical document: deckled top edge, a punched filing margin on
+   the left, ruled entry rows, and a serial line in the ledger voice. */
 .passport {
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius-lg);
-  background: linear-gradient(160deg, var(--paper-raised), var(--clay-wash));
-  padding: 1.5rem;
-  box-shadow: var(--shadow-lift);
+  background:
+    linear-gradient(165deg, var(--paper-raised) 55%, var(--clay-wash) 130%);
+  padding: 1.6rem 1.6rem 1.4rem 2.35rem;
+  box-shadow: var(--shadow-doc);
+  position: relative;
+  overflow: hidden;
+}
+/* The punched filing margin: a vertical rule with binder holes. */
+.passport::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1.1rem;
+  width: 1px;
+  background: var(--clay-line);
+}
+.passport::after {
+  content: '';
+  position: absolute;
+  top: 1.4rem;
+  bottom: 1.4rem;
+  left: 0.35rem;
+  width: 0.5rem;
+  background-image: radial-gradient(circle at 50% 50%, var(--paper-sunken) 0.16rem, transparent 0.18rem);
+  background-size: 0.5rem 2.6rem;
+  background-repeat: repeat-y;
+  filter: drop-shadow(0 1px 0 oklch(1 0 0 / 0.8));
 }
 .passport__row {
   display: flex;
@@ -348,17 +615,196 @@ a:hover { color: var(--clay); }
 .passport__row dt { color: var(--ink-faint); margin: 0; }
 .passport__row dd { color: var(--ink); font-weight: 600; margin: 0; text-align: right; }
 
+.passport__serial {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+/* An inked rubber stamp: double ring, slight lean, pressed unevenly. */
+.stamp {
+  display: inline-block;
+  padding: 0.32rem 0.85rem;
+  border: 2px solid var(--clay);
+  border-radius: 0.4rem;
+  box-shadow: inset 0 0 0 1px var(--paper-raised), inset 0 0 0 2px var(--clay-line);
+  color: var(--clay-deep);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  transform: rotate(-3.5deg);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.72 0.28'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23r)'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.72 0.28'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23r)'/%3E%3C/svg%3E");
+}
+
+/* --- callouts: the drawn connections -------------------------------------- */
+
+/* Architectural leader lines from the document to its margin notes. The lines
+   draw themselves in once, left to right, the way a hand annotates a sheet. */
+.callouts { position: relative; }
+.callouts__svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.callouts__svg path {
+  fill: none;
+  stroke: var(--clay-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: leader-draw 900ms cubic-bezier(0.5, 0, 0.2, 1) forwards;
+}
+.callouts__svg circle { fill: var(--clay); opacity: 0; animation: leader-dot 300ms ease forwards; }
+.callouts__svg .d1 { animation-delay: 500ms; }
+.callouts__svg .d2 { animation-delay: 900ms; }
+.callouts__svg .d3 { animation-delay: 1300ms; }
+@keyframes leader-draw { to { stroke-dashoffset: 0; } }
+@keyframes leader-dot { to { opacity: 1; } }
+
+.callout-tag {
+  position: absolute;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow-soft);
+  white-space: nowrap;
+  opacity: 0;
+  animation: leader-dot 400ms ease forwards;
+}
+.callout-tag strong { color: var(--clay-deep); font-weight: 700; }
+
+/* The annotated hero document. Margin space for the callout tags is reserved
+   only on wide screens; below that the tags and lines simply don't exist and
+   the document takes the full column. */
+.hero-doc .callouts__svg, .hero-doc .callout-tag { display: none; }
+@media (min-width: 62rem) {
+  .hero-doc { padding-right: 10.75rem; }
+  .hero-doc .callouts__svg { display: block; }
+  .hero-doc .callout-tag { display: inline-flex; }
+}
+
+/* --- illustrations -------------------------------------------------------- */
+
 .figure {
   width: 100%;
   height: auto;
   display: block;
   border-radius: var(--radius-sm);
-  background: var(--paper-sunken);
+  background:
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px 22px),
+    var(--paper-sunken);
   border: 1px solid var(--rule);
 }
 
-.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 1.25rem; }
-.steps > li { counter-increment: step; display: grid; grid-template-columns: 2.5rem 1fr; gap: 1rem; align-items: start; }
+/* Line-draw entrance for illustration strokes that opt in. */
+.figure .draw {
+  stroke-dasharray: 620;
+  stroke-dashoffset: 620;
+  animation: leader-draw 1400ms cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+.figure .draw--late { animation-delay: 350ms; }
+
+/* --- the release chain ----------------------------------------------------- */
+
+/* The core loop, drawn as stations on a single drafted line: work performed,
+   homeowner review, release, public proof. The connecting rule is literal. */
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+  counter-reset: chain;
+  position: relative;
+}
+@media (min-width: 62rem) { .chain { grid-template-columns: repeat(4, 1fr); gap: 1.25rem; } }
+.chain > li {
+  counter-increment: chain;
+  position: relative;
+  padding-top: 1.9rem;
+}
+/* The station node. */
+.chain > li::before {
+  content: counter(chain, decimal-leading-zero);
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--clay-deep);
+  background: var(--paper);
+  border: 1px solid var(--clay-line);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  z-index: 1;
+}
+/* The drafted line between stations. */
+.chain > li::after {
+  content: '';
+  position: absolute;
+  top: 0.75rem;
+  left: 3.4rem;
+  right: -1.25rem;
+  height: 1px;
+  background: repeating-linear-gradient(to right, var(--rule-strong) 0 6px, transparent 6px 12px);
+}
+.chain > li:last-child::after { display: none; }
+@media (max-width: 61.99rem) {
+  .chain > li::after {
+    top: 2.2rem;
+    bottom: -1.5rem;
+    left: 1.05rem;
+    right: auto;
+    width: 1px;
+    height: auto;
+    background: repeating-linear-gradient(to bottom, var(--rule-strong) 0 6px, transparent 6px 12px);
+  }
+  .chain > li { padding-left: 3rem; padding-top: 0; }
+  .chain > li::before { top: 0.1rem; }
+}
+.chain h3 { font-size: 1.08rem; margin-bottom: 0.35rem; }
+.chain p { font-size: 0.94rem; color: var(--ink-soft); }
+.chain .provenance { display: block; margin-top: 0.55rem; }
+
+.section--night .chain > li::before {
+  color: var(--night-accent);
+  background: var(--night);
+  border-color: var(--night-rule);
+}
+.section--night .chain > li::after {
+  background: repeating-linear-gradient(to right, var(--night-rule) 0 6px, transparent 6px 12px);
+}
+@media (max-width: 61.99rem) {
+  .section--night .chain > li::after {
+    background: repeating-linear-gradient(to bottom, var(--night-rule) 0 6px, transparent 6px 12px);
+  }
+}
+
+/* --- numbered steps (how-it-works) — a thread with stations ---------------- */
+
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 1.6rem; position: relative; }
+.steps > li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 1.15rem;
+  align-items: start;
+  position: relative;
+}
 .steps > li::before {
   content: counter(step);
   font-family: var(--font-display);
@@ -370,6 +816,18 @@ a:hover { color: var(--clay); }
   width: 2.5rem; height: 2.5rem;
   display: grid; place-items: center;
   border-radius: 50%;
+  position: relative;
+  z-index: 1;
+}
+/* The thread connecting one step to the next. */
+.steps > li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 1.25rem;
+  top: 2.6rem;
+  bottom: -1.6rem;
+  width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--clay-line) 0 5px, transparent 5px 10px);
 }
 
 .divider { height: 1px; background: var(--rule); border: 0; margin-block: 2.5rem; }
@@ -389,6 +847,10 @@ a:hover { color: var(--clay); }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  /* Drawn-in elements land already drawn. */
+  .callouts__svg path { stroke-dashoffset: 0; }
+  .callouts__svg circle, .callout-tag { opacity: 1; }
+  .figure .draw { stroke-dashoffset: 0; }
 }
 
 /* =============================================================================
@@ -405,14 +867,14 @@ a:hover { color: var(--clay); }
 }
 .review--muted { background: var(--paper-sunken); border-style: dashed; }
 .review__head { display: flex; gap: 0.75rem; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
-.review__meta { font-size: 0.84rem; color: var(--ink-faint); }
+.review__meta { font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink-faint); }
 .review__body { color: var(--ink-soft); }
 .review__withheld { color: var(--ink-faint); font-style: italic; }
 
 .review__scores { display: grid; gap: 0.45rem; margin: 0; }
 .score-row { display: grid; grid-template-columns: minmax(9rem, 15rem) 1fr auto; gap: 0.75rem; align-items: center; font-size: 0.86rem; }
 .score-row dt { color: var(--ink-soft); margin: 0; }
-.score-row dd { margin: 0; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.score-row dd { margin: 0; color: var(--ink-faint); font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.8rem; }
 .score-bar { height: 0.4rem; border-radius: 999px; background: var(--paper-sunken); border: 1px solid var(--rule); overflow: hidden; min-width: 3rem; }
 .score-bar > span { display: block; height: 100%; background: var(--clay); }
 
@@ -434,20 +896,21 @@ a:hover { color: var(--clay); }
   gap: 0.6rem;
 }
 .credential--lapsed { background: var(--paper-sunken); }
-.credential__hours { font-size: 0.82rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.credential__hours { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 
 .seal {
   width: 3rem; height: 3rem; flex: none;
   border-radius: 50%;
   display: grid; place-items: center;
   border: 2px solid var(--clay);
+  box-shadow: inset 0 0 0 1px var(--paper-raised), inset 0 0 0 2px var(--clay-line);
   background: var(--clay-wash);
   font-family: var(--font-display);
   font-weight: 600;
   color: var(--clay-deep);
   font-size: 1.05rem;
 }
-.seal--lapsed { border-color: var(--rule-strong); background: var(--paper-sunken); color: var(--ink-faint); }
+.seal--lapsed { border-color: var(--rule-strong); box-shadow: none; background: var(--paper-sunken); color: var(--ink-faint); }
 
 .statline {
   display: flex; flex-wrap: wrap; gap: 1.5rem 2.5rem;
@@ -455,13 +918,13 @@ a:hover { color: var(--clay); }
   border-block: 1px solid var(--rule);
 }
 .statline div { display: grid; gap: 0.15rem; }
-.statline dt { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; }
+.statline dt { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; }
 .statline dd { margin: 0; font-family: var(--font-display); font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 .compare { width: 100%; border-collapse: collapse; font-size: 0.94rem; }
 .compare th, .compare td { text-align: left; padding: 0.85rem 0.9rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
-.compare thead th { font-family: var(--font-body); font-size: 0.8rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-faint); }
-.compare tbody th { font-weight: 600; color: var(--ink); }
+.compare thead th { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; }
+.compare tbody th { font-weight: 600; color: var(--ink); font-family: var(--font-body); }
 .compare td { color: var(--ink-soft); }
 .compare tbody tr:last-child th, .compare tbody tr:last-child td { border-bottom: 0; }
 .table-scroll { overflow-x: auto; }
@@ -487,6 +950,10 @@ a:hover { color: var(--clay); }
 /* Suggested-page list on the 404 and any similar standalone link list. */
 .nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
 .nav-list a { padding-block: 0.3rem; }
+
+/* Colophon links stack one per line; `flex` keeps the 24px hit area from the
+   rule above while restoring block-level flow inside the title block cells. */
+.colophon a { display: flex; }
 
 /* A disclosure control keeps its marker, so it gets padding rather than flex. */
 summary {
