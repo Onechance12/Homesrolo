@@ -1,6 +1,7 @@
 # Homeowner Phase 1 Runtime Foundation
 
-Status: **draft contracts and adapter ports; no live runtime or real data.**
+Status: **draft contracts, adapter ports, and a read-only server application
+boundary; no live provider or real data.**
 
 The first HomesRolo homeowner application is a private workspace for a person
 to organize one home, its projects, photos, documents, warranties, and timeline.
@@ -21,6 +22,14 @@ The draft command boundary also defines idempotency-friendly opaque command
 references for creating one private home workspace and one homeowner project.
 It defines semantic warranty and maintenance records separately from raw
 document bytes. No command adapter or database implementation exists yet.
+
+The Phase 2A server application boundary now defines strict session, home-list,
+and exact-home browser projections. It resolves identity from a server-owned
+session handle, fresh-checks each principal-to-home membership, and strips
+authority, provider, and object-storage fields before returning data. Its
+capability response stays false for magic-link delivery, persistence, uploads,
+invitations, and sharing until each provider is separately configured and
+verified.
 
 ## Separation from Jobrolo
 
