@@ -89,7 +89,7 @@ export class HomeownerApiError extends Error {
 
 export interface HomeownerApiRequestContext {
   /** Opaque server-side session lookup handle; never projected to the browser. */
-  readonly sessionHandle: string
+  readonly sessionHandle: string | null
 }
 
 export interface HomeownerApiServiceOptions {
@@ -133,7 +133,9 @@ export class HomeownerApiService {
   }
 
   async readSession(context: HomeownerApiRequestContext): Promise<HomeownerApiSession> {
-    const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
+    const principal = context.sessionHandle
+      ? await this.#identity.resolvePrincipal(context.sessionHandle)
+      : null
     if (!principal || principal.status !== 'active' || !principal.emailVerified) {
       return homeownerApiSessionSchema.parse({
         apiVersion: HOMEOWNER_API_VERSION,
@@ -150,6 +152,7 @@ export class HomeownerApiService {
   }
 
   async listHomes(context: HomeownerApiRequestContext): Promise<readonly HomeownerApiHomeSummary[]> {
+    if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
     const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
     if (!principal) throw new HomeownerApiError('signed_out')
     const principalGrant = authorizePrivateHomeCreation(principal)
@@ -180,6 +183,7 @@ export class HomeownerApiService {
     const parsedHomeRef = opaqueRef('hhom').safeParse(requestedHomeRef)
     if (!parsedHomeRef.success) throw new HomeownerApiError('invalid_request')
 
+    if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
     const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
     if (!principal) throw new HomeownerApiError('signed_out')
     const membership = await this.#repository.readMembership(
