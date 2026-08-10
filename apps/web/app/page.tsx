@@ -28,51 +28,131 @@ const PILLARS = [
   },
 ]
 
+const CHAIN = [
+  {
+    title: 'Work is recorded',
+    body: 'A company writes down what it actually did: materials, dates, the crew, the warranty.',
+    provenance: 'recorded by the company',
+  },
+  {
+    title: 'The homeowner reviews it',
+    body: 'The record is theirs to read. Nothing about their home moves anywhere without them.',
+    provenance: 'controlled by the homeowner',
+  },
+  {
+    title: 'They release what they choose',
+    body: 'A release is a decision with a date and a name on it, and it can be narrowed or withdrawn.',
+    provenance: 'released · revocable',
+  },
+  {
+    title: 'The proof can travel',
+    body: 'A released project can substantiate a profile or ground a review — and it names its own source.',
+    provenance: 'source attached, always',
+  },
+]
+
+/**
+ * Leader lines annotating the passport document, drawn the way callouts are
+ * drawn on an architectural sheet: from the document's edge out to its margin
+ * notes, each line ending in an inked dot. Desktop only; the tags collapse
+ * into the document's own footer note on smaller screens.
+ */
+function PassportCallouts() {
+  return (
+    <>
+      <svg className="callouts__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <path className="d1" d="M64 14 C 71 14, 71 10, 76 10" style={{ vectorEffect: 'non-scaling-stroke', strokeDasharray: 60, strokeDashoffset: 60 }} />
+        <path className="d2" d="M67 48 C 72 48, 72 46, 76 46" style={{ vectorEffect: 'non-scaling-stroke', strokeDasharray: 60, strokeDashoffset: 60 }} />
+        <path className="d3" d="M60 87 C 70 87, 70 82, 76 82" style={{ vectorEffect: 'non-scaling-stroke', strokeDasharray: 60, strokeDashoffset: 60 }} />
+        <circle className="d1" cx="64" cy="14" r="1.1" style={{ vectorEffect: 'non-scaling-stroke' }} />
+        <circle className="d2" cx="67" cy="48" r="1.1" style={{ vectorEffect: 'non-scaling-stroke' }} />
+        <circle className="d3" cx="60" cy="87" r="1.1" style={{ vectorEffect: 'non-scaling-stroke' }} />
+      </svg>
+      <span className="callout-tag d1" style={{ top: '7%', right: 0 }}>
+        <span><strong>who</strong> did the work</span>
+      </span>
+      <span className="callout-tag d2" style={{ top: '43%', right: 0 }}>
+        <span><strong>what</strong> went on the roof</span>
+      </span>
+      <span className="callout-tag d3" style={{ top: '79%', right: 0 }}>
+        <span><strong>released</strong> by the owner</span>
+      </span>
+    </>
+  )
+}
+
 export default function HomePage() {
   return (
     <>
-      <section className="section">
+      <section className="section section--drafting">
         <div className="shell">
           <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'center' }}>
             <div className="prose">
-              <p className="eyebrow">Phase 0.5 preview</p>
-              <h1>Your home should remember its own history.</h1>
+              <p className="kicker">Sheet 01 · <strong>The record</strong></p>
+              <h1>Your home should <em>remember</em> its own history.</h1>
               <p className="lede">
                 Roofs get replaced, gutters get rerun, and five years later the paperwork is in a drawer, an old
                 email, or a company that no longer exists. Homesrolo is the durable record of a home — and the
                 Home Project Passport is how real work becomes something a homeowner actually holds.
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.75rem' }}>
-                <Link className="btn btn--primary" href="/how-it-works/">See how it works</Link>
+                <Link className="btn btn--primary" href="/how-it-works/">
+                  See how it works <span className="btn__arrow" aria-hidden="true">→</span>
+                </Link>
                 <Link className="btn btn--quiet" href="/how-we-verify/">How we verify</Link>
               </div>
             </div>
 
-            <div className="passport" aria-labelledby="passport-sample">
-              <p className="eyebrow" style={{ marginBottom: '0.35rem' }}>Sample passport entry</p>
-              <h2 id="passport-sample" style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>
-                Roof replacement
-              </h2>
-              <Illustration kind="roofline" label="Simplified drawing of a pitched roof and wall elevation" />
-              <dl style={{ margin: '1.25rem 0 0' }}>
-                <div className="passport__row"><dt>Work</dt><dd>Full tear-off and replacement</dd></div>
-                <div className="passport__row"><dt>Material</dt><dd>30-year architectural shingle</dd></div>
-                <div className="passport__row"><dt>Completed</dt><dd>May 2026</dd></div>
-                <div className="passport__row"><dt>Warranty</dt><dd>Workmanship and manufacturer</dd></div>
-                <div className="passport__row"><dt>Released by</dt><dd>The homeowner</dd></div>
-              </dl>
-              <p style={{ fontSize: '0.82rem', color: 'var(--ink-faint)', marginTop: '1rem' }}>
-                Synthetic example. Nothing here describes a real home or a real company.
-              </p>
+            <div className="callouts hero-doc">
+              <div className="passport" aria-labelledby="passport-sample">
+                <p className="passport__serial">
+                  <span>Passport entry</span>
+                  <span aria-hidden="true">№ 0000-SAMPLE</span>
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                  <h2 id="passport-sample" style={{ fontSize: '1.25rem' }}>Roof replacement</h2>
+                  <span className="stamp">Released</span>
+                </div>
+                <Illustration kind="roofline" label="Simplified drawing of a pitched roof and wall elevation" />
+                <dl style={{ margin: '1.25rem 0 0' }}>
+                  <div className="passport__row"><dt>Work</dt><dd>Full tear-off and replacement</dd></div>
+                  <div className="passport__row"><dt>Material</dt><dd>30-year architectural shingle</dd></div>
+                  <div className="passport__row"><dt>Completed</dt><dd>May 2026</dd></div>
+                  <div className="passport__row"><dt>Warranty</dt><dd>Workmanship and manufacturer</dd></div>
+                  <div className="passport__row"><dt>Released by</dt><dd>The homeowner</dd></div>
+                </dl>
+                <p className="provenance" style={{ marginTop: '1rem' }}>
+                  Synthetic example. Nothing here describes a real home or a real company.
+                </p>
+              </div>
+              <PassportCallouts />
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="chain-heading">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2.5rem' }}>
+            <p className="kicker">Sheet 02 · <strong>The release chain</strong></p>
+            <h2 id="chain-heading">One line, four stations, no shortcuts.</h2>
+          </div>
+          <ol className="chain">
+            {CHAIN.map(station => (
+              <li key={station.title}>
+                <h3>{station.title}</h3>
+                <p>{station.body}</p>
+                <span className="provenance">{station.provenance}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 
       <section className="section section--sunken">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2.5rem' }}>
-            <p className="eyebrow">What Homesrolo is</p>
+            <p className="kicker">Sheet 03 · <strong>Three layers</strong></p>
             <h2>Three layers, and a hard line between them.</h2>
             <p>
               The private record of a home and the public record of a company are different things with different
@@ -91,12 +171,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section--night">
         <div className="shell">
           <div className="grid grid--2" style={{ gap: '3rem' }}>
             <div className="prose">
-              <p className="eyebrow">Why not just another directory</p>
-              <h2>Most listings ask you to trust an adjective.</h2>
+              <p className="kicker">Sheet 04 · <strong>Why not another directory</strong></p>
+              <h2>Most listings ask you to trust <em>an adjective.</em></h2>
               <p>
                 Sites full of star ratings and badges rarely tell you what was checked, who checked it, or when.
                 Homesrolo starts from the opposite end: a record of work that a homeowner released, with the
@@ -107,7 +187,9 @@ export default function HomePage() {
                 shows exactly that. Sparse and honest is the point.
               </p>
               <p style={{ marginTop: '1.5rem' }}>
-                <Link className="btn btn--quiet" href="/professionals/">Look at a sample listing</Link>
+                <Link className="btn btn--quiet" href="/professionals/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>
+                  Look at a sample listing <span className="btn__arrow" aria-hidden="true">→</span>
+                </Link>
               </p>
             </div>
             <div className="stack" style={{ '--stack-gap': '1rem' } as React.CSSProperties}>

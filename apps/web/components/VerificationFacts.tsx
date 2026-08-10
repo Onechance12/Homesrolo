@@ -9,6 +9,17 @@ function chipClass(status: string): string {
 }
 
 /**
+ * The card's left rule carries the same tone as the chip, so the status reads
+ * at the row level too — one fact's standing never colours its neighbours.
+ */
+function factClass(status: string): string {
+  if (status === 'confirmed') return 'fact fact--confirmed'
+  if (status === 'expired') return 'fact fact--stale'
+  if (status === 'self_reported' || status === 'pending_review') return 'fact fact--caution'
+  return 'fact'
+}
+
+/**
  * Renders five independent facts, never a summary.
  *
  * Each row is a definition list of status, source, and date because those three
@@ -28,7 +39,7 @@ export function VerificationFacts({
         const shown = displayFact(fact, today)
         const status = effectiveStatus(fact, today)
         return (
-          <li key={fact.dimension} className="fact">
+          <li key={fact.dimension} className={factClass(status)}>
             <div className="fact__head">
               <span className="fact__dimension">{shown.dimension}</span>
               <span className={chipClass(status)}>{shown.statusLabel}</span>
