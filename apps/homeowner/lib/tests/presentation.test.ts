@@ -138,12 +138,47 @@ test('no raw storage URLs or provider identifiers are projected into the UI', ()
     'no server-supplied link field is decoded on the narrowed surface')
 })
 
-test('no API routes, server actions, or middleware exist in the shell', () => {
+test('exactly the three homeowner-http.v1 routes exist and nothing else', () => {
+  // Phase 2C: the server boundary defines three authenticated GET reads, so
+  // exactly three route files may exist — an allowlist, not a pattern.
+  const ROUTE_ALLOWLIST = [
+    'app/api/v1/session/route.ts',
+    'app/api/v1/homes/route.ts',
+    'app/api/v1/homes/[homeRef]/route.ts',
+  ]
+  const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
+  assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
+    'the route inventory must be exactly the three defined reads')
+  for (const rel of ROUTE_ALLOWLIST) {
+    const content = read(rel)
+    assert.match(content, /export async function GET/, `${rel} serves GET`)
+    assert.doesNotMatch(content, /export (async function|const) (POST|PUT|PATCH|DELETE|HEAD|OPTIONS)/,
+      `${rel} must export no other method`)
+    assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
+  }
   for (const rel of appSources) {
-    assert.doesNotMatch(rel, /route\.(ts|tsx)$/, 'no API routes in the Phase 1 shell')
-    assert.doesNotMatch(rel, /middleware\.(ts|tsx)$/, 'no middleware in the Phase 1 shell')
+    assert.doesNotMatch(rel, /middleware\.(ts|tsx)$/, 'no middleware exists')
     const content = read(rel)
     assert.doesNotMatch(content, /['"]use server['"]/, `${rel} must not declare a server action`)
+  }
+})
+
+test('the server seam is isolated: only routes touch it, and only it touches src', () => {
+  for (const rel of appSources) {
+    const content = read(rel)
+    const isServerSide = rel.startsWith('lib/server') || rel.startsWith('app/api/')
+    if (!isServerSide && !rel.startsWith('lib/tests')) {
+      assert.doesNotMatch(content, /from '.*lib\/server/,
+        `${rel} is client-side and must not import the server seam`)
+      assert.doesNotMatch(content, /from '.*src\/homeowner/,
+        `${rel} is client-side and must not import server contracts`)
+    }
+    if (isServerSide) {
+      assert.doesNotMatch(content, /from '.*fixtures/,
+        `${rel} must never serve synthetic fixtures: a server does not invent homeowners`)
+      assert.doesNotMatch(content, /process\.env/,
+        `${rel} reads no environment; providers arrive through the runtime seam`)
+    }
   }
 })
 

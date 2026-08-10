@@ -9,6 +9,9 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The server seam imports the merged contracts from ../../src, so the
+  // workspace root is the repository root, stated rather than inferred.
+  turbopack: { root: '../..' },
   images: { unoptimized: true },
   reactStrictMode: true,
   poweredByHeader: false,
