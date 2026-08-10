@@ -107,8 +107,15 @@ Or serve the built static export exactly as CI produces it:
 
 ## Legal status
 
-Chance states that an attorney familiar with the operations has reviewed how
-the business can work. The documents here do not request or disclose privileged
-attorney information and are not legal advice or blanket compliance
-certification. The exact future identity, retention, furnishing, and launch
-data flows still require review before real homeowner data is used.
+Nothing in this repository is legal advice or a compliance certification, and
+no document here should be read as clearance for any feature.
+
+Qualified counsel review is a launch gate. It is required before real homeowner
+or company data is used, and again for any material change: identity and
+control verification, retention and deletion, corrections and takedown,
+publication of data about a real business, external-provider integration, and
+any assistant that generates text about a third party. Prior review of an
+operating model is not treated as blanket product clearance.
+
+This repository does not request, store, or reference privileged attorney
+information, and does not identify individuals in connection with legal review.

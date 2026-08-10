@@ -9,6 +9,7 @@ import {
   DISPUTE_STATES,
   disputeBadge,
   factDisputeSchema,
+  isRealCalendarDate,
   isTerminal,
   parseFactDispute,
 } from '../corrections.v1.ts'
@@ -103,6 +104,43 @@ test('correcting a record is never gated on money, an account, or a claim', () =
   assert.equal(CORRECTIONS_COMMERCIAL_RULES.disputeRequiresClaimedProfile, false)
   assert.equal(CORRECTIONS_COMMERCIAL_RULES.disputeRequiresAccount, false)
   assert.equal(CORRECTIONS_COMMERCIAL_RULES.outcomeAffectsOrdering, false)
+})
+
+test('dispute dates must be real calendar dates, not merely date-shaped', () => {
+  // A regex accepts 2026-02-30 and 2026-13-01. Both then sort perfectly
+  // sensibly against real dates and produce a timeline that is silently wrong.
+  for (const impossible of ['2026-02-30', '2026-13-01', '2026-04-31', '2025-02-29', '2026-00-10', '2026-01-32']) {
+    assert.equal(isRealCalendarDate(impossible), false, `${impossible} is not a real date`)
+    assert.throws(() => parseFactDispute({ ...open, submittedOn: impossible }),
+      `submittedOn accepted the impossible date ${impossible}`)
+  }
+  // Leap years are real; the check must not be a blunt 28-day rule.
+  assert.equal(isRealCalendarDate('2024-02-29'), true)
+  assert.ok(parseFactDispute({ ...open, submittedOn: '2024-02-29' }))
+
+  // Shape failures still fail.
+  for (const malformed of ['2026-8-01', '20260801', '2026-08-01T00:00:00.000Z', '', 'yesterday']) {
+    assert.equal(isRealCalendarDate(malformed), false)
+    assert.throws(() => parseFactDispute({ ...open, submittedOn: malformed }))
+  }
+})
+
+test('a resolution date is validated as strictly as a submission date', () => {
+  const resolved = {
+    ...open,
+    state: 'upheld_fact_corrected' as const,
+    resolvedOn: '2026-08-06',
+    resolutionNote: 'The certificate was re-read against the issuer record and the published value was updated.',
+    resolvedByRole: 'directory_operator' as const,
+    factIsContested: false,
+  }
+  assert.ok(parseFactDispute(resolved))
+  assert.throws(() => parseFactDispute({ ...resolved, resolvedOn: '2026-02-30' }),
+    'an impossible resolution date must be rejected before the ordering check runs')
+  // Same-day resolution is legitimate; only strictly-before is impossible.
+  assert.ok(parseFactDispute({ ...resolved, resolvedOn: resolved.submittedOn }))
+  assert.throws(() => parseFactDispute({ ...resolved, resolvedOn: '2026-07-31' }),
+    'resolution one day before submission must be rejected')
 })
 
 test('the promise is stated as intent and passes the constitutional audit', () => {

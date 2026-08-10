@@ -60,7 +60,19 @@ export const DISPUTE_STATES = Object.freeze([
 export type DisputeState = (typeof DISPUTE_STATES)[number]
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * A regex accepts 2026-02-30. A dispute timeline built on impossible dates
+ * orders itself wrongly and nothing downstream can tell. Duplicated rather than
+ * imported because the public layer may not import the private contracts.
+ */
+export function isRealCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+const calendarDate = z.string().refine(isRealCalendarDate, 'must be a real calendar date')
 
 export const factDisputeSchema = z.object({
   contractVersion: z.literal(CORRECTIONS_CONTRACT_VERSION),
@@ -80,10 +92,10 @@ export const factDisputeSchema = z.object({
   ground: z.enum(DISPUTE_GROUNDS),
   /** What the complainant says is wrong, in their words. */
   statement: z.string().min(20).max(2000),
-  submittedOn: z.string().regex(ISO_DATE),
+  submittedOn: calendarDate,
   state: z.enum(DISPUTE_STATES),
   /** Required once the dispute leaves `submitted`. */
-  resolvedOn: z.string().regex(ISO_DATE).optional(),
+  resolvedOn: calendarDate.optional(),
   /** Required on any resolution. The reader is owed the reasoning. */
   resolutionNote: z.string().min(20).max(2000).optional(),
   /**

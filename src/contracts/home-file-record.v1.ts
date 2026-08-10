@@ -35,6 +35,23 @@ const utcInstant = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   .refine(v => new Date(v).toISOString() === v, 'must be a real canonical UTC instant')
 
+/**
+ * A regex accepts 2026-02-30 and 2026-13-01. Round-tripping through Date is
+ * what makes a date real, and a timeline built on impossible dates orders
+ * itself incorrectly in ways nothing downstream can detect.
+ */
+export function isRealCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+const calendarDate = z.string().refine(isRealCalendarDate, 'must be a real calendar date')
+
+/** Start-of-day UTC, so a date and an instant are comparable. */
+const dayStartMs = (date: string) => Date.parse(`${date}T00:00:00.000Z`)
+const instantMs = (value: string) => Date.parse(value)
+
 // --- classification -----------------------------------------------------------
 
 /**
@@ -117,6 +134,13 @@ export function parseContribution(input: unknown): Contribution {
   if (contribution.tombstonedAt && contribution.retentionClass === 'legal_hold') {
     throw new Error('Content under legal hold may not be tombstoned')
   }
+  if (contribution.supersededBy === contribution.contributionRef) {
+    throw new Error('A contribution may not supersede itself')
+  }
+  if (contribution.tombstonedAt
+    && instantMs(contribution.tombstonedAt) < instantMs(contribution.createdAt)) {
+    throw new Error('A contribution may not be tombstoned before it was created')
+  }
   return contribution
 }
 
@@ -141,7 +165,7 @@ export const workRecordSchema = z.object({
   workRecordRef: opaqueId('hwrk'),
   homeRef: opaqueId('hhom'),
   companyRef: opaqueId('hcmp'),
-  performedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  performedOn: calendarDate,
   state: z.enum(WORK_RECORD_STATES),
   /** Required once released or revoked; names who moved it and when. */
   releasedByControllerRef: opaqueId('hctl').optional(),
@@ -160,6 +184,16 @@ export function parseWorkRecord(input: unknown): WorkRecord {
   }
   if (record.state === 'release_revoked' && !record.revokedAt) {
     throw new Error('A revoked release must record when it was revoked')
+  }
+  // A release cannot predate the work it releases, and a revocation cannot
+  // predate the release it withdraws. Both are impossible timelines that a
+  // shape check happily accepts.
+  if (record.releasedAt && instantMs(record.releasedAt) < dayStartMs(record.performedOn)) {
+    throw new Error('A release may not predate the work it releases')
+  }
+  if (record.revokedAt && record.releasedAt
+    && instantMs(record.revokedAt) < instantMs(record.releasedAt)) {
+    throw new Error('A revocation may not predate the release it withdraws')
   }
   return record
 }

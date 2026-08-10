@@ -148,6 +148,75 @@ export type CompanyLinkBinding = z.infer<typeof companyLinkBindingSchema>
 export type CompanyLinkRevocation = z.infer<typeof companyLinkRevocationSchema>
 export type CompanyLinkContent = z.infer<typeof companyLinkContentSchema>
 
+// --- semantic validation ------------------------------------------------------
+// A schema checks shapes. These check that the shapes describe something that
+// could have happened. Both are required: an assertion that expires before it
+// was made is well-formed and meaningless.
+
+const instantMs = (value: string) => Date.parse(value)
+
+export function parseCompanyLinkAssertion(input: unknown): CompanyLinkAssertion {
+  const assertion = companyLinkAssertionSchema.parse(input)
+  if (instantMs(assertion.expiresAt) <= instantMs(assertion.assertedAt)) {
+    throw new Error('Company link assertion must expire after it was asserted')
+  }
+  return assertion
+}
+
+export function parseCompanyLinkBinding(input: unknown): CompanyLinkBinding {
+  const binding = companyLinkBindingSchema.parse(input)
+  if (instantMs(binding.expiresAt) <= instantMs(binding.boundAt)) {
+    throw new Error('Company link binding must expire after it was bound')
+  }
+  return binding
+}
+
+/**
+ * A revocation always crosses the boundary: one system tells the other that an
+ * authority it relied on is gone. Same issuer and audience would be a system
+ * revoking to itself, which is a local state change and not a wire event.
+ *
+ * The target version must also match the target reference, because
+ * `hcla_` is an assertion and `hbnd_` is a binding. Accepting a mismatch would
+ * let a revocation claim to withdraw one kind of receipt while naming another.
+ */
+export function parseCompanyLinkRevocation(input: unknown): CompanyLinkRevocation {
+  const revocation = companyLinkRevocationSchema.parse(input)
+
+  if (revocation.issuer === revocation.audience) {
+    throw new Error('Company link revocation issuer and audience must be opposite systems')
+  }
+
+  const targetsAssertion = revocation.revokedReceiptVersion === COMPANY_LINK_ASSERTION_VERSION
+  const refIsAssertion = revocation.revokedReceiptRef.startsWith('hcla_')
+  if (targetsAssertion !== refIsAssertion) {
+    throw new Error('Company link revocation target version does not match the referenced receipt type')
+  }
+  return revocation
+}
+
+/** Fields that carry actual company-authored content. */
+const CONTENT_FIELDS = ['summary', 'tradeCategories', 'serviceAreas', 'photoRefs'] as const
+
+/**
+ * Every content field is individually optional so a company can update one
+ * thing without resubmitting everything. All of them absent is not a partial
+ * update, it is an empty submission, and it must not be accepted as a change.
+ */
+export function parseCompanyLinkContent(input: unknown): CompanyLinkContent {
+  const content = companyLinkContentSchema.parse(input)
+
+  const populated = CONTENT_FIELDS.filter(field => {
+    const value = content[field]
+    if (value === undefined) return false
+    return Array.isArray(value) ? value.length > 0 : true
+  })
+  if (populated.length === 0) {
+    throw new Error('Company link content must carry at least one populated content field')
+  }
+  return content
+}
+
 /** The only status content from this link may ever be given. */
 export const LINKED_CONTENT_SOURCE = 'company_self_reported' as const
 

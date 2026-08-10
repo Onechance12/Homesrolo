@@ -9,13 +9,16 @@ Counsel review is a launch gate for every section below.
 
 ## 1. Where seeded company data may come from
 
-| Source | Position | Why |
+The **Posture** column is this product's own engineering stance, not a legal
+conclusion. Every row is subject to counsel review before real data is used.
+
+| Source | Product posture | Why, and what is unresolved |
 | --- | --- | --- |
-| **Self-serve** | **Allowed now** | The company submits its own information. Lands as `company_self_reported`, never as a confirmed fact. Zero third-party exposure. This is the V1 path. |
-| **Public business registries** | **Allowed after review** | Secretary of State filings are public record, and facts are not copyrightable. Two real problems below. |
-| **Consented Jobrolo tenants** | **Allowed after explicit consent** | Publishing a customer's tenant as a public profile is a disclosure decision. Their consent must be recorded, revocable, and specific — not buried in a terms update. |
-| **Licensed data providers** | **Allowed after contract** | Clean but costs money. Terms govern. |
-| **Scraping Google, Yelp, BBB, Angi, Pinterest** | **Prohibited** | Their terms prohibit it. Whether scraping public data is a *computer-crime* violation is a separate and mostly favourable question, but breach-of-contract exposure survives regardless. Yelp's terms additionally prohibit using their API to build a competing directory, which is what this is. |
+| **Self-serve** | **V1 default; lowest risk of the options** | The company submits its own information and it lands as `company_self_reported`, never as a confirmed fact. It reduces third-party exposure rather than eliminating it: a company can still submit content that infringes, misdescribes a competitor, or contains someone else's personal data, so intake terms, a takedown route, and content limits are still required. |
+| **Public business registries** | **Not before review** | Secretary of State filings are public record, and facts as such are generally not copyrightable. Access terms vary by state and the two problems below are unresolved. |
+| **Consented Jobrolo tenants** | **Not before explicit, recorded, revocable consent** | Publishing a customer's tenant as a public profile is a disclosure decision. Consent must be specific and withdrawable, not folded into a terms update. |
+| **Licensed data providers** | **Not before a signed contract** | Terms govern, and cost is the trade for clarity. |
+| **Scraping Google, Yelp, BBB, Angi, Pinterest** | **Not doing this** | Their published terms prohibit it. Whether scraping publicly reachable data is a *computer-crime* violation is a separate question with generally favourable case law, but contract-based exposure is unaffected by that. Yelp's terms additionally prohibit using their API to build a competing directory, which is what this is. |
 
 Two problems with registry data that must be solved before ingesting any:
 
@@ -32,8 +35,13 @@ Two problems with registry data that must be solved before ingesting any:
 
 ## 2. Publishing a profile the business never asked for
 
-Legal in general; this is the Yelp and BBB model. The exposure is **defamation
-on a false statement of fact**, and it is real. Design constraints that follow:
+Large directories operate this way, so the model is evidently workable at scale
+with the right controls — that is an observation about industry practice, not a
+conclusion that any particular implementation is lawful. The exposure is
+**defamation on a false statement of fact**, and it is real. It is also
+jurisdiction-specific, and this product has had no counsel review of unclaimed
+publication. Design constraints that follow, all of which are prerequisites
+rather than mitigations applied later:
 
 - Publish **facts with a source and a date**, never conclusions, ratings we
   invented, or characterisations.
@@ -114,7 +122,8 @@ that user. It is still bound by `CONSTITUTION.md`.
 6. Written permission or a licence for any third-party provider content.
 
 Until all six exist, V1 is **self-serve only**, and every profile in the
-repository is synthetic.
+repository is synthetic. Nothing in this document should be read as clearance to
+publish data about a real business.
 
 ## Sources consulted (2026-08-09)
 
