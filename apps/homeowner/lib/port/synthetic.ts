@@ -26,7 +26,7 @@ const LATENCY_MS = 350
 
 const wait = () => new Promise(resolve => setTimeout(resolve, LATENCY_MS))
 const ok = <T,>(value: T): PortResult<T> => ({ ok: true, value })
-const err = <T,>(error: 'not_found' | 'not_signed_in' | 'unavailable'): PortResult<T> =>
+const err = <T,>(error: import('./types.ts').PortError): PortResult<T> =>
   ({ ok: false, error })
 
 /** In-memory only. A refresh clears it, which is the truthful behaviour. */
@@ -54,9 +54,18 @@ function requireSession<T>(): PortResult<T> | null {
 export const syntheticPort: HomeownerDataPort = {
   async getSession(): Promise<SessionState> {
     await wait()
+    // The demo offers no real sign-in, and says so in its capabilities.
+    const capabilities = { magicLinkSignIn: false }
     return memory.session
-      ? { kind: 'signed_in', session: memory.session }
-      : { kind: 'signed_out' }
+      ? { kind: 'signed_in', session: memory.session, capabilities }
+      : { kind: 'signed_out', capabilities }
+  },
+
+  async requestMagicLink() {
+    await wait()
+    // MOCK: there is no email, no link, and no server. Refusing is the honest
+    // behaviour, and the sign-in screen never offers the form in this mode.
+    return err('unavailable')
   },
 
   async enterDemoSession(displayName: string) {

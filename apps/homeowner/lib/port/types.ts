@@ -35,16 +35,32 @@ export const SYNTHETIC_NOTICE =
 
 // --- session ------------------------------------------------------------------
 
+/**
+ * What sign-in the server actually offers, reported by GET /api/v1/session.
+ * The synthetic adapter always reports false: the demo offers no real entry.
+ */
+export interface SignInCapabilities {
+  readonly magicLinkSignIn: boolean
+}
+
 export type SessionState =
-  | { readonly kind: 'signed_out' }
-  | { readonly kind: 'signed_in'; readonly session: HomeownerSession }
+  | { readonly kind: 'signed_out'; readonly capabilities: SignInCapabilities }
+  | {
+      readonly kind: 'signed_in'
+      readonly session: HomeownerSession
+      readonly capabilities: SignInCapabilities
+    }
+
 
 export interface HomeownerSession {
   /** Opaque principal reference; hprn_ to match homeowner-runtime.v1. */
   readonly principalRef: string
   readonly displayName: string
-  /** Always true in this shell; the mock adapter can mint nothing else. */
-  readonly isSynthetic: true
+  /**
+   * True for every record the synthetic adapter mints (tests pin this), false
+   * only when a real server said so. The browser never invents real data.
+   */
+  readonly isSynthetic: boolean
 }
 
 // --- the home file ------------------------------------------------------------
@@ -56,7 +72,7 @@ export interface HomeSummary {
   readonly locality: string
   readonly projectCount: number
   readonly openMaintenanceCount: number
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 export interface HomeFile extends HomeSummary {
@@ -87,7 +103,7 @@ export interface ProjectSummary {
   readonly status: ProjectStatus
   readonly photoCount: number
   readonly documentCount: number
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 export interface Project extends ProjectSummary {
@@ -105,7 +121,7 @@ export interface ProjectPhoto {
   /** Drawn placeholder kind; the shell renders code-native art, never files. */
   readonly art: 'roof' | 'gutter' | 'window' | 'interior' | 'exterior'
   readonly takenOn: string
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 export interface AddProjectInput {
@@ -128,7 +144,7 @@ export interface DocumentSummary {
   readonly kind: DocumentKind
   readonly addedOn: string
   readonly pages: number
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 export interface Warranty {
@@ -139,7 +155,7 @@ export interface Warranty {
   readonly issuedBy: string
   readonly startsOn: string
   readonly endsOn: string
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 // --- timeline -----------------------------------------------------------------
@@ -155,7 +171,7 @@ export interface TimelineEntry {
   readonly detail: string
   /** Route the entry links to inside the app, or null for a plain record. */
   readonly href: string | null
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 export interface MaintenanceItem {
@@ -165,14 +181,28 @@ export interface MaintenanceItem {
   readonly cadence: string
   readonly dueInSeason: string
   readonly state: 'upcoming' | 'done'
-  readonly isSynthetic: true
+  readonly isSynthetic: boolean
 }
 
 // --- the port -----------------------------------------------------------------
 
+/**
+ * Every way a port call can fail, as values. The remote adapter maps HTTP onto
+ * exactly these: 401 not_signed_in, 403 forbidden, 404 not_found, 409 conflict,
+ * 422 invalid, 429 rate_limited, network and 5xx unavailable.
+ */
+export type PortError =
+  | 'not_found'
+  | 'not_signed_in'
+  | 'forbidden'
+  | 'conflict'
+  | 'invalid'
+  | 'rate_limited'
+  | 'unavailable'
+
 export type PortResult<T> =
   | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: 'not_found' | 'not_signed_in' | 'unavailable' }
+  | { readonly ok: false; readonly error: PortError }
 
 export interface HomeownerDataPort {
   getSession(): Promise<SessionState>
@@ -181,6 +211,12 @@ export interface HomeownerDataPort {
    * the UI treats the returned session as opaque either way.
    */
   enterDemoSession(displayName: string): Promise<HomeownerSession>
+  /**
+   * Ask the server to email a sign-in link. Only offered by the UI when the
+   * session capabilities report it live. Acceptance is generic on purpose: the
+   * result never reveals whether the address exists.
+   */
+  requestMagicLink(email: string): Promise<PortResult<{ readonly accepted: true }>>
   signOut(): Promise<void>
 
   listHomes(): Promise<PortResult<readonly HomeSummary[]>>

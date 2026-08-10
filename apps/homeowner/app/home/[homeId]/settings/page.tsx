@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { use } from 'react'
 import { useRouter } from 'next/navigation'
-import { usePort, useSession } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { PORT_IMPLEMENTATION_STATUS } from '../../../../lib/port/types.ts'
@@ -16,6 +16,7 @@ import { PORT_IMPLEMENTATION_STATUS } from '../../../../lib/port/types.ts'
 export default function SettingsPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
+  const mode = usePortMode()
   const router = useRouter()
   const { state: session, refresh } = useSession()
   const home = usePortCall(() => port.getHome(homeId))
@@ -38,7 +39,7 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
         {session.kind === 'signed_in' ? (
           <div className="stack" style={{ ['--stack-gap' as never]: '0.6rem' }}>
             <p style={{ fontWeight: 650 }}>{session.session.displayName}</p>
-            <p className="mono">{session.session.principalRef.slice(0, 16)}… · demo session, memory only</p>
+            <p className="mono">{session.session.principalRef.slice(0, 16)}…{mode === 'synthetic' ? ' · demo session, memory only' : ''}</p>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
               <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
               <Link className="btn btn--quiet" href="/homes">Switch home</Link>
@@ -50,7 +51,7 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
       <section className="panel" aria-labelledby="home-settings">
         <div className="panel__head"><h2 id="home-settings">This home</h2></div>
         {home.state.status === 'loading' && <Skeleton lines={3} label="Loading home" />}
-        {home.state.status === 'error' && <ErrorState retry={home.retry} />}
+        {home.state.status === 'error' && <ErrorState retry={home.retry} error={home.state.status === 'error' ? home.state.error : undefined} />}
         {home.state.status === 'ready' && (
           <div className="stack" style={{ ['--stack-gap' as never]: '0.8rem' }}>
             <div className="field">

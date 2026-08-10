@@ -6,13 +6,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PortResult } from './types.ts'
+import type { PortError, PortResult } from './types.ts'
 
 export type CallState<T> =
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly value: T }
   | { readonly status: 'empty' }
-  | { readonly status: 'error'; readonly error: 'not_found' | 'not_signed_in' | 'unavailable' }
+  | { readonly status: 'error'; readonly error: PortError }
 
 export function usePortCall<T>(
   call: () => Promise<PortResult<T>>,

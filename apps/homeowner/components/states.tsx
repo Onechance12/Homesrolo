@@ -28,12 +28,42 @@ export function EmptyState({ title, body, action }: {
   )
 }
 
-export function ErrorState({ retry }: { retry?: () => void }) {
+/** Boring on purpose: each failure kind gets one plain sentence and one action. */
+const ERROR_COPY: Record<string, { title: string; body: string }> = {
+  not_signed_in: {
+    title: 'You are signed out',
+    body: 'This part of the record needs a session. Sign in again to continue.',
+  },
+  forbidden: {
+    title: 'No access to this record',
+    body: 'Your account does not have access to this home file.',
+  },
+  conflict: {
+    title: 'This changed somewhere else',
+    body: 'The record was updated elsewhere while you were looking at it. Reload to see the current version.',
+  },
+  invalid: {
+    title: 'The server sent something unexpected',
+    body: 'The response did not match what this app accepts, so nothing was displayed. Trying again may help.',
+  },
+  rate_limited: {
+    title: 'Too many requests',
+    body: 'Give it a moment, then try again.',
+  },
+}
+
+export function ErrorState({ retry, error }: { retry?: () => void; error?: string }) {
+  const copy = (error && ERROR_COPY[error]) || {
+    title: 'That did not load',
+    body: 'Something went wrong reading this part of the record. Nothing was lost.',
+  }
   return (
     <div className="state state--error" role="alert">
-      <h3>That did not load</h3>
-      <p>Something went wrong reading this part of the record. Nothing was lost.</p>
-      {retry ? (
+      <h3>{copy.title}</h3>
+      <p>{copy.body}</p>
+      {error === 'not_signed_in' ? (
+        <Link className="btn btn--quiet" href="/signin">Go to sign in</Link>
+      ) : retry ? (
         <button type="button" className="btn btn--quiet" onClick={retry}>Try again</button>
       ) : null}
     </div>

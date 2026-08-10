@@ -28,7 +28,7 @@ export default function HomesPage() {
                 {state.status === 'loading' && <Skeleton lines={4} label="Loading homes" />}
                 {state.status === 'error' && (state.error === 'not_signed_in'
                   ? <UnauthorizedState />
-                  : <ErrorState retry={retry} />)}
+                  : <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />)}
                 {state.status === 'ready' && (
                   <ul className="rows panel panel--flush" style={{ display: 'block' }}>
                     {state.value.map(home => (
