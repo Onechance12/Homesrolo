@@ -11,10 +11,20 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { syntheticPort } from './synthetic.ts'
+import { createRemotePort } from './remote.ts'
+import { fetchJsonTransport } from './transport.ts'
+import { activePortMode, type PortMode } from './mode.ts'
 import type { HomeownerDataPort, SessionState } from './types.ts'
 
-// MOCK: the Phase 1 shell wires the synthetic in-memory adapter.
-const port: HomeownerDataPort = syntheticPort
+/**
+ * The adapter is chosen once, from the fail-closed mode resolver: synthetic
+ * unless the build was deliberately configured 'remote'. No other file makes
+ * this choice, and no runtime input can change it.
+ */
+const mode: PortMode = activePortMode()
+const port: HomeownerDataPort = mode === 'remote'
+  ? createRemotePort(fetchJsonTransport)
+  : syntheticPort
 
 type SessionView =
   | { readonly kind: 'loading' }
@@ -55,6 +65,11 @@ export function PortProvider({ children }: { children: React.ReactNode }) {
 
 export function usePort(): HomeownerDataPort {
   return useContext(PortContext)
+}
+
+/** Which adapter this build runs. Screens use it for honest labelling only. */
+export function usePortMode(): PortMode {
+  return mode
 }
 
 export function useSession() {

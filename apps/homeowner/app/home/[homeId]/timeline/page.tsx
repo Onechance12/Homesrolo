@@ -27,7 +27,7 @@ export default function TimelinePage({ params }: { params: Promise<{ homeId: str
       <section className="panel" aria-labelledby="upcoming-care">
         <div className="panel__head"><h2 id="upcoming-care">Upcoming care</h2></div>
         {maintenance.state.status === 'loading' && <Skeleton lines={3} label="Loading maintenance" />}
-        {maintenance.state.status === 'error' && <ErrorState retry={maintenance.retry} />}
+        {maintenance.state.status === 'error' && <ErrorState retry={maintenance.retry} error={maintenance.state.status === 'error' ? maintenance.state.error : undefined} />}
         {maintenance.state.status === 'empty' && (
           <EmptyState title="Nothing scheduled" body="Seasonal upkeep for this home would be tracked here." />
         )}
@@ -55,7 +55,7 @@ export default function TimelinePage({ params }: { params: Promise<{ homeId: str
       <section className="panel" aria-labelledby="the-record">
         <div className="panel__head"><h2 id="the-record">The record</h2></div>
         {timeline.state.status === 'loading' && <Skeleton lines={6} label="Loading the record" />}
-        {timeline.state.status === 'error' && <ErrorState retry={timeline.retry} />}
+        {timeline.state.status === 'error' && <ErrorState retry={timeline.retry} error={timeline.state.status === 'error' ? timeline.state.error : undefined} />}
         {timeline.state.status === 'empty' && (
           <EmptyState
             title="Page one is unwritten"

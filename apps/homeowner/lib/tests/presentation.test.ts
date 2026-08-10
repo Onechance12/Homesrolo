@@ -64,10 +64,11 @@ test('the shell has a language, a skip link, and a main landmark', () => {
 
 // --- honesty -----------------------------------------------------------------
 
-test('the demo banner is part of the shell, not optional per page', () => {
+test('the demo banner is part of the shell whenever the mode is synthetic', () => {
   const shell = read('components/AppShell.tsx')
   assert.match(shell, /SYNTHETIC_NOTICE/)
-  assert.match(shell, /demo-banner/)
+  assert.match(shell, /mode === 'synthetic'\s*\n?\s*\? <p className="demo-banner"/,
+    'the banner is tied to the mode, not to a per-page choice')
 })
 
 test('the app never claims to be indexed', () => {
@@ -75,15 +76,66 @@ test('the app never claims to be indexed', () => {
   assert.match(layout, /robots:\s*\{\s*index:\s*false/)
 })
 
-test('no source file wires a network or a real backend', () => {
+test('the network exists in exactly one sanctioned file', () => {
   // Constructs, not words: a comment naming the fetch ban is not a fetch, and
   // a status flag honestly recording a missing connection is not a connection.
+  // Phase 2 adds ONE sanctioned call site: the JSON transport. Everything else
+  // stays banned, so no component can grow a backend on the side.
+  const SANCTIONED = 'lib/port/transport.ts'
   for (const rel of appSources) {
     const content = read(rel)
-    assert.doesNotMatch(content, /\bfetch\s*\(/, `${rel} must not call fetch`)
+    if (rel === SANCTIONED) {
+      assert.match(content, /credentials:\s*'same-origin'/, 'the transport is same-origin with cookies')
+      assert.doesNotMatch(content, /https?:\/\//, 'the transport never carries an absolute URL')
+      continue
+    }
+    assert.doesNotMatch(content, /\bfetch\s*\(/, `${rel} must not call fetch; only ${SANCTIONED} may`)
     assert.doesNotMatch(content, /new\s+(XMLHttpRequest|WebSocket)\s*\(/, `${rel} must not open a connection`)
     assert.doesNotMatch(content, /process\.env\.(DATABASE|SECRET|API_KEY|TOKEN)/, `${rel} must not read secrets`)
   }
+})
+
+test('synthetic is the default mode and the only config is the public mode value', () => {
+  const mode = read('lib/port/mode.ts')
+  assert.match(mode, /raw === 'remote' \? 'remote' : 'synthetic'/,
+    'exact-match on remote; everything else fails closed to synthetic')
+  const provider = read('lib/port/provider.tsx')
+  assert.match(provider, /activePortMode\(\)/)
+  assert.match(provider, /mode === 'remote'\s*\n?\s*\? createRemotePort/,
+    'remote is the exception; synthetic is the resting state')
+  // The only environment read in the entire app is the public mode selector.
+  for (const rel of appSources) {
+    const content = read(rel)
+    const reads = content.match(/process\.env\.[A-Z_]+/g) ?? []
+    for (const found of reads) {
+      assert.equal(found, 'process.env.NEXT_PUBLIC_HOMESROLO_PORT_MODE',
+        `${rel} reads ${found}; only the public mode selector is allowed`)
+    }
+  }
+})
+
+test('the browser never supplies principal identity to the wire', () => {
+  const remote = read('lib/port/remote.ts')
+  assert.doesNotMatch(remote, /principalRef/, 'the adapter never handles a principal ref outbound')
+  assert.doesNotMatch(remote, /body:\s*\{[^}]*principal/i, 'no request body carries a principal')
+  const transport = read('lib/port/transport.ts')
+  assert.doesNotMatch(transport, /authorization|bearer|token/i,
+    'no hand-carried credentials; the cookie is the session')
+})
+
+test('no raw storage URLs or provider identifiers are projected into the UI', () => {
+  for (const rel of appSources) {
+    if (rel.startsWith('lib/tests')) continue // the tripwire may name its own targets
+    const content = read(rel)
+    assert.doesNotMatch(content, /storageObjectRef|storageUrl|signedUrl|s3:|gs:\/\//i,
+      `${rel} must not project storage internals`)
+  }
+  const wire = read('lib/port/wire.ts')
+  // The narrowed Phase-2A surface decodes no href, URL, or link field at all;
+  // if one returns (e.g. with a timeline route), it must come with an
+  // app-internal-route confinement check, not a bare string decoder.
+  assert.doesNotMatch(wire, /href|url:/i,
+    'no server-supplied link field is decoded on the narrowed surface')
 })
 
 test('no API routes, server actions, or middleware exist in the shell', () => {
@@ -104,6 +156,31 @@ test('the shell does not import private contracts or other repositories', () => 
     assert.doesNotMatch(content, /from ['"][^'"]*(jobrolo|thresher|claim.?network)/i,
       `${rel} must not import other systems' code`)
   }
+})
+
+test('the magic-link form renders only on server-reported capability', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /capabilities\.magicLinkSignIn \?/,
+    'the form is gated on the session capability, never assumed')
+  assert.match(signin, /If that address can sign in/,
+    'acceptance copy is generic and does not reveal whether an address exists')
+  assert.doesNotMatch(signin, /email (was|has been) sent/i,
+    'nothing claims a send the server did not accept')
+  assert.match(signin, /mode === 'synthetic'\s*\?\s*\(?\s*<SyntheticEntry/,
+    'synthetic mode keeps the honest demo entry')
+})
+
+test('a nameless server session renders a neutral label, never "as null"', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /displayName\?\.trim\(\)/,
+    'the name is included only when a real nonempty display name exists')
+  assert.match(signin, /'You are already signed in\.'/,
+    'the neutral fallback exists')
+  assert.doesNotMatch(signin, /signed in as \{session/,
+    'no template interpolates a possibly-null name directly')
+  const shell = read('components/AppShell.tsx')
+  assert.match(shell, /: 'Signed in'\}?/,
+    'the shell has the same neutral fallback')
 })
 
 test('disabled affordances say why, instead of pretending', () => {

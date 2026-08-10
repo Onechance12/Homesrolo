@@ -8,8 +8,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { SYNTHETIC_NOTICE } from '../lib/port/types.ts'
-import { usePort, useSession } from '../lib/port/provider.tsx'
+import { SYNTHETIC_NOTICE, homeLabel } from '../lib/port/types.ts'
+import { usePort, usePortMode, useSession } from '../lib/port/provider.tsx'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { Skeleton, UnauthorizedState } from './states.tsx'
 import {
@@ -40,6 +40,7 @@ function isCurrent(pathname: string, homeId: string, segment: string) {
 
 export function AppShell({ homeId, children }: { homeId: string; children: React.ReactNode }) {
   const pathname = usePathname()
+  const mode = usePortMode()
   const { state: session } = useSession()
   const port = usePort()
   const { state: home } = usePortCall(
@@ -64,11 +65,13 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
     )
   }
 
-  const alias = home.status === 'ready' ? home.value.alias : '…'
+  const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
 
   return (
     <div className="shell">
-      <p className="demo-banner" role="note">{SYNTHETIC_NOTICE}</p>
+      {mode === 'synthetic'
+        ? <p className="demo-banner" role="note">{SYNTHETIC_NOTICE}</p>
+        : null}
 
       <header className="topbar">
         <Link href="/homes" className="topbar__brand">
@@ -98,8 +101,14 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           ))}
         </div>
         <div className="rail__foot">
-          <span className="mono">Signed in as {session.session.displayName}</span>
-          <span className="mono">Demo session — memory only</span>
+          <span className="mono">
+            {session.session.displayName
+              ? `Signed in as ${session.session.displayName}`
+              : 'Signed in'}
+          </span>
+          {mode === 'synthetic'
+            ? <span className="mono">Demo session — memory only</span>
+            : null}
         </div>
       </nav>
 

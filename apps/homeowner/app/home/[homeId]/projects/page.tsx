@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { use, useState } from 'react'
-import { usePort } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconProjects } from '../../../../components/icons.tsx'
@@ -12,6 +12,7 @@ import type { AddProjectInput } from '../../../../lib/port/types.ts'
 /** Projects: the recorded work on this home, plus the door to record more. */
 export default function ProjectsPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
+  const mode = usePortMode()
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
   const [busy, setBusy] = useState(false)
@@ -39,7 +40,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
       </div>
 
       {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading projects" /></div>}
-      {state.status === 'error' && <ErrorState retry={retry} />}
+      {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
       {state.status === 'empty' && (
         <EmptyState
           title="No projects recorded"
@@ -66,11 +67,14 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
         </ul>
       )}
 
+      {mode === 'remote' ? null : (
       <details className="panel">
-        <summary style={{ fontWeight: 650, cursor: 'pointer' }}>Record a project (demo)</summary>
-        <p className="mono" style={{ margin: '0.5rem 0 0' }}>
-          Added to this session&rsquo;s memory only — a refresh clears it. Nothing uploads.
-        </p>
+        <summary style={{ fontWeight: 650, cursor: 'pointer' }}>{mode === 'synthetic' ? 'Record a project (demo)' : 'Record a project'}</summary>
+        {mode === 'synthetic' ? (
+          <p className="mono" style={{ margin: '0.5rem 0 0' }}>
+            Added to this session&rsquo;s memory only — a refresh clears it. Nothing uploads.
+          </p>
+        ) : null}
         <form onSubmit={add} style={{ maxWidth: '30rem' }}>
           <div className="field">
             <label htmlFor="p-title">What was done?</label>
@@ -108,11 +112,12 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
           )}
           <div style={{ marginTop: '1rem' }}>
             <button type="submit" className="btn btn--primary" disabled={busy}>
-              {busy ? 'Recording…' : 'Add to the record (demo)'}
+              {busy ? 'Recording…' : mode === 'synthetic' ? 'Add to the record (demo)' : 'Add to the record'}
             </button>
           </div>
         </form>
       </details>
+      )}
     </div>
   )
 }

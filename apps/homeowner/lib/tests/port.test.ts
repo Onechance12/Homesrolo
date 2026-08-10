@@ -43,7 +43,8 @@ test('the demo journey: sign in, list homes, open one project end to end', async
   assert.ok(homes.ok)
   if (!homes.ok) return
   assert.ok(homes.value.length >= 2, 'both fixture homes are listed')
-  assert.ok(homes.value.every(h => h.isSynthetic === true))
+  assert.ok(homes.value.every(h => h.source === 'synthetic' && h.isSynthetic === true),
+    'every synthetic home entry is source-tagged and marked synthetic')
 
   const projects = await syntheticPort.listProjects(BIRCH_REF)
   assert.ok(projects.ok)

@@ -35,7 +35,7 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
       </div>
 
       {state.status === 'loading' && <div className="panel"><Skeleton lines={5} label="Loading documents" /></div>}
-      {state.status === 'error' && <ErrorState retry={retry} />}
+      {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
       {state.status === 'empty' && (
         <EmptyState
           title="Nothing filed yet"

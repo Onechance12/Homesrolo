@@ -29,7 +29,7 @@ export default function ProjectPage({
     return state.error === 'not_found'
       ? <EmptyState title="No such project" body="This record does not exist in the demo."
           action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>All projects</Link>} />
-      : <ErrorState retry={retry} />
+      : <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />
   }
   if (state.status !== 'ready') return null
   const project = state.value

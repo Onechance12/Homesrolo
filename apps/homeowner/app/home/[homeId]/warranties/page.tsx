@@ -34,7 +34,7 @@ export default function WarrantiesPage({ params }: { params: Promise<{ homeId: s
       </div>
 
       {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading warranties" /></div>}
-      {state.status === 'error' && <ErrorState retry={retry} />}
+      {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
       {state.status === 'empty' && (
         <EmptyState
           title="No coverage recorded"
