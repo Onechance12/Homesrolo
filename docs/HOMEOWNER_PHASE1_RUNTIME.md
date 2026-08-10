@@ -31,6 +31,13 @@ capability response stays false for magic-link delivery, persistence, uploads,
 invitations, and sharing until each provider is separately configured and
 verified.
 
+The matching framework-neutral HTTP boundary serves exactly `GET
+/api/v1/session`, `GET /api/v1/homes`, and `GET /api/v1/homes/{opaque-home-ref}`.
+It requires a server-owned session handle, rejects query/body identity claims,
+returns a one-key `data` envelope, uses `no-store`, and maps failures to bounded
+problem codes without leaking provider or repository details. A framework
+adapter and real provider configuration are still required before deployment.
+
 ## Separation from Jobrolo
 
 The homeowner runtime has its own principals, sessions, home references,
