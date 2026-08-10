@@ -317,4 +317,9 @@ test('maintenance completion state and timestamp cannot disagree', () => {
     ...maintenance,
     completedAt: now,
   }))
+  assert.throws(() => parseHomeownerMaintenance({
+    ...maintenance,
+    state: 'completed',
+    completedAt: '2026-08-10T11:59:59.999Z',
+  }))
 })

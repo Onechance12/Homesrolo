@@ -308,6 +308,9 @@ export function parseHomeownerMaintenance(input: unknown) {
   if (maintenance.state !== 'completed' && maintenance.completedAt) {
     throw new Error('Only completed maintenance may carry completedAt')
   }
+  if (maintenance.completedAt && maintenance.completedAt < maintenance.createdAt) {
+    throw new Error('Maintenance may not be completed before it was created')
+  }
   if (maintenance.updatedAt < maintenance.createdAt) {
     throw new Error('Maintenance may not be updated before it was created')
   }
