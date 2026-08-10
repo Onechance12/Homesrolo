@@ -94,7 +94,7 @@ if (!existsSync(configPath)) {
 // The reviewed Phase 0 share contract must not be reachable from the public web.
 for (const file of sourceFiles) {
   const source = readFileSync(file, 'utf8')
-  if (/homeowner-share|home-file\.v1/.test(source)) {
+  if (/homeowner-share|home-file\.v1|home-file-record|company-link\.v1/.test(source)) {
     fail(`${rel(file)}: the public layer must not import the private/share contracts`)
   }
 }

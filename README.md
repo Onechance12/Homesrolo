@@ -21,10 +21,14 @@ the site is synthetic.
 | docs/THREAT_MODEL.md | Privacy, security, deletion, failure, and launch gates |
 | docs/RECEIPT_WIRE_SPEC.md | Exact Jobrolo-aligned Phase 0 wire |
 | docs/PUBLIC_DIRECTORY_RFC.md | Neutrality, fact-level provenance, corrections, and external-source limits |
+| docs/PLATFORM_STRATEGY.md | Endgame, aggregation constraints, revenue shape, sequence, risks |
+| docs/LEGAL_POSTURE.md | Seeding sources, unclaimed profiles, Section 230, and the AI-agent boundary |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
+| src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |
+| src/contracts/company-link.v1.ts | Draft Jobrolo-to-Homesrolo company claim binding (proposal for Codex) |
 | src/constitution/ | Pure request and response boundary checks |
-| apps/web/lib/directory/ | Public profile contract, draft project-linked reviews, draft Academy credentials, draft claiming, projection allowlist, neutral ordering, synthetic fixtures |
+| apps/web/lib/directory/ | Public profile contract, draft project-linked reviews, draft Academy credentials, draft claiming, draft corrections and disputes, projection allowlist, neutral ordering, synthetic fixtures |
 | apps/web/app/ | Statically exported public site |
 | scripts/public-web-guard.mjs | Fails the build on any Phase 0.5 prohibition |
 
@@ -55,8 +59,15 @@ a general review site.
 - Intended designs, none enforced: no aggregate star rating; removed reviews stay
   visible with a reason; credentials earned rather than bought, expiring, and
   never affecting ordering; claiming confirms control and never a fact.
-- The public layer cannot reach the private ones: importing the share or
-  home-file contracts fails the guard.
+- The public layer cannot reach the private ones: importing the share,
+  home-file, home-file-record, or company-link contracts fails the guard.
+- **A company claims its page through Jobrolo**, and content authored there
+  arrives as `company_self_reported` — the envelope is structurally incapable of
+  carrying a verification fact or a confirmed status.
+- **An assistant may propose a change; a person approves it.** AI never writes a
+  fact and never promotes anything to confirmed. Section 230 protects
+  third-party content, not the platform's own, so AI-generated statements about
+  a real company are the platform speaking. See `docs/LEGAL_POSTURE.md` §3.
 
 ## Core decisions
 
