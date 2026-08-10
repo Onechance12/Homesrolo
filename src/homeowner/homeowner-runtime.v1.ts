@@ -114,11 +114,6 @@ export type HomeownerAccessDecision =
       readonly action: HomeownerWorkspaceAction
       readonly recheckedAt: string
     }
-
-export type AuthorizedHomeownerWorkspace = Extract<
-  HomeownerAccessDecision,
-  { readonly authorized: true }
->
   | {
       readonly authorized: false
       readonly reason:
@@ -130,6 +125,11 @@ export type AuthorizedHomeownerWorkspace = Extract<
         | 'home_mismatch'
         | 'role_denied'
     }
+
+export type AuthorizedHomeownerWorkspace = Extract<
+  HomeownerAccessDecision,
+  { readonly authorized: true }
+>
 
 /**
  * Derives one exact workspace decision from fresh, server-owned snapshots.
