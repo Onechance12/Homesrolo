@@ -1,0 +1,198 @@
+/**
+ * THE UI DATA PORT — the single seam between this application shell and the
+ * real authenticated runtime.
+ *
+ * FOR CODEX (integration lane): implement `HomeownerDataPort` against the real
+ * authorization and data layer, then swap the provider in
+ * `lib/port/provider.tsx`. Nothing else in `apps/homeowner` may talk to a
+ * backend, and eslint bans fetch/XMLHttpRequest/WebSocket outside this seam,
+ * so this interface is the complete integration surface.
+ *
+ * Decisions this file deliberately does NOT make (they are runtime authority,
+ * not UI): how sign-in actually works, how sessions are stored or expired, how
+ * IDs are minted, what authorization checks run per call, and how uploads or
+ * sharing would ever work. Where the UI needed a shape for those, the shape is
+ * minimal and named `…Input`/`…State` so the real contract can supersede it.
+ *
+ * Everything in the Phase 1 shell behind this port is SYNTHETIC. See
+ * `synthetic.ts` for the mock adapter and `PORT_IMPLEMENTATION_STATUS` below
+ * for the flags a test pins to `false` until the real runtime exists.
+ */
+
+/** What is actually implemented behind the port today. All false: mock only. */
+export const PORT_IMPLEMENTATION_STATUS = Object.freeze({
+  realAuthenticationImplemented: false,
+  realPersistenceImplemented: false,
+  uploadsImplemented: false,
+  sharingImplemented: false,
+  aiAssistantImplemented: false,
+  connectedToJobrolo: false,
+} as const)
+
+/** Wording every mock surface must carry so a screenshot cannot overclaim. */
+export const SYNTHETIC_NOTICE =
+  'Demo shell with synthetic data. Accounts, saving, uploads, and sharing are not built yet.'
+
+// --- session ------------------------------------------------------------------
+
+export type SessionState =
+  | { readonly kind: 'signed_out' }
+  | { readonly kind: 'signed_in'; readonly session: HomeownerSession }
+
+export interface HomeownerSession {
+  /** Opaque principal reference; hprn_ to match homeowner-runtime.v1. */
+  readonly principalRef: string
+  readonly displayName: string
+  /** Always true in this shell; the mock adapter can mint nothing else. */
+  readonly isSynthetic: true
+}
+
+// --- the home file ------------------------------------------------------------
+
+export interface HomeSummary {
+  readonly homeRef: string
+  /** A homeowner-chosen alias, never a postal address. */
+  readonly alias: string
+  readonly locality: string
+  readonly projectCount: number
+  readonly openMaintenanceCount: number
+  readonly isSynthetic: true
+}
+
+export interface HomeFile extends HomeSummary {
+  readonly yearBuilt: number | null
+  readonly homeType: 'house' | 'townhouse' | 'condo' | 'other'
+  /** Ledger-voice facts shown on the dashboard masthead. */
+  readonly keyFacts: readonly { readonly label: string; readonly value: string }[]
+}
+
+export interface CreateHomeInput {
+  readonly alias: string
+  readonly locality: string
+  readonly homeType: HomeFile['homeType']
+  readonly yearBuilt: number | null
+}
+
+// --- projects -----------------------------------------------------------------
+
+/** Mirrors homeownerProjectSchema.status in homeowner-runtime.v1 exactly. */
+export type ProjectStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
+
+export interface ProjectSummary {
+  readonly projectRef: string
+  readonly homeRef: string
+  readonly title: string
+  readonly trade: string
+  readonly performedOn: string
+  readonly status: ProjectStatus
+  readonly photoCount: number
+  readonly documentCount: number
+  readonly isSynthetic: true
+}
+
+export interface Project extends ProjectSummary {
+  readonly summary: string
+  readonly contractor: string
+  readonly materials: readonly { readonly label: string; readonly value: string }[]
+  readonly photos: readonly ProjectPhoto[]
+  readonly documents: readonly DocumentSummary[]
+  readonly warranty: Warranty | null
+}
+
+export interface ProjectPhoto {
+  readonly photoRef: string
+  readonly caption: string
+  /** Drawn placeholder kind; the shell renders code-native art, never files. */
+  readonly art: 'roof' | 'gutter' | 'window' | 'interior' | 'exterior'
+  readonly takenOn: string
+  readonly isSynthetic: true
+}
+
+export interface AddProjectInput {
+  readonly title: string
+  readonly trade: string
+  readonly performedOn: string
+  readonly contractor: string
+  readonly summary: string
+}
+
+// --- documents and warranties -------------------------------------------------
+
+export type DocumentKind = 'contract' | 'invoice' | 'warranty' | 'photo_set' | 'permit' | 'manual'
+
+export interface DocumentSummary {
+  readonly documentRef: string
+  readonly homeRef: string
+  readonly projectRef: string | null
+  readonly title: string
+  readonly kind: DocumentKind
+  readonly addedOn: string
+  readonly pages: number
+  readonly isSynthetic: true
+}
+
+export interface Warranty {
+  readonly warrantyRef: string
+  readonly homeRef: string
+  readonly projectRef: string | null
+  readonly coverage: string
+  readonly issuedBy: string
+  readonly startsOn: string
+  readonly endsOn: string
+  readonly isSynthetic: true
+}
+
+// --- timeline -----------------------------------------------------------------
+
+export type TimelineEntryKind = 'project' | 'document' | 'warranty' | 'maintenance' | 'home'
+
+export interface TimelineEntry {
+  readonly entryRef: string
+  readonly homeRef: string
+  readonly kind: TimelineEntryKind
+  readonly on: string
+  readonly title: string
+  readonly detail: string
+  /** Route the entry links to inside the app, or null for a plain record. */
+  readonly href: string | null
+  readonly isSynthetic: true
+}
+
+export interface MaintenanceItem {
+  readonly itemRef: string
+  readonly homeRef: string
+  readonly title: string
+  readonly cadence: string
+  readonly dueInSeason: string
+  readonly state: 'upcoming' | 'done'
+  readonly isSynthetic: true
+}
+
+// --- the port -----------------------------------------------------------------
+
+export type PortResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: 'not_found' | 'not_signed_in' | 'unavailable' }
+
+export interface HomeownerDataPort {
+  getSession(): Promise<SessionState>
+  /**
+   * MOCK-ONLY ENTRY. The real port replaces this with an actual sign-in flow;
+   * the UI treats the returned session as opaque either way.
+   */
+  enterDemoSession(displayName: string): Promise<HomeownerSession>
+  signOut(): Promise<void>
+
+  listHomes(): Promise<PortResult<readonly HomeSummary[]>>
+  getHome(homeRef: string): Promise<PortResult<HomeFile>>
+  createHome(input: CreateHomeInput): Promise<PortResult<HomeSummary>>
+
+  listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
+  getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>
+  addProject(homeRef: string, input: AddProjectInput): Promise<PortResult<ProjectSummary>>
+
+  listDocuments(homeRef: string): Promise<PortResult<readonly DocumentSummary[]>>
+  listWarranties(homeRef: string): Promise<PortResult<readonly Warranty[]>>
+  listTimeline(homeRef: string): Promise<PortResult<readonly TimelineEntry[]>>
+  listMaintenance(homeRef: string): Promise<PortResult<readonly MaintenanceItem[]>>
+}

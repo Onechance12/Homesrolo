@@ -1,0 +1,37 @@
+# Lane-scoped CI for the Phase 1 homeowner application shell.
+# Deliberately a separate workflow from ci.yml: the integration lane owns that
+# file, and this one triggers only on changes inside apps/homeowner/**.
+
+name: Homeowner app
+
+on:
+  push:
+    branches: ['**']
+    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
+  pull_request:
+    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
+
+jobs:
+  homeowner:
+    name: Homeowner application shell
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/homeowner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/homeowner/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Port, fixture, and presentation tests
+        run: npm test
+      - name: Production build
+        run: npm run build
