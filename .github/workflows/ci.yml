@@ -15,9 +15,82 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
-      - name: Typecheck
+      - name: Typecheck contracts
         run: npm run typecheck
       - name: Constitution and contract tests
         run: npm test
+      - name: Public directory model tests
+        run: npm run test:directory
+
+  web:
+    name: Public web experience
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the whitespace check below diffs a commit range, and a
+          # shallow clone has neither the base commit nor the range between.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install web dependencies
+        run: npm --prefix apps/web ci
+      - name: Lint
+        run: npm run web:lint
+      - name: Typecheck web
+        run: npm run web:typecheck
+      - name: Static production build
+        run: npm run web:build
+      - name: Phase 0.5 prohibition guard
+        run: npm run guard:web
+
+      # `git diff --check` with no arguments compares the working tree to the
+      # index. On a clean CI checkout that is always empty, so the previous
+      # version of this step passed unconditionally and checked nothing. It must
+      # be given an explicit range.
+      - name: Whitespace and conflict-marker check (full PR range)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${BASE_SHA:-}" ]; then
+            # Pull request: HEAD is the merge commit, so base..HEAD is exactly
+            # the range this PR proposes.
+            range_start="$BASE_SHA"
+            echo "pull_request event: checking against base $range_start"
+          else
+            # Push event. `github.event.before` is all-zeros for a new branch
+            # and may be unreachable after a force-push, so fall back to the
+            # parent commit and finally to the empty tree.
+            range_start="${BEFORE_SHA:-}"
+            if [ -z "$range_start" ] \
+              || [ "$range_start" = "0000000000000000000000000000000000000000" ] \
+              || ! git cat-file -e "${range_start}^{commit}" 2>/dev/null; then
+              range_start="$(git rev-parse HEAD~1 2>/dev/null \
+                || git hash-object -t tree /dev/null)"
+            fi
+            echo "push event: checking against $range_start"
+          fi
+
+          git fetch --no-tags --quiet origin "$range_start" 2>/dev/null || true
+
+          changed="$(git diff --name-only "$range_start" HEAD | wc -l | tr -d ' ')"
+          echo "commits in range: $(git rev-list --count "$range_start"..HEAD 2>/dev/null || echo 'n/a')"
+          echo "files in range:   $changed"
+          if [ "$changed" -eq 0 ]; then
+            echo "::warning::whitespace check saw an empty range; verify the base SHA is correct"
+          fi
+
+          git diff --check "$range_start" HEAD
+          echo "whitespace and conflict-marker check passed over $changed file(s)"
