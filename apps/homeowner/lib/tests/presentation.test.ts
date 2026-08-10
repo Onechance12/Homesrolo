@@ -11,10 +11,21 @@ import path from 'node:path'
 const APP = path.resolve(import.meta.dirname, '../..')
 const read = (relative: string) => readFileSync(path.join(APP, relative), 'utf8')
 
+/**
+ * Relative paths in the route inventory are always POSIX, whatever the host
+ * separator is. Without this, `path.join` yields backslashes on Windows and
+ * every screen-existence assertion comparing against 'app/…/page.tsx' literals
+ * fails there while Linux CI stays green — found by validation on a Windows
+ * machine, reproduced here as a normalization the tests below exercise.
+ */
+export function toPosix(relative: string): string {
+  return relative.split('\\').join('/')
+}
+
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
   for (const name of readdirSync(path.join(APP, dir))) {
-    const rel = path.join(dir, name)
+    const rel = toPosix(path.join(dir, name))
     const stat = statSync(path.join(APP, rel))
     if (stat.isDirectory()) out.push(...sourceFiles(rel))
     else if (/\.(ts|tsx|css|mjs)$/.test(name)) out.push(rel)
@@ -134,10 +145,26 @@ test('the entry journey screens exist', () => {
 
 test('only the provider chooses the port implementation', () => {
   for (const rel of appSources) {
-    if (rel.startsWith(path.join('lib', 'port')) || rel.startsWith('lib/port')) continue
-    if (rel.startsWith(path.join('lib', 'tests')) || rel.startsWith('lib/tests')) continue
+    if (rel.startsWith('lib/port') || rel.startsWith('lib/tests')) continue
     const content = read(rel)
     assert.doesNotMatch(content, /from '.*port\/synthetic/,
       `${rel} must consume the port via the provider, not the mock directly`)
   }
+})
+
+// --- platform neutrality -----------------------------------------------------
+
+test('the route inventory is platform-neutral', () => {
+  // The normalization must turn a Windows-style relative path into the POSIX
+  // form the screen literals use — asserted with explicit backslash input so
+  // Linux CI proves the Windows behaviour rather than merely not hitting it.
+  assert.equal(toPosix('app\\home\\[homeId]\\page.tsx'), 'app/home/[homeId]/page.tsx')
+  assert.equal(toPosix('lib\\tests\\presentation.test.ts'), 'lib/tests/presentation.test.ts')
+  assert.equal(toPosix('app/signin/page.tsx'), 'app/signin/page.tsx', 'POSIX input passes through')
+  // And the discovered inventory itself must already be normalized.
+  for (const rel of appSources) {
+    assert.ok(!rel.includes('\\'), `route inventory leaked a host separator: ${rel}`)
+  }
+  assert.ok(appSources.includes('app/signin/page.tsx'),
+    'inventory entries are comparable against POSIX literals on every platform')
 })
