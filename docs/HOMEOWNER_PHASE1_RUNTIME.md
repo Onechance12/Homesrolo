@@ -17,6 +17,11 @@ It does not establish legal ownership and it does not unlock contractor records.
 6. Third-party contributions remain behind the existing verified-controller or
    exact-active-share boundary. Home membership does not reveal their existence.
 
+The draft command boundary also defines idempotency-friendly opaque command
+references for creating one private home workspace and one homeowner project.
+It defines semantic warranty and maintenance records separately from raw
+document bytes. No command adapter or database implementation exists yet.
+
 ## Separation from Jobrolo
 
 The homeowner runtime has its own principals, sessions, home references,
