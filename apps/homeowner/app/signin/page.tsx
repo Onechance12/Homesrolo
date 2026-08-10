@@ -155,7 +155,9 @@ export default function SignInPage() {
           ) : session.kind === 'signed_in' ? (
             <div style={{ marginTop: '1.25rem', display: 'grid', gap: '0.6rem' }}>
               <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem' }}>
-                You are already signed in as {session.session.displayName}.
+                {session.session.displayName?.trim()
+                  ? `You are already signed in as ${session.session.displayName}.`
+                  : 'You are already signed in.'}
               </p>
               <Link className="btn btn--primary btn--block" href="/homes">Go to your homes</Link>
             </div>

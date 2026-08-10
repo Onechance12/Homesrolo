@@ -65,7 +65,7 @@ const HOME_VIEW = {
   documentCount: 8,
   warrantyCount: 2,
   maintenanceCount: 4,
-  updatedAt: '2026-08-10T16:00:00Z',
+  updatedAt: '2026-08-10T16:00:00.000Z',
 }
 
 // --- mode selection -----------------------------------------------------------
@@ -185,6 +185,10 @@ test('the home list accepts exactly HomeownerApiHomeSummary and nothing more', a
 
   // Old guessed shapes and padded shapes are rejected.
   const rejected: readonly unknown[] = [
+    [{ ...HOME_SUMMARY, displayLabel: '' }],                      // server min(1) mirrored
+    [{ ...HOME_SUMMARY, displayLabel: ' padded ' }],              // server trim mirrored
+    [{ ...HOME_SUMMARY, displayLabel: 'x'.repeat(81) }],          // server max(80) mirrored
+    [{ ...HOME_SUMMARY, privateLocationLabel: 'y'.repeat(201) }], // server max(200) mirrored
     [{ ...HOME_SUMMARY, projectCount: 3 }],                       // counts are view-only
     [{ ...HOME_SUMMARY, isSynthetic: false }],                    // no marker on the wire
     [{ ...HOME_SUMMARY, alias: 'x' }],                            // pre-PR#8 field name
@@ -210,7 +214,7 @@ test('the home view accepts exactly HomeownerApiHomeView', async () => {
   if (result.value.source !== 'server') return
   assert.equal(result.value.projectCount, 3)
   assert.equal(result.value.maintenanceCount, 4)
-  assert.equal(result.value.updatedAt, '2026-08-10T16:00:00Z')
+  assert.equal(result.value.updatedAt, '2026-08-10T16:00:00.000Z')
 
   const rejected: readonly unknown[] = [
     HOME_SUMMARY,                                                  // counts are required on the view
@@ -220,6 +224,13 @@ test('the home view accepts exactly HomeownerApiHomeView', async () => {
     { ...HOME_VIEW, projectCount: -1 },                            // negative count
     { ...HOME_VIEW, updatedAt: '2026-08-10T16:00:00+02:00' },      // offset not allowed
     { ...HOME_VIEW, updatedAt: '2026-08-10' },                     // date is not a datetime
+    { ...HOME_VIEW, updatedAt: '2026-08-10T16:00:00Z' },           // second precision only
+    { ...HOME_VIEW, updatedAt: '2026-08-10T16:00:00.000000Z' },    // microsecond precision
+    { ...HOME_VIEW, updatedAt: '2026-02-30T16:00:00.000Z' },       // impossible date
+    { ...HOME_VIEW, displayLabel: '' },                            // empty label
+    { ...HOME_VIEW, displayLabel: ' padded ' },                    // untrimmed label
+    { ...HOME_VIEW, displayLabel: 'x'.repeat(81) },                // over the 80 cap
+    { ...HOME_VIEW, privateLocationLabel: 'y'.repeat(201) },       // over the 200 cap
   ]
   for (const body of rejected) {
     const bad = createRemotePort(transportReturning(200, { data: body }))
@@ -248,7 +259,6 @@ test('undefined routes return unavailable without ever building a request', asyn
     assert.deepEqual(result, { ok: false, error: 'unavailable' },
       'a route the server has not defined must refuse, not guess')
   }
-  await port.signOut()
   assert.equal(requests.length, 0,
     'no request may be sent to a route homeowner-api.v1 does not define')
 })
@@ -289,6 +299,26 @@ test('a malformed ref never becomes a request path', async () => {
     assert.deepEqual(result, { ok: false, error: 'not_found' }, hostile)
   }
   assert.equal(requests.length, 0, 'no request may be built from a malformed ref')
+})
+
+test('a well-formed ref of the wrong kind never reaches a home route', async () => {
+  // These are perfectly valid opaque refs — of other types. getHome takes an
+  // hhom_ ref and nothing else; a principal or project ref in a home route
+  // would be the client asking the server a confused question.
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  for (const wrongKind of [REF('hprn', 'p'), REF('hprj', 'r'), REF('hdoc', 'd'), REF('hcmd', 'c')]) {
+    const result = await port.getHome(wrongKind)
+    assert.deepEqual(result, { ok: false, error: 'not_found' }, wrongKind.slice(0, 10))
+  }
+  assert.equal(requests.length, 0, 'wrong-kind refs must be rejected before the wire')
+})
+
+test('signOut fails loudly instead of pretending a session ended', async () => {
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  await assert.rejects(() => port.signOut(), /no defined route/)
+  assert.equal(requests.length, 0)
 })
 
 test('the demo doorway does not exist in remote mode', async () => {

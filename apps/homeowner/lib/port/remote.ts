@@ -33,10 +33,14 @@ import {
 
 const API = '/api/v1'
 
-/** Path segments are validated opaque refs; anything else never leaves the app. */
-const REF = /^[a-z]+_[A-Za-z0-9_-]{43}$/
-function refSegment(candidate: string): string | null {
-  return REF.test(candidate) ? candidate : null
+/**
+ * Path segments are validated against the EXACT ref type the route takes. A
+ * well-formed ref of the wrong kind — an hprn_ or hprj_ where a home belongs —
+ * is just as rejected as garbage: it never becomes a request path.
+ */
+const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
+function homeRefSegment(candidate: string): string | null {
+  return HOME_REF.test(candidate) ? candidate : null
 }
 
 const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
@@ -87,7 +91,7 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
     },
 
     async getHome(homeRef) {
-      const ref = refSegment(homeRef)
+      const ref = homeRefSegment(homeRef)
       if (!ref) return { ok: false, error: 'not_found' }
       return call({ method: 'GET', path: `${API}/homes/${ref}` }, decodeServerHomeView)
     },
@@ -102,7 +106,9 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
 
     async signOut() {
       // No sign-out route is defined yet. The UI disables the control in
-      // remote mode; this is the belt to that suspender.
+      // remote mode; a direct call must FAIL rather than resolve as though a
+      // session had actually ended.
+      throw new Error('signOut has no defined route in homeowner-api.v1')
     },
 
     async createHome() { return UNDEFINED_ROUTE },

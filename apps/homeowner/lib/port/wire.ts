@@ -76,8 +76,17 @@ function array<T>(item: Decoder<T>): Decoder<readonly T[]> {
   }
 }
 
-const string: Decoder<string> = (value, at) =>
-  typeof value === 'string' ? value : fail(at, 'a string')
+/** Mirrors z.string().trim().min(1).max(n): trimmed, nonempty, bounded. */
+function boundedLabel(max: number): Decoder<string> {
+  return (value, at) => {
+    if (typeof value !== 'string') return fail(at, 'a string')
+    if (value !== value.trim()) return fail(at, 'a trimmed string')
+    if (value.length < 1 || value.length > max) {
+      return fail(at, `a nonempty string of at most ${max} characters`)
+    }
+    return value
+  }
+}
 
 const boolean: Decoder<boolean> = (value, at) =>
   typeof value === 'boolean' ? value : fail(at, 'a boolean')
@@ -107,12 +116,20 @@ function opaqueRef(prefix: string): Decoder<string> {
       : fail(at, `an opaque ${prefix}_ ref`)
 }
 
-/** Mirrors zod's .datetime({ offset: false }): UTC instant, Z suffix, no offset. */
-const utcDatetime: Decoder<string> = (value, at) => {
+/**
+ * The server's canonical UTC instant: exactly YYYY-MM-DDTHH:mm:ss.sssZ, a real
+ * moment, and byte-equal to its own round trip through Date — the same rule
+ * the root contracts apply. Alternate precision, offsets, and impossible dates
+ * (2026-02-30) all reject.
+ */
+const utcInstant: Decoder<string> = (value, at) => {
   if (typeof value !== 'string'
-    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value)
-    || !Number.isFinite(Date.parse(value))) {
-    return fail(at, 'a UTC datetime with Z and no offset')
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return fail(at, 'a canonical UTC instant (YYYY-MM-DDTHH:mm:ss.sssZ)')
+  }
+  const parsed = new Date(value)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) {
+    return fail(at, 'a real canonical UTC instant')
   }
   return value
 }
@@ -178,8 +195,8 @@ export const decodeSession: Decoder<SessionState> = (value, at) => {
 export const decodeServerHomeSummary: Decoder<ServerHomeSummary> = (value, at) => {
   const decoded = object<Omit<ServerHomeSummary, 'source'>>({
     homeRef: opaqueRef('hhom'),
-    displayLabel: string,
-    privateLocationLabel: string,
+    displayLabel: boundedLabel(80),
+    privateLocationLabel: boundedLabel(200),
     relationshipLabel: oneOf(RELATIONSHIP_LABELS),
   })(value, at)
   return { source: 'server', ...decoded }
@@ -189,14 +206,14 @@ export const decodeServerHomeSummary: Decoder<ServerHomeSummary> = (value, at) =
 export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
   const decoded = object<Omit<ServerHomeView, 'source'>>({
     homeRef: opaqueRef('hhom'),
-    displayLabel: string,
-    privateLocationLabel: string,
+    displayLabel: boundedLabel(80),
+    privateLocationLabel: boundedLabel(200),
     relationshipLabel: oneOf(RELATIONSHIP_LABELS),
     projectCount: countInt,
     documentCount: countInt,
     warrantyCount: countInt,
     maintenanceCount: countInt,
-    updatedAt: utcDatetime,
+    updatedAt: utcInstant,
   })(value, at)
   return { source: 'server', ...decoded }
 }

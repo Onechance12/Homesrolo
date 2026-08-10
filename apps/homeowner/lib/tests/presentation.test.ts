@@ -170,6 +170,19 @@ test('the magic-link form renders only on server-reported capability', () => {
     'synthetic mode keeps the honest demo entry')
 })
 
+test('a nameless server session renders a neutral label, never "as null"', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /displayName\?\.trim\(\)/,
+    'the name is included only when a real nonempty display name exists')
+  assert.match(signin, /'You are already signed in\.'/,
+    'the neutral fallback exists')
+  assert.doesNotMatch(signin, /signed in as \{session/,
+    'no template interpolates a possibly-null name directly')
+  const shell = read('components/AppShell.tsx')
+  assert.match(shell, /: 'Signed in'\}?/,
+    'the shell has the same neutral fallback')
+})
+
 test('disabled affordances say why, instead of pretending', () => {
   const signin = read('app/signin/page.tsx')
   assert.match(signin, /not built yet/i)
