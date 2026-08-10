@@ -131,8 +131,11 @@ test('no raw storage URLs or provider identifiers are projected into the UI', ()
       `${rel} must not project storage internals`)
   }
   const wire = read('lib/port/wire.ts')
-  assert.match(wire, /only app-internal \/home\/ routes are accepted/,
-    'server-supplied hrefs are confined to app routes')
+  // The narrowed Phase-2A surface decodes no href, URL, or link field at all;
+  // if one returns (e.g. with a timeline route), it must come with an
+  // app-internal-route confinement check, not a bare string decoder.
+  assert.doesNotMatch(wire, /href|url:/i,
+    'no server-supplied link field is decoded on the narrowed surface')
 })
 
 test('no API routes, server actions, or middleware exist in the shell', () => {

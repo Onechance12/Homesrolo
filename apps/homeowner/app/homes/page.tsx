@@ -5,7 +5,8 @@ import { usePort, useSession } from '../../lib/port/provider.tsx'
 import { usePortCall } from '../../lib/port/hooks.ts'
 import { HouseMark, IconHome, IconPlus } from '../../components/icons.tsx'
 import { EmptyState, ErrorState, Skeleton, UnauthorizedState } from '../../components/states.tsx'
-import { SYNTHETIC_NOTICE } from '../../lib/port/types.ts'
+import { SYNTHETIC_NOTICE, homeLabel, homeLocality } from '../../lib/port/types.ts'
+import { RELATIONSHIP_COPY } from '../../components/relationship.ts'
 
 /** Home selection: a person may keep more than one home's file. */
 export default function HomesPage() {
@@ -36,12 +37,18 @@ export default function HomesPage() {
                         <Link className="row" href={`/home/${home.homeRef}`}>
                           <span className="row__glyph"><IconHome /></span>
                           <span className="row__body">
-                            <span className="row__title">{home.alias}</span>
-                            <span className="row__sub">{home.locality}</span>
+                            <span className="row__title">{homeLabel(home)}</span>
+                            <span className="row__sub">{homeLocality(home)}</span>
                           </span>
                           <span className="row__end">
-                            <span className="mono">{home.projectCount} projects</span>
-                            <span className="mono">{home.openMaintenanceCount} upcoming tasks</span>
+                            {home.source === 'synthetic' ? (
+                              <>
+                                <span className="mono">{home.projectCount} projects</span>
+                                <span className="mono">{home.openMaintenanceCount} upcoming tasks</span>
+                              </>
+                            ) : (
+                              <span className="mono">{RELATIONSHIP_COPY[home.relationshipLabel]}</span>
+                            )}
                           </span>
                         </Link>
                       </li>

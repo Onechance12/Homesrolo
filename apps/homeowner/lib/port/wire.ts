@@ -1,24 +1,29 @@
 /**
- * The client's half of the wire: strict decoders for every /api/v1 response
- * the remote adapter consumes, and the single HTTP-status-to-PortError map.
+ * The client's half of the wire: strict decoders for the /api/v1 responses the
+ * remote adapter consumes, and the single HTTP-status-to-PortError map.
  *
- * Narrow on purpose. A response with an unknown key, a missing key, a
- * malformed opaque ref, or an impossible date is REJECTED as 'invalid', never
- * displayed. The server (Codex's lane) is authoritative for what these shapes
- * become; when it diverges from the assumptions documented in the PR, this
- * file is where the client meets it — by updating a decoder, not by loosening
- * one.
+ * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
+ * server defines exactly three reads — session, home list, home view — and the
+ * decoders below mirror those schemas key for key. Speculative decoders for
+ * routes the server has not defined were deleted rather than kept "for later":
+ * an unsupported route returns unavailable in the adapter and never decodes.
  *
- * Wire envelope assumption: every success body is exactly `{ "data": ... }`.
+ * Envelope: every success body is exactly `{ "data": ... }` with no sibling
+ * keys. The application service itself is transport-neutral, so this is a
+ * ROUTE-ADAPTER REQUIREMENT on the server side, not something the service
+ * already guarantees — flagged in the PR for the integration lane.
  */
 
-import type {
-  DocumentSummary, HomeFile, HomeSummary, MaintenanceItem, PortError, Project,
-  ProjectPhoto, ProjectStatus, ProjectSummary, SessionState, TimelineEntry, Warranty,
+import {
+  type HomeownerSession, type PortError, type RelationshipLabel, type ServerHomeSummary,
+  type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
+/** Matches homeowner-api.v1's HOMEOWNER_API_VERSION exactly. */
+export const EXPECTED_API_VERSION = 'homeowner-api.v1-draft'
+
 /** 401 → not_signed_in, 403 → forbidden, 404 → not_found, 409 → conflict,
- *  422 → invalid, 429 → rate_limited; everything else unexpected → unavailable. */
+ *  400/422 → invalid, 429 → rate_limited; everything else unexpected → unavailable. */
 export function portErrorForStatus(status: number): PortError {
   if (status === 401) return 'not_signed_in'
   if (status === 403) return 'forbidden'
@@ -77,14 +82,12 @@ const string: Decoder<string> = (value, at) =>
 const boolean: Decoder<boolean> = (value, at) =>
   typeof value === 'boolean' ? value : fail(at, 'a boolean')
 
-const integer: Decoder<number> = (value, at) =>
-  typeof value === 'number' && Number.isInteger(value) ? value : fail(at, 'an integer')
+const countInt: Decoder<number> = (value, at) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : fail(at, 'a non-negative integer')
 
-function nullable<T>(inner: Decoder<T>): Decoder<T | null> {
-  return (value, at) => (value === null ? null : inner(value, at))
-}
-
-function literal<const T extends string | boolean>(expected: T): Decoder<T> {
+function literal<const T extends string>(expected: T): Decoder<T> {
   return (value, at) => (value === expected ? expected : fail(at, JSON.stringify(expected)))
 }
 
@@ -104,163 +107,101 @@ function opaqueRef(prefix: string): Decoder<string> {
       : fail(at, `an opaque ${prefix}_ ref`)
 }
 
-const calendarDate: Decoder<string> = (value, at) => {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return fail(at, 'a YYYY-MM-DD date')
-  }
-  const parsed = new Date(`${value}T00:00:00.000Z`)
-  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    return fail(at, 'a real calendar date')
+/** Mirrors zod's .datetime({ offset: false }): UTC instant, Z suffix, no offset. */
+const utcDatetime: Decoder<string> = (value, at) => {
+  if (typeof value !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value)
+    || !Number.isFinite(Date.parse(value))) {
+    return fail(at, 'a UTC datetime with Z and no offset')
   }
   return value
 }
 
-// --- resource decoders --------------------------------------------------------
+// --- resource decoders (exactly homeowner-api.v1) -----------------------------
 
-const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+const RELATIONSHIP_LABELS = [
+  'claimed_unverified', 'verified_controller', 'invited_participant',
+] as const satisfies readonly RelationshipLabel[]
 
-const keyFact = object<{ label: string; value: string }>({ label: string, value: string })
+const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilities>({
+  magicLinkSignIn: boolean,
+  persistence: boolean,
+  uploads: boolean,
+  invitations: boolean,
+  sharing: boolean,
+})
 
+/**
+ * homeownerApiSessionSchema, key for key. apiVersion is required and pinned;
+ * signed_in carries a top-level principalRef and nothing else about the
+ * person — no displayName, no isSynthetic, and the decoder rejects both as
+ * unknown keys rather than tolerating them.
+ */
 export const decodeSession: Decoder<SessionState> = (value, at) => {
   if (!isRecord(value)) return fail(at, 'a session object')
-  const capabilities = object<{ magicLinkSignIn: boolean }>({ magicLinkSignIn: boolean })
   if (value.kind === 'signed_out') {
-    return object<Extract<SessionState, { kind: 'signed_out' }>>({
+    const decoded = object<{
+      apiVersion: string
+      kind: 'signed_out'
+      capabilities: SignInCapabilities
+    }>({
+      apiVersion: literal(EXPECTED_API_VERSION),
       kind: literal('signed_out'),
-      capabilities,
+      capabilities: decodeCapabilities,
     })(value, at)
+    return { kind: 'signed_out', capabilities: decoded.capabilities }
   }
   if (value.kind === 'signed_in') {
-    return object<Extract<SessionState, { kind: 'signed_in' }>>({
+    const decoded = object<{
+      apiVersion: string
+      kind: 'signed_in'
+      principalRef: string
+      capabilities: SignInCapabilities
+    }>({
+      apiVersion: literal(EXPECTED_API_VERSION),
       kind: literal('signed_in'),
-      capabilities,
-      session: object({
-        principalRef: opaqueRef('hprn'),
-        displayName: string,
-        // A server session describes a real person; a server claiming its own
-        // data is synthetic would be nonsense and is rejected as malformed.
-        isSynthetic: literal(false),
-      }),
+      principalRef: opaqueRef('hprn'),
+      capabilities: decodeCapabilities,
     })(value, at)
+    const session: HomeownerSession = {
+      principalRef: decoded.principalRef,
+      // The server names no one; the UI renders a neutral "Signed in".
+      displayName: null,
+      isSynthetic: false,
+    }
+    return { kind: 'signed_in', session, capabilities: decoded.capabilities }
   }
   return fail(at, 'kind signed_out|signed_in')
 }
 
-export const decodeHomeSummary: Decoder<HomeSummary> = object<HomeSummary>({
-  homeRef: opaqueRef('hhom'),
-  alias: string,
-  locality: string,
-  projectCount: integer,
-  openMaintenanceCount: integer,
-  isSynthetic: literal(false),
-})
-
-export const decodeHomeFile: Decoder<HomeFile> = object<HomeFile>({
-  homeRef: opaqueRef('hhom'),
-  alias: string,
-  locality: string,
-  projectCount: integer,
-  openMaintenanceCount: integer,
-  yearBuilt: nullable(integer),
-  homeType: oneOf(['house', 'townhouse', 'condo', 'other'] as const),
-  keyFacts: array(keyFact),
-  isSynthetic: literal(false),
-})
-
-export const decodeProjectSummary: Decoder<ProjectSummary> = object<ProjectSummary>({
-  projectRef: opaqueRef('hprj'),
-  homeRef: opaqueRef('hhom'),
-  title: string,
-  trade: string,
-  performedOn: calendarDate,
-  status: oneOf(PROJECT_STATUSES) as Decoder<ProjectStatus>,
-  photoCount: integer,
-  documentCount: integer,
-  isSynthetic: literal(false),
-})
-
-const decodePhoto: Decoder<ProjectPhoto> = object<ProjectPhoto>({
-  photoRef: opaqueRef('hphot'),
-  caption: string,
-  art: oneOf(['roof', 'gutter', 'window', 'interior', 'exterior'] as const),
-  takenOn: calendarDate,
-  isSynthetic: literal(false),
-})
-
-export const decodeDocumentSummary: Decoder<DocumentSummary> = object<DocumentSummary>({
-  documentRef: opaqueRef('hdoc'),
-  homeRef: opaqueRef('hhom'),
-  projectRef: nullable(opaqueRef('hprj')),
-  title: string,
-  kind: oneOf(['contract', 'invoice', 'warranty', 'photo_set', 'permit', 'manual'] as const),
-  addedOn: calendarDate,
-  pages: integer,
-  isSynthetic: literal(false),
-})
-
-export const decodeWarranty: Decoder<Warranty> = object<Warranty>({
-  warrantyRef: opaqueRef('hwar'),
-  homeRef: opaqueRef('hhom'),
-  projectRef: nullable(opaqueRef('hprj')),
-  coverage: string,
-  issuedBy: string,
-  startsOn: calendarDate,
-  endsOn: calendarDate,
-  isSynthetic: literal(false),
-})
-
-export const decodeProject: Decoder<Project> = object<Project>({
-  projectRef: opaqueRef('hprj'),
-  homeRef: opaqueRef('hhom'),
-  title: string,
-  trade: string,
-  performedOn: calendarDate,
-  status: oneOf(PROJECT_STATUSES) as Decoder<ProjectStatus>,
-  photoCount: integer,
-  documentCount: integer,
-  summary: string,
-  contractor: string,
-  materials: array(keyFact),
-  photos: array(decodePhoto),
-  documents: array(decodeDocumentSummary),
-  warranty: nullable(decodeWarranty),
-  isSynthetic: literal(false),
-})
-
-export const decodeTimelineEntry: Decoder<TimelineEntry> = (value, at) => {
-  const entry = object<TimelineEntry>({
-    entryRef: string,
+/** homeownerApiHomeSummarySchema: four fields, no counts, no markers. */
+export const decodeServerHomeSummary: Decoder<ServerHomeSummary> = (value, at) => {
+  const decoded = object<Omit<ServerHomeSummary, 'source'>>({
     homeRef: opaqueRef('hhom'),
-    kind: oneOf(['project', 'document', 'warranty', 'maintenance', 'home'] as const),
-    on: calendarDate,
-    title: string,
-    detail: string,
-    href: nullable(string),
-    isSynthetic: literal(false),
+    displayLabel: string,
+    privateLocationLabel: string,
+    relationshipLabel: oneOf(RELATIONSHIP_LABELS),
   })(value, at)
-  // A timeline href is an app-internal route or nothing. A server must never
-  // steer the client to an absolute URL, a protocol, or another origin.
-  if (entry.href !== null && !/^\/home\//.test(entry.href)) {
-    throw new WireError(`${at}.href: only app-internal /home/ routes are accepted`)
-  }
-  return entry
+  return { source: 'server', ...decoded }
 }
 
-export const decodeMaintenanceItem: Decoder<MaintenanceItem> = object<MaintenanceItem>({
-  itemRef: opaqueRef('hmnt'),
-  homeRef: opaqueRef('hhom'),
-  title: string,
-  cadence: string,
-  dueInSeason: string,
-  state: oneOf(['upcoming', 'done'] as const),
-  isSynthetic: literal(false),
-})
-
-export const decodeMagicLinkAccepted: Decoder<{ readonly accepted: true }> =
-  object<{ accepted: true }>({ accepted: literal(true) })
+/** homeownerApiHomeViewSchema: the summary plus exactly the supplied counts. */
+export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
+  const decoded = object<Omit<ServerHomeView, 'source'>>({
+    homeRef: opaqueRef('hhom'),
+    displayLabel: string,
+    privateLocationLabel: string,
+    relationshipLabel: oneOf(RELATIONSHIP_LABELS),
+    projectCount: countInt,
+    documentCount: countInt,
+    warrantyCount: countInt,
+    maintenanceCount: countInt,
+    updatedAt: utcDatetime,
+  })(value, at)
+  return { source: 'server', ...decoded }
+}
 
 export const decodeList = array
-export { object as decodeObject, string as decodeString }
 
 /** Unwrap the `{ data: … }` envelope; any sibling key rejects the response. */
 export function unwrapEnvelope(body: unknown): unknown {

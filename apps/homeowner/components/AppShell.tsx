@@ -8,7 +8,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { SYNTHETIC_NOTICE } from '../lib/port/types.ts'
+import { SYNTHETIC_NOTICE, homeLabel } from '../lib/port/types.ts'
 import { usePort, usePortMode, useSession } from '../lib/port/provider.tsx'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { Skeleton, UnauthorizedState } from './states.tsx'
@@ -65,7 +65,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
     )
   }
 
-  const alias = home.status === 'ready' ? home.value.alias : '…'
+  const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
 
   return (
     <div className="shell">
@@ -101,7 +101,11 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           ))}
         </div>
         <div className="rail__foot">
-          <span className="mono">Signed in as {session.session.displayName}</span>
+          <span className="mono">
+            {session.session.displayName
+              ? `Signed in as ${session.session.displayName}`
+              : 'Signed in'}
+          </span>
           {mode === 'synthetic'
             ? <span className="mono">Demo session — memory only</span>
             : null}

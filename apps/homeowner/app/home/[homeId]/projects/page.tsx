@@ -67,6 +67,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
         </ul>
       )}
 
+      {mode === 'remote' ? null : (
       <details className="panel">
         <summary style={{ fontWeight: 650, cursor: 'pointer' }}>{mode === 'synthetic' ? 'Record a project (demo)' : 'Record a project'}</summary>
         {mode === 'synthetic' ? (
@@ -116,6 +117,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
           </div>
         </form>
       </details>
+      )}
     </div>
   )
 }

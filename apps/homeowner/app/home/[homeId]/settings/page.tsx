@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { ErrorState, Skeleton } from '../../../../components/states.tsx'
-import { PORT_IMPLEMENTATION_STATUS } from '../../../../lib/port/types.ts'
+import { PORT_IMPLEMENTATION_STATUS, homeLabel, homeLocality } from '../../../../lib/port/types.ts'
 
 /**
  * Account and home settings. Nearly everything here is honestly disabled:
@@ -38,10 +38,17 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
         <div className="panel__head"><h2 id="account-settings">Account</h2></div>
         {session.kind === 'signed_in' ? (
           <div className="stack" style={{ ['--stack-gap' as never]: '0.6rem' }}>
-            <p style={{ fontWeight: 650 }}>{session.session.displayName}</p>
+            <p style={{ fontWeight: 650 }}>{session.session.displayName ?? 'Signed in'}</p>
             <p className="mono">{session.session.principalRef.slice(0, 16)}…{mode === 'synthetic' ? ' · demo session, memory only' : ''}</p>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
+              {mode === 'remote' ? (
+                <button type="button" className="btn btn--quiet" disabled
+                  title="The sign-out route is not defined yet">
+                  Sign out — not available yet
+                </button>
+              ) : (
+                <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
+              )}
               <Link className="btn btn--quiet" href="/homes">Switch home</Link>
             </div>
           </div>
@@ -56,12 +63,12 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
           <div className="stack" style={{ ['--stack-gap' as never]: '0.8rem' }}>
             <div className="field">
               <label htmlFor="alias">Alias</label>
-              <input id="alias" type="text" defaultValue={home.state.value.alias} disabled />
+              <input id="alias" type="text" defaultValue={homeLabel(home.state.value)} disabled />
               <span className="field__hint">Renaming is not wired in the demo shell.</span>
             </div>
             <div className="field">
               <label htmlFor="area">Area</label>
-              <input id="area" type="text" defaultValue={home.state.value.locality} disabled />
+              <input id="area" type="text" defaultValue={homeLocality(home.state.value)} disabled />
             </div>
             <button type="button" className="btn btn--primary" disabled title="Saving is not built yet">
               Save changes — not built yet

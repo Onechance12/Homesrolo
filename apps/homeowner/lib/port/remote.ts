@@ -1,29 +1,34 @@
 /**
  * REMOTE ADAPTER — HomeownerDataPort over the same-origin /api/v1 JSON wire.
  *
- * Enabled only when the runtime mode resolves to 'remote' (see mode.ts; the
- * default is synthetic and unknown values fail closed). The adapter is a thin
- * composition: build a request, hand it to the transport, map the status, run
- * the strict decoder. It holds no state, invents no data, and identifies
- * nobody — the session is whatever the server's cookie says it is.
+ * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
+ * server defines THREE reads, and this adapter operates exactly those:
  *
- * Server-shape assumptions this client makes (documented in the PR for Codex;
- * the decoders in wire.ts enforce them exactly):
- *   - success bodies are `{ "data": ... }` with no sibling keys
- *   - DTO field names match lib/port/types.ts
- *   - opaque refs use the homeowner-runtime.v1 prefixes
- *   - server records carry isSynthetic: false explicitly
+ *   GET /api/v1/session          → decodeSession
+ *   GET /api/v1/homes            → decodeServerHomeSummary[]
+ *   GET /api/v1/homes/{homeRef}  → decodeServerHomeView
+ *
+ * Every other port method — magic link, sign-out, home creation, projects,
+ * documents, warranties, timeline, maintenance, all writes — returns
+ * 'unavailable' WITHOUT building a request, because the server has not
+ * defined those routes and this client does not decode guessed DTOs. When the
+ * server defines a route, the adapter gains it together with its decoder.
+ *
+ * Enabled only when the runtime mode resolves to 'remote' (mode.ts; default
+ * synthetic, unknown values fail closed). The adapter holds no state, invents
+ * no data, and identifies nobody — the session is whatever the server's
+ * cookie resolves to. The browser never sends a principal ref, provider id,
+ * raw storage location, or authority claim.
  */
 
-import type {
-  AddProjectInput, CreateHomeInput, HomeownerDataPort, HomeownerSession,
-  PortResult, SessionState,
+import {
+  NO_CAPABILITIES,
+  type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
 } from './types.ts'
 import type { JsonTransport, TransportReply, TransportRequest } from './transport.ts'
 import {
-  decodeDocumentSummary, decodeHomeFile, decodeHomeSummary, decodeList,
-  decodeMagicLinkAccepted, decodeMaintenanceItem, decodeProject, decodeProjectSummary,
-  decodeSession, decodeTimelineEntry, decodeWarranty, portErrorForStatus, unwrapEnvelope,
+  decodeList, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
 const API = '/api/v1'
@@ -34,11 +39,15 @@ function refSegment(candidate: string): string | null {
   return REF.test(candidate) ? candidate : null
 }
 
+const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
+  ok: false as const,
+  error: 'unavailable' as const,
+})
+
 export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
   async function call<T>(
     request: TransportRequest,
     decode: (value: unknown, at: string) => T,
-    okStatuses: readonly number[] = [200],
   ): Promise<PortResult<T>> {
     let reply: TransportReply
     try {
@@ -47,7 +56,7 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return { ok: false, error: 'unavailable' }
     }
     if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
-    if (!okStatuses.includes(reply.status)) {
+    if (reply.status !== 200) {
       return { ok: false, error: portErrorForStatus(reply.status) }
     }
     try {
@@ -63,9 +72,9 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
     async getSession(): Promise<SessionState> {
       const result = await call({ method: 'GET', path: `${API}/session` }, decodeSession)
       if (result.ok) return result.value
-      // A session read that fails in any way is a signed-out UI with no real
+      // A session read that fails in any way is a signed-out UI with no
       // capabilities — never a guessed session.
-      return { kind: 'signed_out', capabilities: { magicLinkSignIn: false } }
+      return { kind: 'signed_out', capabilities: NO_CAPABILITIES }
     },
 
     async enterDemoSession(): Promise<HomeownerSession> {
@@ -73,99 +82,36 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       throw new Error('enterDemoSession is synthetic-mode only')
     },
 
-    async requestMagicLink(email: string) {
-      return call(
-        { method: 'POST', path: `${API}/session/magic-link`, body: { email } },
-        decodeMagicLinkAccepted,
-        [200, 202],
-      )
-    },
-
-    async signOut() {
-      await call({ method: 'DELETE', path: `${API}/session` }, () => null, [200, 204])
-    },
-
     async listHomes() {
-      return call({ method: 'GET', path: `${API}/homes` }, decodeList(decodeHomeSummary))
+      return call({ method: 'GET', path: `${API}/homes` }, decodeList(decodeServerHomeSummary))
     },
 
     async getHome(homeRef) {
       const ref = refSegment(homeRef)
       if (!ref) return { ok: false, error: 'not_found' }
-      return call({ method: 'GET', path: `${API}/homes/${ref}` }, decodeHomeFile)
+      return call({ method: 'GET', path: `${API}/homes/${ref}` }, decodeServerHomeView)
     },
 
-    async createHome(input: CreateHomeInput) {
-      return call(
-        { method: 'POST', path: `${API}/homes`, body: input },
-        decodeHomeSummary,
-        [200, 201],
-      )
+    // --- routes the server has not defined: unavailable, no request built ----
+
+    async requestMagicLink() {
+      // The session capability is false and no route exists; the sign-in form
+      // is hidden, and even a direct call refuses without touching the wire.
+      return UNDEFINED_ROUTE
     },
 
-    async listProjects(homeRef) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${ref}/projects` },
-        decodeList(decodeProjectSummary),
-      )
+    async signOut() {
+      // No sign-out route is defined yet. The UI disables the control in
+      // remote mode; this is the belt to that suspender.
     },
 
-    async getProject(homeRef, projectRef) {
-      const home = refSegment(homeRef)
-      const project = refSegment(projectRef)
-      if (!home || !project) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${home}/projects/${project}` },
-        decodeProject,
-      )
-    },
-
-    async addProject(homeRef, input: AddProjectInput) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'POST', path: `${API}/homes/${ref}/projects`, body: input },
-        decodeProjectSummary,
-        [200, 201],
-      )
-    },
-
-    async listDocuments(homeRef) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${ref}/documents` },
-        decodeList(decodeDocumentSummary),
-      )
-    },
-
-    async listWarranties(homeRef) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${ref}/warranties` },
-        decodeList(decodeWarranty),
-      )
-    },
-
-    async listTimeline(homeRef) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${ref}/timeline` },
-        decodeList(decodeTimelineEntry),
-      )
-    },
-
-    async listMaintenance(homeRef) {
-      const ref = refSegment(homeRef)
-      if (!ref) return { ok: false, error: 'not_found' }
-      return call(
-        { method: 'GET', path: `${API}/homes/${ref}/maintenance` },
-        decodeList(decodeMaintenanceItem),
-      )
-    },
+    async createHome() { return UNDEFINED_ROUTE },
+    async listProjects() { return UNDEFINED_ROUTE },
+    async getProject() { return UNDEFINED_ROUTE },
+    async addProject() { return UNDEFINED_ROUTE },
+    async listDocuments() { return UNDEFINED_ROUTE },
+    async listWarranties() { return UNDEFINED_ROUTE },
+    async listTimeline() { return UNDEFINED_ROUTE },
+    async listMaintenance() { return UNDEFINED_ROUTE },
   }
 }

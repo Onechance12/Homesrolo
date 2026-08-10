@@ -17,9 +17,11 @@ import {
   BIRCH_REF, COTTAGE_REF, FIXTURE_HOMES, FIXTURE_MAINTENANCE,
   FIXTURE_PROJECTS, FIXTURE_WARRANTIES, allDocuments, projectSummaries, timelineFor,
 } from '../fixtures/homes.ts'
-import type {
-  AddProjectInput, CreateHomeInput, HomeFile, HomeSummary, HomeownerDataPort,
-  HomeownerSession, PortResult, Project, ProjectSummary, SessionState,
+import {
+  NO_CAPABILITIES,
+  type AddProjectInput, type CreateHomeInput, type HomeFile, type HomeListEntry,
+  type HomeSummary, type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
+  type PortResult, type Project, type ProjectSummary, type SessionState,
 } from './types.ts'
 
 const LATENCY_MS = 350
@@ -54,8 +56,8 @@ function requireSession<T>(): PortResult<T> | null {
 export const syntheticPort: HomeownerDataPort = {
   async getSession(): Promise<SessionState> {
     await wait()
-    // The demo offers no real sign-in, and says so in its capabilities.
-    const capabilities = { magicLinkSignIn: false }
+    // The demo offers nothing real, and says so in its capabilities.
+    const capabilities = NO_CAPABILITIES
     return memory.session
       ? { kind: 'signed_in', session: memory.session, capabilities }
       : { kind: 'signed_out', capabilities }
@@ -85,19 +87,20 @@ export const syntheticPort: HomeownerDataPort = {
 
   async listHomes() {
     await wait()
-    const gate = requireSession<readonly HomeSummary[]>()
+    const gate = requireSession<readonly HomeListEntry[]>()
     if (gate) return gate
     return ok(homes().map(({ homeRef, alias, locality, projectCount, openMaintenanceCount }) => ({
+      source: 'synthetic' as const,
       homeRef, alias, locality, projectCount, openMaintenanceCount, isSynthetic: true as const,
     })))
   },
 
   async getHome(homeRef) {
     await wait()
-    const gate = requireSession<HomeFile>()
+    const gate = requireSession<HomeViewEntry>()
     if (gate) return gate
     const home = homes().find(h => h.homeRef === homeRef)
-    return home ? ok(home) : err('not_found')
+    return home ? ok({ source: 'synthetic' as const, ...home }) : err('not_found')
   },
 
   async createHome(input: CreateHomeInput) {

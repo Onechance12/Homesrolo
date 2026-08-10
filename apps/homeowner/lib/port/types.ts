@@ -36,12 +36,25 @@ export const SYNTHETIC_NOTICE =
 // --- session ------------------------------------------------------------------
 
 /**
- * What sign-in the server actually offers, reported by GET /api/v1/session.
- * The synthetic adapter always reports false: the demo offers no real entry.
+ * What the server actually offers, reported by GET /api/v1/session — exactly
+ * the five booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
   readonly magicLinkSignIn: boolean
+  readonly persistence: boolean
+  readonly uploads: boolean
+  readonly invitations: boolean
+  readonly sharing: boolean
 }
+
+export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
+  magicLinkSignIn: false,
+  persistence: false,
+  uploads: false,
+  invitations: false,
+  sharing: false,
+})
 
 export type SessionState =
   | { readonly kind: 'signed_out'; readonly capabilities: SignInCapabilities }
@@ -55,7 +68,12 @@ export type SessionState =
 export interface HomeownerSession {
   /** Opaque principal reference; hprn_ to match homeowner-runtime.v1. */
   readonly principalRef: string
-  readonly displayName: string
+  /**
+   * The server session carries no display name (homeowner-api.v1 exposes only
+   * the principal ref); null renders as a neutral "Signed in" label. The
+   * synthetic adapter always supplies one.
+   */
+  readonly displayName: string | null
   /**
    * True for every record the synthetic adapter mints (tests pin this), false
    * only when a real server said so. The browser never invents real data.
@@ -64,6 +82,40 @@ export interface HomeownerSession {
 }
 
 // --- the home file ------------------------------------------------------------
+
+/** homeowner-runtime.v1 membership labels, rendered verbatim as provenance. */
+export type RelationshipLabel = 'claimed_unverified' | 'verified_controller' | 'invited_participant'
+
+/**
+ * The server's home summary — exactly HomeownerApiHomeSummary from
+ * homeowner-api.v1, no counts, no synthetic marker, nothing guessed.
+ */
+export interface ServerHomeSummary {
+  readonly source: 'server'
+  readonly homeRef: string
+  readonly displayLabel: string
+  readonly privateLocationLabel: string
+  readonly relationshipLabel: RelationshipLabel
+}
+
+/** The server's home view — the summary plus the counts it actually supplies. */
+export interface ServerHomeView extends Omit<ServerHomeSummary, 'source'> {
+  readonly source: 'server'
+  readonly projectCount: number
+  readonly documentCount: number
+  readonly warrantyCount: number
+  readonly maintenanceCount: number
+  readonly updatedAt: string
+}
+
+export type HomeListEntry = ({ readonly source: 'synthetic' } & HomeSummary) | ServerHomeSummary
+export type HomeViewEntry = ({ readonly source: 'synthetic' } & HomeFile) | ServerHomeView
+
+/** One label per entry, whichever side minted it. */
+export const homeLabel = (entry: HomeListEntry | HomeViewEntry): string =>
+  entry.source === 'server' ? entry.displayLabel : entry.alias
+export const homeLocality = (entry: HomeListEntry | HomeViewEntry): string =>
+  entry.source === 'server' ? entry.privateLocationLabel : entry.locality
 
 export interface HomeSummary {
   readonly homeRef: string
@@ -219,8 +271,8 @@ export interface HomeownerDataPort {
   requestMagicLink(email: string): Promise<PortResult<{ readonly accepted: true }>>
   signOut(): Promise<void>
 
-  listHomes(): Promise<PortResult<readonly HomeSummary[]>>
-  getHome(homeRef: string): Promise<PortResult<HomeFile>>
+  listHomes(): Promise<PortResult<readonly HomeListEntry[]>>
+  getHome(homeRef: string): Promise<PortResult<HomeViewEntry>>
   createHome(input: CreateHomeInput): Promise<PortResult<HomeSummary>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>

@@ -5,6 +5,8 @@ import { use } from 'react'
 import { usePort, usePortMode } from '../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../components/states.tsx'
+import { RELATIONSHIP_COPY } from '../../../components/relationship.ts'
+import { homeLabel, homeLocality } from '../../../lib/port/types.ts'
 
 /**
  * The home dashboard: the front page of the property's file. A masthead that
@@ -37,12 +39,16 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   const count = (s: { status: string; value?: unknown }) =>
     s.status === 'ready' && Array.isArray(s.value) ? s.value.length : null
 
-  const projectCount = count(projects.state)
-  const documentCount = count(documents.state)
-  const warrantyCount = count(warranties.state)
-  const upcoming = maintenance.state.status === 'ready'
-    ? maintenance.state.value.filter(item => item.state === 'upcoming').length
-    : null
+  // Synthetic counts come from listing the demo records; server counts come
+  // from the home view itself, because the list routes do not exist yet.
+  const projectCount = file.source === 'server' ? file.projectCount : count(projects.state)
+  const documentCount = file.source === 'server' ? file.documentCount : count(documents.state)
+  const warrantyCount = file.source === 'server' ? file.warrantyCount : count(warranties.state)
+  const upcoming = file.source === 'server'
+    ? file.maintenanceCount
+    : maintenance.state.status === 'ready'
+      ? maintenance.state.value.filter(item => item.state === 'upcoming').length
+      : null
 
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
@@ -51,16 +57,31 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
           <span>Home file</span>
           <span aria-hidden="true">{file.homeRef.slice(0, 14)}…</span>
         </p>
-        <h1>{file.alias}</h1>
-        <p className="filehead__where">{file.locality}</p>
-        <dl className="filehead__facts">
-          {file.keyFacts.map(fact => (
-            <div key={fact.label}>
-              <dt>{fact.label}</dt>
-              <dd>{fact.value}</dd>
+        <h1>{homeLabel(file)}</h1>
+        <p className="filehead__where">{homeLocality(file)}</p>
+        {file.source === 'synthetic' ? (
+          <dl className="filehead__facts">
+            {file.keyFacts.map(fact => (
+              <div key={fact.label}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          // The server view supplies exactly these facts and no others; nothing
+          // here is invented to fill the row out.
+          <dl className="filehead__facts">
+            <div>
+              <dt>Relationship</dt>
+              <dd>{RELATIONSHIP_COPY[file.relationshipLabel]}</dd>
             </div>
-          ))}
-        </dl>
+            <div>
+              <dt>Updated</dt>
+              <dd>{file.updatedAt.slice(0, 10)}</dd>
+            </div>
+          </dl>
+        )}
       </header>
 
       <dl className="cardgrid cardgrid--2 cardgrid--4" style={{ margin: 0 }}>
@@ -91,6 +112,13 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
           <h2 id="record-so-far">The record so far</h2>
           <Link className="panel__more" href={`/home/${homeId}/timeline`}>Full timeline →</Link>
         </div>
+        {file.source === 'server' ? (
+          <EmptyState
+            title="The record view is not available yet"
+            body="The server does not serve the timeline route yet. The counts above are live; the entries arrive with that route."
+          />
+        ) : (
+          <>
         {timeline.state.status === 'loading' && <Skeleton lines={4} label="Loading the record" />}
         {timeline.state.status === 'error' && <ErrorState retry={timeline.retry} error={timeline.state.status === 'error' ? timeline.state.error : undefined} />}
         {timeline.state.status === 'empty' && (
@@ -112,6 +140,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
               </li>
             ))}
           </ol>
+        )}
+          </>
         )}
       </section>
 

@@ -2,17 +2,18 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolvePortMode } from '../port/mode.ts'
 import { createRemotePort } from '../port/remote.ts'
-import { portErrorForStatus, unwrapEnvelope, WireError, decodeSession } from '../port/wire.ts'
+import {
+  EXPECTED_API_VERSION, WireError, decodeSession, portErrorForStatus, unwrapEnvelope,
+} from '../port/wire.ts'
 import type { JsonTransport, TransportRequest } from '../port/transport.ts'
 
 /**
- * The remote adapter under a fake transport: no network exists anywhere in
- * this suite, which is exactly how the adapter is meant to be exercised.
+ * The remote adapter under a fake transport, against the EXACT payloads of
+ * homeowner-api.v1 (PR #8). No network exists anywhere in this suite.
  */
 
 const REF = (prefix: string, c: string) => `${prefix}_${c.repeat(43)}`
 const HOME = REF('hhom', 'b')
-const PROJECT = REF('hprj', 'r')
 
 const data = (value: unknown) => ({ kind: 'reply' as const, status: 200, body: { data: value } })
 
@@ -31,9 +32,40 @@ function recordingTransport(replies: Record<string, unknown>) {
   return { transport, requests }
 }
 
-const wireHome = {
-  homeRef: HOME, alias: 'Wire House', locality: 'Wire Metro',
-  projectCount: 1, openMaintenanceCount: 0, isSynthetic: false,
+/** Exactly homeownerApiCapabilitiesSchema. */
+const CAPABILITIES = {
+  magicLinkSignIn: false,
+  persistence: false,
+  uploads: false,
+  invitations: false,
+  sharing: false,
+}
+
+/** Exactly homeownerApiSessionSchema, signed_out and signed_in. */
+const SIGNED_OUT = { apiVersion: EXPECTED_API_VERSION, kind: 'signed_out', capabilities: CAPABILITIES }
+const SIGNED_IN = {
+  apiVersion: EXPECTED_API_VERSION,
+  kind: 'signed_in',
+  principalRef: REF('hprn', 'p'),
+  capabilities: CAPABILITIES,
+}
+
+/** Exactly homeownerApiHomeSummarySchema. */
+const HOME_SUMMARY = {
+  homeRef: HOME,
+  displayLabel: 'The Wire House',
+  privateLocationLabel: 'Wire Metro — North',
+  relationshipLabel: 'claimed_unverified',
+}
+
+/** Exactly homeownerApiHomeViewSchema. */
+const HOME_VIEW = {
+  ...HOME_SUMMARY,
+  projectCount: 3,
+  documentCount: 8,
+  warrantyCount: 2,
+  maintenanceCount: 4,
+  updatedAt: '2026-08-10T16:00:00Z',
 }
 
 // --- mode selection -----------------------------------------------------------
@@ -53,6 +85,7 @@ test('every HTTP status maps to exactly the agreed PortError', () => {
   assert.equal(portErrorForStatus(404), 'not_found')
   assert.equal(portErrorForStatus(409), 'conflict')
   assert.equal(portErrorForStatus(422), 'invalid')
+  assert.equal(portErrorForStatus(400), 'invalid')
   assert.equal(portErrorForStatus(429), 'rate_limited')
   for (const status of [500, 502, 503, 301, 204, 418]) {
     assert.equal(portErrorForStatus(status), 'unavailable', `status ${status}`)
@@ -72,9 +105,9 @@ test('the adapter surfaces mapped errors and treats network failure as unavailab
   assert.deepEqual(await throwing.listHomes(), { ok: false, error: 'unavailable' })
 })
 
-// --- strict decoding ----------------------------------------------------------
+// --- envelope -----------------------------------------------------------------
 
-test('the envelope accepts exactly one key, data', () => {
+test('the envelope accepts exactly one key, data (a route-adapter requirement)', () => {
   assert.equal(unwrapEnvelope({ data: 1 }), 1)
   assert.throws(() => unwrapEnvelope({ data: 1, extra: 2 }), WireError)
   assert.throws(() => unwrapEnvelope({ result: 1 }), WireError)
@@ -82,102 +115,169 @@ test('the envelope accepts exactly one key, data', () => {
   assert.throws(() => unwrapEnvelope('data'), WireError)
 })
 
-test('unknown keys, malformed refs, and impossible dates reject the response', async () => {
-  const good = createRemotePort(transportReturning(200, { data: [wireHome] }))
-  const okResult = await good.listHomes()
-  assert.ok(okResult.ok)
+// --- session: exact PR #8 shape -----------------------------------------------
 
-  const cases: readonly unknown[] = [
-    [{ ...wireHome, surprise: 'key' }],                        // unknown key
-    [{ ...wireHome, homeRef: 'hhom_short' }],                  // malformed ref
-    [{ ...wireHome, homeRef: REF('hwrk', 'b') }],              // wrong prefix
-    [{ ...wireHome, isSynthetic: true }],                      // server claiming synthetic
-    [{ ...wireHome, projectCount: '1' }],                      // wrong type
-  ]
-  for (const body of cases) {
-    const port = createRemotePort(transportReturning(200, { data: body }))
-    const result = await port.listHomes()
-    assert.deepEqual(result, { ok: false, error: 'invalid' }, JSON.stringify(body).slice(0, 60))
-  }
+test('the session decoder accepts exactly the homeowner-api.v1 shapes', async () => {
+  const out = decodeSession(SIGNED_OUT, 'data')
+  assert.equal(out.kind, 'signed_out')
+  assert.deepEqual(out.capabilities, CAPABILITIES)
 
-  const badDate = createRemotePort(transportReturning(200, {
-    data: [{
-      projectRef: PROJECT, homeRef: HOME, title: 'X', trade: 'Y',
-      performedOn: '2026-02-30', status: 'completed', photoCount: 0, documentCount: 0,
-      isSynthetic: false,
-    }],
-  }))
-  assert.deepEqual(await badDate.listProjects(HOME), { ok: false, error: 'invalid' })
+  const inn = decodeSession(SIGNED_IN, 'data')
+  assert.equal(inn.kind, 'signed_in')
+  if (inn.kind !== 'signed_in') return
+  assert.equal(inn.session.principalRef, SIGNED_IN.principalRef)
+  assert.equal(inn.session.displayName, null,
+    'the server names no one; the UI renders a neutral label')
+  assert.equal(inn.session.isSynthetic, false)
 })
 
-test('a timeline href from the server must be an app-internal route', async () => {
-  const entry = (href: string | null) => ([{
-    entryRef: 'e1', homeRef: HOME, kind: 'project', on: '2026-05-18',
-    title: 'T', detail: 'D', href, isSynthetic: false,
-  }])
-  const internal = createRemotePort(transportReturning(200, { data: entry(`/home/${HOME}/projects/${PROJECT}`) }))
-  assert.ok((await internal.listTimeline(HOME)).ok)
-  for (const hostile of ['https://evil.example/x', '//evil.example', 'javascript:alert(1)', '/companies/x']) {
-    const port = createRemotePort(transportReturning(200, { data: entry(hostile) }))
-    assert.deepEqual(await port.listTimeline(HOME), { ok: false, error: 'invalid' }, hostile)
-  }
-})
+test('sessions missing apiVersion, capability keys, or carrying extras are rejected', () => {
+  const { apiVersion: _dropped, ...noVersion } = SIGNED_OUT
+  assert.throws(() => decodeSession(noVersion, 'data'), WireError, 'apiVersion is required')
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, apiVersion: 'homeowner-api.v2' }, 'data'),
+    WireError, 'a different version is not silently accepted')
 
-test('the session decoder is strict and a failed session read is signed_out', async () => {
-  const live = decodeSession({
-    kind: 'signed_out', capabilities: { magicLinkSignIn: true },
-  }, 'data')
-  assert.equal(live.kind, 'signed_out')
-  assert.equal(live.capabilities.magicLinkSignIn, true)
+  const { persistence: _p, ...fourCaps } = CAPABILITIES
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: fourCaps }, 'data'),
+    WireError, 'all five capability booleans are required')
+  assert.throws(() => decodeSession(
+    { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
+  ), WireError, 'unknown capability keys are rejected')
 
-  assert.throws(() => decodeSession({ kind: 'signed_out' }, 'data'), WireError,
-    'capabilities are required, not assumed')
+  // The OLD guessed Phase-2 payload must now be rejected, not tolerated.
   assert.throws(() => decodeSession({
-    kind: 'signed_in', capabilities: { magicLinkSignIn: true },
-    session: { principalRef: REF('hprn', 'p'), displayName: 'A', isSynthetic: true },
-  }, 'data'), WireError, 'a server session claiming to be synthetic is malformed')
+    kind: 'signed_in',
+    capabilities: { magicLinkSignIn: true },
+    session: { principalRef: REF('hprn', 'p'), displayName: 'A', isSynthetic: false },
+  }, 'data'), WireError, 'the pre-PR#8 guessed shape is dead')
 
-  const broken = createRemotePort(transportReturning(200, { data: { kind: 'weird' } }))
-  const session = await broken.getSession()
-  assert.equal(session.kind, 'signed_out')
-  assert.equal(session.capabilities.magicLinkSignIn, false,
-    'a failed session read reports no capabilities rather than guessed ones')
+  assert.throws(() => decodeSession({ ...SIGNED_IN, displayName: 'Someone' }, 'data'),
+    WireError, 'the server does not send a display name and the client does not accept one')
+  assert.throws(() => decodeSession({ ...SIGNED_IN, isSynthetic: false }, 'data'),
+    WireError, 'no synthetic marker exists on the wire')
+  assert.throws(() => decodeSession({ ...SIGNED_IN, principalRef: 'hprn_short' }, 'data'),
+    WireError, 'malformed principal refs are rejected')
+})
+
+test('a failed or malformed session read is signed_out with no capabilities', async () => {
+  for (const body of [{ data: { kind: 'weird' } }, { data: SIGNED_OUT, extra: 1 }, undefined]) {
+    const port = createRemotePort(transportReturning(200, body))
+    const session = await port.getSession()
+    assert.equal(session.kind, 'signed_out')
+    assert.deepEqual(session.capabilities, CAPABILITIES,
+      'no capability is guessed on from a broken read')
+  }
+})
+
+// --- homes: exact PR #8 shapes ------------------------------------------------
+
+test('the home list accepts exactly HomeownerApiHomeSummary and nothing more', async () => {
+  const port = createRemotePort(transportReturning(200, { data: [HOME_SUMMARY] }))
+  const result = await port.listHomes()
+  assert.ok(result.ok)
+  if (!result.ok) return
+  const entry = result.value[0]
+  assert.ok(entry)
+  assert.equal(entry.source, 'server')
+  if (entry.source !== 'server') return
+  assert.equal(entry.displayLabel, 'The Wire House')
+  assert.equal(entry.relationshipLabel, 'claimed_unverified')
+
+  // Old guessed shapes and padded shapes are rejected.
+  const rejected: readonly unknown[] = [
+    [{ ...HOME_SUMMARY, projectCount: 3 }],                       // counts are view-only
+    [{ ...HOME_SUMMARY, isSynthetic: false }],                    // no marker on the wire
+    [{ ...HOME_SUMMARY, alias: 'x' }],                            // pre-PR#8 field name
+    [{ homeRef: HOME, alias: 'x', locality: 'y', projectCount: 1, openMaintenanceCount: 0, isSynthetic: false }],
+    [{ ...HOME_SUMMARY, homeRef: REF('hprj', 'b') }],             // wrong prefix
+    [{ ...HOME_SUMMARY, relationshipLabel: 'owner' }],            // unknown label
+    [{ ...HOME_SUMMARY, storageObjectRef: 'hobj_x' }],            // storage internals
+    [{ ...HOME_SUMMARY, providerId: 'auth0|123' }],               // provider identifiers
+  ]
+  for (const body of rejected) {
+    const bad = createRemotePort(transportReturning(200, { data: body }))
+    assert.deepEqual(await bad.listHomes(), { ok: false, error: 'invalid' },
+      JSON.stringify(body).slice(0, 70))
+  }
+})
+
+test('the home view accepts exactly HomeownerApiHomeView', async () => {
+  const port = createRemotePort(transportReturning(200, { data: HOME_VIEW }))
+  const result = await port.getHome(HOME)
+  assert.ok(result.ok)
+  if (!result.ok) return
+  assert.equal(result.value.source, 'server')
+  if (result.value.source !== 'server') return
+  assert.equal(result.value.projectCount, 3)
+  assert.equal(result.value.maintenanceCount, 4)
+  assert.equal(result.value.updatedAt, '2026-08-10T16:00:00Z')
+
+  const rejected: readonly unknown[] = [
+    HOME_SUMMARY,                                                  // counts are required on the view
+    { ...HOME_VIEW, yearBuilt: 1987 },                             // pre-PR#8 field
+    { ...HOME_VIEW, keyFacts: [] },                                // pre-PR#8 field
+    { ...HOME_VIEW, homeType: 'house' },                           // pre-PR#8 field
+    { ...HOME_VIEW, projectCount: -1 },                            // negative count
+    { ...HOME_VIEW, updatedAt: '2026-08-10T16:00:00+02:00' },      // offset not allowed
+    { ...HOME_VIEW, updatedAt: '2026-08-10' },                     // date is not a datetime
+  ]
+  for (const body of rejected) {
+    const bad = createRemotePort(transportReturning(200, { data: body }))
+    assert.deepEqual(await bad.getHome(HOME), { ok: false, error: 'invalid' },
+      JSON.stringify(body).slice(0, 70))
+  }
+})
+
+// --- the narrowed surface -----------------------------------------------------
+
+test('undefined routes return unavailable without ever building a request', async () => {
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  const results = await Promise.all([
+    port.requestMagicLink('a@example.com'),
+    port.createHome({ alias: 'A', locality: 'B', homeType: 'house', yearBuilt: null }),
+    port.listProjects(HOME),
+    port.getProject(HOME, REF('hprj', 'r')),
+    port.addProject(HOME, { title: 'T', trade: 'G', performedOn: '2026-08-01', contractor: 'C', summary: 'S' }),
+    port.listDocuments(HOME),
+    port.listWarranties(HOME),
+    port.listTimeline(HOME),
+    port.listMaintenance(HOME),
+  ])
+  for (const result of results) {
+    assert.deepEqual(result, { ok: false, error: 'unavailable' },
+      'a route the server has not defined must refuse, not guess')
+  }
+  await port.signOut()
+  assert.equal(requests.length, 0,
+    'no request may be sent to a route homeowner-api.v1 does not define')
 })
 
 // --- request construction -----------------------------------------------------
 
-test('the browser sends paths and typed bodies, never a principal or authority claim', async () => {
+test('the browser sends validated paths only, never principal identity', async () => {
   const { transport, requests } = recordingTransport({
-    [`GET /api/v1/homes`]: [wireHome],
-    [`GET /api/v1/homes/${HOME}`]: { ...wireHome, yearBuilt: null, homeType: 'house', keyFacts: [] },
-    [`GET /api/v1/homes/${HOME}/projects`]: [],
-    [`GET /api/v1/homes/${HOME}/documents`]: [],
-    [`GET /api/v1/homes/${HOME}/warranties`]: [],
-    [`GET /api/v1/homes/${HOME}/timeline`]: [],
-    [`GET /api/v1/homes/${HOME}/maintenance`]: [],
-    [`POST /api/v1/homes`]: wireHome,
-    [`POST /api/v1/session/magic-link`]: { accepted: true },
+    ['GET /api/v1/homes']: [HOME_SUMMARY],
+    [`GET /api/v1/homes/${HOME}`]: HOME_VIEW,
   })
   const port = createRemotePort(transport)
   await port.getSession()
   await port.listHomes()
   await port.getHome(HOME)
-  await port.listProjects(HOME)
-  await port.listDocuments(HOME)
-  await port.listWarranties(HOME)
-  await port.listTimeline(HOME)
-  await port.listMaintenance(HOME)
-  await port.createHome({ alias: 'A', locality: 'B', homeType: 'house', yearBuilt: null })
-  await port.requestMagicLink('person@example.com')
-  await port.signOut()
 
+  assert.deepEqual(requests.map(r => `${r.method} ${r.path}`), [
+    'GET /api/v1/session',
+    'GET /api/v1/homes',
+    `GET /api/v1/homes/${HOME}`,
+  ])
   for (const request of requests) {
     const wire = JSON.stringify(request)
     assert.ok(request.path.startsWith('/api/v1'), `same-origin path only: ${request.path}`)
     assert.ok(!/^https?:|^\/\//.test(request.path), 'never an absolute URL')
     assert.ok(!wire.includes('hprn_'), 'a principal ref never crosses the wire from the browser')
-    assert.ok(!wire.includes('principal'), 'no principal field is ever sent')
-    assert.ok(!/authoriz|grant|role|provider/i.test(wire), `no authority claim in ${wire.slice(0, 80)}`)
+    assert.ok(!/principal|provider|authoriz|grant|role|storage/i.test(wire),
+      `no identity or authority claim in ${wire.slice(0, 80)}`)
+    assert.equal(request.body, undefined, 'the three defined routes are reads; no body exists')
   }
 })
 
@@ -189,31 +289,6 @@ test('a malformed ref never becomes a request path', async () => {
     assert.deepEqual(result, { ok: false, error: 'not_found' }, hostile)
   }
   assert.equal(requests.length, 0, 'no request may be built from a malformed ref')
-})
-
-// --- magic link ---------------------------------------------------------------
-
-test('magic-link acceptance is only ever what the server said', async () => {
-  const accepted = createRemotePort(transportReturning(202, { data: { accepted: true } }))
-  assert.deepEqual(await accepted.requestMagicLink('a@example.com'),
-    { ok: true, value: { accepted: true } })
-
-  const limited = createRemotePort(transportReturning(429, {}))
-  assert.deepEqual(await limited.requestMagicLink('a@example.com'),
-    { ok: false, error: 'rate_limited' })
-
-  const rejected = createRemotePort(transportReturning(422, {}))
-  assert.deepEqual(await rejected.requestMagicLink('a@example.com'),
-    { ok: false, error: 'invalid' })
-
-  const down = createRemotePort(async () => ({ kind: 'network_failure' as const }))
-  assert.deepEqual(await down.requestMagicLink('a@example.com'),
-    { ok: false, error: 'unavailable' })
-
-  // A 200 with a non-conforming body is not an acceptance.
-  const weird = createRemotePort(transportReturning(200, { data: { accepted: true, sent: 'yes' } }))
-  assert.deepEqual(await weird.requestMagicLink('a@example.com'),
-    { ok: false, error: 'invalid' })
 })
 
 test('the demo doorway does not exist in remote mode', async () => {
