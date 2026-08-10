@@ -114,6 +114,11 @@ export type HomeownerAccessDecision =
       readonly action: HomeownerWorkspaceAction
       readonly recheckedAt: string
     }
+
+export type AuthorizedHomeownerWorkspace = Extract<
+  HomeownerAccessDecision,
+  { readonly authorized: true }
+>
   | {
       readonly authorized: false
       readonly reason:
@@ -247,13 +252,16 @@ export interface HomeownerIdentityPort {
 
 export interface HomeownerRepositoryPort {
   readMembership(principalRef: string, homeRef: string): Promise<HomeownerMembership | null>
-  readHome(homeRef: string): Promise<PrivateHomeProfile | null>
-  listProjects(homeRef: string): Promise<readonly HomeownerProject[]>
-  listArtifactMetadata(homeRef: string): Promise<readonly HomeownerArtifactMetadata[]>
+  readHome(grant: AuthorizedHomeownerWorkspace): Promise<PrivateHomeProfile | null>
+  listProjects(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerProject[]>
+  listArtifactMetadata(
+    grant: AuthorizedHomeownerWorkspace,
+  ): Promise<readonly HomeownerArtifactMetadata[]>
 }
 
 export interface HomeownerPrivateObjectPort {
   readExactObject(input: {
+    readonly grant: AuthorizedHomeownerWorkspace
     readonly storageObjectRef: string
     readonly expectedSha256: string
     readonly maximumBytes: number
