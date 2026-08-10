@@ -5,11 +5,19 @@ import {
   HOMEOWNER_RUNTIME_VERSION,
   HOMEOWNER_RUNTIME_WARNING,
   authorizeHomeownerWorkspace,
+  authorizePrivateHomeCreation,
+  createHomeWorkspaceInputSchema,
+  createHomeownerProjectInputSchema,
   homeownerArtifactMetadataSchema,
+  homeownerMaintenanceSchema,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
+  homeownerWarrantySchema,
+  parseHomeownerMaintenance,
   privateHomeProfileSchema,
   parseHomeownerMembership,
+  parseHomeownerWarranty,
+  requireHomeownerActionGrant,
 } from '../homeowner-runtime.v1.ts'
 
 const body = (character: string) => character.repeat(43).slice(0, 43)
@@ -189,5 +197,129 @@ test('private profile is strict and address-like labels never become canonical I
   assert.throws(() => privateHomeProfileSchema.parse({
     ...profile,
     public: true,
+  }))
+})
+
+test('private home creation requires an active verified principal but proves no ownership', () => {
+  assert.deepEqual(authorizePrivateHomeCreation(principal), {
+    authorized: true,
+    principalRef,
+  })
+  assert.deepEqual(authorizePrivateHomeCreation({ ...principal, emailVerified: false }), {
+    authorized: false,
+    reason: 'email_unverified',
+  })
+  assert.deepEqual(authorizePrivateHomeCreation({ ...principal, status: 'disabled' }), {
+    authorized: false,
+    reason: 'principal_inactive',
+  })
+
+  assert.ok(createHomeWorkspaceInputSchema.parse({
+    commandRef: `hcmd_${body('c')}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'A private location label',
+    requestedAt: now,
+  }))
+  assert.throws(() => createHomeWorkspaceInputSchema.parse({
+    commandRef: `hcmd_${body('c')}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'A private location label',
+    requestedAt: now,
+    verifiedOwner: true,
+  }))
+})
+
+test('project commands use the runtime vocabulary and reject impossible dates', () => {
+  const command = {
+    commandRef: `hcmd_${body('d')}`,
+    title: 'Roof replacement',
+    category: 'roofing' as const,
+    status: 'completed' as const,
+    occurredOn: '2026-05-12',
+    requestedAt: now,
+  }
+  assert.ok(createHomeownerProjectInputSchema.parse(command))
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    status: 'recorded',
+  }))
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    occurredOn: '2026-02-30',
+  }))
+
+  const readGrant = authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'workspace.read',
+    recheckedAt: now,
+  })
+  assert.equal(requireHomeownerActionGrant(readGrant, 'project.create'), null)
+
+  const createGrant = authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'project.create',
+    recheckedAt: now,
+  })
+  assert.equal(requireHomeownerActionGrant(createGrant, 'project.create')?.action, 'project.create')
+})
+
+test('warranty records keep semantic coverage separate from private document bytes', () => {
+  const warranty = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    warrantyRef: `hwty_${body('w')}`,
+    homeRef,
+    projectRef: `hprj_${body('j')}`,
+    controllerPrincipalRef: principalRef,
+    coverageSummary: 'Sample manufacturer coverage',
+    issuerLabel: 'Sample manufacturer',
+    startsOn: '2026-01-01',
+    endsOn: '2036-01-01',
+    documentArtifactRef: `hart_${body('a')}`,
+    createdAt: now,
+    updatedAt: now,
+  }
+  assert.ok(homeownerWarrantySchema.parse(warranty))
+  assert.ok(parseHomeownerWarranty(warranty))
+  assert.throws(() => parseHomeownerWarranty({
+    ...warranty,
+    endsOn: '2025-12-31',
+  }))
+  assert.throws(() => homeownerWarrantySchema.parse({
+    ...warranty,
+    publicUrl: 'https://example.com/warranty.pdf',
+  }))
+})
+
+test('maintenance completion state and timestamp cannot disagree', () => {
+  const maintenance = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    maintenanceRef: `hmnt_${body('t')}`,
+    homeRef,
+    controllerPrincipalRef: principalRef,
+    title: 'Clean gutters',
+    cadence: 'semiannual' as const,
+    dueOn: '2026-10-01',
+    state: 'upcoming' as const,
+    createdAt: now,
+    updatedAt: now,
+  }
+  assert.ok(homeownerMaintenanceSchema.parse(maintenance))
+  assert.ok(parseHomeownerMaintenance(maintenance))
+  assert.throws(() => parseHomeownerMaintenance({
+    ...maintenance,
+    state: 'completed',
+  }))
+  assert.throws(() => parseHomeownerMaintenance({
+    ...maintenance,
+    completedAt: now,
+  }))
+  assert.throws(() => parseHomeownerMaintenance({
+    ...maintenance,
+    state: 'completed',
+    completedAt: '2026-08-10T11:59:59.999Z',
   }))
 })

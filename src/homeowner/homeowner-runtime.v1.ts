@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isRealCalendarDate } from '../contracts/home-file-record.v1.ts'
 
 /**
  * Server-side contracts for the first private HomesRolo homeowner workspace.
@@ -28,6 +29,9 @@ const opaqueRef = (prefix: string) =>
 const utcInstant = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   .refine(value => new Date(value).toISOString() === value, 'must be a canonical UTC instant')
+
+const calendarDate = z.string()
+  .refine(isRealCalendarDate, 'must be a real calendar date')
 
 export const homeownerPrincipalSchema = z.object({
   principalRef: opaqueRef('hprn'),
@@ -85,6 +89,8 @@ export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'artifact.read_metadata',
   'warranty.create',
   'warranty.update',
+  'maintenance.create',
+  'maintenance.update',
 ] as const)
 
 export type HomeownerWorkspaceAction = (typeof HOMEOWNER_WORKSPACE_ACTIONS)[number]
@@ -98,6 +104,8 @@ const MEMBER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
   'artifact.read_metadata',
   'warranty.create',
   'warranty.update',
+  'maintenance.create',
+  'maintenance.update',
 ])
 const VIEWER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
   'workspace.read',
@@ -130,6 +138,17 @@ export type AuthorizedHomeownerWorkspace = Extract<
   HomeownerAccessDecision,
   { readonly authorized: true }
 >
+
+export type AuthorizedHomeownerAction<Action extends HomeownerWorkspaceAction> =
+  Omit<AuthorizedHomeownerWorkspace, 'action'> & { readonly action: Action }
+
+export function requireHomeownerActionGrant<Action extends HomeownerWorkspaceAction>(
+  decision: HomeownerAccessDecision,
+  action: Action,
+): AuthorizedHomeownerAction<Action> | null {
+  if (!decision.authorized || decision.action !== action) return null
+  return { ...decision, action }
+}
 
 /**
  * Derives one exact workspace decision from fresh, server-owned snapshots.
@@ -219,7 +238,7 @@ export const homeownerProjectSchema = z.object({
     'other',
   ]),
   status: z.enum(['planned', 'in_progress', 'completed', 'cancelled']),
-  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  occurredOn: calendarDate.optional(),
   summary: z.string().trim().max(2000).optional(),
   createdAt: utcInstant,
   updatedAt: utcInstant,
@@ -241,9 +260,109 @@ export const homeownerArtifactMetadataSchema = z.object({
   createdAt: utcInstant,
 }).strict()
 
+export const homeownerWarrantySchema = z.object({
+  recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
+  warrantyRef: opaqueRef('hwty'),
+  homeRef: opaqueRef('hhom'),
+  projectRef: opaqueRef('hprj').optional(),
+  controllerPrincipalRef: opaqueRef('hprn'),
+  coverageSummary: z.string().trim().min(1).max(2000),
+  issuerLabel: z.string().trim().min(1).max(160),
+  startsOn: calendarDate,
+  endsOn: calendarDate.optional(),
+  documentArtifactRef: opaqueRef('hart').optional(),
+  createdAt: utcInstant,
+  updatedAt: utcInstant,
+}).strict()
+
+export const homeownerMaintenanceSchema = z.object({
+  recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
+  maintenanceRef: opaqueRef('hmnt'),
+  homeRef: opaqueRef('hhom'),
+  controllerPrincipalRef: opaqueRef('hprn'),
+  title: z.string().trim().min(1).max(160),
+  cadence: z.enum(['one_time', 'monthly', 'quarterly', 'semiannual', 'annual', 'custom']),
+  dueOn: calendarDate,
+  state: z.enum(['upcoming', 'completed', 'dismissed']),
+  completedAt: utcInstant.optional(),
+  createdAt: utcInstant,
+  updatedAt: utcInstant,
+}).strict()
+
+export function parseHomeownerWarranty(input: unknown) {
+  const warranty = homeownerWarrantySchema.parse(input)
+  if (warranty.endsOn && warranty.endsOn < warranty.startsOn) {
+    throw new Error('A warranty may not end before it starts')
+  }
+  if (warranty.updatedAt < warranty.createdAt) {
+    throw new Error('A warranty may not be updated before it was created')
+  }
+  return warranty
+}
+
+export function parseHomeownerMaintenance(input: unknown) {
+  const maintenance = homeownerMaintenanceSchema.parse(input)
+  if (maintenance.state === 'completed' && !maintenance.completedAt) {
+    throw new Error('Completed maintenance must record when it was completed')
+  }
+  if (maintenance.state !== 'completed' && maintenance.completedAt) {
+    throw new Error('Only completed maintenance may carry completedAt')
+  }
+  if (maintenance.completedAt && maintenance.completedAt < maintenance.createdAt) {
+    throw new Error('Maintenance may not be completed before it was created')
+  }
+  if (maintenance.updatedAt < maintenance.createdAt) {
+    throw new Error('Maintenance may not be updated before it was created')
+  }
+  return maintenance
+}
+
 export type PrivateHomeProfile = z.infer<typeof privateHomeProfileSchema>
 export type HomeownerProject = z.infer<typeof homeownerProjectSchema>
 export type HomeownerArtifactMetadata = z.infer<typeof homeownerArtifactMetadataSchema>
+export type HomeownerWarranty = z.infer<typeof homeownerWarrantySchema>
+export type HomeownerMaintenance = z.infer<typeof homeownerMaintenanceSchema>
+
+export const createHomeWorkspaceInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  displayLabel: z.string().trim().min(1).max(80),
+  privateLocationLabel: z.string().trim().min(1).max(200),
+  requestedAt: utcInstant,
+}).strict()
+
+export const createHomeownerProjectInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  title: z.string().trim().min(1).max(120),
+  category: homeownerProjectSchema.shape.category,
+  status: homeownerProjectSchema.shape.status,
+  occurredOn: calendarDate.optional(),
+  summary: z.string().trim().max(2000).optional(),
+  requestedAt: utcInstant,
+}).strict()
+
+export type CreateHomeWorkspaceInput = z.infer<typeof createHomeWorkspaceInputSchema>
+export type CreateHomeownerProjectInput = z.infer<typeof createHomeownerProjectInputSchema>
+
+export type HomeCreationDecision =
+  | { readonly authorized: true; readonly principalRef: string }
+  | {
+      readonly authorized: false
+      readonly reason: 'invalid_authoritative_state' | 'principal_inactive' | 'email_unverified'
+    }
+
+export type AuthorizedHomeownerPrincipal = Extract<
+  HomeCreationDecision,
+  { readonly authorized: true }
+>
+
+/** Creating a private workspace is allowed; it still records claimed_unverified. */
+export function authorizePrivateHomeCreation(principalInput: unknown): HomeCreationDecision {
+  const parsed = homeownerPrincipalSchema.safeParse(principalInput)
+  if (!parsed.success) return { authorized: false, reason: 'invalid_authoritative_state' }
+  if (parsed.data.status !== 'active') return { authorized: false, reason: 'principal_inactive' }
+  if (!parsed.data.emailVerified) return { authorized: false, reason: 'email_unverified' }
+  return { authorized: true, principalRef: parsed.data.principalRef }
+}
 
 /** Adapter surfaces only. Implementations must re-authorize after every read. */
 export interface HomeownerIdentityPort {
@@ -251,12 +370,31 @@ export interface HomeownerIdentityPort {
 }
 
 export interface HomeownerRepositoryPort {
+  listMemberships(
+    authorization: AuthorizedHomeownerPrincipal,
+  ): Promise<readonly HomeownerMembership[]>
   readMembership(principalRef: string, homeRef: string): Promise<HomeownerMembership | null>
   readHome(grant: AuthorizedHomeownerWorkspace): Promise<PrivateHomeProfile | null>
   listProjects(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerProject[]>
   listArtifactMetadata(
     grant: AuthorizedHomeownerWorkspace,
   ): Promise<readonly HomeownerArtifactMetadata[]>
+  listWarranties(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerWarranty[]>
+  listMaintenance(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerMaintenance[]>
+}
+
+export interface HomeownerCommandPort {
+  createPrivateHomeWorkspace(input: {
+    readonly authorization: AuthorizedHomeownerPrincipal
+    readonly command: CreateHomeWorkspaceInput
+  }): Promise<{
+    readonly home: PrivateHomeProfile
+    readonly membership: HomeownerMembership
+  }>
+  createProject(input: {
+    readonly grant: AuthorizedHomeownerAction<'project.create'>
+    readonly command: CreateHomeownerProjectInput
+  }): Promise<HomeownerProject>
 }
 
 export interface HomeownerPrivateObjectPort {
