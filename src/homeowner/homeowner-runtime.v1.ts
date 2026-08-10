@@ -26,9 +26,11 @@ const OPAQUE_BODY = '[A-Za-z0-9_-]{43}'
 const opaqueRef = (prefix: string) =>
   z.string().regex(new RegExp(`^${prefix}_${OPAQUE_BODY}$`))
 
-const utcInstant = z.string()
+export const homeownerUtcInstantSchema = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   .refine(value => new Date(value).toISOString() === value, 'must be a canonical UTC instant')
+
+const utcInstant = homeownerUtcInstantSchema
 
 const calendarDate = z.string()
   .refine(isRealCalendarDate, 'must be a real calendar date')

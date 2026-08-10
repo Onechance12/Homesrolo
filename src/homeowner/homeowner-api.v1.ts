@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
+  homeownerUtcInstantSchema,
   type HomeownerIdentityPort,
   type HomeownerMembership,
   type HomeownerRepositoryPort,
@@ -65,7 +66,7 @@ export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   documentCount: z.number().int().min(0),
   warrantyCount: z.number().int().min(0),
   maintenanceCount: z.number().int().min(0),
-  updatedAt: z.string().datetime({ offset: false }),
+  updatedAt: homeownerUtcInstantSchema,
 }).strict()
 
 export type HomeownerApiHomeView = z.infer<typeof homeownerApiHomeViewSchema>

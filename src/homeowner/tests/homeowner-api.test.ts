@@ -206,4 +206,16 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
   ]) {
     assert.throws(() => homeownerApiHomeViewSchema.parse({ ...base, ...extra }))
   }
+
+  for (const noncanonical of [
+    '2026-08-10T12:00:00Z',
+    '2026-08-10T12:00:00.000000Z',
+    '2026-08-10T12:00:00.000+00:00',
+    '2026-02-30T12:00:00.000Z',
+  ]) {
+    assert.throws(
+      () => homeownerApiHomeViewSchema.parse({ ...base, updatedAt: noncanonical }),
+      `${noncanonical} must not cross the server/client boundary`,
+    )
+  }
 })
