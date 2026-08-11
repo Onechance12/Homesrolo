@@ -20,7 +20,7 @@ import {
 import {
   NO_CAPABILITIES,
   type AddProjectInput, type CreateHomeInput, type HomeFile, type HomeListEntry,
-  type HomeSummary, type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
+  type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
   type PortResult, type Project, type ProjectSummary, type SessionState,
 } from './types.ts'
 
@@ -105,7 +105,7 @@ export const syntheticPort: HomeownerDataPort = {
 
   async createHome(input: CreateHomeInput) {
     await wait()
-    const gate = requireSession<HomeSummary>()
+    const gate = requireSession<HomeListEntry>()
     if (gate) return gate
     const home: HomeFile = {
       homeRef: mint('hhom'),
@@ -123,7 +123,13 @@ export const syntheticPort: HomeownerDataPort = {
       isSynthetic: true,
     }
     memory.createdHomes.push(home)
-    return ok(home)
+    // input.commandRef is ignored here: the demo has no dedupe to serve, and
+    // pretending to honor idempotency would be a claim the mock can't keep.
+    return ok({ source: 'synthetic' as const, ...home })
+  },
+
+  async recordInitialIntake() {
+    return err('unavailable')
   },
 
   async listProjects(homeRef) {
