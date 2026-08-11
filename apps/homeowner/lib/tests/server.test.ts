@@ -67,6 +67,7 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/session/route.ts',
     '../../app/api/v1/homes/route.ts',
     '../../app/api/v1/homes/[homeRef]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/intake/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
@@ -170,6 +171,31 @@ test('the create-home adapter accepts only bounded JSON and still fails closed w
     assert.equal(response.status, 400)
     assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
   }
+})
+
+test('the exact-home intake adapter stays bounded and fail-closed without identity', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'i'.repeat(43)}`,
+    homeType: 'house',
+    yearBuilt: null,
+    systems: ['roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation']
+      .map(kind => ({ kind, present: 'unknown', installedOrReplacedYear: null })),
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/intake`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401)
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  const forged = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/intake`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...validBody, principalRef: `hprn_${'p'.repeat(43)}` }),
+  }))
+  assert.equal(forged.status, 400)
+  assert.deepEqual(await forged.json(), { error: { code: 'invalid_request' } })
 })
 
 test('unknown paths and wrong-kind refs are 404 through the adapter', async () => {

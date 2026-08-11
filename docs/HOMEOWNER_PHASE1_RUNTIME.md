@@ -41,11 +41,19 @@ verified.
 
 The matching framework-neutral HTTP boundary serves exactly `GET
 /api/v1/session`, `GET /api/v1/homes`, `GET
-/api/v1/homes/{opaque-home-ref}`, and `POST /api/v1/homes`.
+/api/v1/homes/{opaque-home-ref}`, `POST /api/v1/homes`, and `POST
+/api/v1/homes/{opaque-home-ref}/intake`.
 It requires a server-owned session handle, rejects query/body identity claims,
 returns a one-key `data` envelope, uses `no-store`, and maps failures to bounded
 problem codes without leaking provider or repository details. A framework
 adapter is present; real identity and persistence providers are still required.
+
+The intake command is deliberately narrow. It records only homeowner-recalled
+home type, year built, and the six supported system answers. The browser sends
+no principal, membership, role, source, timestamp, provider identifier, or
+verification claim. The server fresh-reads the exact membership, requires the
+workspace-controller role, derives the timestamp and source, and rejects
+incoherent adapter output before returning a minimized projection.
 
 ## Separation from Jobrolo
 
