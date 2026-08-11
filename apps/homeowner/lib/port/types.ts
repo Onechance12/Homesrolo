@@ -135,8 +135,21 @@ export interface HomeFile extends HomeSummary {
 }
 
 export interface CreateHomeInput {
+  /**
+   * Browser-minted opaque idempotency ref (`hcmd_` + 43 base64url chars; see
+   * command-ref.ts). Minted ONCE per submission attempt group and reused
+   * verbatim on retries so the server can deduplicate; an edited draft is a
+   * new group with a fresh ref. It carries no authority — requestedAt and
+   * every membership fact are server-derived.
+   */
+  readonly commandRef: string
   readonly alias: string
   readonly locality: string
+  /**
+   * Draft-only facts. The synthetic adapter renders them in the demo; the
+   * remote adapter NEVER puts them on the wire — no server contract exists
+   * for the profile or systems inventory yet (spec item 6).
+   */
   readonly homeType: HomeFile['homeType']
   readonly yearBuilt: number | null
 }
@@ -273,7 +286,7 @@ export interface HomeownerDataPort {
 
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>
   getHome(homeRef: string): Promise<PortResult<HomeViewEntry>>
-  createHome(input: CreateHomeInput): Promise<PortResult<HomeSummary>>
+  createHome(input: CreateHomeInput): Promise<PortResult<HomeListEntry>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>

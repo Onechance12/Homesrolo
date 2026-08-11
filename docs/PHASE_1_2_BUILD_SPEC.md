@@ -1,7 +1,9 @@
 # Phase 1–2 build spec — server authority and persistence
 
 Owner: Codex (integration lane). Written by the experience lane against main
-`0c06ce2`. Dependency-ordered: each item assumes everything above it. The
+`0c06ce2` plus PR #15 (`codex/homeowner-persistence-v1`), which implements
+item 4's boundary fail-closed. Dependency-ordered: each item assumes
+everything above it. The
 browser side of every step already exists and fails closed until the
 corresponding capability flips true.
 
@@ -33,13 +35,20 @@ schema must never make the home a child row of an account.
    `readHome` go live; the three GET routes then serve real data with zero
    route/UI changes.
 
-4. **`POST /api/v1/homes`** — the first write. Body is
-   `createHomeWorkspaceInputSchema` minus `commandRef`/`requestedAt` if the
-   route mints those server-side (state which; the client will mirror
-   exactly). Calls `createHomeWorkspace`; membership lands as
-   `self_created_workspace` / `claimed_unverified`. Success: 201 with
-   `{ data: HomeownerApiHomeSummary }`. Flip `capabilities.persistence` only
-   when this actually stores.
+4. **`POST /api/v1/homes`** — the first write. **Decided and implemented
+   fail-closed in PR #15** (`homeownerApiCreateHomeInputSchema`): the body is
+   exactly `{ commandRef, displayLabel, privateLocationLabel }`, strict. The
+   **browser mints the opaque `commandRef`** (`hcmd_` + 43 base64url chars),
+   once per submission attempt group, and **reuses the same value on every
+   retry** of that group so the command stays idempotency-stable; an edited
+   draft is a new group with a fresh ref. The **server derives `requestedAt`
+   and all authority** — principal, membership role/basis/state, and
+   relationship label never cross the wire. Success: 201 with
+   `{ data: HomeownerApiHomeSummary }`; membership lands as
+   `workspace_controller` / `self_created_workspace` / `claimed_unverified`
+   and is coherence-checked before the summary returns. Remaining here: the
+   real command/persistence provider. Flip `capabilities.persistence` only
+   when it actually stores — and dedupe on `commandRef` when it does.
 
    *Route-adapter requirements the client enforces:* success bodies are
    exactly `{ "data": ... }` with no sibling keys; `updatedAt` is the

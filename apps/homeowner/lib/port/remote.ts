@@ -1,18 +1,27 @@
 /**
  * REMOTE ADAPTER — HomeownerDataPort over the same-origin /api/v1 JSON wire.
  *
- * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
- * server defines THREE reads, and this adapter operates exactly those:
+ * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8 + PR #15). The
+ * server defines THREE reads and ONE write, and this adapter operates exactly
+ * those:
  *
- *   GET /api/v1/session          → decodeSession
- *   GET /api/v1/homes            → decodeServerHomeSummary[]
- *   GET /api/v1/homes/{homeRef}  → decodeServerHomeView
+ *   GET  /api/v1/session          → decodeSession
+ *   GET  /api/v1/homes            → decodeServerHomeSummary[]
+ *   GET  /api/v1/homes/{homeRef}  → decodeServerHomeView
+ *   POST /api/v1/homes            → 201 decodeServerHomeSummary
  *
- * Every other port method — magic link, sign-out, home creation, projects,
- * documents, warranties, timeline, maintenance, all writes — returns
- * 'unavailable' WITHOUT building a request, because the server has not
- * defined those routes and this client does not decode guessed DTOs. When the
- * server defines a route, the adapter gains it together with its decoder.
+ * The create body is EXACTLY homeownerApiCreateHomeInputSchema:
+ * `{ commandRef, displayLabel, privateLocationLabel }`. The commandRef is the
+ * one browser-minted identifier (an idempotency ref, command-ref.ts);
+ * requestedAt, the principal, and every membership fact are server-derived.
+ * homeType, yearBuilt, and the systems inventory are draft-only facts with no
+ * server contract yet — they never cross the wire.
+ *
+ * Every other port method — magic link, sign-out, projects, documents,
+ * warranties, timeline, maintenance — returns 'unavailable' WITHOUT building
+ * a request, because the server has not defined those routes and this client
+ * does not decode guessed DTOs. When the server defines a route, the adapter
+ * gains it together with its decoder.
  *
  * Enabled only when the runtime mode resolves to 'remote' (mode.ts; default
  * synthetic, unknown values fail closed). The adapter holds no state, invents
@@ -21,6 +30,7 @@
  * raw storage location, or authority claim.
  */
 
+import { COMMAND_REF_PATTERN } from './command-ref.ts'
 import {
   NO_CAPABILITIES,
   type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
@@ -52,6 +62,7 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
   async function call<T>(
     request: TransportRequest,
     decode: (value: unknown, at: string) => T,
+    successStatus = 200,
   ): Promise<PortResult<T>> {
     let reply: TransportReply
     try {
@@ -60,7 +71,7 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return { ok: false, error: 'unavailable' }
     }
     if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
-    if (reply.status !== 200) {
+    if (reply.status !== successStatus) {
       return { ok: false, error: portErrorForStatus(reply.status) }
     }
     try {
@@ -96,6 +107,30 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return call({ method: 'GET', path: `${API}/homes/${ref}` }, decodeServerHomeView)
     },
 
+    async createHome(input) {
+      // The one browser-minted identifier is validated to the exact hcmd_
+      // shape; anything else never becomes a request. Same for the labels:
+      // the server's trim/min/max bounds are enforced BEFORE the wire.
+      if (!COMMAND_REF_PATTERN.test(input.commandRef)) {
+        return { ok: false, error: 'invalid' }
+      }
+      const displayLabel = input.alias.trim()
+      const privateLocationLabel = input.locality.trim()
+      if (displayLabel.length < 1 || displayLabel.length > 80
+        || privateLocationLabel.length < 1 || privateLocationLabel.length > 200) {
+        return { ok: false, error: 'invalid' }
+      }
+      // EXACTLY homeownerApiCreateHomeInputSchema — three keys, nothing else.
+      // input.homeType, input.yearBuilt, and the systems inventory stay in the
+      // browser draft: no server contract exists for them, and a command must
+      // never smuggle facts the server has not defined a place for.
+      return call({
+        method: 'POST',
+        path: `${API}/homes`,
+        body: { commandRef: input.commandRef, displayLabel, privateLocationLabel },
+      }, decodeServerHomeSummary, 201)
+    },
+
     // --- routes the server has not defined: unavailable, no request built ----
 
     async requestMagicLink() {
@@ -111,7 +146,6 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       throw new Error('signOut has no defined route in homeowner-api.v1')
     },
 
-    async createHome() { return UNDEFINED_ROUTE },
     async listProjects() { return UNDEFINED_ROUTE },
     async getProject() { return UNDEFINED_ROUTE },
     async addProject() { return UNDEFINED_ROUTE },

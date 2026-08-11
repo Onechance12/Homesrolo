@@ -7,7 +7,9 @@ import {
   type IntakeState,
 } from '../intake/machine.ts'
 import { SYSTEM_ORDER } from '../intake/script.ts'
+import { commandRefForAttempt } from '../port/command-ref.ts'
 import { createRemotePort } from '../port/remote.ts'
+import type { TransportRequest } from '../port/transport.ts'
 
 /**
  * The guided intake is deterministic script, not model: the same answers must
@@ -161,20 +163,58 @@ test('the intake persists nothing: a refresh honestly starts over', () => {
   assert.match(page, /refresh starts over/i, 'the screen says so out loud')
 })
 
-test('in remote mode, submitting the draft is honestly unavailable and sends nothing', async () => {
-  const requests: unknown[] = []
+test('submitting the draft POSTs only the strict home shell; systems stay draft-only', async () => {
+  const requests: TransportRequest[] = []
   const port = createRemotePort(async request => {
     requests.push(request)
-    return { kind: 'reply', status: 200, body: { data: null } }
+    return { kind: 'reply', status: 201, body: { data: {
+      homeRef: 'hhom_' + 'b'.repeat(43),
+      displayLabel: 'The Birch House',
+      privateLocationLabel: 'Sample Metro — North',
+      relationshipLabel: 'claimed_unverified',
+    } } }
   })
   const draft = draftFrom(completeRun())
+  const commandRef = commandRefForAttempt(null)
   const result = await port.createHome({
+    commandRef,
     alias: draft.home.displayLabel,
     locality: draft.home.privateLocationLabel,
     homeType: 'house',
     yearBuilt: draft.profile.yearBuilt?.value ?? null,
   })
-  assert.deepEqual(result, { ok: false, error: 'unavailable' },
-    'no POST /homes route exists yet; the port must refuse')
-  assert.equal(requests.length, 0, 'and nothing may touch the wire')
+  assert.ok(result.ok, 'a 201 with the exact server summary is the one success')
+
+  assert.equal(requests.length, 1, 'one attempt, exactly one POST')
+  const request = requests[0]
+  assert.ok(request)
+  assert.equal(request.method, 'POST')
+  assert.equal(request.path, '/api/v1/homes')
+  assert.deepEqual(request.body, {
+    commandRef,
+    displayLabel: 'The Birch House',
+    privateLocationLabel: 'Sample Metro — North',
+  }, 'exactly homeownerApiCreateHomeInputSchema: the shell plus the idempotency ref')
+
+  // Not one recollected fact beyond the shell may ride this command: the
+  // systems/profile contract does not exist yet, and the server derives
+  // requestedAt and all authority itself.
+  const wire = JSON.stringify(request.body)
+  for (const leaked of ['roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+    'homeType', 'yearBuilt', 'systems', 'profile', 'precision', 'approximate', '1987', '2019',
+    'requestedAt', 'principal', 'source']) {
+    assert.ok(!wire.includes(leaked), `"${leaked}" must never ride the create command`)
+  }
+
+  // A retry of this same attempt group reuses the same commandRef, so the
+  // server can treat "try again" as the same command rather than a second home.
+  assert.equal(commandRefForAttempt(commandRef), commandRef)
+})
+
+test('the success screen never claims the systems inventory was saved', () => {
+  const page = readFileSync(path.join(import.meta.dirname, '../../app/homes/new/page.tsx'), 'utf8')
+  assert.match(page, /were <strong>not<\/strong> saved/,
+    'the remote success panel must say the systems answers were not saved')
+  assert.match(page, /will not be saved/,
+    'the pre-submit remote note must say the draft facts will not be saved')
 })

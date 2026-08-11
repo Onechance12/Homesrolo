@@ -11,6 +11,7 @@ import {
   type IntakeState,
 } from '../../../lib/intake/machine.ts'
 import { SYSTEM_LABEL, SYSTEM_ORDER, type IntakeDraft } from '../../../lib/intake/script.ts'
+import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
 
 /**
  * Opening a home's file is a conversation, not a form. The script is
@@ -19,16 +20,19 @@ import { SYSTEM_LABEL, SYSTEM_ORDER, type IntakeDraft } from '../../../lib/intak
  *
  * The draft lives in memory only. A refresh starts the conversation over,
  * because pretending to have saved something is the one thing this app never
- * does. Submission goes through the same data port as everything else: in the
- * demo it lands in the demo; against the real server it is honest about the
- * write route not existing yet.
+ * does. Submission goes through the same data port as everything else. In
+ * remote mode only the home SHELL (name + area) rides the create command —
+ * the profile and systems answers have no server contract yet, so the success
+ * screen says plainly that they were not saved.
  */
 
 type SubmitState =
   | { kind: 'idle' }
   | { kind: 'sending' }
   | { kind: 'unavailable' }
+  | { kind: 'signed_out' }
   | { kind: 'failed'; error: string }
+  | { kind: 'created'; homeRef: string }
 
 function ReviewCard({ draft }: { draft: IntakeDraft }) {
   return (
@@ -82,10 +86,18 @@ export default function NewHomePage() {
   const [approximate, setApproximate] = useState(false)
   const [submit, setSubmit] = useState<SubmitState>({ kind: 'idle' })
   const endRef = useRef<HTMLDivElement>(null)
+  // One commandRef per submission attempt group: retries of the SAME draft
+  // reuse it (idempotency-stable), an edited draft mints a fresh one.
+  const attemptRef = useRef<string | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [state.transcript.length])
+
+  useEffect(() => {
+    // Any change to the conversation ends the current attempt group.
+    if (!isComplete(state)) attemptRef.current = null
+  }, [state])
 
   const step = state.step
   const choices = choicesFor(step)
@@ -101,17 +113,30 @@ export default function NewHomePage() {
   async function create() {
     if (!complete) return
     const draft = draftFrom(state)
+    const commandRef = commandRefForAttempt(attemptRef.current)
+    attemptRef.current = commandRef
     setSubmit({ kind: 'sending' })
     const result = await port.createHome({
+      commandRef,
       alias: draft.home.displayLabel,
       locality: draft.home.privateLocationLabel,
+      // Draft-only in remote mode: the adapter never puts these on the wire.
       homeType: draft.profile.homeType === 'unknown' ? 'other' : draft.profile.homeType,
       yearBuilt: draft.profile.yearBuilt?.value ?? null,
     })
     if (!result.ok) {
+      if (result.error === 'not_signed_in') {
+        setSubmit({ kind: 'signed_out' })
+        return
+      }
       setSubmit(result.error === 'unavailable'
         ? { kind: 'unavailable' }
         : { kind: 'failed', error: result.error })
+      return
+    }
+    if (mode === 'remote') {
+      // Stop and say exactly what was stored before leaving the draft behind.
+      setSubmit({ kind: 'created', homeRef: result.value.homeRef })
       return
     }
     router.push(`/home/${result.value.homeRef}`)
@@ -235,43 +260,70 @@ export default function NewHomePage() {
               {complete && (
                 <>
                   <ReviewCard draft={draftFrom(state)} />
-                  {submit.kind === 'unavailable' && (
-                    <div className="state" role="alert" style={{ marginTop: '1rem' }}>
-                      <h3>Saving is not available yet</h3>
+                  {submit.kind === 'created' ? (
+                    <div className="state" role="status" style={{ marginTop: '1rem' }}>
+                      <h3>Home file saved</h3>
                       <p>
-                        The server cannot store a home yet, so nothing was saved. Your
-                        draft is shown above and stays on this screen — try again once
-                        saving is live, or start over later. It was not stored anywhere.
+                        The server stored the home shell — its name and area. The
+                        systems and profile answers above were <strong>not</strong> saved:
+                        no server contract exists for them yet, so they remain this
+                        on-screen draft and nothing more.
                       </p>
-                      <button type="button" className="btn btn--quiet" onClick={create}>Try again</button>
+                      <Link className="btn btn--primary" href={`/home/${submit.homeRef}`}>
+                        Open this home’s file
+                      </Link>
                     </div>
-                  )}
-                  {submit.kind === 'failed' && (
-                    <p role="alert" className="intake__error">
-                      That did not go through ({submit.error}). Nothing was saved — try again.
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '1.1rem' }}>
-                    <button
-                      type="button"
-                      className="btn btn--primary"
-                      onClick={create}
-                      disabled={submit.kind === 'sending'}
-                    >
-                      {submit.kind === 'sending' ? 'Opening the file…' : 'Open this home’s file'}
-                    </button>
-                    <button type="button" className="btn btn--quiet" onClick={() => setState(back)}>
-                      ← Change an answer
-                    </button>
-                  </div>
-                  {mode === 'synthetic' ? (
-                    <p className="mono" style={{ marginTop: '0.8rem' }}>
-                      Demo: this file lives in memory and disappears on refresh.
-                    </p>
+                  ) : submit.kind === 'signed_out' ? (
+                    <div style={{ marginTop: '1rem' }} role="alert">
+                      <p className="intake__error">
+                        The server says you are signed out, so nothing was saved.
+                        Your draft stays on this screen.
+                      </p>
+                      <UnauthorizedState />
+                    </div>
                   ) : (
-                    <p className="mono" style={{ marginTop: '0.8rem' }}>
-                      The systems inventory stays in this draft until the server can store it.
-                    </p>
+                    <>
+                      {submit.kind === 'unavailable' && (
+                        <div className="state" role="alert" style={{ marginTop: '1rem' }}>
+                          <h3>Saving is not available yet</h3>
+                          <p>
+                            The server cannot store a home yet, so nothing was saved. Your
+                            draft is shown above and stays on this screen — try again once
+                            saving is live, or start over later. It was not stored anywhere.
+                          </p>
+                          <button type="button" className="btn btn--quiet" onClick={create}>Try again</button>
+                        </div>
+                      )}
+                      {submit.kind === 'failed' && (
+                        <p role="alert" className="intake__error">
+                          That did not go through ({submit.error}). Nothing was saved — try again.
+                        </p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '1.1rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          onClick={create}
+                          disabled={submit.kind === 'sending'}
+                        >
+                          {submit.kind === 'sending' ? 'Opening the file…' : 'Open this home’s file'}
+                        </button>
+                        <button type="button" className="btn btn--quiet" onClick={() => setState(back)}>
+                          ← Change an answer
+                        </button>
+                      </div>
+                      {mode === 'synthetic' ? (
+                        <p className="mono" style={{ marginTop: '0.8rem' }}>
+                          Demo: this file lives in memory and disappears on refresh.
+                        </p>
+                      ) : (
+                        <p className="mono" style={{ marginTop: '0.8rem' }}>
+                          Saving stores the name and area only. The systems and profile
+                          answers stay in this draft — their server contract does not
+                          exist yet, so they will not be saved.
+                        </p>
+                      )}
+                    </>
                   )}
                 </>
               )}
