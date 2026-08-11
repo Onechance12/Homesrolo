@@ -25,6 +25,12 @@ document bytes. The create-home HTTP command is wired, but its capability stays
 false and its unconfigured adapter refuses every write until real persistence
 is installed and verified.
 
+The next contract slice defines the initial living record without claiming it
+is stored: one source-labeled property-facts record and exactly one entry for
+each of the six supported home systems. Unknown stays unknown, approximate
+years keep their precision, and only a fresh workspace-controller grant may
+record the intake. No systems HTTP route or persistence adapter exists yet.
+
 The Phase 2A server application boundary now defines strict session, home-list,
 and exact-home browser projections. It resolves identity from a server-owned
 session handle, fresh-checks each principal-to-home membership, and strips

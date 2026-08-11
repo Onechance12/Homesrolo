@@ -50,6 +50,12 @@ const unconfiguredRepository: HomeownerRepositoryPort = {
   async readHome() {
     throw new HomeownerApiError('unavailable')
   },
+  async readPropertyFacts() {
+    throw new HomeownerApiError('unavailable')
+  },
+  async listSystems() {
+    throw new HomeownerApiError('unavailable')
+  },
   async listProjects() {
     throw new HomeownerApiError('unavailable')
   },
@@ -63,6 +69,9 @@ const unconfiguredCommands: HomeownerCommandPort = {
     throw new HomeownerApiError('unavailable')
   },
   async createProject() {
+    throw new HomeownerApiError('unavailable')
+  },
+  async recordInitialIntake() {
     throw new HomeownerApiError('unavailable')
   },
 }
