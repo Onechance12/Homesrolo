@@ -1,11 +1,19 @@
 import { z } from 'zod'
 import {
+  HOMEOWNER_SYSTEM_KINDS,
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
   createHomeWorkspaceInputSchema,
+  homeownerApproximateYearSchema,
+  homeownerHomeTypeSchema,
+  homeownerSystemKindSchema,
   homeownerUtcInstantSchema,
+  parseHomeownerPropertyFacts,
+  parseHomeownerSystem,
   parseHomeownerMembership,
   privateHomeProfileSchema,
+  recordHomeownerIntakeInputSchema,
+  requireHomeownerActionGrant,
   type HomeownerCommandPort,
   type HomeownerIdentityPort,
   type HomeownerMembership,
@@ -72,6 +80,41 @@ export const homeownerApiCreateHomeInputSchema = z.object({
 }).strict()
 
 export type HomeownerApiCreateHomeInput = z.infer<typeof homeownerApiCreateHomeInputSchema>
+
+const homeownerApiSystemInputSchema = z.object({
+  kind: homeownerSystemKindSchema,
+  present: z.enum(['yes', 'no', 'unknown']),
+  installedOrReplacedYear: homeownerApproximateYearSchema.nullable(),
+}).strict()
+
+export const homeownerApiRecordIntakeInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  homeType: homeownerHomeTypeSchema,
+  yearBuilt: homeownerApproximateYearSchema.nullable(),
+  systems: z.array(homeownerApiSystemInputSchema).length(HOMEOWNER_SYSTEM_KINDS.length),
+}).strict()
+
+export const homeownerApiIntakeViewSchema = z.object({
+  homeRef: opaqueRef('hhom'),
+  homeType: homeownerHomeTypeSchema,
+  yearBuilt: homeownerApproximateYearSchema.nullable(),
+  source: z.literal('homeowner_recollection'),
+  systems: z.array(homeownerApiSystemInputSchema).length(HOMEOWNER_SYSTEM_KINDS.length),
+  updatedAt: homeownerUtcInstantSchema,
+}).strict().superRefine((view, context) => {
+  const kinds = view.systems.map(system => system.kind)
+  if (new Set(kinds).size !== HOMEOWNER_SYSTEM_KINDS.length
+    || HOMEOWNER_SYSTEM_KINDS.some(kind => !kinds.includes(kind))) {
+    context.addIssue({
+      code: 'custom',
+      path: ['systems'],
+      message: 'the view must contain each supported system exactly once',
+    })
+  }
+})
+
+export type HomeownerApiRecordIntakeInput = z.infer<typeof homeownerApiRecordIntakeInputSchema>
+export type HomeownerApiIntakeView = z.infer<typeof homeownerApiIntakeViewSchema>
 
 export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   projectCount: z.number().int().min(0),
@@ -269,7 +312,74 @@ export class HomeownerApiService {
 
     return safeSummary(home, membership)
   }
+
+  async recordInitialIntake(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiIntakeView> {
+    const parsedHomeRef = opaqueRef('hhom').safeParse(requestedHomeRef)
+    const parsedInput = homeownerApiRecordIntakeInputSchema.safeParse(input)
+    if (!parsedHomeRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+
+    if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
+    const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
+    if (!principal) throw new HomeownerApiError('signed_out')
+    const membership = await this.#repository.readMembership(
+      principal.principalRef,
+      parsedHomeRef.data,
+    )
+    if (!membership) throw new HomeownerApiError('not_found')
+
+    const decision = authorizeHomeownerWorkspace({
+      principal,
+      membership,
+      requestedHomeRef: parsedHomeRef.data,
+      action: 'intake.record',
+      recheckedAt: this.#now(),
+    })
+    if (!decision.authorized) {
+      if (decision.reason === 'role_denied') throw new HomeownerApiError('forbidden')
+      throw new HomeownerApiError('not_found')
+    }
+    const grant = requireHomeownerActionGrant(decision, 'intake.record')
+    if (!grant) throw new HomeownerApiError('forbidden')
+    if (!this.#capabilities.persistence) throw new HomeownerApiError('unavailable')
+
+    const commandResult = recordHomeownerIntakeInputSchema.safeParse({
+      ...parsedInput.data,
+      requestedAt: this.#now(),
+    })
+    if (!commandResult.success) throw new HomeownerApiError('invalid_request')
+    const command = commandResult.data
+    const recorded = await this.#commands.recordInitialIntake({ grant, command })
+    const propertyFacts = parseHomeownerPropertyFacts(recorded.propertyFacts)
+    const systems = recorded.systems.map(parseHomeownerSystem)
+    const coherent = propertyFacts.homeRef === grant.homeRef
+      && propertyFacts.controllerPrincipalRef === grant.principalRef
+      && propertyFacts.source === 'homeowner_recollection'
+      && systems.length === HOMEOWNER_SYSTEM_KINDS.length
+      && systems.every(system => system.homeRef === grant.homeRef
+        && system.controllerPrincipalRef === grant.principalRef
+        && system.source === 'homeowner_recollection')
+    if (!coherent) throw new HomeownerApiError('unavailable')
+
+    return homeownerApiIntakeViewSchema.parse({
+      homeRef: grant.homeRef,
+      homeType: propertyFacts.homeType,
+      yearBuilt: propertyFacts.yearBuilt,
+      source: propertyFacts.source,
+      systems: systems.map(system => ({
+        kind: system.kind,
+        present: system.present,
+        installedOrReplacedYear: system.installedOrReplacedYear,
+      })),
+      updatedAt: [propertyFacts.updatedAt, ...systems.map(system => system.updatedAt)].sort().at(-1),
+    })
+  }
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation is defined but remains fail-closed until server persistence is configured. Email delivery, uploads, invitations, and sharing remain unavailable until separately configured and verified.'
+  'Home creation and exact-home intake recording are defined but remain fail-closed until server persistence is configured. Email delivery, uploads, invitations, and sharing remain unavailable until separately configured and verified.'

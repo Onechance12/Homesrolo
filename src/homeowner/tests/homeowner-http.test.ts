@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { HomeownerApiService } from '../homeowner-api.v1.ts'
 import { createHomeownerHttpHandler, HOMEOWNER_HTTP_WARNING } from '../homeowner-http.v1.ts'
 import {
+  HOMEOWNER_SYSTEM_KINDS,
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
@@ -78,7 +79,35 @@ const commands: HomeownerCommandPort = {
     }
   },
   async createProject() { throw new Error('not used') },
-  async recordInitialIntake() { throw new Error('not used') },
+  async recordInitialIntake() {
+    return {
+      propertyFacts: {
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        propertyFactsRef: `hfac_${body('f')}`,
+        homeRef,
+        controllerPrincipalRef: principalRef,
+        homeType: 'house',
+        yearBuilt: { value: 1988, precision: 'approximate' },
+        source: 'homeowner_recollection',
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+      systems: HOMEOWNER_SYSTEM_KINDS.map((kind, index) => ({
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        systemRef: `hsys_${body(String.fromCharCode(97 + index))}`,
+        homeRef,
+        controllerPrincipalRef: principalRef,
+        kind,
+        present: 'unknown' as const,
+        installedOrReplacedYear: null,
+        source: 'homeowner_recollection' as const,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    }
+  },
 }
 
 function handler() {
@@ -224,6 +253,45 @@ test('POST /api/v1/homes accepts only the strict command and returns one safe su
   ]) {
     const rejected = await handle(request({
       method: 'POST', pathname: '/api/v1/homes', hasBody: true, jsonBody,
+    }))
+    assert.equal(rejected.status, 400)
+  }
+})
+
+test('POST exact-home intake accepts only a complete recollection command', async () => {
+  const handle = handler()
+  const jsonBody = {
+    commandRef: `hcmd_${body('i')}`,
+    homeType: 'house',
+    yearBuilt: { value: 1988, precision: 'approximate' },
+    systems: HOMEOWNER_SYSTEM_KINDS.map(kind => ({
+      kind,
+      present: 'unknown',
+      installedOrReplacedYear: null,
+    })),
+  }
+  const response = await handle(request({
+    method: 'POST',
+    pathname: `/api/v1/homes/${homeRef}/intake`,
+    hasBody: true,
+    jsonBody,
+  }))
+  assert.equal(response.status, 201)
+  assert.equal((response.body as { data: { source: string } }).data.source,
+    'homeowner_recollection')
+  assert.equal(JSON.stringify(response.body).includes(principalRef), false)
+
+  for (const rejectedBody of [
+    { ...jsonBody, requestedAt: now },
+    { ...jsonBody, role: 'workspace_controller' },
+    { ...jsonBody, systems: jsonBody.systems.slice(0, -1) },
+    { ...jsonBody, systems: jsonBody.systems.map(system => ({ ...system, kind: 'roof' })) },
+  ]) {
+    const rejected = await handle(request({
+      method: 'POST',
+      pathname: `/api/v1/homes/${homeRef}/intake`,
+      hasBody: true,
+      jsonBody: rejectedBody,
     }))
     assert.equal(rejected.status, 400)
   }

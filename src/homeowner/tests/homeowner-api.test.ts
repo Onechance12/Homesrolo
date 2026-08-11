@@ -8,6 +8,7 @@ import {
   homeownerApiHomeViewSchema,
 } from '../homeowner-api.v1.ts'
 import {
+  HOMEOWNER_SYSTEM_KINDS,
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
@@ -52,6 +53,46 @@ const home = {
   createdAt: now,
   updatedAt: now,
 } as const
+
+const intakeSystems = HOMEOWNER_SYSTEM_KINDS.map((kind, index) => ({
+  recordVersion: HOMEOWNER_RUNTIME_VERSION,
+  systemRef: `hsys_${body(String.fromCharCode(97 + index))}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  kind,
+  present: kind === 'roof' ? 'yes' as const : 'unknown' as const,
+  installedOrReplacedYear: kind === 'roof'
+    ? { value: 2019, precision: 'approximate' as const }
+    : null,
+  source: 'homeowner_recollection' as const,
+  revision: 1,
+  createdAt: now,
+  updatedAt: now,
+}))
+
+const propertyFacts = {
+  recordVersion: HOMEOWNER_RUNTIME_VERSION,
+  propertyFactsRef: `hfac_${body('f')}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  homeType: 'house' as const,
+  yearBuilt: { value: 1988, precision: 'approximate' as const },
+  source: 'homeowner_recollection' as const,
+  revision: 1,
+  createdAt: now,
+  updatedAt: now,
+}
+
+const intakeInput = {
+  commandRef: `hcmd_${body('i')}`,
+  homeType: 'house' as const,
+  yearBuilt: { value: 1988, precision: 'approximate' as const },
+  systems: intakeSystems.map(system => ({
+    kind: system.kind,
+    present: system.present,
+    installedOrReplacedYear: system.installedOrReplacedYear,
+  })),
+}
 
 function repository(overrides: Partial<HomeownerRepositoryPort> = {}): HomeownerRepositoryPort {
   return {
@@ -298,6 +339,100 @@ test('home creation rejects browser authority, disabled persistence, and incoher
       displayLabel: 'Our home',
       privateLocationLabel: 'Private location',
     }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+})
+
+test('initial intake fresh-authorizes one exact home and derives source and time server-side', async () => {
+  let observed: unknown
+  const result = await service({
+    persistence: true,
+    commands: {
+      async createPrivateHomeWorkspace() { return { home, membership } },
+      async createProject() { throw new Error('not used') },
+      async recordInitialIntake(input) {
+        observed = input
+        return { propertyFacts, systems: intakeSystems }
+      },
+    },
+  }).recordInitialIntake(context, homeRef, intakeInput)
+
+  assert.equal(result.homeRef, homeRef)
+  assert.equal(result.source, 'homeowner_recollection')
+  assert.equal(result.systems.length, HOMEOWNER_SYSTEM_KINDS.length)
+  assert.equal(JSON.stringify(result).includes(principalRef), false)
+  assert.equal(JSON.stringify(result).includes('membershipRef'), false)
+  assert.deepEqual(observed, {
+    grant: {
+      authorized: true,
+      principalRef,
+      homeRef,
+      membershipRef: membership.membershipRef,
+      membershipRevision: 1,
+      action: 'intake.record',
+      recheckedAt: now,
+    },
+    command: { ...intakeInput, requestedAt: now },
+  })
+})
+
+test('initial intake rejects browser authority, non-controller access, and disabled persistence', async () => {
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      source: 'verified_contractor_record',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+
+  const viewerRepo = repository({
+    async readMembership() { return { ...membership, role: 'viewer' } },
+  })
+  await assert.rejects(
+    service({ repository: viewerRepo, persistence: true }).recordInitialIntake(
+      context,
+      homeRef,
+      intakeInput,
+    ),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+
+  await assert.rejects(
+    service().recordInitialIntake(context, homeRef, intakeInput),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+})
+
+test('initial intake rejects missing/duplicate systems and incoherent command output', async () => {
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      systems: intakeInput.systems.slice(0, -1),
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      systems: intakeInput.systems.map(system => ({ ...system, kind: 'roof' })),
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+
+  await assert.rejects(
+    service({
+      persistence: true,
+      commands: {
+        async createPrivateHomeWorkspace() { return { home, membership } },
+        async createProject() { throw new Error('not used') },
+        async recordInitialIntake() {
+          return {
+            propertyFacts: { ...propertyFacts, controllerPrincipalRef: otherPrincipalRef },
+            systems: intakeSystems,
+          }
+        },
+      },
+    }).recordInitialIntake(context, homeRef, intakeInput),
     (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
   )
 })
