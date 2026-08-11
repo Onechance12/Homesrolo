@@ -193,4 +193,96 @@ test('the shell does not import private contracts or other repositories', () => 
   // no Jobrolo connection exists; what must never exist is code reaching one.
   for (const rel of appSources) {
     const content = read(rel)
-    assert.doesNmu×~m¢G§²ÚîÆ­yÒ&W÷6—F÷'’‚’À¢6öÖÖæG3¢–çWBæ6öÖÖæG2óò°¢7–æ27&VFU&—fFT†öÖUv÷&·76R‚’²&WGW&â²†öÖRÂÖVÖ&W'6†—ÒÒÀ¢7–æ27&VFU&ö¦V7B‚’²F‡&÷ræWrW'&÷"‚væ÷BW6VBr’ÒÀ¢ÒÀ¢æ÷s¢‚’Óâæ÷rÀ¢6&–Æ—F–W3¢²ââæ6&–Æ—F–W2ÂW'6—7FVæ6S¢–çWBçW'6—7FVæ6RóòfÇ6RÒÀ¢Ò§Ð ¦6öç7B6öçFW‡BÒ²6W76–öä†æFÆS¢w6W'fW"×6W76–öâÖ†æFÆRrÐ §FW7B‚w6W76–öâ&ö¦V7F–öâ—2G'WF†gVÂæBæWfW"W‡÷6W26W76–öâ÷"&÷f–FW"–FVçF—G’rÂ7–æ2‚’Óâ°¢6öç7B6–væVD–âÒv—B6W'f–6R‚’ç&VE6W76–öâ†6öçFW‡B¢76W'BæFVWWVÂ‡6–væVD–âÂ°¢•fW'6–öã¢„ôÔTõtäU%ô•õdU%4”ôâÀ¢¶–æC¢w6–væVEö–ârÀ¢&–æ6—Å&VbÀ¢6&–Æ—F–W2À¢Ò¢76W'BæWVÂ‚w6W76–öä†æFÆRr–â6–væVD–âÂfÇ6R¢76W'BæWVÂ‚w&÷f–FW$–Br–â6–væVD–âÂfÇ6R¢76W'BæÖF6‚„„ôÔTõtäU%ô•õt$ä”ärÂ÷&VÖ–âVæf–Æ&ÆRò ¢6öç7B6–væVD÷WBÒv—B6W'f–6R‡²&W6öÇfVE&–æ6—Ã¢çVÆÂÒ’ç&VE6W76–öâ†6öçFW‡B¢76W'BæWVÂ‡6–væVD÷WBæ¶–æBÂw6–væVEö÷WBr¢76W'BæWVÂ‚w&–æ6—Å&Vbr–â6–væVD÷WBÂfÇ6R§Ò §FW7B‚v–æ7F—fR÷"VçfW&–f–VB&–æ6—Ç2&V6V—fRF†R6–væVBÖ÷WB&ö¦V7F–öârÂ7–æ2‚’Óâ°¢6öç7BF—6&ÆVBÒv—B6W'f–6R‡°¢&W6öÇfVE&–æ6—Ã¢²ââç&–æ6—ÂÂ7FGW3¢vF—6&ÆVBrÒÀ¢Ò’ç&VE6W76–öâ†6öçFW‡B¢6öç7BVçfW&–f–VBÒv—B6W'f–6R‡°¢&W6öÇfVE&–æ6—Ã¢²ââç&–æ6—ÂÂVÖ–ÅfW&–f–VC¢fÇ6RÒÀ¢Ò’ç&VE6W76–öâ†6öçFW‡B¢76W'BæWVÂ†F—6&ÆVBæ¶–æBÂw6–væVEö÷WBr¢76W'BæWVÂ‡VçfW&–f–VBæ¶–æBÂw6–væVEö÷WBr§Ò §FW7B‚v†öÖRÆ—7F–ærg&W6‚Ö6†V6·2WfW'’ÖVÖ&W'6†—æB6¶—2–æ7F—fR÷"Ö—6ÖF6†VB&÷w2rÂ7–æ2‚’Óâ°¢6öç7B&Wfö¶VC¢†öÖV÷væW$ÖVÖ&W'6†—Ò²ââæÖVÖ&W'6†—Â7FFS¢w&Wfö¶VBrÂ&Wfö¶VDC¢æ÷rÐ¢6öç7BÖ—6ÖF6†VC¢†öÖV÷væW$ÖVÖ&W'6†—Ò°¢ââæÖVÖ&W'6†—À¢ÖVÖ&W'6†—&Vc¢†Ö'%òG¶&öG’‚vâr—ÖÀ¢&–æ6—Å&Vc¢÷F†W%&–æ6—Å&VbÀ¢†öÖU&Vc¢÷F†W$†öÖU&VbÀ¢Ð¢6öç7B&WòÒ&W÷6—F÷'’‡°¢7–æ2Æ—7DÖVÖ&W'6†—2‚’²&WGW&â·&Wfö¶VBÂÖ—6ÖF6†VBÂÖVÖ&W'6†—ÒÒÀ¢Ò¢76W'BæFVWWVÂ†v—B6W'f–6R‡²&W÷6—F÷'“¢&WòÒ’æÆ—7D†öÖW2†6öçFW‡B’Â·°¢†öÖU&VbÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢t&—fFR†öÖV÷væW"Æö6F–öâÆ&VÂrÀ¢&VÆF–öç6†—Æ&VÃ¢v6Æ–ÖVE÷VçfW&–f–VBrÀ¢ÕÒ§Ò §FW7B‚vW†7B†öÖR&VB&V6†V6·2ÖVÖ&W'6†—æB&ö¦V7G2æòWF†÷&—G’÷"7F÷&vRf–VÆG2rÂ7–æ2‚’Óâ°¢6öç7B&WòÒ&W÷6—F÷'’‡°¢7–æ2Æ—7E&ö¦V7G2‚’²&WGW&â·²&ö¦V7E&Vc¢‡&¥òG¶&öG’‚v¢r—ÖÕÒ2æWfW"ÒÀ¢7–æ2Æ—7D'F–f7DÖWFFF‚’°¢&WGW&â°¢²¶–æC¢vFö7VÖVçBrÂ7F÷&vTö&¦V7E&Vc¢†ö&¥òG¶&öG’‚w2r—ÖÒÀ¢²¶–æC¢w†÷FòrÂ7F÷&vTö&¦V7E&Vc¢†ö&¥òG¶&öG’‚wBr—ÖÒÀ¢Ò2æWfW ¢ÒÀ¢7–æ2Æ—7Ev'&çF–W2‚’²&WGW&â·²v'&çG•&Vc¢‡wG•òG¶&öG’‚wrr—ÖÕÒ2æWfW"ÒÀ¢7–æ2Æ—7DÖ–çFVææ6R‚’²&WGW&â·²Ö–çFVææ6U&Vc¢†ÖçEòG¶&öG’‚w‚r—ÖÕÒ2æWfW"ÒÀ¢Ò¢6öç7Bf–WrÒv—B6W'f–6R‡²&W÷6—F÷'“¢&WòÒ’ç&VD†öÖR†6öçFW‡BÂ†öÖU&Vb¢76W'Bæö²††öÖV÷væW$”†öÖUf–Wu66†VÖç'6R‡f–Wr’¢76W'BæWVÂ‡f–Wrç&ö¦V7D6÷VçBÂ¢76W'BæWVÂ‡f–WræFö7VÖVçD6÷VçBÂ¢76W'BæWVÂ‡f–Wrçv'&çG”6÷VçBÂ¢76W'BæWVÂ‡f–WræÖ–çFVææ6T6÷VçBÂ¢76W'BæWVÂ‚v7&VFVD'•&–æ6—Å&Vbr–âf–WrÂfÇ6R¢76W'BæWVÂ‚vÖVÖ&W'6†—&Vbr–âf–WrÂfÇ6R¢76W'BæWVÂ‚w7F÷&vTö&¦V7E&Vbr–âf–WrÂfÇ6R§Ò §FW7B‚vÖÆf÷&ÖVBÂ7&÷72Ö†öÖRÂæB&Wfö¶VB&VG2f–Â6Æ÷6VBv—F†÷WB&WfVÆ–ærWF†÷&—G’rÂ7–æ2‚’Óâ°¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‚’ç&VD†öÖR†6öçFW‡BÂs#2W†×ÆR7G&VWBr’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒv–çfÆ–E÷&WVW7BrÀ¢¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‚’ç&VD†öÖR†6öçFW‡BÂ÷F†W$†öÖU&Vb’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒvæ÷Eöf÷VæBrÀ¢¢6öç7B&Wfö¶VE&WòÒ&W÷6—F÷'’‡°¢7–æ2&VDÖVÖ&W'6†—‚’²&WGW&â²ââæÖVÖ&W'6†—Â7FFS¢w&Wfö¶VBrÂ&Wfö¶VDC¢æ÷rÒÒÀ¢Ò¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‡²&W÷6—F÷'“¢&Wfö¶VE&WòÒ’ç&VD†öÖR†6öçFW‡BÂ†öÖU&Vb’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒvæ÷Eöf÷VæBrÀ¢§Ò §FW7B‚w7G&–7B'&÷w6W"&ö¦V7F–öç2&V¦V7B&rU$Ç2Â&÷f–FW"–G2ÂæBW‡G&WF†÷&—G’6Æ–×2rÂ‚’Óâ°¢6öç7B&6RÒ°¢†öÖU&VbÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢t&—fFR†öÖV÷væW"Æö6F–öâÆ&VÂrÀ¢&VÆF–öç6†—Æ&VÃ¢v6Æ–ÖVE÷VçfW&–f–VBrÀ¢&ö¦V7D6÷VçC¢À¢Fö7VÖVçD6÷VçC¢À¢v'&çG”6÷VçC¢À¢Ö–çFVææ6T6÷VçC¢À¢WFFVDC¢æ÷rÀ¢Ð¢76W'Bæö²††öÖV÷væW$”†öÖUf–Wu66†VÖç'6R†&6R’¢f÷"†6öç7BW‡G&öb°¢²&÷f–FW$–C¢w&÷f–FW"Ö†öÖRÓrÒÀ¢²7F÷&vTö&¦V7E&Vc¢†ö&¥òG¶&öG’‚w2r—ÖÒÀ¢²V&Æ–5W&Ã¢v‡GG3¢òöW†×ÆRæ6öÒ÷&—fFRçFbrÒÀ¢²fW&–f–VD÷væW#¢G'VRÒÀ¢²6öçG&öÆÆW%&–æ6—Å&Vc¢&–æ6—Å&VbÒÀ¢Ò’°¢76W'BçF‡&÷w2‚‚’Óâ†öÖV÷væW$”†öÖUf–Wu66†VÖç'6R‡²ââæ&6RÂââæW‡G&Ò’¢Ð ¢f÷"†6öç7Bæöæ6æöæ–6Âöb°¢s##bÓ‚ÓC#££¢rÀ¢s##bÓ‚ÓC#££ã¢rÀ¢s##bÓ‚ÓC#££ã³£rÀ¢s##bÓ"Ó3C#££ã¢rÀ¢Ò’°¢76W'BçF‡&÷w2€¢‚’Óâ†öÖV÷væW$”†öÖUf–Wu66†VÖç'6R‡²ââæ&6RÂWFFVDC¢æöæ6æöæ–6ÂÒ’À¢G¶æöæ6æöæ–6ÇÒ×W7Bæ÷B7&÷72F†R6W'fW"ö6Æ–VçB&÷VæF'–À¢¢Ð§Ò §FW7B‚v†öÖR7&VF–öâFW&—fW2WF†÷&—G’æBF–ÖRöâF†R6W'fW"rÂ7–æ2‚’Óâ°¢ÆWBö'6W'fVC¢Væ¶æ÷và¢6öç7B7&VFVBÒv—B6W'f–6R‡°¢W'6—7FVæ6S¢G'VRÀ¢6öÖÖæG3¢°¢7–æ27&VFU&—fFT†öÖUv÷&·76R†–çWB’°¢ö'6W'fVBÒ–çW@¢&WGW&â²†öÖRÂÖVÖ&W'6†—Ð¢ÒÀ¢7–æ27&VFU&ö¦V7B‚’²F‡&÷ræWrW'&÷"‚væ÷BW6VBr’ÒÀ¢ÒÀ¢Ò’æ7&VFT†öÖR†6öçFW‡BÂ°¢6öÖÖæE&Vc¢†6ÖEòG¶&öG’‚v2r—ÖÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢u&—fFRÆö6F–öârÀ¢Ò ¢76W'BæFVWWVÂ†7&VFVBÂ°¢†öÖU&VbÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢t&—fFR†öÖV÷væW"Æö6F–öâÆ&VÂrÀ¢&VÆF–öç6†—Æ&VÃ¢v6Æ–ÖVE÷VçfW&–f–VBrÀ¢Ò¢76W'BæFVWWVÂ†ö'6W'fVBÂ°¢WF†÷&—¦F–öã¢²WF†÷&—¦VC¢G'VRÂ&–æ6—Å&VbÒÀ¢6öÖÖæC¢°¢6öÖÖæE&Vc¢†6ÖEòG¶&öG’‚v2r—ÖÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢u&—fFRÆö6F–öârÀ¢&WVW7FVDC¢æ÷rÀ¢ÒÀ¢Ò§Ò §FW7B‚v†öÖR7&VF–öâ&V¦V7G2'&÷w6W"WF†÷&—G’ÂF—6&ÆVBW'6—7FVæ6RÂæB–æ6ö†W&VçBFFW"÷WGWBrÂ7–æ2‚’Óâ°¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‡²W'6—7FVæ6S¢G'VRÒ’æ7&VFT†öÖR†6öçFW‡BÂ°¢6öÖÖæE&Vc¢†6ÖEòG¶&öG’‚v2r—ÖÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢u&—fFRÆö6F–öârÀ¢&–æ6—Å&VbÀ¢Ò’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒv–çfÆ–E÷&WVW7BrÀ¢¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‚’æ7&VFT†öÖR†6öçFW‡BÂ°¢6öÖÖæE&Vc¢†6ÖEòG¶&öG’‚v2r—ÖÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢u&—fFRÆö6F–öârÀ¢Ò’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒwVæf–Æ&ÆRrÀ¢¢v—B76W'Bç&V¦V7G2€¢6W'f–6R‡°¢W'6—7FVæ6S¢G'VRÀ¢6öÖÖæG3¢°¢7–æ27&VFU&—fFT†öÖUv÷&·76R‚’°¢&WGW&â²†öÖRÂÖVÖ&W'6†—¢²ââæÖVÖ&W'6†—Â&–æ6—Å&Vc¢÷F†W%&–æ6—Å&VbÒÐ¢ÒÀ¢7–æ27&VFU&ö¦V7B‚’²F‡&÷ræWrW'&÷"‚væ÷BW6VBr’ÒÀ¢ÒÀ¢Ò’æ7&VFT†öÖR†6öçFW‡BÂ°¢6öÖÖæE&Vc¢†6ÖEòG¶&öG’‚v2r—ÖÀ¢F—7Æ”Æ&VÃ¢t÷W"†öÖRrÀ¢&—fFTÆö6F–öäÆ&VÃ¢u&—fFRÆö6F–öârÀ¢Ò’À¢†W'&÷#¢Væ¶æ÷vâ’ÓâW'&÷"–ç7Fæ6Vöb†öÖV÷væW$”W'&÷"bbW'&÷"æ6öFRÓÓÒwVæf–Æ&ÆRrÀ¢§Ò 
+    assert.doesNotMatch(content, /from '.*src\/contracts/, `${rel} must not import root contracts`)
+    assert.doesNotMatch(content, /from ['"][^'"]*(jobrolo|thresher|claim.?network)/i,
+      `${rel} must not import other systems' code`)
+  }
+})
+
+test('the magic-link form renders only on server-reported capability', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /capabilities\.magicLinkSignIn \?/,
+    'the form is gated on the session capability, never assumed')
+  assert.match(signin, /If that address can sign in/,
+    'acceptance copy is generic and does not reveal whether an address exists')
+  assert.doesNotMatch(signin, /email (was|has been) sent/i,
+    'nothing claims a send the server did not accept')
+  assert.match(signin, /mode === 'synthetic'\s*\?\s*\(?\s*<SyntheticEntry/,
+    'synthetic mode keeps the honest demo entry')
+})
+
+test('a nameless server session renders a neutral label, never "as null"', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /displayName\?\.trim\(\)/,
+    'the name is included only when a real nonempty display name exists')
+  assert.match(signin, /'You are already signed in\.'/,
+    'the neutral fallback exists')
+  assert.doesNotMatch(signin, /signed in as \{session/,
+    'no template interpolates a possibly-null name directly')
+  const shell = read('components/AppShell.tsx')
+  assert.match(shell, /: 'Signed in'\}?/,
+    'the shell has the same neutral fallback')
+})
+
+test('disabled affordances say why, instead of pretending', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /not built yet/i)
+  const settings = read('app/home/[homeId]/settings/page.tsx')
+  assert.match(settings, /not built yet/i)
+  const documents = read('app/home/[homeId]/documents/page.tsx')
+  assert.match(documents, /Uploads are not built/i)
+})
+
+test('photo plates are drawn and say so', () => {
+  const plate = read('components/PhotoPlate.tsx')
+  assert.match(plate, /drawn placeholder â€” no photo exists/)
+  assert.doesNotMatch(plate, /<img|next\/image/, 'no image files exist to show')
+})
+
+// --- structure ---------------------------------------------------------------
+
+test('every home-scoped screen exists', () => {
+  for (const screen of [
+    'app/home/[homeId]/page.tsx',
+    'app/home/[homeId]/projects/page.tsx',
+    'app/home/[homeId]/projects/[projectId]/page.tsx',
+    'app/home/[homeId]/documents/page.tsx',
+    'app/home/[homeId]/warranties/page.tsx',
+    'app/home/[homeId]/timeline/page.tsx',
+    'app/home/[homeId]/settings/page.tsx',
+  ]) {
+    assert.ok(appSources.includes(screen), `${screen} must exist`)
+  }
+})
+
+test('the entry journey screens exist', () => {
+  for (const screen of ['app/signin/page.tsx', 'app/onboarding/page.tsx', 'app/homes/page.tsx', 'app/homes/new/page.tsx']) {
+    assert.ok(appSources.includes(screen), `${screen} must exist`)
+  }
+})
+
+test('only the provider chooses the port implementation', () => {
+  for (const rel of appSources) {
+    if (rel.startsWith('lib/port') || rel.startsWith('lib/tests')) continue
+    const content = read(rel)
+    assert.doesNotMatch(content, /from '.*port\/synthetic/,
+      `${rel} must consume the port via the provider, not the mock directly`)
+  }
+})
+
+// --- platform neutrality -----------------------------------------------------
+
+test('the route inventory is platform-neutral', () => {
+  // The normalization must turn a Windows-style relative path into the POSIX
+  // form the screen literals use â€” asserted with explicit backslash input so
+  // Linux CI proves the Windows behaviour rather than merely not hitting it.
+  assert.equal(toPosix('app\\home\\[homeId]\\page.tsx'), 'app/home/[homeId]/page.tsx')
+  assert.equal(toPosix('lib\\tests\\presentation.test.ts'), 'lib/tests/presentation.test.ts')
+  assert.equal(toPosix('app/signin/page.tsx'), 'app/signin/page.tsx', 'POSIX input passes through')
+  // And the discovered inventory itself must already be normalized.
+  for (const rel of appSources) {
+    assert.ok(!rel.includes('\\'), `route inventory leaked a host separator: ${rel}`)
+  }
+  assert.ok(appSources.includes('app/signin/page.tsx'),
+    'inventory entries are comparable against POSIX literals on every platform')
+})
