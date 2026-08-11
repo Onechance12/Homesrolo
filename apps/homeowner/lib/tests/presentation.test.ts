@@ -138,9 +138,9 @@ test('no raw storage URLs or provider identifiers are projected into the UI', ()
     'no server-supplied link field is decoded on the narrowed surface')
 })
 
-test('exactly the three homeowner-http.v1 routes exist and nothing else', () => {
-  // Phase 2C: the server boundary defines three authenticated GET reads, so
-  // exactly three route files may exist — an allowlist, not a pattern.
+test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
+  // One route file now serves both the authenticated list read and the strict
+  // create-home command. The file inventory remains an allowlist.
   const ROUTE_ALLOWLIST = [
     'app/api/v1/session/route.ts',
     'app/api/v1/homes/route.ts',
@@ -148,12 +148,18 @@ test('exactly the three homeowner-http.v1 routes exist and nothing else', () => 
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
-    'the route inventory must be exactly the three defined reads')
+    'the route inventory must remain exactly the three defined paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
     assert.match(content, /export async function GET/, `${rel} serves GET`)
-    assert.doesNotMatch(content, /export (async function|const) (POST|PUT|PATCH|DELETE|HEAD|OPTIONS)/,
-      `${rel} must export no other method`)
+    if (rel === 'app/api/v1/homes/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves the create command`)
+    } else {
+      assert.doesNotMatch(content, /export (async function|const) POST/,
+        `${rel} must not export POST`)
+    }
+    assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE|HEAD|OPTIONS)/,
+      `${rel} must export no generic mutation method`)
     assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
   }
   for (const rel of appSources) {

@@ -2,7 +2,11 @@ import { z } from 'zod'
 import {
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
+  createHomeWorkspaceInputSchema,
   homeownerUtcInstantSchema,
+  parseHomeownerMembership,
+  privateHomeProfileSchema,
+  type HomeownerCommandPort,
   type HomeownerIdentityPort,
   type HomeownerMembership,
   type HomeownerRepositoryPort,
@@ -61,6 +65,14 @@ export const homeownerApiHomeSummarySchema = z.object({
 
 export type HomeownerApiHomeSummary = z.infer<typeof homeownerApiHomeSummarySchema>
 
+export const homeownerApiCreateHomeInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  displayLabel: z.string().trim().min(1).max(80),
+  privateLocationLabel: z.string().trim().min(1).max(200),
+}).strict()
+
+export type HomeownerApiCreateHomeInput = z.infer<typeof homeownerApiCreateHomeInputSchema>
+
 export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   projectCount: z.number().int().min(0),
   documentCount: z.number().int().min(0),
@@ -96,6 +108,7 @@ export interface HomeownerApiRequestContext {
 export interface HomeownerApiServiceOptions {
   readonly identity: HomeownerIdentityPort
   readonly repository: HomeownerRepositoryPort
+  readonly commands: HomeownerCommandPort
   readonly now: () => string
   /**
    * These values must come from verified server configuration. A route must not
@@ -123,12 +136,14 @@ function safeSummary(
 export class HomeownerApiService {
   readonly #identity: HomeownerIdentityPort
   readonly #repository: HomeownerRepositoryPort
+  readonly #commands: HomeownerCommandPort
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
 
   constructor(options: HomeownerApiServiceOptions) {
     this.#identity = options.identity
     this.#repository = options.repository
+    this.#commands = options.commands
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
   }
@@ -220,7 +235,41 @@ export class HomeownerApiService {
       updatedAt: home.updatedAt,
     })
   }
+
+  async createHome(
+    context: HomeownerApiRequestContext,
+    input: unknown,
+  ): Promise<HomeownerApiHomeSummary> {
+    const parsedInput = homeownerApiCreateHomeInputSchema.safeParse(input)
+    if (!parsedInput.success) throw new HomeownerApiError('invalid_request')
+
+    if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
+    const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
+    if (!principal) throw new HomeownerApiError('signed_out')
+    const authorization = authorizePrivateHomeCreation(principal)
+    if (!authorization.authorized) throw new HomeownerApiError('signed_out')
+    if (!this.#capabilities.persistence) throw new HomeownerApiError('unavailable')
+
+    const command = createHomeWorkspaceInputSchema.parse({
+      ...parsedInput.data,
+      requestedAt: this.#now(),
+    })
+    const created = await this.#commands.createPrivateHomeWorkspace({ authorization, command })
+    const home = privateHomeProfileSchema.parse(created.home)
+    const membership = parseHomeownerMembership(created.membership)
+
+    const coherent = home.createdByPrincipalRef === authorization.principalRef
+      && membership.principalRef === authorization.principalRef
+      && membership.homeRef === home.homeRef
+      && membership.role === 'workspace_controller'
+      && membership.basis === 'self_created_workspace'
+      && membership.state === 'active'
+      && membership.relationshipLabel === 'claimed_unverified'
+    if (!coherent) throw new HomeownerApiError('unavailable')
+
+    return safeSummary(home, membership)
+  }
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Phase 2A is a read-only server boundary. Email delivery, persistence, uploads, invitations, and sharing remain unavailable until separately configured and verified.'
+  'Home creation is defined but remains fail-closed until server persistence is configured. Email delivery, uploads, invitations, and sharing remain unavailable until separately configured and verified.'

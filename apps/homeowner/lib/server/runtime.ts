@@ -10,10 +10,8 @@
  * exists on this side — the demo lives in the browser's synthetic mode only,
  * and a server must never invent a homeowner.
  *
- * FOR CODEX: replace `unconfiguredIdentity` and `unconfiguredRepository` with
- * the real providers (and the capability values with verified server
- * configuration) to bring the three read routes live. The route files and the
- * HTTP handler do not change.
+ * FOR CODEX: replace the unconfigured identity, repository, and command ports
+ * with real providers, then enable only independently verified capabilities.
  */
 
 import {
@@ -21,7 +19,7 @@ import {
 } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import type {
-  HomeownerIdentityPort, HomeownerRepositoryPort,
+  HomeownerCommandPort, HomeownerIdentityPort, HomeownerRepositoryPort,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
 
 /** No identity provider exists: every handle resolves to nobody. */
@@ -60,6 +58,15 @@ const unconfiguredRepository: HomeownerRepositoryPort = {
   },
 }
 
+const unconfiguredCommands: HomeownerCommandPort = {
+  async createPrivateHomeWorkspace() {
+    throw new HomeownerApiError('unavailable')
+  },
+  async createProject() {
+    throw new HomeownerApiError('unavailable')
+  },
+}
+
 /** Verified server configuration does not exist yet; every capability is false. */
 const UNCONFIGURED_CAPABILITIES = Object.freeze({
   magicLinkSignIn: false,
@@ -76,6 +83,7 @@ export function homeownerApiService(): HomeownerApiService {
     service = new HomeownerApiService({
       identity: unconfiguredIdentity,
       repository: unconfiguredRepository,
+      commands: unconfiguredCommands,
       now: () => new Date().toISOString(),
       capabilities: UNCONFIGURED_CAPABILITIES,
     })
