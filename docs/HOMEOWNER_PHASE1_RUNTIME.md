@@ -1,7 +1,7 @@
 # Homeowner Phase 1 Runtime Foundation
 
-Status: **draft contracts, adapter ports, and a read-only server application
-boundary; no live provider or real data.**
+Status: **draft contracts, adapter ports, three read routes, and one fail-closed
+create-home command; no live provider or real data.**
 
 The first HomesRolo homeowner application is a private workspace for a person
 to organize one home, its projects, photos, documents, warranties, and timeline.
@@ -18,10 +18,12 @@ It does not establish legal ownership and it does not unlock contractor records.
 6. Third-party contributions remain behind the existing verified-controller or
    exact-active-share boundary. Home membership does not reveal their existence.
 
-The draft command boundary also defines idempotency-friendly opaque command
+The command boundary defines idempotency-friendly opaque command
 references for creating one private home workspace and one homeowner project.
 It defines semantic warranty and maintenance records separately from raw
-document bytes. No command adapter or database implementation exists yet.
+document bytes. The create-home HTTP command is wired, but its capability stays
+false and its unconfigured adapter refuses every write until real persistence
+is installed and verified.
 
 The Phase 2A server application boundary now defines strict session, home-list,
 and exact-home browser projections. It resolves identity from a server-owned
@@ -32,11 +34,12 @@ invitations, and sharing until each provider is separately configured and
 verified.
 
 The matching framework-neutral HTTP boundary serves exactly `GET
-/api/v1/session`, `GET /api/v1/homes`, and `GET /api/v1/homes/{opaque-home-ref}`.
+/api/v1/session`, `GET /api/v1/homes`, `GET
+/api/v1/homes/{opaque-home-ref}`, and `POST /api/v1/homes`.
 It requires a server-owned session handle, rejects query/body identity claims,
 returns a one-key `data` envelope, uses `no-store`, and maps failures to bounded
 problem codes without leaking provider or repository details. A framework
-adapter and real provider configuration are still required before deployment.
+adapter is present; real identity and persistence providers are still required.
 
 ## Separation from Jobrolo
 

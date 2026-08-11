@@ -16,6 +16,7 @@ export interface HomeownerHttpRequest {
   readonly pathname: string
   readonly search: string
   readonly hasBody: boolean
+  readonly jsonBody: unknown
   readonly sessionHandle: string | null
 }
 
@@ -33,8 +34,8 @@ const JSON_HEADERS = Object.freeze({
 
 const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
 
-function success(data: unknown): HomeownerHttpResponse {
-  return { status: 200, headers: JSON_HEADERS, body: { data } }
+function success(data: unknown, status = 200): HomeownerHttpResponse {
+  return { status, headers: JSON_HEADERS, body: { data } }
 }
 
 function problem(status: number, code: string): HomeownerHttpResponse {
@@ -55,28 +56,44 @@ function mappedError(error: unknown): HomeownerHttpResponse {
 }
 
 /**
- * Serves exactly the three read routes in homeowner-api.v1. No write route,
- * redirect, upload, or guessed fallback exists in this boundary.
+ * Serves the three read routes plus the one exact create-home command. No
+ * redirect, upload, generic mutation, or guessed fallback exists here.
  */
 export function createHomeownerHttpHandler(service: HomeownerApiService) {
   return async function handle(request: HomeownerHttpRequest): Promise<HomeownerHttpResponse> {
-    if (request.method !== 'GET') return problem(405, 'method_not_allowed')
-    if (request.search !== '' || request.hasBody) return problem(400, 'invalid_request')
-
     const context: HomeownerApiRequestContext = {
       sessionHandle: request.sessionHandle,
     }
 
     try {
-      if (request.pathname === '/api/v1/session') {
-        return success(await service.readSession(context))
+      if (request.method === 'GET') {
+        if (request.search !== '' || request.hasBody || request.jsonBody !== undefined) {
+          return problem(400, 'invalid_request')
+        }
+        if (request.pathname === '/api/v1/session') {
+          return success(await service.readSession(context))
+        }
+        if (request.pathname === '/api/v1/homes') {
+          return success(await service.listHomes(context))
+        }
+        const homeMatch = HOME_PATH.exec(request.pathname)
+        if (homeMatch?.[1]) {
+          return success(await service.readHome(context, homeMatch[1]))
+        }
+        return problem(404, 'not_found')
       }
-      if (request.pathname === '/api/v1/homes') {
-        return success(await service.listHomes(context))
+
+      if (request.method === 'POST' && request.pathname === '/api/v1/homes') {
+        if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+          return problem(400, 'invalid_request')
+        }
+        return success(await service.createHome(context, request.jsonBody), 201)
       }
-      const homeMatch = HOME_PATH.exec(request.pathname)
-      if (homeMatch?.[1]) {
-        return success(await service.readHome(context, homeMatch[1]))
+
+      if (request.pathname === '/api/v1/session'
+        || request.pathname === '/api/v1/homes'
+        || HOME_PATH.test(request.pathname)) {
+        return problem(405, 'method_not_allowed')
       }
       return problem(404, 'not_found')
     } catch (error) {
@@ -86,4 +103,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines three authenticated reads only. It does not create sessions, send email, persist data, accept uploads, or expose write routes.'
+  'This boundary defines three authenticated reads and one create-home command. It does not create sessions, send email, provide persistence by itself, accept uploads, or expose generic writes.'

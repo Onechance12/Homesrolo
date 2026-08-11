@@ -6,6 +6,7 @@ import {
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
+  type HomeownerCommandPort,
   type HomeownerMembership,
   type HomeownerPrincipal,
   type HomeownerRepositoryPort,
@@ -59,6 +60,24 @@ const repository: HomeownerRepositoryPort = {
   async listMaintenance() { return [] },
 }
 
+const commands: HomeownerCommandPort = {
+  async createPrivateHomeWorkspace() {
+    return {
+      home: {
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        homeRef,
+        createdByPrincipalRef: principalRef,
+        displayLabel: 'Our home',
+        privateLocationLabel: 'Private location',
+        createdAt: now,
+        updatedAt: now,
+      },
+      membership,
+    }
+  },
+  async createProject() { throw new Error('not used') },
+}
+
 function handler() {
   const service = new HomeownerApiService({
     identity: {
@@ -67,10 +86,11 @@ function handler() {
       },
     },
     repository,
+    commands,
     now: () => now,
     capabilities: {
       magicLinkSignIn: false,
-      persistence: false,
+      persistence: true,
       uploads: false,
       invitations: false,
       sharing: false,
@@ -84,6 +104,7 @@ const request = (overrides: Partial<Parameters<ReturnType<typeof handler>>[0]> =
   pathname: '/api/v1/session',
   search: '',
   hasBody: false,
+  jsonBody: undefined,
   sessionHandle: 'server-cookie-session',
   ...overrides,
 })
@@ -133,7 +154,7 @@ test('unknown, malformed, cross-home, and write routes fail closed', async () =>
     [request({ pathname: '/api/v1/homes/hhom_short' }), 404],
     [request({ pathname: `/api/v1/homes/${otherHomeRef}` }), 404],
     [request({ pathname: '/api/v1/projects' }), 404],
-    [request({ method: 'POST', pathname: '/api/v1/homes' }), 405],
+    [request({ method: 'POST', pathname: '/api/v1/projects', hasBody: true, jsonBody: {} }), 404],
   ] as const
   for (const [input, status] of cases) {
     const response = await handle(input)
@@ -149,6 +170,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   const broken = new HomeownerApiService({
     identity: { async resolvePrincipal() { return principal } },
     repository: { ...repository, async listMemberships() { throw new Error('private database detail') } },
+    commands,
     now: () => now,
     capabilities: {
       magicLinkSignIn: false,
@@ -163,4 +185,43 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   assert.deepEqual(response.body, { error: { code: 'unavailable' } })
   assert.equal(JSON.stringify(response.body).includes('database'), false)
   assert.match(HOMEOWNER_HTTP_WARNING, /does not create sessions/)
+})
+
+test('POST /api/v1/homes accepts only the strict command and returns one safe summary', async () => {
+  const handle = handler()
+  const response = await handle(request({
+    method: 'POST',
+    pathname: '/api/v1/homes',
+    hasBody: true,
+    jsonBody: {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    },
+  }))
+  assert.equal(response.status, 201)
+  assert.deepEqual(response.body, { data: {
+    homeRef,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+    relationshipLabel: 'claimed_unverified',
+  } })
+  assert.equal(JSON.stringify(response.body).includes(principalRef), false)
+
+  for (const jsonBody of [
+    undefined,
+    null,
+    { commandRef: `hcmd_${body('c')}`, displayLabel: 'Our home' },
+    {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      role: 'workspace_controller',
+    },
+  ]) {
+    const rejected = await handle(request({
+      method: 'POST', pathname: '/api/v1/homes', hasBody: true, jsonBody,
+    }))
+    assert.equal(rejected.status, 400)
+  }
 })

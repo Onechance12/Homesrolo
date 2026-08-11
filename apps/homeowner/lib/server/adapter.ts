@@ -22,14 +22,53 @@ function toWebResponse(response: HomeownerHttpResponse): Response {
   })
 }
 
+const MAX_JSON_BYTES = 4096
+
+async function boundedJsonBody(request: Request): Promise<unknown> {
+  if (request.method !== 'POST' || request.body === null) return undefined
+  const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (mediaType !== 'application/json') return undefined
+  const declared = request.headers.get('content-length')
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > MAX_JSON_BYTES)) return undefined
+  try {
+    const reader = request.body.getReader()
+    const chunks: Uint8Array[] = []
+    let byteLength = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > MAX_JSON_BYTES) {
+        await reader.cancel()
+        return undefined
+      }
+      chunks.push(value)
+    }
+    if (byteLength === 0) return undefined
+    const bytes = new Uint8Array(byteLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
+}
+
 export async function handleHomeownerRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const handler = createHomeownerHttpHandler(homeownerApiService())
+  const hasBody = request.body !== null
+  const jsonBody = await boundedJsonBody(request)
   const response = await handler({
     method: request.method,
     pathname: url.pathname,
     search: url.search,
-    hasBody: request.body !== null,
+    hasBody,
+    jsonBody,
     sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
   })
   return toWebResponse(response)
