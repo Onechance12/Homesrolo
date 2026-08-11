@@ -11,6 +11,7 @@ import {
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
+  type HomeownerCommandPort,
   type HomeownerMembership,
   type HomeownerPrincipal,
   type HomeownerRepositoryPort,
@@ -80,6 +81,8 @@ const capabilities = {
 function service(input: {
   resolvedPrincipal?: HomeownerPrincipal | null
   repository?: HomeownerRepositoryPort
+  commands?: HomeownerCommandPort
+  persistence?: boolean
 } = {}) {
   return new HomeownerApiService({
     identity: {
@@ -89,8 +92,12 @@ function service(input: {
       },
     },
     repository: input.repository ?? repository(),
+    commands: input.commands ?? {
+      async createPrivateHomeWorkspace() { return { home, membership } },
+      async createProject() { throw new Error('not used') },
+    },
     now: () => now,
-    capabilities,
+    capabilities: { ...capabilities, persistence: input.persistence ?? false },
   })
 }
 
@@ -218,4 +225,74 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
       `${noncanonical} must not cross the server/client boundary`,
     )
   }
+})
+
+test('home creation derives authority and time on the server', async () => {
+  let observed: unknown
+  const created = await service({
+    persistence: true,
+    commands: {
+      async createPrivateHomeWorkspace(input) {
+        observed = input
+        return { home, membership }
+      },
+      async createProject() { throw new Error('not used') },
+    },
+  }).createHome(context, {
+    commandRef: `hcmd_${body('c')}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+  })
+
+  assert.deepEqual(created, {
+    homeRef,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'A private homeowner location label',
+    relationshipLabel: 'claimed_unverified',
+  })
+  assert.deepEqual(observed, {
+    authorization: { authorized: true, principalRef },
+    command: {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      requestedAt: now,
+    },
+  })
+})
+
+test('home creation rejects browser authority, disabled persistence, and incoherent adapter output', async () => {
+  await assert.rejects(
+    service({ persistence: true }).createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      principalRef,
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    service().createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+  await assert.rejects(
+    service({
+      persistence: true,
+      commands: {
+        async createPrivateHomeWorkspace() {
+          return { home, membership: { ...membership, principalRef: otherPrincipalRef } }
+        },
+        async createProject() { throw new Error('not used') },
+      },
+    }).createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
 })

@@ -132,6 +132,46 @@ test('non-GET methods are 405 and query strings or bodies are 400', async () => 
   assert.equal(withBody.status, 200)
 })
 
+test('the create-home adapter accepts only bounded JSON and still fails closed without identity', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'c'.repeat(43)}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401, 'a valid command still needs a real server session')
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  const rejected = [
+    new Request(`${BASE}/api/v1/homes`, { method: 'POST' }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(validBody),
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{bad json',
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        ...validBody, principalRef: `hprn_${'p'.repeat(43)}`,
+      }),
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        ...validBody, privateLocationLabel: 'x'.repeat(5000),
+      }),
+    }),
+  ]
+  for (const request of rejected) {
+    const response = await handleHomeownerRequest(request)
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
+  }
+})
+
 test('unknown paths and wrong-kind refs are 404 through the adapter', async () => {
   for (const path of [
     '/api/v1/anything',
