@@ -3,8 +3,8 @@
  * remote adapter consumes, and the single HTTP-status-to-PortError map.
  *
  * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
- * server defines exactly three reads — session, home list, home view — and the
- * decoders below mirror those schemas key for key. Speculative decoders for
+ * server defines three reads plus the create-home and exact-home intake
+ * responses, and the decoders below mirror those schemas key for key. Speculative decoders for
  * routes the server has not defined were deleted rather than kept "for later":
  * an unsupported route returns unavailable in the adapter and never decodes.
  *
@@ -15,7 +15,7 @@
  */
 
 import {
-  type HomeownerSession, type PortError, type RelationshipLabel, type ServerHomeSummary,
+  type HomeownerSession, type PortError, type RecordedHomeIntake, type RelationshipLabel, type ServerHomeSummary,
   type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -134,6 +134,19 @@ const utcInstant: Decoder<string> = (value, at) => {
   return value
 }
 
+const nullable = <T>(decoder: Decoder<T>): Decoder<T | null> => (value, at) =>
+  value === null ? null : decoder(value, at)
+
+const wholeYear: Decoder<number> = (value, at) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1800 && value <= 9999
+    ? value
+    : fail(at, 'a whole year from 1800 through 9999')
+
+const decodeApproximateYear = object<{ value: number; precision: 'exact' | 'approximate' }>({
+  value: wholeYear,
+  precision: oneOf(['exact', 'approximate'] as const),
+})
+
 // --- resource decoders (exactly homeowner-api.v1) -----------------------------
 
 const RELATIONSHIP_LABELS = [
@@ -216,6 +229,39 @@ export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
     updatedAt: utcInstant,
   })(value, at)
   return { source: 'server', ...decoded }
+}
+
+const SYSTEM_KINDS = [
+  'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+] as const
+
+const decodeRecordedSystem = object<RecordedHomeIntake['systems'][number]>({
+  kind: oneOf(SYSTEM_KINDS),
+  present: oneOf(['yes', 'no', 'unknown'] as const),
+  installedOrReplacedYear: nullable(decodeApproximateYear),
+})
+
+export const decodeRecordedHomeIntake: Decoder<RecordedHomeIntake> = (value, at) => {
+  const decoded = object<RecordedHomeIntake>({
+    homeRef: opaqueRef('hhom'),
+    homeType: oneOf(['house', 'townhouse', 'condo', 'other', 'unknown'] as const),
+    yearBuilt: nullable(decodeApproximateYear),
+    source: literal('homeowner_recollection'),
+    systems: array(decodeRecordedSystem),
+    updatedAt: utcInstant,
+  })(value, at)
+  const kinds = decoded.systems.map(system => system.kind)
+  if (kinds.length !== SYSTEM_KINDS.length
+    || new Set(kinds).size !== SYSTEM_KINDS.length
+    || SYSTEM_KINDS.some(kind => !kinds.includes(kind))) {
+    return fail(`${at}.systems`, 'each supported system exactly once')
+  }
+  for (const [index, system] of decoded.systems.entries()) {
+    if (system.present !== 'yes' && system.installedOrReplacedYear !== null) {
+      fail(`${at}.systems[${index}].installedOrReplacedYear`, 'null unless present is yes')
+    }
+  }
+  return decoded
 }
 
 export const decodeList = array

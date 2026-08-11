@@ -135,10 +135,56 @@ export interface HomeFile extends HomeSummary {
 }
 
 export interface CreateHomeInput {
+  /**
+   * Browser-minted opaque idempotency ref (`hcmd_` + 43 base64url chars; see
+   * command-ref.ts). Minted ONCE per submission attempt group and reused
+   * verbatim on retries so the server can deduplicate; an edited draft is a
+   * new group with a fresh ref. It carries no authority — requestedAt and
+   * every membership fact are server-derived.
+   */
+  readonly commandRef: string
   readonly alias: string
   readonly locality: string
+  /**
+   * The synthetic adapter renders these in the demo. The remote create-home
+   * adapter never puts them in the create command; the separate exact-home
+   * intake command records the typed values after one homeRef exists.
+   */
   readonly homeType: HomeFile['homeType']
   readonly yearBuilt: number | null
+}
+
+export type HomeSystemKind =
+  | 'roof'
+  | 'heating'
+  | 'cooling'
+  | 'water_heater'
+  | 'gutters'
+  | 'foundation'
+
+export interface HomeownerApproximateYear {
+  readonly value: number
+  readonly precision: 'exact' | 'approximate'
+}
+
+export interface RecordHomeIntakeInput {
+  readonly commandRef: string
+  readonly homeType: 'house' | 'townhouse' | 'condo' | 'other' | 'unknown'
+  readonly yearBuilt: HomeownerApproximateYear | null
+  readonly systems: readonly {
+    readonly kind: HomeSystemKind
+    readonly present: 'yes' | 'no' | 'unknown'
+    readonly installedOrReplacedYear: HomeownerApproximateYear | null
+  }[]
+}
+
+export interface RecordedHomeIntake {
+  readonly homeRef: string
+  readonly homeType: RecordHomeIntakeInput['homeType']
+  readonly yearBuilt: HomeownerApproximateYear | null
+  readonly source: 'homeowner_recollection'
+  readonly systems: RecordHomeIntakeInput['systems']
+  readonly updatedAt: string
 }
 
 // --- projects -----------------------------------------------------------------
@@ -273,7 +319,11 @@ export interface HomeownerDataPort {
 
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>
   getHome(homeRef: string): Promise<PortResult<HomeViewEntry>>
-  createHome(input: CreateHomeInput): Promise<PortResult<HomeSummary>>
+  createHome(input: CreateHomeInput): Promise<PortResult<HomeListEntry>>
+  recordInitialIntake(
+    homeRef: string,
+    input: RecordHomeIntakeInput,
+  ): Promise<PortResult<RecordedHomeIntake>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>
