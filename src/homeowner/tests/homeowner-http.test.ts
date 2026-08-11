@@ -54,6 +54,8 @@ const repository: HomeownerRepositoryPort = {
       updatedAt: now,
     }
   },
+  async readPropertyFacts() { return null },
+  async listSystems() { return [] },
   async listProjects() { return [] },
   async listArtifactMetadata() { return [] },
   async listWarranties() { return [] },
@@ -76,6 +78,7 @@ const commands: HomeownerCommandPort = {
     }
   },
   async createProject() { throw new Error('not used') },
+  async recordInitialIntake() { throw new Error('not used') },
 }
 
 function handler() {

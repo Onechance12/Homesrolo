@@ -62,6 +62,8 @@ function repository(overrides: Partial<HomeownerRepositoryPort> = {}): Homeowner
     async readHome(grant: AuthorizedHomeownerWorkspace) {
       return grant.homeRef === homeRef ? home : null
     },
+    async readPropertyFacts() { return null },
+    async listSystems() { return [] },
     async listProjects() { return [] },
     async listArtifactMetadata() { return [] },
     async listWarranties() { return [] },
@@ -95,6 +97,7 @@ function service(input: {
     commands: input.commands ?? {
       async createPrivateHomeWorkspace() { return { home, membership } },
       async createProject() { throw new Error('not used') },
+      async recordInitialIntake() { throw new Error('not used') },
     },
     now: () => now,
     capabilities: { ...capabilities, persistence: input.persistence ?? false },
@@ -237,6 +240,7 @@ test('home creation derives authority and time on the server', async () => {
         return { home, membership }
       },
       async createProject() { throw new Error('not used') },
+      async recordInitialIntake() { throw new Error('not used') },
     },
   }).createHome(context, {
     commandRef: `hcmd_${body('c')}`,
@@ -287,6 +291,7 @@ test('home creation rejects browser authority, disabled persistence, and incoher
           return { home, membership: { ...membership, principalRef: otherPrincipalRef } }
         },
         async createProject() { throw new Error('not used') },
+        async recordInitialIntake() { throw new Error('not used') },
       },
     }).createHome(context, {
       commandRef: `hcmd_${body('c')}`,
