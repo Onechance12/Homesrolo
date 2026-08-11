@@ -145,16 +145,23 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/session/route.ts',
     'app/api/v1/homes/route.ts',
     'app/api/v1/homes/[homeRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/intake/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
-    'the route inventory must remain exactly the three defined paths')
+    'the route inventory must remain exactly the four defined paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    assert.match(content, /export async function GET/, `${rel} serves GET`)
+    if (rel === 'app/api/v1/homes/[homeRef]/intake/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves the intake command`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose an intake read`)
+    } else {
+      assert.match(content, /export async function GET/, `${rel} serves GET`)
+    }
     if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
-    } else {
+    } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
