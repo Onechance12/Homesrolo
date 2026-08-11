@@ -2,37 +2,173 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { usePort, useSession } from '../../../lib/port/provider.tsx'
+import { useEffect, useRef, useState } from 'react'
+import { usePort, usePortMode, useSession } from '../../../lib/port/provider.tsx'
 import { HouseMark } from '../../../components/icons.tsx'
 import { UnauthorizedState } from '../../../components/states.tsx'
-import type { CreateHomeInput } from '../../../lib/port/types.ts'
+import {
+  answer, back, choicesFor, draftFrom, initialIntake, isComplete, skip, skippable,
+  type IntakeState,
+} from '../../../lib/intake/machine.ts'
+import { SYSTEM_LABEL, SYSTEM_ORDER, type IntakeDraft } from '../../../lib/intake/script.ts'
+import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
 
 /**
- * Create-home onboarding — MOCK. The created home lives in memory for this
- * demo session only. Note what is deliberately NOT asked for: a postal
- * address. A home file is identified by an alias here; real property
- * resolution is a runtime decision that belongs to the integration lane.
+ * Opening a home's file is a conversation, not a form. The script is
+ * deterministic (lib/intake) — no model, no invented defaults — and everything
+ * it records is marked as the homeowner's own recollection.
+ *
+ * The draft lives in memory until the remote path completes two exact
+ * commands: create the private home shell, then attach the homeowner-recalled
+ * profile and systems to the returned homeRef. Partial completion is shown
+ * honestly and retries only the second command.
  */
+
+type SubmitState =
+  | { kind: 'idle' }
+  | { kind: 'sending' }
+  | { kind: 'saving_intake'; homeRef: string }
+  | { kind: 'unavailable' }
+  | { kind: 'signed_out' }
+  | { kind: 'failed'; error: string }
+  | { kind: 'partial'; homeRef: string; error: string }
+  | { kind: 'created'; homeRef: string }
+
+function ReviewCard({ draft }: { draft: IntakeDraft }) {
+  return (
+    <div className="jobdoc" style={{ marginTop: '1rem' }}>
+      <p className="jobdoc__serial">
+        <span>Home file draft</span>
+        <span aria-hidden="true">recollection · unconfirmed</span>
+      </p>
+      <dl className="jobdoc__rows">
+        <div><dt>Name</dt><dd>{draft.home.displayLabel}</dd></div>
+        <div><dt>Area</dt><dd>{draft.home.privateLocationLabel}</dd></div>
+        <div><dt>Type</dt><dd>{draft.profile.homeType === 'unknown' ? 'Not recorded' : draft.profile.homeType}</dd></div>
+        <div>
+          <dt>Built</dt>
+          <dd>
+            {draft.profile.yearBuilt
+              ? `${draft.profile.yearBuilt.precision === 'approximate' ? '~' : ''}${draft.profile.yearBuilt.value}`
+              : 'Not recorded'}
+          </dd>
+        </div>
+        {draft.systems.map(system => (
+          <div key={system.kind}>
+            <dt>{SYSTEM_LABEL[system.kind]}</dt>
+            <dd>
+              {system.present === 'no' && 'None'}
+              {system.present === 'unknown' && 'Not sure'}
+              {system.present === 'yes' && (system.year
+                ? `${system.year.precision === 'approximate' ? '~' : ''}${system.year.value}`
+                : 'Yes — year not recorded')}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mono" style={{ marginTop: '0.8rem' }}>
+        Source: your recollection. A contractor can confirm the big items later.
+      </p>
+    </div>
+  )
+}
+
 export default function NewHomePage() {
   const port = usePort()
+  const mode = usePortMode()
   const { state: session } = useSession()
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [form, setForm] = useState<CreateHomeInput>({
-    alias: '',
-    locality: '',
-    homeType: 'house',
-    yearBuilt: null,
-  })
 
-  async function create(event: React.FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setFailed(false)
-    const result = await port.createHome(form)
-    if (!result.ok) { setBusy(false); setFailed(true); return }
+  // The current year bounds year answers; injected so the machine stays pure.
+  const [state, setState] = useState<IntakeState>(() => initialIntake(new Date().getFullYear()))
+  const [text, setText] = useState('')
+  const [yearText, setYearText] = useState('')
+  const [approximate, setApproximate] = useState(false)
+  const [submit, setSubmit] = useState<SubmitState>({ kind: 'idle' })
+  const endRef = useRef<HTMLDivElement>(null)
+  // One commandRef per submission attempt group: retries of the SAME draft
+  // reuse it (idempotency-stable), an edited draft mints a fresh one.
+  const createAttemptRef = useRef<string | null>(null)
+  const intakeAttemptRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' })
+  }, [state.transcript.length])
+
+  useEffect(() => {
+    // Any change to the conversation ends the current attempt group.
+    if (!isComplete(state)) {
+      createAttemptRef.current = null
+      intakeAttemptRef.current = null
+    }
+  }, [state])
+
+  const step = state.step
+  const choices = choicesFor(step)
+  const complete = isComplete(state)
+
+  function give(input: Parameters<typeof answer>[1]) {
+    setState(current => answer(current, input))
+    setText('')
+    setYearText('')
+    setApproximate(false)
+  }
+
+  async function saveIntake(homeRef: string, draft: IntakeDraft) {
+    const commandRef = commandRefForAttempt(intakeAttemptRef.current)
+    intakeAttemptRef.current = commandRef
+    setSubmit({ kind: 'saving_intake', homeRef })
+    const result = await port.recordInitialIntake(homeRef, {
+      commandRef,
+      homeType: draft.profile.homeType,
+      yearBuilt: draft.profile.yearBuilt,
+      systems: draft.systems.map(system => ({
+        kind: system.kind,
+        present: system.present,
+        installedOrReplacedYear: system.year,
+      })),
+    })
+    if (!result.ok) {
+      setSubmit({ kind: 'partial', homeRef, error: result.error })
+      return
+    }
+    setSubmit({ kind: 'created', homeRef })
+  }
+
+  async function retryIntake(homeRef: string) {
+    if (!complete) return
+    await saveIntake(homeRef, draftFrom(state))
+  }
+
+  async function create() {
+    if (!complete) return
+    const draft = draftFrom(state)
+    const commandRef = commandRefForAttempt(createAttemptRef.current)
+    createAttemptRef.current = commandRef
+    setSubmit({ kind: 'sending' })
+    const result = await port.createHome({
+      commandRef,
+      alias: draft.home.displayLabel,
+      locality: draft.home.privateLocationLabel,
+      // The remote create adapter omits these; saveIntake sends their typed
+      // values only after the server returns the exact homeRef.
+      homeType: draft.profile.homeType === 'unknown' ? 'other' : draft.profile.homeType,
+      yearBuilt: draft.profile.yearBuilt?.value ?? null,
+    })
+    if (!result.ok) {
+      if (result.error === 'not_signed_in') {
+        setSubmit({ kind: 'signed_out' })
+        return
+      }
+      setSubmit(result.error === 'unavailable'
+        ? { kind: 'unavailable' }
+        : { kind: 'failed', error: result.error })
+      return
+    }
+    if (mode === 'remote') {
+      await saveIntake(result.value.homeRef, draft)
+      return
+    }
     router.push(`/home/${result.value.homeRef}`)
   }
 
@@ -40,64 +176,210 @@ export default function NewHomePage() {
     <div className="gate">
       <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
       <main id="main" tabIndex={-1} className="gate__main">
-        <div className="gate__card">
+        <div className="gate__card gate__card--wide">
           {session.kind === 'signed_out' ? <UnauthorizedState /> : (
             <>
               <Link href="/homes" className="backlink">← Back to your homes</Link>
-              <p className="mono" style={{ marginBottom: '0.4rem' }}>New home file</p>
-              <h1 style={{ fontSize: '1.5rem' }}>Give the home its file.</h1>
-              <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
-                A name and a rough area are enough to start. The record grows from
-                the first project you add.
+              <p className="mono" style={{ marginBottom: '0.4rem' }}>New home file · guided</p>
+              <h1 style={{ fontSize: '1.4rem' }}>Tell us about the home.</h1>
+              <p className="mono" style={{ marginTop: '0.35rem' }}>
+                Scripted questions, your words. Nothing is guessed, and a refresh starts over.
               </p>
 
-              <form onSubmit={create}>
-                <div className="field">
-                  <label htmlFor="alias">What do you call this home?</label>
-                  <input id="alias" type="text" required value={form.alias}
-                    onChange={e => setForm(f => ({ ...f, alias: e.target.value }))}
-                    placeholder="The Birch House" autoComplete="off" />
-                  <span className="field__hint">An alias, not an address. Addresses are never collected in this demo.</span>
-                </div>
-                <div className="field">
-                  <label htmlFor="locality">Area</label>
-                  <input id="locality" type="text" value={form.locality}
-                    onChange={e => setForm(f => ({ ...f, locality: e.target.value }))}
-                    placeholder="Sample Metro — North" autoComplete="off" />
-                </div>
-                <div className="field">
-                  <label htmlFor="home-type">Type</label>
-                  <select id="home-type" value={form.homeType}
-                    onChange={e => setForm(f => ({ ...f, homeType: e.target.value as CreateHomeInput['homeType'] }))}>
-                    <option value="house">House</option>
-                    <option value="townhouse">Townhouse</option>
-                    <option value="condo">Condo</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="year-built">Year built (if known)</label>
-                  <input id="year-built" type="number" inputMode="numeric" min={1700} max={2026}
-                    value={form.yearBuilt ?? ''}
-                    onChange={e => setForm(f => ({ ...f, yearBuilt: e.target.value ? Number(e.target.value) : null }))}
-                    placeholder="1987" />
-                </div>
-
-                {failed && (
-                  <p role="alert" style={{ color: 'var(--brick)', fontSize: '0.88rem', marginTop: '0.75rem' }}>
-                    The demo could not add that home. Try again.
+              <div className="intake" aria-live="polite">
+                {state.transcript.map((line, index) => (
+                  <p
+                    key={index}
+                    className={line.speaker === 'homesrolo' ? 'intake__ask' : 'intake__say'}
+                  >
+                    {line.text}
                   </p>
-                )}
+                ))}
+                <div ref={endRef} />
+              </div>
 
-                <div style={{ marginTop: '1.25rem' }}>
-                  <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
-                    {busy ? 'Opening the file…' : 'Open this home’s file'}
-                  </button>
+              {state.error && (
+                <p role="alert" className="intake__error">{state.error}</p>
+              )}
+
+              {!complete && (
+                <div className="intake__controls">
+                  {step.kind === 'display_label' || step.kind === 'location_label' ? (
+                    <form
+                      className="intake__row"
+                      onSubmit={event => { event.preventDefault(); give({ kind: 'text', value: text }) }}
+                    >
+                      <label className="sr-only" htmlFor="intake-text">Your answer</label>
+                      <input
+                        id="intake-text"
+                        type="text"
+                        value={text}
+                        onChange={event => setText(event.target.value)}
+                        placeholder="Type your answer…"
+                        autoComplete="off"
+                      />
+                      <button type="submit" className="btn btn--primary">Answer</button>
+                    </form>
+                  ) : null}
+
+                  {choices.length > 0 ? (
+                    <div className="intake__chips" role="group" aria-label="Answer options">
+                      {choices.map(choice => (
+                        <button
+                          key={choice.value}
+                          type="button"
+                          className="btn btn--quiet"
+                          onClick={() => give({ kind: 'choice', value: choice.value })}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {(step.kind === 'year_built' || step.kind === 'system_year') ? (
+                    <form
+                      className="intake__row"
+                      onSubmit={event => {
+                        event.preventDefault()
+                        const value = Number(yearText)
+                        give({ kind: 'year', value, approximate })
+                      }}
+                    >
+                      <label className="sr-only" htmlFor="intake-year">Year</label>
+                      <input
+                        id="intake-year"
+                        type="number"
+                        inputMode="numeric"
+                        value={yearText}
+                        onChange={event => setYearText(event.target.value)}
+                        placeholder="e.g. 2019"
+                      />
+                      <label className="intake__approx">
+                        <input
+                          type="checkbox"
+                          checked={approximate}
+                          onChange={event => setApproximate(event.target.checked)}
+                        />
+                        Just a guess
+                      </label>
+                      <button type="submit" className="btn btn--primary">Answer</button>
+                    </form>
+                  ) : null}
+
+                  <div className="intake__meta">
+                    {step.kind !== 'display_label' && (
+                      <button type="button" className="btn btn--quiet" onClick={() => setState(back)}>
+                        ← Back
+                      </button>
+                    )}
+                    {skippable(step) && (
+                      <button type="button" className="btn btn--quiet" onClick={() => setState(skip)}>
+                        Not sure — skip
+                      </button>
+                    )}
+                    <span className="mono">
+                      {step.kind.startsWith('system')
+                        ? `System ${SYSTEM_ORDER.indexOf((step as { system: (typeof SYSTEM_ORDER)[number] }).system) + 1} of ${SYSTEM_ORDER.length}`
+                        : 'The basics'}
+                    </span>
+                  </div>
                 </div>
-                <p className="mono" style={{ marginTop: '0.8rem' }}>
-                  Demo only: this home lives in memory and disappears on refresh.
-                </p>
-              </form>
+              )}
+
+              {complete && (
+                <>
+                  <ReviewCard draft={draftFrom(state)} />
+                  {submit.kind === 'created' ? (
+                    <div className="state" role="status" style={{ marginTop: '1rem' }}>
+                      <h3>Home file and starting history saved</h3>
+                      <p>
+                        The home shell and the profile and system answers above are
+                        stored as <strong>your recollection</strong>. They are not a
+                        contractor verification or legal proof of ownership.
+                      </p>
+                      <Link className="btn btn--primary" href={`/home/${submit.homeRef}`}>
+                        Open this home’s file
+                      </Link>
+                    </div>
+                  ) : submit.kind === 'partial' ? (
+                    <div className="state" role="alert" style={{ marginTop: '1rem' }}>
+                      <h3>The home is saved; its starting details still need saving</h3>
+                      <p>
+                        The server stored the home shell, but did not confirm the
+                        profile and systems ({submit.error}). The draft is still here.
+                        Retrying below sends only those details to this same home.
+                      </p>
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          onClick={() => retryIntake(submit.homeRef)}
+                        >
+                          Retry the starting details
+                        </button>
+                        <button type="button" className="btn btn--quiet" onClick={() => setState(back)}>
+                          Change an answer
+                        </button>
+                      </div>
+                    </div>
+                  ) : submit.kind === 'signed_out' ? (
+                    <div style={{ marginTop: '1rem' }} role="alert">
+                      <p className="intake__error">
+                        The server says you are signed out, so nothing was saved.
+                        Your draft stays on this screen.
+                      </p>
+                      <UnauthorizedState />
+                    </div>
+                  ) : (
+                    <>
+                      {submit.kind === 'unavailable' && (
+                        <div className="state" role="alert" style={{ marginTop: '1rem' }}>
+                          <h3>Saving is not available yet</h3>
+                          <p>
+                            The server cannot store a home yet, so nothing was saved. Your
+                            draft is shown above and stays on this screen — try again once
+                            saving is live, or start over later. It was not stored anywhere.
+                          </p>
+                          <button type="button" className="btn btn--quiet" onClick={create}>Try again</button>
+                        </div>
+                      )}
+                      {submit.kind === 'failed' && (
+                        <p role="alert" className="intake__error">
+                          That did not go through ({submit.error}). Nothing was saved — try again.
+                        </p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '1.1rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          onClick={create}
+                          disabled={submit.kind === 'sending' || submit.kind === 'saving_intake'}
+                        >
+                          {submit.kind === 'sending'
+                            ? 'Opening the file…'
+                            : submit.kind === 'saving_intake'
+                              ? 'Saving the starting details…'
+                              : 'Open this home’s file'}
+                        </button>
+                        <button type="button" className="btn btn--quiet" onClick={() => setState(back)}>
+                          ← Change an answer
+                        </button>
+                      </div>
+                      {mode === 'synthetic' ? (
+                        <p className="mono" style={{ marginTop: '0.8rem' }}>
+                          Demo: this file lives in memory and disappears on refresh.
+                        </p>
+                      ) : (
+                        <p className="mono" style={{ marginTop: '0.8rem' }}>
+                          Remote saving creates the private home first, then records
+                          these answers as your recollection against that exact home.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
