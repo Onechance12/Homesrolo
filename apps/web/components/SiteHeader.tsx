@@ -18,6 +18,16 @@ function Mark() {
 export function SiteHeader() {
   const pathname = usePathname()
 
+  const navLinks = PRIMARY_NAV.map(item => {
+    const isCurrent = pathname === item.href || pathname === item.href.replace(/\/$/, '')
+
+    return (
+      <Link key={item.href} href={item.href} aria-current={isCurrent ? 'page' : undefined}>
+        {item.label}
+      </Link>
+    )
+  })
+
   return (
     <header className="masthead">
       <div className="shell masthead__inner">
@@ -25,16 +35,15 @@ export function SiteHeader() {
           <Mark />
           <span>Homes<span className="wordmark__accent">rolo</span></span>
         </Link>
-        <nav aria-label={`${SITE_NAME} primary`} className="nav">
-          {PRIMARY_NAV.map(item => {
-            const isCurrent = pathname === item.href || pathname === item.href.replace(/\/$/, '')
-            return (
-              <Link key={item.href} href={item.href} aria-current={isCurrent ? 'page' : undefined}>
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav aria-label={`${SITE_NAME} primary`} className="nav nav--desktop">
+          {navLinks}
         </nav>
+        <details className="mobile-nav">
+          <summary>Menu</summary>
+          <nav aria-label={`${SITE_NAME} mobile`} className="mobile-nav__links">
+            {navLinks}
+          </nav>
+        </details>
       </div>
     </header>
   )
