@@ -19,6 +19,7 @@ export function RoofingArticle({
   title,
   eyebrow,
   lede,
+  quickAnswer,
   pathname,
   sections,
   sources,
@@ -28,6 +29,7 @@ export function RoofingArticle({
   title: string
   eyebrow: string
   lede: string
+  quickAnswer: string
   pathname: string
   sections: readonly EducationalSection[]
   sources: readonly RoofingSource[]
@@ -41,7 +43,11 @@ export function RoofingArticle({
     headline: title,
     description: lede,
     mainEntityOfPage: canonical,
+    datePublished: '2026-08-12',
     dateModified: '2026-08-12',
+    inLanguage: 'en-US',
+    isAccessibleForFree: true,
+    citation: sources.map(source => source.href),
     author: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
   }
@@ -68,7 +74,16 @@ export function RoofingArticle({
             <span aria-current="page">{title}</span>
           </nav>
           <PageHeader eyebrow={eyebrow} title={title} lede={lede} />
-          <p className="article-meta">Reviewed August 12, 2026 · General homeowner education</p>
+          <p className="article-meta">Published by Homesrolo | Updated August 12, 2026 | Sources linked below</p>
+        </div>
+      </section>
+
+      <section className="answer-strip" aria-label="Quick answer">
+        <div className="shell">
+          <div className="answer-box">
+            <p className="eyebrow">Quick answer</p>
+            <p>{quickAnswer}</p>
+          </div>
         </div>
       </section>
 
@@ -85,7 +100,7 @@ export function RoofingArticle({
           <div className="grid grid--2" style={{ alignItems: 'start', gap: '2.5rem' }}>
             <div className="prose">
               <h2>Sources and further reading</h2>
-              <p>These links support the factual parts of this guide. Requirements and prices can change, so the source date and the property’s jurisdiction still matter.</p>
+              <p>We used the sources below for the facts on this page. Prices, permit rules, products, and warranties can change. Check the current source before starting work.</p>
               <ul className="source-list">
                 {sources.map(source => (
                   <li key={source.href}>
@@ -96,7 +111,7 @@ export function RoofingArticle({
               </ul>
             </div>
             <aside className="note">
-              <strong>Where Homesrolo stops.</strong> This page explains common roofing records, choices, and processes. It does not inspect a roof, quote a project, choose a company, or advise on an insurance claim.
+              <strong>About this guide.</strong> Homesrolo explains roofing terms, records, and common project steps. It does not inspect a roof, price a job, select a company, or advise on an insurance claim.
             </aside>
           </div>
         </div>
@@ -105,7 +120,7 @@ export function RoofingArticle({
       <section className="section section--night" aria-labelledby="related-roofing">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2rem' }}>
-            <p className="eyebrow">Keep researching</p>
+            <p className="eyebrow">More roofing information</p>
             <h2 id="related-roofing">Related roofing guides</h2>
           </div>
           <div className="grid grid--3">

@@ -15,13 +15,12 @@ export const SITE_ORIGIN = 'https://homesrolo.com'
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
-  { href: '/how-it-works/', label: 'How it works' },
-  { href: '/how-we-verify/', label: 'How we verify' },
-  { href: '/professionals/', label: 'Professionals' },
-  { href: '/academy/', label: 'Academy' },
+  { href: '/how-it-works/', label: 'Home record' },
   { href: '/services/roofing/', label: 'Roofing' },
-  { href: '/ideas/', label: 'Ideas' },
+  { href: '/professionals/', label: 'Find pros' },
+  { href: '/how-we-verify/', label: 'How we verify' },
   { href: '/for-professionals/', label: 'For pros' },
+  { href: '/about/', label: 'About' },
 ])
 
 /** Routes that belong in the sitemap. Synthetic profiles are excluded. */
@@ -40,4 +39,6 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/services/roofing/fort-worth/',
   '/ideas/',
   '/for-professionals/',
+  '/about/',
+  '/editorial-standards/',
 ])

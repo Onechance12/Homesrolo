@@ -10,13 +10,19 @@ export const dynamic = 'force-static'
  * crawlers that read robots.txt. Synthetic listings warrant both.
  */
 export default function robots(): MetadataRoute.Robots {
+  const publicRules = {
+    allow: '/',
+    disallow: ['/companies/'],
+  }
   return {
     rules: [
-      {
-        userAgent: '*',
-        allow: '/',
-        disallow: ['/companies/'],
-      },
+      { userAgent: '*', ...publicRules },
+      { userAgent: 'OAI-SearchBot', ...publicRules },
+      { userAgent: 'ChatGPT-User', ...publicRules },
+      { userAgent: 'Claude-SearchBot', ...publicRules },
+      { userAgent: 'Googlebot', ...publicRules },
+      { userAgent: 'Bingbot', ...publicRules },
+      { userAgent: 'PerplexityBot', ...publicRules },
     ],
     sitemap: `${SITE_ORIGIN}/sitemap.xml`,
   }

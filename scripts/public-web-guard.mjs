@@ -128,6 +128,7 @@ if (!existsSync(OUT)) {
     const reviewedSourceHosts = new Set([
       'dallas.gov',
       'www.angi.com',
+      'www.gaf.com',
       'www.fortworthtexas.gov',
       'ibhs.org',
       'www.ibhs.org',
@@ -170,6 +171,14 @@ if (!existsSync(OUT)) {
   if (!existsSync(sitemapPath)) fail('sitemap.xml was not exported')
   else if (/\/companies\//.test(readFileSync(sitemapPath, 'utf8'))) {
     fail('sitemap.xml must not list synthetic company profiles')
+  }
+
+  const llmsPath = path.join(OUT, 'llms.txt')
+  if (!existsSync(llmsPath)) fail('llms.txt was not exported')
+  else {
+    const llms = readFileSync(llmsPath, 'utf8')
+    if (!llms.includes('https://homesrolo.com/services/roofing/')) fail('llms.txt must name the canonical roofing center')
+    if (/homesrolo\.example\.com|\/companies\/[a-z0-9-]+/i.test(llms)) fail('llms.txt must not advertise placeholder hosts or sample company profiles')
   }
 
   if (!existsSync(path.join(OUT, '404.html'))) fail('404.html was not exported')

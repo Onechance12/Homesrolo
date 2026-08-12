@@ -29,19 +29,22 @@ export function SiteFooter() {
               <Link href="/services/roofing/">Roofing guide</Link>
               <Link href="/services/roofing/cost/">Roof cost</Link>
               <Link href="/services/roofing/materials/">Roof materials</Link>
-              <Link href="/ideas/">Ideas</Link>
+              <Link href="/services/roofing/choose-a-contractor/">Contractor checklist</Link>
+              <Link href="/services/roofing/dfw/">DFW roofing</Link>
             </div>
             <div className="titleblock__cell">
-              <h2>Directory</h2>
+              <h2>Homesrolo</h2>
               <Link href="/professionals/">Professionals</Link>
               <Link href="/for-professionals/">For professionals</Link>
+              <Link href="/about/">About</Link>
+              <Link href="/editorial-standards/">Editorial standards</Link>
             </div>
           </div>
           <div className="titleblock__meta" aria-hidden="true">
-            <span>Public education preview</span>
-            <span>All data synthetic</span>
-            <span>Ordered by name only</span>
-            <span>Facts carry their source</span>
+            <span>Homeowner education</span>
+            <span>Sample directory data</span>
+            <span>Neutral order</span>
+            <span>Sources shown</span>
           </div>
         </div>
 

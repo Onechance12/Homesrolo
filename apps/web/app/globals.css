@@ -204,6 +204,18 @@ a:hover { color: var(--clay); }
   font-size: 0.78rem;
   letter-spacing: 0.04em;
 }
+.answer-strip { padding-block: 1.5rem; border-bottom: 1px solid var(--rule); background: var(--paper-raised); }
+.answer-box { max-width: var(--measure); }
+.answer-box .eyebrow { margin-bottom: 0.45rem; }
+.answer-box > p:last-child { color: var(--ink); font-size: 1.05rem; line-height: 1.65; }
+.answer-grid { display: grid; gap: 1rem; }
+@media (min-width: 48rem) { .answer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.answer-card { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper-raised); padding: 1.25rem; }
+.answer-card h3 { font-size: 1.06rem; margin-bottom: 0.55rem; }
+.answer-card p { color: var(--ink-soft); }
+.answer-card__source { margin-top: 0.7rem; font-size: 0.84rem; }
+.question-list { display: grid; gap: 0.75rem; padding-left: 1.35rem; }
+.question-list li { padding-left: 0.25rem; color: var(--ink-soft); }
 .source-list { list-style: none; padding: 0; margin: 1.25rem 0 0; display: grid; gap: 1rem; }
 .source-list li { display: grid; gap: 0.15rem; padding-bottom: 0.85rem; border-bottom: 1px solid var(--rule); }
 .source-list a { font-weight: 650; }

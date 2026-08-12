@@ -22,5 +22,5 @@ const RELATED = [
 ] as const
 
 export default function DallasRoofingPage() {
-  return <RoofingArticle eyebrow="Dallas, Texas" title="Roofing in Dallas: the homeowner’s field guide" lede="A useful Dallas roofing plan connects the city permit record, a line-by-line construction scope, exact materials, contractor evidence, and a complete closeout file." pathname="/services/roofing/dallas/" sections={ROOFING_DALLAS_GUIDE} sources={SOURCES} related={RELATED} />
+  return <RoofingArticle eyebrow="Dallas, Texas" title="Roofing in Dallas: a homeowner's field guide" lede="Dallas roofing projects should connect the city permit, measured scope, exact materials, contractor documents, and a complete closeout package." quickAnswer="Dallas requires a roofing permit for roof installation, repair, or replacement. Confirm who pulls it, compare the measured scope and exact materials, and keep the permit and completion records with the home." pathname="/services/roofing/dallas/" sections={ROOFING_DALLAS_GUIDE} sources={SOURCES} related={RELATED} />
 }

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
-import { CONSTITUTION_DISCLOSURES, ROOFING_GUIDE } from '../../../lib/content/education.ts'
+import { CONSTITUTION_DISCLOSURES, ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
 import { SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
   title: 'Texas roofing guide: costs, materials, contractors, and DFW rules',
-  description: 'Independent homeowner roofing guides for Texas and Dallas–Fort Worth: roof replacement cost, materials, contractor checks, permits, storm records, and warranties.',
+  description: 'Independent roofing information for Texas homeowners: roof replacement cost, materials, contractor checks, Dallas Fort Worth permits, storm records, and warranties.',
   alternates: { canonical: '/services/roofing/' },
   openGraph: {
     title: 'Texas roofing guide for homeowners',
@@ -45,6 +45,10 @@ export default function RoofingGuidePage() {
     '@type': 'CollectionPage',
     name: 'Texas roofing guide for homeowners',
     url: `${SITE_ORIGIN}/services/roofing/`,
+    dateModified: '2026-08-12',
+    inLanguage: 'en-US',
+    isAccessibleForFree: true,
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
     isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: SITE_ORIGIN },
     hasPart: [...GUIDES, ...LOCAL_GUIDES].map(guide => ({
       '@type': 'Article',
@@ -59,12 +63,12 @@ export default function RoofingGuidePage() {
       <section className="section section--drafting">
         <div className="shell">
           <PageHeader
-            eyebrow="Texas homeowner roofing center"
-            title="Roofing without the sales pitch"
-            lede="Understand what a roof costs, what the materials actually mean, how to compare contractors, and which records protect the history of the home. Built first for Dallas–Fort Worth and Texas homeowners."
+            eyebrow="Texas roofing help for homeowners"
+            title="Understand the roof before you hire the roofer"
+            lede="Straight answers about roof prices, materials, contractors, permits, insurance boundaries, and the paperwork worth keeping. We start with Dallas Fort Worth and Texas."
           />
           <div className="note" style={{ marginTop: '2rem', maxWidth: 'var(--measure)' }}>
-            <strong>Independent education.</strong> Homesrolo does not sell roofing work, sell leads, or rank a company because it paid. The guides explain the process and cite the source.
+            <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides or neutral directory order. Important claims link to the source so you can check them.
           </div>
         </div>
       </section>
@@ -73,14 +77,14 @@ export default function RoofingGuidePage() {
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">Start here</p>
-            <h2 id="roofing-start">The three questions behind most roofing searches</h2>
+            <h2 id="roofing-start">Start with cost, material, and contractor</h2>
           </div>
           <div className="grid grid--3">
             {GUIDES.map(guide => (
               <article className="card" key={guide.href}>
                 <h3 className="card__title"><Link href={guide.href}>{guide.title}</Link></h3>
                 <p>{guide.body}</p>
-                <p style={{ marginTop: '1rem' }}><Link href={guide.href}>Read the guide →</Link></p>
+                <p style={{ marginTop: '1rem' }}><Link href={guide.href}>Read the guide</Link></p>
               </article>
             ))}
           </div>
@@ -91,9 +95,27 @@ export default function RoofingGuidePage() {
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2.5rem' }}>
             <p className="eyebrow">Roofing basics</p>
-            <h2>The job is an assembly, not just a shingle</h2>
+            <h2>What is included in a roof replacement?</h2>
           </div>
           <Sections sections={ROOFING_GUIDE} />
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="roofing-answers">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">Common questions</p>
+            <h2 id="roofing-answers">Straight answers to common roofing questions</h2>
+          </div>
+          <div className="answer-grid">
+            {ROOFING_QUICK_ANSWERS.map(item => (
+              <article className="answer-card" key={item.question}>
+                <h3>{item.question}</h3>
+                <p>{item.answer}</p>
+                {item.href && item.source ? <p className="answer-card__source"><a href={item.href} rel="noreferrer">Source: {item.source}</a></p> : null}
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -101,7 +123,7 @@ export default function RoofingGuidePage() {
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">Local roofing information</p>
-            <h2 id="local-guides">Dallas–Fort Worth is one market with many local rules</h2>
+            <h2 id="local-guides">Dallas Fort Worth is one market with many local rules</h2>
             <p>Permits and contractor registration are handled by the jurisdiction attached to the property. These pages separate regional weather and pricing context from city-specific rules.</p>
           </div>
           <div className="grid grid--3">
@@ -109,7 +131,7 @@ export default function RoofingGuidePage() {
               <article className="card" key={guide.href}>
                 <h3 className="card__title"><Link href={guide.href}>{guide.title}</Link></h3>
                 <p>{guide.body}</p>
-                <p style={{ marginTop: '1rem' }}><Link href={guide.href}>Open local guide →</Link></p>
+                <p style={{ marginTop: '1rem' }}><Link href={guide.href}>Open local guide</Link></p>
               </article>
             ))}
           </div>
@@ -121,12 +143,12 @@ export default function RoofingGuidePage() {
           <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'start' }}>
             <div className="prose">
               <p className="eyebrow">The Homesrolo difference</p>
-              <h2>A roof guide should end with a usable home record.</h2>
-              <p>A future owner needs more than a star rating. The durable record is the exact product, installer, date, scope, permits, photographs, final invoice, and warranties—kept with the home.</p>
-              <p><Link className="btn btn--quiet" href="/how-it-works/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>See the Home Project Passport</Link></p>
+              <h2>A roof guide should end with a usable home record</h2>
+              <p>A future owner needs the exact product, installer, date, scope, permits, photographs, final invoice, and warranties. Homesrolo is being built to keep that record with the home.</p>
+              <p><Link className="btn btn--quiet" href="/how-it-works/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>See how the home record works</Link></p>
             </div>
             <div className="note">
-              <strong>Not a lead auction.</strong> The long-term directory is designed around sourced facts and homeowner-released project proof, not whoever pays most for the ZIP code.
+              <strong>The contractor directory is being built carefully.</strong> It will open with sourced company facts, correction handling, and homeowner-released project records. Placeholder companies will not be published just to make the directory look full.
             </div>
           </div>
         </div>
@@ -135,11 +157,12 @@ export default function RoofingGuidePage() {
       <section className="section">
         <div className="shell">
           <div className="prose">
-            <h2>Where Homesrolo stops</h2>
+            <h2>A note about this information</h2>
             <ul style={{ color: 'var(--ink-soft)', paddingLeft: '1.15rem' }}>
               {CONSTITUTION_DISCLOSURES.map(line => <li key={line} style={{ marginBottom: '0.45rem' }}>{line}</li>)}
               <li style={{ marginBottom: '0.45rem' }}>Homesrolo is not an engineering firm and does not assess the condition of a structure.</li>
             </ul>
+            <p><Link href="/about/">About Homesrolo</Link> &nbsp;|&nbsp; <Link href="/editorial-standards/">How we research and update these guides</Link></p>
           </div>
         </div>
       </section>

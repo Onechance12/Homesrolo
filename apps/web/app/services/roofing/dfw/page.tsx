@@ -3,10 +3,10 @@ import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_DFW_GUIDE } from '../../../../lib/content/education.ts'
 
 export const metadata: Metadata = {
-  title: 'DFW roofing guide for Dallas–Fort Worth homeowners',
-  description: 'A Dallas–Fort Worth roofing guide covering North Texas hail, wind, heat, local permit differences, materials, contractor scope, and the roof records worth preserving.',
+  title: 'DFW roofing guide for Dallas Fort Worth homeowners',
+  description: 'Dallas Fort Worth roofing information about North Texas hail, wind, heat, city permit differences, materials, contractor scopes, and roof records.',
   alternates: { canonical: '/services/roofing/dfw/' },
-  openGraph: { title: 'Dallas–Fort Worth roofing guide', description: 'North Texas roofing information without the sales pitch.', url: '/services/roofing/dfw/' },
+  openGraph: { title: 'Dallas Fort Worth roofing guide', description: 'North Texas roofing, permits, materials, contractor scopes, and project records.', url: '/services/roofing/dfw/' },
 }
 
 const SOURCES = [
@@ -22,5 +22,5 @@ const RELATED = [
 ] as const
 
 export default function DfwRoofingPage() {
-  return <RoofingArticle eyebrow="Dallas–Fort Worth" title="A DFW roofing guide built for homeowners" lede="North Texas roofing decisions sit at the intersection of severe weather, extreme summer heat, city-by-city rules, construction scope, and a home record that needs to survive the next storm and the next owner." pathname="/services/roofing/dfw/" sections={ROOFING_DFW_GUIDE} sources={SOURCES} related={RELATED} />
+  return <RoofingArticle eyebrow="Dallas Fort Worth" title="A DFW roofing guide for homeowners" lede="North Texas roofs face hot summers, severe thunderstorms, and different permit rules from one city to the next. This guide explains what to check before work begins and what to save afterward." quickAnswer="For a DFW roofing project, verify the rule for the property’s city, compare the complete roof system instead of the shingle alone, confirm the contractor and insurance, and keep photographs and closeout documents with the home." pathname="/services/roofing/dfw/" sections={ROOFING_DFW_GUIDE} sources={SOURCES} related={RELATED} />
 }

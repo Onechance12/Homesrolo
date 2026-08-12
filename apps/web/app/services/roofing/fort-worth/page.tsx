@@ -22,5 +22,5 @@ const RELATED = [
 ] as const
 
 export default function FortWorthRoofingPage() {
-  return <RoofingArticle eyebrow="Fort Worth, Texas" title="Roofing in Fort Worth: permits, scope, and proof" lede="Fort Worth draws a specific line between shingle replacement and work on the deck or roof structure. The project record needs to capture when the scope crosses that line." pathname="/services/roofing/fort-worth/" sections={ROOFING_FORT_WORTH_GUIDE} sources={SOURCES} related={RELATED} />
+  return <RoofingArticle eyebrow="Fort Worth, Texas" title="Roofing in Fort Worth: permits, scope, and proof" lede="Fort Worth's permit rule can change once tear-off exposes damaged wood. The scope should explain how that change is priced, approved, permitted, and documented." quickAnswer="Fort Worth does not require a permit for shingle replacement alone. A permit is required when decking, lathing, sheathing, rafters, or ridge boards are replaced. Put the wood-repair price and permit responsibility in the contract." pathname="/services/roofing/fort-worth/" sections={ROOFING_FORT_WORTH_GUIDE} sources={SOURCES} related={RELATED} />
 }
