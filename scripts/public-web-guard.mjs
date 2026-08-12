@@ -140,7 +140,7 @@ if (!existsSync(OUT)) {
     for (const match of page.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
       const url = new URL(match[1])
       const synthetic = url.hostname === 'example.com' || url.hostname.endsWith('.example.com')
-      const canonical = url.hostname === 'homesrolo.com'
+      const canonical = url.hostname === 'homesrolo.com' || url.hostname === 'app.homesrolo.com'
       if (!synthetic && !canonical && !reviewedSourceHosts.has(url.hostname)) {
         fail(`${rel(file)}: unreviewed external link ${url.href}`)
       }

@@ -5,6 +5,7 @@ import {
   HOMEOWNER_RUNTIME_VERSION,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
+  homeownerProjectSchema,
   homeownerPropertyFactsSchema,
   homeownerSystemSchema,
   privateHomeProfileSchema,
@@ -14,6 +15,7 @@ import {
   type HomeownerIdentityPort,
   type HomeownerMembership,
   type HomeownerPrincipal,
+  type HomeownerProject,
   type HomeownerRepositoryPort,
   type HomeownerSystem,
   type PrivateHomeProfile,
@@ -141,6 +143,23 @@ function systemFromRow(input: unknown): HomeownerSystem {
   })
 }
 
+function projectFromRow(input: unknown): HomeownerProject {
+  const row = record(input)
+  return homeownerProjectSchema.parse({
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    projectRef: requiredString(row, 'project_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
+    title: requiredString(row, 'title'),
+    category: requiredString(row, 'category'),
+    status: requiredString(row, 'status'),
+    ...(row.occurred_on === null ? {} : { occurredOn: requiredString(row, 'occurred_on') }),
+    ...(row.summary === null ? {} : { summary: requiredString(row, 'summary') }),
+    createdAt: canonicalInstant(row, 'created_at'),
+    updatedAt: canonicalInstant(row, 'updated_at'),
+  })
+}
+
 function stableJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
@@ -243,7 +262,15 @@ export class SupabaseHomeownerProvider implements
     return data.map(systemFromRow)
   }
 
-  async listProjects() { return [] }
+  async listProjects(grant: AuthorizedHomeownerWorkspace) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_projects')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .order('updated_at', { ascending: false })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(projectFromRow)
+  }
   async listArtifactMetadata() { return [] }
   async listWarranties() { return [] }
   async listMaintenance() { return [] }
@@ -266,8 +293,22 @@ export class SupabaseHomeownerProvider implements
     return { home: homeFromRow(result.home), membership: membershipFromRow(result.membership) }
   }
 
-  async createProject(): Promise<never> {
-    throw new HomeownerApiError('unavailable')
+  async createProject(input: Parameters<HomeownerCommandPort['createProject']>[0]) {
+    const projectRef = mintOpaqueRef('hprj')
+    const { data, error } = await this.#client.rpc('homesrolo_create_homeowner_roofing_project', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: digest(input.command),
+      p_project_ref: projectRef,
+      p_title: input.command.title,
+      p_summary: input.command.summary ?? '',
+      p_requested_at: input.command.requestedAt,
+    })
+    if (error) throw new HomeownerApiError('unavailable')
+    return projectFromRow(data)
   }
 
   async recordInitialIntake(input: Parameters<HomeownerCommandPort['recordInitialIntake']>[0]) {

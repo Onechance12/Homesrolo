@@ -224,6 +224,50 @@ a:hover { color: var(--clay); }
 .btn--block { width: 100%; }
 .btn[disabled] { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
 
+.form-error { color: var(--brick); font-size: 0.88rem; }
+.form-note { color: var(--ink-faint); font-size: 0.78rem; line-height: 1.45; }
+
+.roof-start { border-color: var(--clay-line); box-shadow: var(--shadow-soft); }
+.roof-start__form { display: grid; gap: 1rem; }
+.roof-start__form fieldset { margin: 0; padding: 0; border: 0; }
+.roof-start__form legend { margin-bottom: 0.55rem; color: var(--ink-soft); font-size: 0.85rem; font-weight: 650; }
+.choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; }
+.choice-card {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 48px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.choice-card:has(input:checked) { border-color: var(--clay); background: var(--clay-wash); }
+.choice-card input { accent-color: var(--clay); flex: none; }
+
+.roof-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--clay-line);
+  border-radius: var(--radius);
+  background: var(--clay-wash);
+}
+.roof-callout h2 { margin-top: 0.15rem; font-size: 1.2rem; }
+.roof-callout p:not(.mono) { margin-top: 0.25rem; color: var(--ink-soft); font-size: 0.9rem; }
+
+@media (max-width: 34rem) {
+  .choice-grid { grid-template-columns: 1fr; }
+  .roof-callout { align-items: stretch; flex-direction: column; }
+  .roof-callout .btn { width: 100%; }
+  .row { align-items: flex-start; }
+  .row__end { max-width: 8.5rem; }
+}
+
 /* =============================================================================
    App shell — desktop rail, mobile tab bar
    ========================================================================== */

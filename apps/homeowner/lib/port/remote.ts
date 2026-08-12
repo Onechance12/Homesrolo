@@ -2,7 +2,7 @@
  * REMOTE ADAPTER — HomeownerDataPort over the same-origin /api/v1 JSON wire.
  *
  * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8 + PR #15). The
- * server defines THREE reads and TWO writes, and this adapter operates exactly
+ * server defines authenticated home/project reads and three exact writes, and this adapter operates exactly
  * those:
  *
  *   GET  /api/v1/session          → decodeSession
@@ -19,8 +19,7 @@
  * only through POST /api/v1/homes/{homeRef}/intake after the server returns
  * the exact homeRef.
  *
- * Every other port method — magic link, sign-out, projects, documents,
- * warranties, timeline, maintenance — returns 'unavailable' WITHOUT building
+ * Every other port method — documents, warranties, timeline, and maintenance — returns 'unavailable' WITHOUT building
  * a request, because the server has not defined those routes and this client
  * does not decode guessed DTOs. When the server defines a route, the adapter
  * gains it together with its decoder.
@@ -39,7 +38,7 @@ import {
 } from './types.ts'
 import type { JsonTransport, TransportReply, TransportRequest } from './transport.ts'
 import {
-  decodeList, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeList, decodeProject, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -51,8 +50,13 @@ const API = '/api/v1'
  * is just as rejected as garbage: it never becomes a request path.
  */
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
+const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
 function homeRefSegment(candidate: string): string | null {
   return HOME_REF.test(candidate) ? candidate : null
+}
+
+function projectRefSegment(candidate: string): string | null {
+  return PROJECT_REF.test(candidate) ? candidate : null
 }
 
 const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
@@ -208,11 +212,58 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       if (!result.ok) throw new Error('sign-out failed')
     },
 
+    async listProjects(homeRef) {
+      const ref = homeRefSegment(homeRef)
+      if (!ref) return { ok: false, error: 'not_found' }
+      return call({ method: 'GET', path: `${API}/homes/${ref}/projects` }, decodeList(decodeProject))
+    },
+
+    async getProject(homeRef, projectRef) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/projects/${project}` },
+        decodeProject,
+      )
+      if (result.ok && result.value.homeRef !== home) return { ok: false, error: 'invalid' }
+      return result
+    },
+
+    async addProject() { return UNDEFINED_ROUTE },
+
+    async startRoofingProject(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      const allowedNeeds = ['repair', 'replacement', 'inspection', 'storm_damage', 'not_sure'] as const
+      const allowedTiming = ['urgent', 'within_30_days', 'researching', 'not_sure'] as const
+      const notes = input.notes.trim()
+      if (!ref
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !allowedNeeds.includes(input.need)
+        || !allowedTiming.includes(input.timing)
+        || notes.length > 1500) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/roofing-projects`,
+        body: {
+          commandRef: input.commandRef,
+          need: input.need,
+          timing: input.timing,
+          ...(notes ? { notes } : {}),
+        },
+      }, decodeProject, 201)
+      if (result.ok && (result.value.homeRef !== ref
+        || result.value.trade !== 'Roofing'
+        || result.value.status !== 'planned')) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
     // --- routes the server has not defined: unavailable, no request built ----
 
-    async listProjects() { return UNDEFINED_ROUTE },
-    async getProject() { return UNDEFINED_ROUTE },
-    async addProject() { return UNDEFINED_ROUTE },
     async listDocuments() { return UNDEFINED_ROUTE },
     async listWarranties() { return UNDEFINED_ROUTE },
     async listTimeline() { return UNDEFINED_ROUTE },

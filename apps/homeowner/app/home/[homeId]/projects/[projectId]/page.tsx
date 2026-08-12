@@ -10,7 +10,7 @@ import { IconDocs } from '../../../../../components/icons.tsx'
 import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
 
 /**
- * A single project, rendered as the document it will one day be: the job's
+ * A single project, rendered as the document it is becoming: the job's
  * facts in ruled rows, its photo plates, its papers, and its warranty.
  */
 export default function ProjectPage({
@@ -27,7 +27,7 @@ export default function ProjectPage({
   }
   if (state.status === 'error') {
     return state.error === 'not_found'
-      ? <EmptyState title="No such project" body="This record does not exist in the demo."
+      ? <EmptyState title="No such project" body="This project is not available in this home file."
           action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>All projects</Link>} />
       : <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />
   }
@@ -49,13 +49,13 @@ export default function ProjectPage({
             {STATUS_LABEL[project.status]}
           </span>
         </div>
-        <p style={{ color: 'var(--ink-soft)', fontSize: '0.94rem', marginTop: '0.6rem', maxWidth: '58ch' }}>
+        <p style={{ color: 'var(--ink-soft)', fontSize: '0.94rem', marginTop: '0.6rem', maxWidth: '58ch', whiteSpace: 'pre-wrap' }}>
           {project.summary}
         </p>
         <dl className="jobdoc__rows">
-          <div><dt>Performed</dt><dd>{project.performedOn}</dd></div>
+          <div><dt>{project.status === 'planned' ? 'Started' : 'Performed'}</dt><dd>{project.performedOn}</dd></div>
           <div><dt>Trade</dt><dd>{project.trade}</dd></div>
-          <div><dt>By</dt><dd>{project.contractor}</dd></div>
+          {project.contractor ? <div><dt>By</dt><dd>{project.contractor}</dd></div> : null}
           {project.materials.map(m => (
             <div key={m.label}><dt>{m.label}</dt><dd>{m.value}</dd></div>
           ))}
@@ -65,7 +65,7 @@ export default function ProjectPage({
       <section className="panel" aria-labelledby="project-photos">
         <div className="panel__head"><h2 id="project-photos">Photos</h2></div>
         {project.photos.length === 0 ? (
-          <EmptyState title="No photos" body="No photos are attached to this record. Uploads are not built in this demo." />
+          <EmptyState title="No photos yet" body="Photos will live with this project as the file grows." />
         ) : (
           <div className="plates">
             {project.photos.map(photo => <PhotoPlate key={photo.photoRef} photo={photo} />)}
@@ -109,7 +109,9 @@ export default function ProjectPage({
         )}
       </section>
 
-      <p className="mono">Synthetic record — no real project, company, or document exists behind it.</p>
+      {project.isSynthetic ? (
+        <p className="mono">Synthetic record — no real project, company, or document exists behind it.</p>
+      ) : null}
     </div>
   )
 }

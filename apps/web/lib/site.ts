@@ -12,12 +12,15 @@ export const SITE_DESCRIPTION =
  */
 export const SITE_ORIGIN = 'https://homesrolo.com'
 
+/** The separate authenticated homeowner application. */
+export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
+
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
   { href: '/how-it-works/', label: 'Home record' },
   { href: '/services/roofing/', label: 'Roofing' },
-  { href: '/professionals/', label: 'Find pros' },
+  { href: '/professionals/', label: 'Start a project' },
   { href: '/how-we-verify/', label: 'How we verify' },
   { href: '/for-professionals/', label: 'For pros' },
   { href: '/about/', label: 'About' },

@@ -152,10 +152,13 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/route.ts',
     'app/api/v1/homes/[homeRef]/route.ts',
     'app/api/v1/homes/[homeRef]/intake/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
-    'the route inventory must remain exactly the seven defined paths')
+    'the route inventory must remain exactly the allowlisted paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
     if (rel === 'app/api/v1/auth/callback/route.ts') {
@@ -174,6 +177,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function POST/, `${rel} serves the intake command`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
         `${rel} must not expose an intake read`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves only the roofing command`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose a duplicate read surface`)
     } else {
       assert.match(content, /export async function GET/, `${rel} serves GET`)
     }
@@ -181,7 +188,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       // The three explicit authentication routes were checked above.
     } else if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
-    } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts') {
+    } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }

@@ -128,3 +128,19 @@ test('the migration is deny-by-default and exposes only narrow service functions
   assert.match(migration, /grant execute on function public\.homesrolo_complete_magic_link[\s\S]+to service_role/i)
   assert.doesNotMatch(migration, /grant execute[\s\S]+to (anon|authenticated)/i)
 })
+
+test('the roofing project migration is private, exact-home scoped, and receipt-backed', () => {
+  const migration = readFileSync(path.resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/202608120002_homeowner_roofing_projects.sql',
+  ), 'utf8')
+  assert.match(migration, /create table if not exists public\.homesrolo_homeowner_projects/i)
+  assert.match(migration, /alter table public\.homesrolo_homeowner_projects enable row level security/i)
+  assert.match(migration, /revoke all on table public\.homesrolo_homeowner_projects from public, anon, authenticated/i)
+  assert.match(migration, /role in \('workspace_controller', 'member'\)/i)
+  assert.match(migration, /membership_ref = p_membership_ref[\s\S]+revision = p_membership_revision[\s\S]+state = 'active'/i)
+  assert.match(migration, /category, status,[\s\S]+values \([\s\S]+'roofing', 'planned'/i)
+  assert.match(migration, /action in \('home\.create', 'intake\.record', 'project\.create'\)/i)
+  assert.match(migration, /grant execute on function public\.homesrolo_create_homeowner_roofing_project[\s\S]+to service_role/i)
+  assert.doesNotMatch(migration, /grant (select|insert|update|delete|execute)[\s\S]+to (anon|authenticated)/i)
+})

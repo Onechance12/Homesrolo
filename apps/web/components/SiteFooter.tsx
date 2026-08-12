@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { CONSTITUTION_DISCLOSURES, LISTING_NOT_ENDORSEMENT } from '../lib/content/education.ts'
-import { NEUTRAL_ORDERING_STATEMENT } from '../lib/directory/ordering.ts'
+import { CONSTITUTION_DISCLOSURES } from '../lib/content/education.ts'
+import { HOMEOWNER_APP_ORIGIN } from '../lib/site.ts'
 
 /**
  * The colophon is drawn as a drawing sheet's title block, because that is what
@@ -34,7 +34,8 @@ export function SiteFooter() {
             </div>
             <div className="titleblock__cell">
               <h2>Homesrolo</h2>
-              <Link href="/professionals/">Professionals</Link>
+              <Link href="/professionals/">Start a roof project</Link>
+              <a href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Homeowner sign in</a>
               <Link href="/for-professionals/">For professionals</Link>
               <Link href="/about/">About</Link>
               <Link href="/editorial-standards/">Editorial standards</Link>
@@ -42,8 +43,8 @@ export function SiteFooter() {
           </div>
           <div className="titleblock__meta" aria-hidden="true">
             <span>Homeowner education</span>
-            <span>Sample directory data</span>
-            <span>Neutral order</span>
+            <span>Private home account</span>
+            <span>Project records</span>
             <span>Sources shown</span>
           </div>
         </div>
@@ -51,15 +52,9 @@ export function SiteFooter() {
         <div className="disclosures">
           <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
             {CONSTITUTION_DISCLOSURES.map(line => <li key={line}>{line}</li>)}
-            <li>{LISTING_NOT_ENDORSEMENT}</li>
-            <li>{NEUTRAL_ORDERING_STATEMENT}</li>
             <li>
-              Homesrolo does not copy or republish content from other review sites. Outside links are
-              attributed and their content stays on the source.
-            </li>
-            <li>
-              Every public company and project example is synthetic. Private homeowner accounts and home
-              records live in the separate authenticated application.
+              Private homeowner accounts and home records live in a separate authenticated application.
+              Homesrolo does not publish a homeowner&rsquo;s property file as a contractor listing.
             </li>
           </ul>
         </div>

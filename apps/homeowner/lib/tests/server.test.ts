@@ -71,6 +71,9 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/route.ts',
     '../../app/api/v1/homes/[homeRef]/route.ts',
     '../../app/api/v1/homes/[homeRef]/intake/route.ts',
+    '../../app/api/v1/homes/[homeRef]/projects/route.ts',
+    '../../app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
@@ -107,7 +110,12 @@ test('a well-formed cookie still reads signed_out: no identity provider exists',
 // --- protected reads, fail-closed runtime -------------------------------------
 
 test('protected reads are bounded 401 signed_out, cookie or not', async () => {
-  for (const path of ['/api/v1/homes', `/api/v1/homes/${HOME}`]) {
+  for (const path of [
+    '/api/v1/homes',
+    `/api/v1/homes/${HOME}`,
+    `/api/v1/homes/${HOME}/projects`,
+    `/api/v1/homes/${HOME}/projects/hprj_${'r'.repeat(43)}`,
+  ]) {
     for (const headers of [undefined, { cookie: `${SESSION_COOKIE_NAME}=${HANDLE}` }]) {
       const response = await get(path, headers)
       assert.equal(response.status, 401, `${path} ${headers ? 'with' : 'without'} cookie`)
@@ -201,12 +209,41 @@ test('the exact-home intake adapter stays bounded and fail-closed without identi
   assert.deepEqual(await forged.json(), { error: { code: 'invalid_request' } })
 })
 
+test('the roofing-project adapter accepts only a bounded exact-home command and stays fail-closed', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'r'.repeat(43)}`,
+    need: 'repair',
+    timing: 'urgent',
+    notes: 'Leak above the back room.',
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/roofing-projects`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401)
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  for (const bad of [
+    { ...validBody, principalRef: `hprn_${'p'.repeat(43)}` },
+    { ...validBody, need: 'insurance_claim' },
+    { ...validBody, timing: 'tomorrow_at_8' },
+    { ...validBody, notes: 'x'.repeat(5000) },
+  ]) {
+    const response = await handleHomeownerRequest(new Request(
+      `${BASE}/api/v1/homes/${HOME}/roofing-projects`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bad) },
+    ))
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
+  }
+})
+
 test('unknown paths and wrong-kind refs are 404 through the adapter', async () => {
   for (const path of [
     '/api/v1/anything',
     '/api/v1/homes/hhom_short',
     `/api/v1/homes/hprj_${'r'.repeat(43)}`,
-    `/api/v1/homes/${HOME}/projects`,
     '/api/v1/session/magic-link',
   ]) {
     const response = await get(path, { cookie: `${SESSION_COOKIE_NAME}=${HANDLE}` })

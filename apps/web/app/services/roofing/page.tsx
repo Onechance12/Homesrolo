@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
 import { CONSTITUTION_DISCLOSURES, ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
-import { SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
+import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
   title: 'Texas roofing guide: costs, materials, contractors, and DFW rules',
@@ -68,7 +68,11 @@ export default function RoofingGuidePage() {
             lede="Straight answers about roof prices, materials, contractors, permits, insurance boundaries, and the paperwork worth keeping. We start with Dallas Fort Worth and Texas."
           />
           <div className="note" style={{ marginTop: '2rem', maxWidth: 'var(--measure)' }}>
-            <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides or neutral directory order. Important claims link to the source so you can check them.
+            <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides. Important claims link to the source so you can check them.
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
+            <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my roof project</a>
+            <Link className="btn btn--quiet" href="/professionals/">See how the project works</Link>
           </div>
         </div>
       </section>
@@ -148,7 +152,7 @@ export default function RoofingGuidePage() {
               <p><Link className="btn btn--quiet" href="/how-it-works/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>See how the home record works</Link></p>
             </div>
             <div className="note">
-              <strong>The contractor directory is being built carefully.</strong> It will open with sourced company facts, correction handling, and homeowner-released project records. Placeholder companies will not be published just to make the directory look full.
+              <strong>No contractor directory to sort through.</strong> Start with the home and the roof problem. Homesrolo keeps that request with the property and will use a narrow network handoff when project routing opens.
             </div>
           </div>
         </div>
