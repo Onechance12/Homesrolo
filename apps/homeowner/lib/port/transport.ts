@@ -47,3 +47,24 @@ export const fetchJsonTransport: JsonTransport = async request => {
     return { kind: 'network_failure' }
   }
 }
+
+/**
+ * Completes the provider's standard one-time-link redirect. Only the short-lived
+ * access credential from the URL fragment crosses this exact same-origin path;
+ * refresh credentials are never read or transmitted. The server validates it
+ * with the configured provider and returns only an HttpOnly Homesrolo cookie.
+ */
+export async function exchangeHomeownerProviderCredential(accessToken: string): Promise<boolean> {
+  if (accessToken.length < 32 || accessToken.length > 4096 || /\s/.test(accessToken)) return false
+  const reply = await fetchJsonTransport({
+    method: 'POST',
+    path: '/api/v1/auth/exchange',
+    body: { access_token: accessToken },
+  })
+  if (reply.kind !== 'reply' || reply.status !== 200) return false
+  if (!reply.body || typeof reply.body !== 'object' || Array.isArray(reply.body)
+    || Object.keys(reply.body).length !== 1 || !Object.hasOwn(reply.body, 'data')) return false
+  const data = (reply.body as { data?: unknown }).data
+  return !!data && typeof data === 'object' && !Array.isArray(data)
+    && Object.keys(data).length === 1 && (data as { signedIn?: unknown }).signedIn === true
+}

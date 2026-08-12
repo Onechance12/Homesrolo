@@ -119,8 +119,10 @@ test('the browser never supplies principal identity to the wire', () => {
   assert.doesNotMatch(remote, /principalRef/, 'the adapter never handles a principal ref outbound')
   assert.doesNotMatch(remote, /body:\s*\{[^}]*principal/i, 'no request body carries a principal')
   const transport = read('lib/port/transport.ts')
-  assert.doesNotMatch(transport, /authorization|bearer|token/i,
-    'no hand-carried credentials; the cookie is the session')
+  assert.doesNotMatch(transport, /authorization|bearer|refresh_token/i,
+    'no authorization header or refresh credential crosses the browser seam')
+  assert.match(transport, /path:\s*'\/api\/v1\/auth\/exchange'[\s\S]*body:\s*\{ access_token: accessToken \}/,
+    'the one-time provider credential can cross only the exact same-origin exchange route')
 })
 
 test('no raw storage URLs or provider identifiers are projected into the UI', () => {
@@ -143,6 +145,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
   // create-home command. The file inventory remains an allowlist.
   const ROUTE_ALLOWLIST = [
     'app/api/v1/auth/callback/route.ts',
+    'app/api/v1/auth/exchange/route.ts',
     'app/api/v1/auth/magic-link/route.ts',
     'app/api/v1/auth/signout/route.ts',
     'app/api/v1/session/route.ts',
@@ -158,6 +161,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     if (rel === 'app/api/v1/auth/callback/route.ts') {
       assert.match(content, /export async function GET/, `${rel} completes one magic link`)
       assert.match(content, /completeHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/exchange/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} exchanges one provider credential`)
+      assert.match(content, /exchangeHomeownerProviderSession/, `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/auth/magic-link/route.ts') {
       assert.match(content, /export async function POST/, `${rel} requests one magic link`)
       assert.match(content, /requestHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)

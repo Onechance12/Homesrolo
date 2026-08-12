@@ -20,13 +20,13 @@ function sameOrigin(request: Request, expected: string): boolean {
   return origin === expected
 }
 
-async function smallJson(request: Request): Promise<unknown> {
+async function boundedJson(request: Request, maximumBytes = 1024): Promise<unknown> {
   const length = request.headers.get('content-length')
-  if (length && (!/^\d+$/.test(length) || Number(length) > 1024)) return null
+  if (length && (!/^\d+$/.test(length) || Number(length) > maximumBytes)) return null
   if (request.headers.get('content-type')?.split(';', 1)[0]?.trim() !== 'application/json') return null
   try {
     const text = await request.text()
-    if (new TextEncoder().encode(text).byteLength > 1024) return null
+    if (new TextEncoder().encode(text).byteLength > maximumBytes) return null
     return JSON.parse(text) as unknown
   } catch {
     return null
@@ -40,7 +40,7 @@ export async function requestHomeownerMagicLink(request: Request): Promise<Respo
   if (!sameOrigin(request, configuration.appOrigin)) {
     return json(403, { error: { code: 'forbidden' } })
   }
-  const body = await smallJson(request)
+  const body = await boundedJson(request)
   if (!body || typeof body !== 'object' || Array.isArray(body)
     || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'email')) {
     return json(400, { error: { code: 'invalid_request' } })
@@ -53,6 +53,25 @@ export async function requestHomeownerMagicLink(request: Request): Promise<Respo
   } catch {
     return json(400, { error: { code: 'invalid_request' } })
   }
+}
+
+export async function exchangeHomeownerProviderSession(request: Request): Promise<Response> {
+  const configuration = homeownerRuntimeConfiguration()
+  const auth = configuredHomeownerAuthService()
+  if (!configuration || !auth) return json(503, { error: { code: 'unavailable' } })
+  if (!sameOrigin(request, configuration.appOrigin)) {
+    return json(403, { error: { code: 'forbidden' } })
+  }
+  const body = await boundedJson(request, 8192)
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'access_token')) {
+    return json(400, { error: { code: 'invalid_request' } })
+  }
+  const handle = await auth.completeProviderAccessToken(
+    (body as { access_token?: unknown }).access_token,
+  )
+  if (!handle) return json(401, { error: { code: 'invalid_link' } })
+  return json(200, { data: { signedIn: true } }, { 'set-cookie': sessionCookie(handle) })
 }
 
 export async function completeHomeownerMagicLink(request: Request): Promise<Response> {
@@ -89,4 +108,3 @@ export async function signOutHomeowner(request: Request): Promise<Response> {
   await auth.revokeSession(handle)
   return json(200, { data: { signedOut: true } }, { 'set-cookie': clearSessionCookie() })
 }
-

@@ -7,6 +7,7 @@ import { SESSION_LIFETIME_SECONDS } from './cookie.ts'
 
 const emailSchema = z.string().trim().email().max(254)
 const tokenHashSchema = z.string().regex(/^[A-Za-z0-9_-]{20,256}$/)
+const accessTokenSchema = z.string().min(32).max(4096).regex(/^\S+$/)
 
 export type MagicLinkRequestResult = 'accepted' | 'rate_limited' | 'unavailable'
 
@@ -35,7 +36,7 @@ export class HomeownerAuthService {
       email: parsed.data.toLowerCase(),
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${this.#configuration.appOrigin}/api/v1/auth/callback`,
+        emailRedirectTo: `${this.#configuration.appOrigin}/auth/complete`,
       },
     })
     if (!error) return 'accepted'
@@ -50,8 +51,20 @@ export class HomeownerAuthService {
       token_hash: parsed.data,
       type: 'email',
     })
-    const user = data.user
-    if (error || !user || !user.email) return null
+    if (error || !data.user) return null
+    return this.#mintHomeownerSession(data.user)
+  }
+
+  async completeProviderAccessToken(rawAccessToken: unknown): Promise<string | null> {
+    const parsed = accessTokenSchema.safeParse(rawAccessToken)
+    if (!parsed.success) return null
+    const { data, error } = await this.#auth.auth.getUser(parsed.data)
+    if (error || !data.user) return null
+    return this.#mintHomeownerSession(data.user)
+  }
+
+  async #mintHomeownerSession(user: { readonly id: string; readonly email?: string | null }): Promise<string | null> {
+    if (!user.email) return null
 
     const now = this.#now()
     const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_SECONDS * 1000)
@@ -85,4 +98,3 @@ export class HomeownerAuthService {
 export function magicLinkEmailIsValid(value: unknown): boolean {
   return emailSchema.safeParse(value).success
 }
-

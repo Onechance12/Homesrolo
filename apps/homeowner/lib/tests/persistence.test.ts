@@ -56,6 +56,10 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
         authCalls.push(input)
         return { data: { user: { id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2', email: 'Person@Example.com' } }, error: null }
       },
+      async getUser(input: unknown) {
+        authCalls.push({ getUser: input })
+        return { data: { user: { id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2', email: 'Person@Example.com' } }, error: null }
+      },
     },
   } as unknown as SupabaseClient
   const serviceClient = {
@@ -81,7 +85,7 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
     email: 'person@example.com',
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: 'https://app.homesrolo.com/api/v1/auth/callback',
+      emailRedirectTo: 'https://app.homesrolo.com/auth/complete',
     },
   })
   assert.deepEqual(authCalls[1], { token_hash: 't'.repeat(43), type: 'email' })
@@ -91,8 +95,13 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
   assert.equal(completion.input.p_session_hash, hashSessionHandle(handle))
   assert.ok(!JSON.stringify(completion).includes(handle), 'the raw handle is cookie-only')
 
+  const exchangedHandle = await service.completeProviderAccessToken(`header.${'x'.repeat(40)}.signature`)
+  assert.ok(exchangedHandle)
+  assert.deepEqual(authCalls[2], { getUser: `header.${'x'.repeat(40)}.signature` })
+  assert.equal((rpcCalls[1] as { name: string }).name, 'homesrolo_complete_magic_link')
+
   await service.revokeSession(handle)
-  const revocation = rpcCalls[1] as { name: string; input: Record<string, unknown> }
+  const revocation = rpcCalls[2] as { name: string; input: Record<string, unknown> }
   assert.equal(revocation.name, 'homesrolo_revoke_homeowner_session')
   assert.equal(revocation.input.p_session_hash, hashSessionHandle(handle))
 })
@@ -119,4 +128,3 @@ test('the migration is deny-by-default and exposes only narrow service functions
   assert.match(migration, /grant execute on function public\.homesrolo_complete_magic_link[\s\S]+to service_role/i)
   assert.doesNotMatch(migration, /grant execute[\s\S]+to (anon|authenticated)/i)
 })
-
