@@ -3,9 +3,11 @@ import {
   HOMEOWNER_SYSTEM_KINDS,
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
+  createHomeownerProjectInputSchema,
   createHomeWorkspaceInputSchema,
   homeownerApproximateYearSchema,
   homeownerHomeTypeSchema,
+  homeownerProjectSchema,
   homeownerSystemKindSchema,
   homeownerUtcInstantSchema,
   parseHomeownerPropertyFacts,
@@ -17,6 +19,7 @@ import {
   type HomeownerCommandPort,
   type HomeownerIdentityPort,
   type HomeownerMembership,
+  type HomeownerProject,
   type HomeownerRepositoryPort,
   type PrivateHomeProfile,
 } from './homeowner-runtime.v1.ts'
@@ -116,6 +119,45 @@ export const homeownerApiIntakeViewSchema = z.object({
 export type HomeownerApiRecordIntakeInput = z.infer<typeof homeownerApiRecordIntakeInputSchema>
 export type HomeownerApiIntakeView = z.infer<typeof homeownerApiIntakeViewSchema>
 
+export const homeownerApiRoofingNeedSchema = z.enum([
+  'repair',
+  'replacement',
+  'inspection',
+  'storm_damage',
+  'not_sure',
+])
+
+export const homeownerApiRoofingTimingSchema = z.enum([
+  'urgent',
+  'within_30_days',
+  'researching',
+  'not_sure',
+])
+
+export const homeownerApiStartRoofingProjectInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  need: homeownerApiRoofingNeedSchema,
+  timing: homeownerApiRoofingTimingSchema,
+  notes: z.string().trim().max(1500).optional(),
+}).strict()
+
+export const homeownerApiProjectViewSchema = z.object({
+  projectRef: opaqueRef('hprj'),
+  homeRef: opaqueRef('hhom'),
+  title: z.string().trim().min(1).max(120),
+  category: homeownerProjectSchema.shape.category,
+  status: homeownerProjectSchema.shape.status,
+  occurredOn: homeownerProjectSchema.shape.occurredOn.nullable(),
+  summary: z.string().trim().max(2000),
+  createdAt: homeownerUtcInstantSchema,
+  updatedAt: homeownerUtcInstantSchema,
+}).strict()
+
+export type HomeownerApiStartRoofingProjectInput = z.infer<
+  typeof homeownerApiStartRoofingProjectInputSchema
+>
+export type HomeownerApiProjectView = z.infer<typeof homeownerApiProjectViewSchema>
+
 export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   projectCount: z.number().int().min(0),
   documentCount: z.number().int().min(0),
@@ -171,6 +213,41 @@ function safeSummary(
     relationshipLabel: membership.relationshipLabel,
   })
 }
+
+function safeProject(project: HomeownerProject): HomeownerApiProjectView {
+  return homeownerApiProjectViewSchema.parse({
+    projectRef: project.projectRef,
+    homeRef: project.homeRef,
+    title: project.title,
+    category: project.category,
+    status: project.status,
+    occurredOn: project.occurredOn ?? null,
+    summary: project.summary ?? '',
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  })
+}
+
+const ROOFING_NEED_TITLE: Readonly<Record<
+  z.infer<typeof homeownerApiRoofingNeedSchema>,
+  string
+>> = Object.freeze({
+  repair: 'Roof repair',
+  replacement: 'Roof replacement',
+  inspection: 'Roof inspection',
+  storm_damage: 'Storm damage roof review',
+  not_sure: 'Roofing help',
+})
+
+const ROOFING_TIMING_LABEL: Readonly<Record<
+  z.infer<typeof homeownerApiRoofingTimingSchema>,
+  string
+>> = Object.freeze({
+  urgent: 'As soon as possible',
+  within_30_days: 'Within 30 days',
+  researching: 'Researching options',
+  not_sure: 'Not sure yet',
+})
 
 /**
  * Read-only Phase 2A application service. It intentionally exposes no write,
@@ -279,6 +356,63 @@ export class HomeownerApiService {
     })
   }
 
+  async listProjects(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<readonly HomeownerApiProjectView[]> {
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    const projects = await this.#repository.listProjects(grant)
+    return projects.map(project => safeProject(homeownerProjectSchema.parse(project)))
+  }
+
+  async readProject(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+  ): Promise<HomeownerApiProjectView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    if (!parsedProjectRef.success) throw new HomeownerApiError('invalid_request')
+    const projects = await this.listProjects(context, requestedHomeRef)
+    const project = projects.find(candidate => candidate.projectRef === parsedProjectRef.data)
+    if (!project) throw new HomeownerApiError('not_found')
+    return project
+  }
+
+  async startRoofingProject(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectView> {
+    const parsedInput = homeownerApiStartRoofingProjectInputSchema.safeParse(input)
+    if (!parsedInput.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'project.create')
+    if (!this.#capabilities.persistence) throw new HomeownerApiError('unavailable')
+
+    const title = ROOFING_NEED_TITLE[parsedInput.data.need]
+    const timing = ROOFING_TIMING_LABEL[parsedInput.data.timing]
+    const summary = parsedInput.data.notes
+      ? `Timing: ${timing}\n\n${parsedInput.data.notes}`
+      : `Timing: ${timing}`
+    const command = createHomeownerProjectInputSchema.parse({
+      commandRef: parsedInput.data.commandRef,
+      title,
+      category: 'roofing',
+      status: 'planned',
+      summary,
+      requestedAt: this.#now(),
+    })
+    const created = homeownerProjectSchema.parse(await this.#commands.createProject({ grant, command }))
+    const coherent = created.homeRef === grant.homeRef
+      && created.controllerPrincipalRef === grant.principalRef
+      && created.title === title
+      && created.category === 'roofing'
+      && created.status === 'planned'
+      && created.summary === summary
+      && created.occurredOn === undefined
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProject(created)
+  }
+
   async createHome(
     context: HomeownerApiRequestContext,
     input: unknown,
@@ -379,7 +513,38 @@ export class HomeownerApiService {
       updatedAt: [propertyFacts.updatedAt, ...systems.map(system => system.updatedAt)].sort().at(-1),
     })
   }
+
+  async #workspaceGrant<Action extends 'workspace.read' | 'project.create'>(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    action: Action,
+  ) {
+    const parsedHomeRef = opaqueRef('hhom').safeParse(requestedHomeRef)
+    if (!parsedHomeRef.success) throw new HomeownerApiError('invalid_request')
+    if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
+    const principal = await this.#identity.resolvePrincipal(context.sessionHandle)
+    if (!principal) throw new HomeownerApiError('signed_out')
+    const membership = await this.#repository.readMembership(
+      principal.principalRef,
+      parsedHomeRef.data,
+    )
+    if (!membership) throw new HomeownerApiError('not_found')
+    const decision = authorizeHomeownerWorkspace({
+      principal,
+      membership,
+      requestedHomeRef: parsedHomeRef.data,
+      action,
+      recheckedAt: this.#now(),
+    })
+    if (!decision.authorized) {
+      if (decision.reason === 'role_denied') throw new HomeownerApiError('forbidden')
+      throw new HomeownerApiError('not_found')
+    }
+    const grant = requireHomeownerActionGrant(decision, action)
+    if (!grant) throw new HomeownerApiError('forbidden')
+    return grant
+  }
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation and exact-home intake recording are defined but remain fail-closed until server persistence is configured. Email delivery, uploads, invitations, and sharing remain unavailable until separately configured and verified.'
+  'Home creation, exact-home intake, and private roofing-project creation are defined but remain fail-closed until server persistence is configured. Email delivery, uploads, invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'

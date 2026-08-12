@@ -230,6 +230,16 @@ export interface AddProjectInput {
   readonly summary: string
 }
 
+export type RoofingNeed = 'repair' | 'replacement' | 'inspection' | 'storm_damage' | 'not_sure'
+export type RoofingTiming = 'urgent' | 'within_30_days' | 'researching' | 'not_sure'
+
+export interface StartRoofingProjectInput {
+  readonly commandRef: string
+  readonly need: RoofingNeed
+  readonly timing: RoofingTiming
+  readonly notes: string
+}
+
 // --- documents and warranties -------------------------------------------------
 
 export type DocumentKind = 'contract' | 'invoice' | 'warranty' | 'photo_set' | 'permit' | 'manual'
@@ -328,6 +338,10 @@ export interface HomeownerDataPort {
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>
   addProject(homeRef: string, input: AddProjectInput): Promise<PortResult<ProjectSummary>>
+  startRoofingProject(
+    homeRef: string,
+    input: StartRoofingProjectInput,
+  ): Promise<PortResult<ProjectSummary>>
 
   listDocuments(homeRef: string): Promise<PortResult<readonly DocumentSummary[]>>
   listWarranties(homeRef: string): Promise<PortResult<readonly Warranty[]>>

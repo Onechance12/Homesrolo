@@ -21,6 +21,9 @@ const notFound = read('app/not-found.tsx')
 const companyPage = read('app/companies/[slug]/page.tsx')
 const robots = read('app/robots.ts')
 const sitemap = read('app/sitemap.ts')
+const professionals = read('app/professionals/page.tsx')
+const roofing = read('app/services/roofing/page.tsx')
+const site = read('lib/site.ts')
 
 // --- target size (WCAG 2.5.8) -------------------------------------------------
 
@@ -118,4 +121,13 @@ test('the profile renders the retraction disclaimers, not just the model', () =>
   assert.match(companyPage, /CREDENTIAL_DEMO_DISCLAIMER/)
   assert.match(companyPage, /CLAIM_DEMO_DISCLAIMER/)
   assert.match(companyPage, /REVIEW_ACTIVATION_REQUIREMENTS/)
+})
+
+test('the homeowner conversion path starts a project instead of publishing a contractor directory', () => {
+  assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/app\.homesrolo\.com'/)
+  assert.match(site, /label: 'Start a project'/)
+  assert.match(professionals, /Create my home account/)
+  assert.match(professionals, /Start with your home, not a contractor list/)
+  assert.doesNotMatch(professionals, /SYNTHETIC_PROFILES|sample listings|ordered by name/)
+  assert.match(roofing, /Start my roof project/)
 })

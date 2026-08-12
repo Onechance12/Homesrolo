@@ -187,6 +187,65 @@ a:hover { color: var(--clay); }
 .prose > * + * { margin-top: 1.05rem; }
 .prose p { color: var(--ink-soft); }
 
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 1.35rem;
+  color: var(--ink-faint);
+  font-size: 0.84rem;
+}
+.breadcrumbs a { color: var(--clay-deep); }
+.article-meta {
+  margin-top: 1.4rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+.answer-strip { padding-block: 1.5rem; border-bottom: 1px solid var(--rule); background: var(--paper-raised); }
+.answer-box { max-width: var(--measure); }
+.answer-box .eyebrow { margin-bottom: 0.45rem; }
+.answer-box > p:last-child { color: var(--ink); font-size: 1.05rem; line-height: 1.65; }
+.answer-grid { display: grid; gap: 1rem; }
+@media (min-width: 48rem) { .answer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.answer-card { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper-raised); padding: 1.25rem; }
+.answer-card h3 { font-size: 1.06rem; margin-bottom: 0.55rem; }
+.answer-card p { color: var(--ink-soft); }
+.answer-card__source { margin-top: 0.7rem; font-size: 0.84rem; }
+.question-list { display: grid; gap: 0.75rem; padding-left: 1.35rem; }
+.question-list li { padding-left: 0.25rem; color: var(--ink-soft); }
+.source-list { list-style: none; padding: 0; margin: 1.25rem 0 0; display: grid; gap: 1rem; }
+.source-list li { display: grid; gap: 0.15rem; padding-bottom: 0.85rem; border-bottom: 1px solid var(--rule); }
+.source-list a { font-weight: 650; }
+.source-list span { color: var(--ink-faint); font-size: 0.85rem; }
+.roofing-link-card {
+  display: grid;
+  gap: 0.55rem;
+  min-height: 9rem;
+  padding: 1.35rem;
+  border: 1px solid var(--night-rule);
+  border-radius: var(--radius);
+  background: var(--night-raised);
+  color: var(--night-ink);
+  text-decoration: none;
+}
+.roofing-link-card strong { font-size: 1.05rem; }
+.roofing-link-card span { color: var(--night-soft); line-height: 1.55; }
+.roofing-link-card:hover { border-color: var(--night-accent); color: var(--night-ink); transform: translateY(-2px); }
+.cost-table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: 0.94rem; }
+.cost-table th, .cost-table td { text-align: left; vertical-align: top; padding: 0.8rem; border-bottom: 1px solid var(--rule); }
+.cost-table th { color: var(--ink); font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.cost-table td { color: var(--ink-soft); }
+@media (max-width: 39.99rem) {
+  .cost-table, .cost-table tbody, .cost-table tr, .cost-table th, .cost-table td { display: block; }
+  .cost-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .cost-table tr { padding: 0.8rem 0; border-bottom: 1px solid var(--rule); }
+  .cost-table td { border: 0; padding: 0.25rem 0; }
+  .cost-table td::before { content: attr(data-label); display: block; color: var(--ink); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+}
+
 .section { padding-block: clamp(3rem, 2rem + 5vw, 5.75rem); position: relative; }
 .section--sunken { background: var(--paper-sunken); border-block: 1px solid var(--rule); }
 

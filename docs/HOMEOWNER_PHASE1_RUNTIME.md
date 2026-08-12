@@ -1,8 +1,8 @@
 # Homeowner Phase 1 Runtime Foundation
 
 Status: **configured private runtime foundation.** Passwordless email identity,
-opaque Homesrolo sessions, private Postgres persistence, home creation, and the
-six-system intake are implemented. Uploads, invitations, sharing, controller
+opaque Homesrolo sessions, private Postgres persistence, home creation, the
+six-system intake, and a private roof-project request are implemented. Uploads, invitations, sharing, controller
 verification, and Jobrolo transport remain unavailable.
 
 The first HomesRolo homeowner application is a private workspace for a person
@@ -21,7 +21,7 @@ It does not establish legal ownership and it does not unlock contractor records.
    exact-active-share boundary. Home membership does not reveal their existence.
 
 The command boundary uses idempotency-friendly opaque command
-references for creating one private home workspace and one homeowner project.
+references for creating one private home workspace and one homeowner roof project.
 It defines semantic warranty and maintenance records separately from raw
 document bytes. Create-home and intake saves use transaction-bound command
 receipts; a changed payload cannot reuse an earlier command reference.
@@ -39,10 +39,10 @@ capability response stays false for magic-link delivery, persistence, uploads,
 invitations, and sharing until each provider is separately configured and
 verified.
 
-The matching framework-neutral HTTP boundary serves exactly `GET
-/api/v1/session`, `GET /api/v1/homes`, `GET
-/api/v1/homes/{opaque-home-ref}`, `POST /api/v1/homes`, and `POST
-/api/v1/homes/{opaque-home-ref}/intake`.
+The matching framework-neutral HTTP boundary serves `GET /api/v1/session`,
+`GET /api/v1/homes`, `GET /api/v1/homes/{opaque-home-ref}`, `POST /api/v1/homes`,
+`POST /api/v1/homes/{opaque-home-ref}/intake`, exact-home project list/detail
+reads, and `POST /api/v1/homes/{opaque-home-ref}/roofing-projects`.
 It requires a server-owned session handle, rejects query/body identity claims,
 returns a one-key `data` envelope, uses `no-store`, and maps failures to bounded
 problem codes without leaking provider or repository details. A framework
@@ -54,6 +54,13 @@ no principal, membership, role, source, timestamp, provider identifier, or
 verification claim. The server fresh-reads the exact membership, requires the
 workspace-controller role, derives the timestamp and source, and rejects
 incoherent adapter output before returning a minimized projection.
+
+The roofing command is equally narrow. The browser supplies only an opaque
+command reference, one roof-need enum, one timing enum, and bounded optional
+notes. The server fresh-checks the exact home membership and derives the trade,
+status, title, summary, principal scope, and timestamp. There is no generic
+browser project-create route and no contractor or Jobrolo authority in this
+command.
 
 ## Separation from Jobrolo
 
@@ -69,6 +76,7 @@ code and cannot enumerate Jobrolo projects. The separately reviewed
 - upload, download, export, deletion, and retention jobs;
 - invitations and co-owner/controller verification;
 - trusted Jobrolo signature and revocation verification;
+- network routing or delivery of a roof request to Jobrolo;
 - public links or public home records; and
 - production deployment, monitoring, and incident procedures.
 

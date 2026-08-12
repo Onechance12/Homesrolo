@@ -7,10 +7,17 @@ claim advocate.
 
 **Status: Phase 1 foundation.** The separate homeowner app now has passwordless
 email authentication, opaque server sessions, a private Supabase persistence
-boundary, private home workspaces, and the guided six-system intake. The public
-directory remains a statically exported synthetic experience. Uploads,
+boundary, private home workspaces, the guided six-system intake, and a narrow
+roof-project request. The public roofing path now routes homeowners into this
+private account flow rather than a contractor directory. Uploads,
 controller verification, public sharing, a live assistant, payments,
 analytics, and a production Jobrolo connection are still unavailable.
+
+The first homeowner workflow is: request a passwordless email link, create a
+private home workspace, and open a roof repair, replacement, inspection, or
+storm-damage project. Homesrolo saves that project inside its own account and
+database. It does not create a Jobrolo user or send the request to a contractor;
+that future delivery remains a narrow signed adapter with separate identities.
 
 ## Contents
 

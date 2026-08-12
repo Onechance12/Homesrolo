@@ -69,6 +69,19 @@ const HOME_VIEW = {
   updatedAt: '2026-08-10T16:00:00.000Z',
 }
 
+const PROJECT = REF('hprj', 'r')
+const PROJECT_VIEW = {
+  projectRef: PROJECT,
+  homeRef: HOME,
+  title: 'Roof repair',
+  category: 'roofing',
+  status: 'planned',
+  occurredOn: null,
+  summary: 'Timing: As soon as possible\n\nLeak above the back room.',
+  createdAt: '2026-08-12T16:00:00.000Z',
+  updatedAt: '2026-08-12T16:00:00.000Z',
+}
+
 // --- mode selection -----------------------------------------------------------
 
 test('the mode selector fails closed to synthetic on anything but exactly "remote"', () => {
@@ -428,14 +441,72 @@ test('intake accepts only a 201 exact-home, six-system, source-labeled projectio
   }
 })
 
+test('project reads decode only the safe project projection and stay exact-home scoped', async () => {
+  const { transport, requests } = recordingTransport({
+    [`GET /api/v1/homes/${HOME}/projects`]: [PROJECT_VIEW],
+    [`GET /api/v1/homes/${HOME}/projects/${PROJECT}`]: PROJECT_VIEW,
+  })
+  const port = createRemotePort(transport)
+  const listed = await port.listProjects(HOME)
+  const exact = await port.getProject(HOME, PROJECT)
+  assert.ok(listed.ok && exact.ok)
+  if (!listed.ok || !exact.ok) return
+  assert.equal(listed.value[0]?.trade, 'Roofing')
+  assert.equal(exact.value.status, 'planned')
+  assert.equal(exact.value.isSynthetic, false)
+  assert.equal(exact.value.contractor, '')
+  assert.deepEqual(requests, [
+    { method: 'GET', path: `/api/v1/homes/${HOME}/projects` },
+    { method: 'GET', path: `/api/v1/homes/${HOME}/projects/${PROJECT}` },
+  ])
+
+  const crossHome = createRemotePort(transportReturning(200, {
+    data: { ...PROJECT_VIEW, homeRef: REF('hhom', 'x') },
+  }))
+  assert.deepEqual(await crossHome.getProject(HOME, PROJECT), { ok: false, error: 'invalid' })
+})
+
+test('startRoofingProject sends one narrow request and rejects authority or unknown enums', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    return { kind: 'reply', status: 201, body: { data: PROJECT_VIEW } }
+  })
+  const input = {
+    commandRef: REF('hcmd', 'r'),
+    need: 'repair' as const,
+    timing: 'urgent' as const,
+    notes: '  Leak above the back room.  ',
+  }
+  const result = await port.startRoofingProject(HOME, input)
+  assert.ok(result.ok)
+  assert.deepEqual(requests, [{
+    method: 'POST',
+    path: `/api/v1/homes/${HOME}/roofing-projects`,
+    body: {
+      commandRef: input.commandRef,
+      need: 'repair',
+      timing: 'urgent',
+      notes: 'Leak above the back room.',
+    },
+  }])
+  assert.doesNotMatch(JSON.stringify(requests[0]), /principal|membership|role|status|category|provider/i)
+
+  const blocked = recordingTransport({})
+  const bad = createRemotePort(blocked.transport)
+  assert.deepEqual(await bad.startRoofingProject(HOME, { ...input, commandRef: REF('hprn', 'p') }),
+    { ok: false, error: 'invalid' })
+  assert.deepEqual(await bad.startRoofingProject(HOME, { ...input, notes: 'x'.repeat(1501) }),
+    { ok: false, error: 'invalid' })
+  assert.equal(blocked.requests.length, 0)
+})
+
 // --- the narrowed surface -----------------------------------------------------
 
-test('undefined routes return unavailable without ever building a request', async () => {
+test('remaining undefined routes return unavailable without ever building a request', async () => {
   const { transport, requests } = recordingTransport({})
   const port = createRemotePort(transport)
   const results = await Promise.all([
-    port.listProjects(HOME),
-    port.getProject(HOME, REF('hprj', 'r')),
     port.addProject(HOME, { title: 'T', trade: 'G', performedOn: '2026-08-01', contractor: 'C', summary: 'S' }),
     port.listDocuments(HOME),
     port.listWarranties(HOME),

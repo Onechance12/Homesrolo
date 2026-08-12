@@ -23,8 +23,8 @@ export default function HomesPage() {
         <div className="gate__card gate__card--wide">
           {session.kind === 'signed_out' ? <UnauthorizedState /> : (
             <>
-              <p className="mono" style={{ marginBottom: '0.4rem' }}>Step 2 of 2 — the home</p>
-              <h1 style={{ fontSize: '1.5rem' }}>Whose file are we opening?</h1>
+              <p className="mono" style={{ marginBottom: '0.4rem' }}>Your private home files</p>
+              <h1 style={{ fontSize: '1.5rem' }}>Which home are we working on?</h1>
               {mode === 'synthetic'
                 ? <p className="mono" style={{ marginTop: '0.35rem' }}>{SYNTHETIC_NOTICE}</p>
                 : <p style={{ color: 'var(--ink-soft)', marginTop: '0.35rem' }}>Choose a private home file or start one.</p>}

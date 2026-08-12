@@ -7,8 +7,8 @@ export const metadata: Metadata = {
     default: 'Homesrolo — your home file',
     template: '%s — Homesrolo',
   },
-  description: 'The homeowner application shell. Phase 1 demo with synthetic data only.',
-  // The app is a Phase 1 demo shell; it has no business in a search index.
+  description: 'Keep the projects, documents, photos, warranties, and maintenance history for your home in one private file.',
+  // Private account pages should never appear in search results.
   robots: { index: false, follow: false },
 }
 

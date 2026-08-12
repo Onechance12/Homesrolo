@@ -15,8 +15,8 @@
  */
 
 import {
-  type HomeownerSession, type PortError, type RecordedHomeIntake, type RelationshipLabel, type ServerHomeSummary,
-  type ServerHomeView, type SessionState, type SignInCapabilities,
+  type HomeownerSession, type PortError, type Project, type RecordedHomeIntake, type RelationshipLabel,
+  type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
 /** Matches homeowner-api.v1's HOMEOWNER_API_VERSION exactly. */
@@ -88,6 +88,15 @@ function boundedLabel(max: number): Decoder<string> {
   }
 }
 
+function trimmedText(max: number): Decoder<string> {
+  return (value, at) => {
+    if (typeof value !== 'string') return fail(at, 'a string')
+    if (value !== value.trim()) return fail(at, 'a trimmed string')
+    if (value.length > max) return fail(at, `a string of at most ${max} characters`)
+    return value
+  }
+}
+
 const boolean: Decoder<boolean> = (value, at) =>
   typeof value === 'boolean' ? value : fail(at, 'a boolean')
 
@@ -136,6 +145,17 @@ const utcInstant: Decoder<string> = (value, at) => {
 
 const nullable = <T>(decoder: Decoder<T>): Decoder<T | null> => (value, at) =>
   value === null ? null : decoder(value, at)
+
+const calendarDate: Decoder<string> = (value, at) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return fail(at, 'a calendar date')
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    return fail(at, 'a real calendar date')
+  }
+  return value
+}
 
 const wholeYear: Decoder<number> = (value, at) =>
   typeof value === 'number' && Number.isInteger(value) && value >= 1800 && value <= 9999
@@ -262,6 +282,67 @@ export const decodeRecordedHomeIntake: Decoder<RecordedHomeIntake> = (value, at)
     }
   }
   return decoded
+}
+
+type WireProject = {
+  projectRef: string
+  homeRef: string
+  title: string
+  category: 'roofing' | 'exterior' | 'interior' | 'electrical' | 'plumbing' | 'hvac' | 'landscaping' | 'other'
+  status: Project['status']
+  occurredOn: string | null
+  summary: string
+  createdAt: string
+  updatedAt: string
+}
+
+const PROJECT_CATEGORIES = [
+  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac', 'landscaping', 'other',
+] as const
+
+const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> = Object.freeze({
+  roofing: 'Roofing',
+  exterior: 'Exterior',
+  interior: 'Interior',
+  electrical: 'Electrical',
+  plumbing: 'Plumbing',
+  hvac: 'HVAC',
+  landscaping: 'Landscaping',
+  other: 'Other',
+})
+
+export const decodeProject: Decoder<Project> = (value, at) => {
+  const decoded = object<WireProject>({
+    projectRef: opaqueRef('hprj'),
+    homeRef: opaqueRef('hhom'),
+    title: boundedLabel(120),
+    category: oneOf(PROJECT_CATEGORIES),
+    status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+    occurredOn: nullable(calendarDate),
+    summary: trimmedText(2000),
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (decoded.updatedAt < decoded.createdAt) {
+    return fail(`${at}.updatedAt`, 'a time on or after createdAt')
+  }
+  return {
+    projectRef: decoded.projectRef,
+    homeRef: decoded.homeRef,
+    title: decoded.title,
+    trade: PROJECT_CATEGORY_LABEL[decoded.category],
+    performedOn: decoded.occurredOn ?? decoded.createdAt.slice(0, 10),
+    status: decoded.status,
+    photoCount: 0,
+    documentCount: 0,
+    isSynthetic: false,
+    summary: decoded.summary,
+    contractor: '',
+    materials: [],
+    photos: [],
+    documents: [],
+    warranty: null,
+  }
 }
 
 export const decodeList = array

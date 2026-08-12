@@ -34,6 +34,9 @@ const JSON_HEADERS = Object.freeze({
 
 const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
 const HOME_INTAKE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/intake$/
+const HOME_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects$/
+const HOME_PROJECT_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})$/
+const HOME_ROOFING_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/roofing-projects$/
 
 function success(data: unknown, status = 200): HomeownerHttpResponse {
   return { status, headers: JSON_HEADERS, body: { data } }
@@ -81,6 +84,14 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
         if (homeMatch?.[1]) {
           return success(await service.readHome(context, homeMatch[1]))
         }
+        const projectsMatch = HOME_PROJECTS_PATH.exec(request.pathname)
+        if (projectsMatch?.[1]) {
+          return success(await service.listProjects(context, projectsMatch[1]))
+        }
+        const projectMatch = HOME_PROJECT_PATH.exec(request.pathname)
+        if (projectMatch?.[1] && projectMatch[2]) {
+          return success(await service.readProject(context, projectMatch[1], projectMatch[2]))
+        }
         return problem(404, 'not_found')
       }
 
@@ -92,6 +103,17 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const roofingProjectMatch = HOME_ROOFING_PROJECTS_PATH.exec(request.pathname)
+        if (roofingProjectMatch?.[1]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.startRoofingProject(
+            context,
+            roofingProjectMatch[1],
+            request.jsonBody,
+          ), 201)
+        }
         const intakeMatch = HOME_INTAKE_PATH.exec(request.pathname)
         if (intakeMatch?.[1]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -106,9 +128,12 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.pathname === '/api/v1/session'
-        || request.pathname === '/api/v1/homes'
-        || HOME_PATH.test(request.pathname)
-        || HOME_INTAKE_PATH.test(request.pathname)) {
+         || request.pathname === '/api/v1/homes'
+         || HOME_PATH.test(request.pathname)
+         || HOME_INTAKE_PATH.test(request.pathname)
+         || HOME_PROJECTS_PATH.test(request.pathname)
+         || HOME_PROJECT_PATH.test(request.pathname)
+         || HOME_ROOFING_PROJECTS_PATH.test(request.pathname)) {
         return problem(405, 'method_not_allowed')
       }
       return problem(404, 'not_found')
@@ -119,4 +144,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines three authenticated reads, one create-home command, and one exact-home intake command. It does not create sessions, send email, provide persistence by itself, accept uploads, or expose generic writes.'
+  'This boundary defines authenticated home and project reads plus exact create-home, intake, and roofing-project commands. It does not create sessions, send email, provide persistence by itself, accept uploads, expose generic writes, or deliver work to Jobrolo.'

@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { CONSTITUTION_DISCLOSURES, LISTING_NOT_ENDORSEMENT } from '../lib/content/education.ts'
-import { NEUTRAL_ORDERING_STATEMENT } from '../lib/directory/ordering.ts'
+import { CONSTITUTION_DISCLOSURES } from '../lib/content/education.ts'
+import { HOMEOWNER_APP_ORIGIN } from '../lib/site.ts'
 
 /**
  * The colophon is drawn as a drawing sheet's title block, because that is what
@@ -27,34 +27,34 @@ export function SiteFooter() {
               <Link href="/how-it-works/">How it works</Link>
               <Link href="/how-we-verify/">How we verify</Link>
               <Link href="/services/roofing/">Roofing guide</Link>
-              <Link href="/ideas/">Ideas</Link>
+              <Link href="/services/roofing/cost/">Roof cost</Link>
+              <Link href="/services/roofing/materials/">Roof materials</Link>
+              <Link href="/services/roofing/choose-a-contractor/">Contractor checklist</Link>
+              <Link href="/services/roofing/dfw/">DFW roofing</Link>
             </div>
             <div className="titleblock__cell">
-              <h2>Directory</h2>
-              <Link href="/professionals/">Professionals</Link>
+              <h2>Homesrolo</h2>
+              <Link href="/professionals/">Start a roof project</Link>
+              <a href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Homeowner sign in</a>
               <Link href="/for-professionals/">For professionals</Link>
+              <Link href="/about/">About</Link>
+              <Link href="/editorial-standards/">Editorial standards</Link>
             </div>
           </div>
           <div className="titleblock__meta" aria-hidden="true">
-            <span>Phase 0.5 preview</span>
-            <span>All data synthetic</span>
-            <span>Ordered by name only</span>
-            <span>Facts carry their source</span>
+            <span>Homeowner education</span>
+            <span>Private home account</span>
+            <span>Project records</span>
+            <span>Sources shown</span>
           </div>
         </div>
 
         <div className="disclosures">
           <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
             {CONSTITUTION_DISCLOSURES.map(line => <li key={line}>{line}</li>)}
-            <li>{LISTING_NOT_ENDORSEMENT}</li>
-            <li>{NEUTRAL_ORDERING_STATEMENT}</li>
             <li>
-              Homesrolo does not copy or republish content from other review sites. Outside links are
-              attributed and their content stays on the source.
-            </li>
-            <li>
-              Phase 0.5 preview. Every company and project shown is synthetic, and no account, upload, or
-              sharing feature exists yet.
+              Private homeowner accounts and home records live in a separate authenticated application.
+              Homesrolo does not publish a homeowner&rsquo;s property file as a contractor listing.
             </li>
           </ul>
         </div>

@@ -10,18 +10,20 @@ export const SITE_DESCRIPTION =
  * Used for canonical URLs and the sitemap. No network call is made with it at
  * any point; it is a string the export bakes in.
  */
-export const SITE_ORIGIN = 'https://homesrolo.example.com'
+export const SITE_ORIGIN = 'https://homesrolo.com'
+
+/** The separate authenticated homeowner application. */
+export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
 
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
-  { href: '/how-it-works/', label: 'How it works' },
+  { href: '/how-it-works/', label: 'Home record' },
+  { href: '/services/roofing/', label: 'Roofing' },
+  { href: '/professionals/', label: 'Start a project' },
   { href: '/how-we-verify/', label: 'How we verify' },
-  { href: '/professionals/', label: 'Professionals' },
-  { href: '/academy/', label: 'Academy' },
-  { href: '/services/roofing/', label: 'Guides' },
-  { href: '/ideas/', label: 'Ideas' },
   { href: '/for-professionals/', label: 'For pros' },
+  { href: '/about/', label: 'About' },
 ])
 
 /** Routes that belong in the sitemap. Synthetic profiles are excluded. */
@@ -32,6 +34,14 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/professionals/',
   '/academy/',
   '/services/roofing/',
+  '/services/roofing/cost/',
+  '/services/roofing/materials/',
+  '/services/roofing/choose-a-contractor/',
+  '/services/roofing/dfw/',
+  '/services/roofing/dallas/',
+  '/services/roofing/fort-worth/',
   '/ideas/',
   '/for-professionals/',
+  '/about/',
+  '/editorial-standards/',
 ])
