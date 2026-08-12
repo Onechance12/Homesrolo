@@ -22,5 +22,43 @@ const RELATED = [
 ] as const
 
 export default function FortWorthRoofingPage() {
-  return <RoofingArticle eyebrow="Fort Worth, Texas" title="Roofing in Fort Worth: permits, scope, and proof" lede="Fort Worth's permit rule can change once tear-off exposes damaged wood. The scope should explain how that change is priced, approved, permitted, and documented." quickAnswer="Fort Worth does not require a permit for shingle replacement alone. A permit is required when decking, lathing, sheathing, rafters, or ridge boards are replaced. Put the wood-repair price and permit responsibility in the contract." pathname="/services/roofing/fort-worth/" sections={ROOFING_FORT_WORTH_GUIDE} sources={SOURCES} related={RELATED} />
+  return (
+    <RoofingArticle eyebrow="Fort Worth, Texas" title="Roofing in Fort Worth: permits, scope, and proof" lede="Fort Worth's permit rule can change once tear-off exposes damaged wood. The scope should explain how that change is priced, approved, permitted, and documented." quickAnswer="Fort Worth does not require a permit for shingle replacement alone. A permit is required when decking, lathing, sheathing, rafters, or ridge boards are replaced. Put the wood-repair price and permit responsibility in the contract." pathname="/services/roofing/fort-worth/" sections={ROOFING_FORT_WORTH_GUIDE} sources={SOURCES} related={RELATED}>
+      <section className="section" aria-labelledby="fort-worth-decking">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">When tear-off changes the job</p>
+            <h2 id="fort-worth-decking">A simple decking process keeps a hidden condition from becoming a blank check</h2>
+            <p>Fort Worth’s permit trigger makes deck discovery more than a price change. The contractor and homeowner need a clear pause point before damaged wood is covered.</p>
+          </div>
+          <ol className="chain">
+            <li><h3>Expose</h3><p>The old covering is removed and the deck can be seen.</p><span className="provenance">No guessing before tear-off</span></li>
+            <li><h3>Document</h3><p>Photographs show the location and condition of proposed replacement areas.</p><span className="provenance">Evidence tied to the roof</span></li>
+            <li><h3>Price and approve</h3><p>The quantity uses the contract unit price and the homeowner approves the written change.</p><span className="provenance">No surprise total</span></li>
+            <li><h3>Permit and close out</h3><p>The responsible party follows the city requirement and the final invoice matches the documented quantity.</p><span className="provenance">A complete Fort Worth record</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section className="section section--night" aria-labelledby="fort-worth-hidden-details">
+        <div className="shell">
+          <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'start' }}>
+            <div className="prose">
+              <p className="eyebrow">Photograph before covering</p>
+              <h2 id="fort-worth-hidden-details">The most useful roof photos are not the finished-roof photos</h2>
+              <p>The finished roof matters, but it does not show the assembly underneath. Ask for a repeatable set of progress photographs that can be understood years later.</p>
+            </div>
+            <ul className="plain-checklist">
+              <li>Each slope after tear-off and before new material</li>
+              <li>Every replaced deck area with location and quantity</li>
+              <li>Underlayment, valleys, edges, and transitions before shingles</li>
+              <li>Chimney, wall, skylight, and pipe flashing details</li>
+              <li>Intake and exhaust ventilation changes</li>
+              <li>Product labels and the completed roof from every elevation</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </RoofingArticle>
+  )
 }
