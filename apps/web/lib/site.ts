@@ -34,6 +34,7 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/professionals/',
   '/academy/',
   '/services/roofing/',
+  '/services/roofing/repair-or-replace/',
   '/services/roofing/cost/',
   '/services/roofing/materials/',
   '/services/roofing/choose-a-contractor/',

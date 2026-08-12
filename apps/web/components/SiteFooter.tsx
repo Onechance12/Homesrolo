@@ -22,6 +22,7 @@ export function SiteFooter() {
               <Link href="/how-it-works/">How it works</Link>
               <Link href="/how-we-verify/">How we verify</Link>
               <Link href="/services/roofing/">Roofing guide</Link>
+              <Link href="/services/roofing/repair-or-replace/">Repair or replace</Link>
               <Link href="/services/roofing/cost/">Roof cost</Link>
               <Link href="/services/roofing/materials/">Roof materials</Link>
               <Link href="/services/roofing/choose-a-contractor/">Contractor checklist</Link>

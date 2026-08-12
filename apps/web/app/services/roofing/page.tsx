@@ -17,6 +17,11 @@ export const metadata: Metadata = {
 
 const GUIDES = [
   {
+    href: '/services/roofing/repair-or-replace/',
+    title: 'Roof repair or replacement?',
+    body: 'A condition-first framework for leaks, isolated damage, repeated problems, material matching, and written repairability evidence.',
+  },
+  {
     href: '/services/roofing/cost/',
     title: 'Roof replacement cost in Texas',
     body: 'How roof area, material, pitch, tear-off, decking, flashing, ventilation, and permits shape the price.',
@@ -108,7 +113,7 @@ export default function RoofingGuidePage() {
             <article className="card">
               <h3 className="card__title">The roof is old or keeps needing repair</h3>
               <p>Find the installation date, earlier invoices, repair photographs, product name, permit, and warranty. A repair-versus-replacement conversation is much more useful when the roof’s age and problem history are known.</p>
-              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/materials/">Compare roof systems</Link></p>
+              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/repair-or-replace/">Use the repair-or-replace guide</Link></p>
             </article>
             <article className="card">
               <h3 className="card__title">You already have roofing bids</h3>

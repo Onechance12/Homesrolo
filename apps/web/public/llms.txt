@@ -1,10 +1,11 @@
 # Homesrolo
 
-> Homesrolo helps homeowners understand major home projects and keep a durable record of work performed on a property. Public guides are independent education. Private homeowner files are separate and are never published by these pages.
+> Homesrolo helps homeowners understand major home projects and keep a durable history of the work performed on a property. Public guides show the sources behind material facts. Home records remain private unless the homeowner chooses to share them.
 
 ## Roofing
 
 - [Texas roofing center](https://homesrolo.com/services/roofing/): Cost, materials, contractor checks, insurance boundaries, and Dallas Fort Worth rules.
+- [Repair or replace a roof](https://homesrolo.com/services/roofing/repair-or-replace/): Evidence that separates a durable repair from a complete roof replacement.
 - [Roof replacement cost](https://homesrolo.com/services/roofing/cost/): Dallas market benchmarks and a line-by-line estimate comparison.
 - [Roofing materials](https://homesrolo.com/services/roofing/materials/): Asphalt, impact-resistant, metal, tile, slate, composite, and the full roof assembly.
 - [Contractor checklist](https://homesrolo.com/services/roofing/choose-a-contractor/): Documents to verify and 12 questions to ask before signing.
@@ -24,4 +25,4 @@
 - Homesrolo does not inspect roofs, price individual jobs, select a contractor, or advise on an insurance claim.
 - Cost figures are dated market benchmarks, not quotes for a particular home.
 - Permit rules and laws can change. The current source is linked from each guide.
-- The current public company pages are clearly labeled samples and are blocked from search indexing. A real contractor directory is not live yet.
+- Homesrolo is built around the home and its project record, not a pay-to-rank contractor directory.
