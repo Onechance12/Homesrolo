@@ -74,6 +74,7 @@ test('unknown refs are not_found, never fabricated', async () => {
 test('a created home and project exist in memory and feed the timeline', async () => {
   await syntheticPort.enterDemoSession('Test homeowner')
   const created = await syntheticPort.createHome({
+    commandRef: `hcmd_${'a'.repeat(43)}`,
     alias: 'Test Bungalow', locality: 'Sample Metro — West', homeType: 'house', yearBuilt: 1975,
   })
   assert.ok(created.ok)
@@ -100,6 +101,48 @@ test('a created home and project exist in memory and feed the timeline', async (
     'even user-entered contractors are stamped synthetic in the demo')
 })
 
+test('the demo records an intake honestly: source stamped, precision preserved', async () => {
+  await syntheticPort.enterDemoSession('Test homeowner')
+  const created = await syntheticPort.createHome({
+    commandRef: `hcmd_${'c'.repeat(43)}`,
+    alias: 'Intake Bungalow', locality: 'Sample Metro — East', homeType: 'house', yearBuilt: 1987,
+  })
+  assert.ok(created.ok)
+  if (!created.ok) return
+
+  const recorded = await syntheticPort.recordIntake({
+    commandRef: `hcmd_${'d'.repeat(43)}`,
+    homeRef: created.value.homeRef,
+    homeType: 'house',
+    yearBuilt: { value: 1987, precision: 'approximate' },
+    systems: [
+      { kind: 'roof', present: 'yes', installedOrReplacedYear: { value: 2019, precision: 'approximate' } },
+      { kind: 'heating', present: 'yes', installedOrReplacedYear: null },
+      { kind: 'cooling', present: 'unknown', installedOrReplacedYear: null },
+      { kind: 'water_heater', present: 'yes', installedOrReplacedYear: { value: 2024, precision: 'exact' } },
+      { kind: 'gutters', present: 'no', installedOrReplacedYear: null },
+      { kind: 'foundation', present: 'unknown', installedOrReplacedYear: null },
+    ],
+  })
+  assert.ok(recorded.ok)
+  if (!recorded.ok) return
+  assert.equal(recorded.value.source, 'homeowner_recollection',
+    'a recollection is stamped as recollection, never upgraded')
+  assert.equal(recorded.value.homeRef, created.value.homeRef)
+  assert.deepEqual(recorded.value.yearBuilt, { value: 1987, precision: 'approximate' },
+    'an approximate year stays approximate in the demo too')
+
+  const missing = await syntheticPort.recordIntake({
+    commandRef: `hcmd_${'e'.repeat(43)}`,
+    homeRef: `hhom_${'x'.repeat(43)}`,
+    homeType: 'unknown',
+    yearBuilt: null,
+    systems: [],
+  })
+  assert.deepEqual(missing, { ok: false, error: 'not_found' },
+    'a recollection cannot attach to a home that does not exist')
+})
+
 test('the empty fixture home renders the empty states, not errors', async () => {
   await syntheticPort.enterDemoSession('Test homeowner')
   const projects = await syntheticPort.listProjects(COTTAGE_REF)
@@ -118,6 +161,7 @@ test('minted refs use the runtime boundary vocabulary', async () => {
     'sessions carry principal refs in the homeowner-runtime.v1 shape')
 
   const home = await syntheticPort.createHome({
+    commandRef: `hcmd_${'b'.repeat(43)}`,
     alias: 'Prefix House', locality: 'Sample Metro', homeType: 'house', yearBuilt: null,
   })
   assert.ok(home.ok)

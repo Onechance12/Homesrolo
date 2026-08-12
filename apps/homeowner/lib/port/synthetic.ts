@@ -20,8 +20,9 @@ import {
 import {
   NO_CAPABILITIES,
   type AddProjectInput, type CreateHomeInput, type HomeFile, type HomeListEntry,
-  type HomeSummary, type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
-  type PortResult, type Project, type ProjectSummary, type SessionState,
+  type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
+  type IntakeRecordView, type PortResult, type Project, type ProjectSummary,
+  type SessionState,
 } from './types.ts'
 
 const LATENCY_MS = 350
@@ -36,8 +37,11 @@ type MemoryState = {
   session: HomeownerSession | null
   createdHomes: HomeFile[]
   createdProjects: Project[]
+  intakes: Map<string, IntakeRecordView>
 }
-const memory: MemoryState = { session: null, createdHomes: [], createdProjects: [] }
+const memory: MemoryState = {
+  session: null, createdHomes: [], createdProjects: [], intakes: new Map(),
+}
 
 let mintCounter = 0
 /** Mock id mint. The real runtime mints real opaque ids; the UI never cares. */
@@ -105,7 +109,7 @@ export const syntheticPort: HomeownerDataPort = {
 
   async createHome(input: CreateHomeInput) {
     await wait()
-    const gate = requireSession<HomeSummary>()
+    const gate = requireSession<HomeListEntry>()
     if (gate) return gate
     const home: HomeFile = {
       homeRef: mint('hhom'),
@@ -123,7 +127,26 @@ export const syntheticPort: HomeownerDataPort = {
       isSynthetic: true,
     }
     memory.createdHomes.push(home)
-    return ok(home)
+    // input.commandRef is ignored here: the demo has no dedupe to serve, and
+    // pretending to honor idempotency would be a claim the mock can't keep.
+    return ok({ source: 'synthetic' as const, ...home })
+  },
+
+  async recordIntake(input) {
+    await wait()
+    const gate = requireSession<IntakeRecordView>()
+    if (gate) return gate
+    if (!homes().some(h => h.homeRef === input.homeRef)) return err('not_found')
+    const view: IntakeRecordView = {
+      homeRef: input.homeRef,
+      homeType: input.homeType,
+      yearBuilt: input.yearBuilt,
+      source: 'homeowner_recollection',
+      systems: input.systems,
+      updatedAt: new Date().toISOString(),
+    }
+    memory.intakes.set(input.homeRef, view)
+    return ok(view)
   },
 
   async listProjects(homeRef) {
