@@ -3,6 +3,7 @@ node_modules/
 .DS_Store
 
 # Next.js build artifacts for the public web experience
+/.next/
 apps/web/.next/
 apps/web/out/
 apps/web/tsconfig.tsbuildinfo

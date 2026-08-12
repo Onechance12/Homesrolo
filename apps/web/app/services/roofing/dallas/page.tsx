@@ -22,5 +22,41 @@ const RELATED = [
 ] as const
 
 export default function DallasRoofingPage() {
-  return <RoofingArticle eyebrow="Dallas, Texas" title="Roofing in Dallas: a homeowner's field guide" lede="Dallas roofing projects should connect the city permit, measured scope, exact materials, contractor documents, and a complete closeout package." quickAnswer="Dallas requires a roofing permit for roof installation, repair, or replacement. Confirm who pulls it, compare the measured scope and exact materials, and keep the permit and completion records with the home." pathname="/services/roofing/dallas/" sections={ROOFING_DALLAS_GUIDE} sources={SOURCES} related={RELATED} />
+  return (
+    <RoofingArticle eyebrow="Dallas, Texas" title="Roofing in Dallas: a homeowner's field guide" lede="Dallas roofing projects should connect the city permit, measured scope, exact materials, contractor documents, and a complete closeout package." quickAnswer="Dallas uses a roofing permit record for roof installation, repair, or replacement. Confirm who pulls it, compare the measured scope and exact materials, and keep the permit and completion records with the home." pathname="/services/roofing/dallas/" sections={ROOFING_DALLAS_GUIDE} sources={SOURCES} related={RELATED}>
+      <section className="section" aria-labelledby="dallas-project-file">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">The Dallas project file</p>
+            <h2 id="dallas-project-file">A permit number is the start of the record, not the whole record</h2>
+            <p>Homesrolo connects the city record to the contract and the work at the house. That matters when a future buyer sees a permit but still needs to know which product was installed, what wood was replaced, who performed the work, and which warranties can transfer.</p>
+          </div>
+          <div className="grid grid--3">
+            <article className="card"><p className="eyebrow">Before tear-off</p><h3 className="card__title">Match the permit to the project</h3><p>Save the permit number, property, applicant or contractor, described work, issue date, and any stated inspection requirements.</p></article>
+            <article className="card"><p className="eyebrow">During construction</p><h3 className="card__title">Record scope changes</h3><p>Photograph discovered deck damage and other hidden conditions. Keep the written quantity, unit price, approval, and resulting permit communication together.</p></article>
+            <article className="card"><p className="eyebrow">Before final payment</p><h3 className="card__title">Confirm closeout</h3><p>Collect the city result that applies, final invoice, change orders, installation photos, warranty registrations, and contractor warranty.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section className="section section--night" aria-labelledby="dallas-bid-questions">
+        <div className="shell">
+          <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'start' }}>
+            <div className="prose">
+              <p className="eyebrow">Dallas estimate review</p>
+              <h2 id="dallas-bid-questions">Five lines that prevent most price confusion</h2>
+              <p>Dallas prices vary because the homes and scopes vary. These details make the total traceable back to the work.</p>
+            </div>
+            <ul className="plain-checklist">
+              <li>Measured roof squares and the report used</li>
+              <li>Number of tear-off layers and disposal included</li>
+              <li>Deck replacement price per sheet and approval method</li>
+              <li>Exact flashing, ventilation, and accessory scope</li>
+              <li>Permit, inspection, cleanup, warranty, and closeout responsibilities</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </RoofingArticle>
+  )
 }
