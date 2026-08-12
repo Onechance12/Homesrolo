@@ -1,14 +1,9 @@
 import Link from 'next/link'
-import { CONSTITUTION_DISCLOSURES } from '../lib/content/education.ts'
 import { HOMEOWNER_APP_ORIGIN } from '../lib/site.ts'
 
 /**
- * The colophon is drawn as a drawing sheet's title block, because that is what
- * it is: the box in the corner that says who drew the sheet and under what
- * revision. The disclosures are not fine print here. They are the product's
- * boundary, and a homeowner reading a page about insurance terminology needs
- * them on the same page, not buried in a terms document they will never open —
- * so they get a ruled panel of their own, not a smaller font.
+ * The colophon keeps the visual character of a drawing-sheet title block while
+ * presenting a conventional public-site footer and concise legal boundary.
  */
 export function SiteFooter() {
   return (
@@ -19,7 +14,7 @@ export function SiteFooter() {
             <div className="titleblock__cell">
               <h2>Homesrolo</h2>
               <p style={{ color: 'var(--ink-faint)', fontSize: '0.94rem', marginTop: '0.5rem', maxWidth: '32ch' }}>
-                The durable record of a home, built from work a homeowner chose to release.
+                One organized history for the work, documents, and decisions that shape a home.
               </p>
             </div>
             <div className="titleblock__cell">
@@ -49,15 +44,9 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="disclosures">
-          <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
-            {CONSTITUTION_DISCLOSURES.map(line => <li key={line}>{line}</li>)}
-            <li>
-              Private homeowner accounts and home records live in a separate authenticated application.
-              Homesrolo does not publish a homeowner&rsquo;s property file as a contractor listing.
-            </li>
-          </ul>
-        </div>
+        <p className="footer-legal">
+          Homesrolo provides general homeowner education, not legal, insurance, public adjusting, engineering, or contracting advice. Requirements and project conditions vary. Check current local rules and consult an appropriately licensed professional about your situation.
+        </p>
       </div>
     </footer>
   )

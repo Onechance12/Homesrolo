@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
-import { CONSTITUTION_DISCLOSURES, ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
+import { ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
 import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
@@ -56,16 +56,26 @@ export default function RoofingGuidePage() {
       url: `${SITE_ORIGIN}${guide.href}`,
     })),
   }
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: ROOFING_QUICK_ANSWERS.map(item => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: { '@type': 'Answer', text: item.answer },
+    })),
+  }
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       <section className="section section--drafting">
         <div className="shell">
           <PageHeader
             eyebrow="Texas roofing help for homeowners"
             title="Understand the roof before you hire the roofer"
-            lede="Straight answers about roof prices, materials, contractors, permits, insurance boundaries, and the paperwork worth keeping. We start with Dallas Fort Worth and Texas."
+            lede="Straight answers about roof prices, materials, contractors, permits, storm paperwork, and the records worth keeping. We start with Dallas Fort Worth and Texas."
           />
           <div className="note" style={{ marginTop: '2rem', maxWidth: 'var(--measure)' }}>
             <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides. Important claims link to the source so you can check them.
@@ -73,6 +83,38 @@ export default function RoofingGuidePage() {
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
             <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my roof project</a>
             <Link className="btn btn--quiet" href="/professionals/">See how the project works</Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="roofing-situation">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">Start with the real problem</p>
+            <h2 id="roofing-situation">What brought you here today?</h2>
+            <p>The right first step depends on whether the house is taking on water, a storm just passed, the roof is aging, or bids are already on the table.</p>
+          </div>
+          <div className="grid grid--2">
+            <article className="card">
+              <h3 className="card__title">Water is coming into the house</h3>
+              <p>Protect people and belongings first. Photograph visible conditions from a safe place, record when the water appeared, and keep receipts for temporary protection. Do not climb onto a wet or damaged roof.</p>
+              <p style={{ marginTop: '1rem' }}><a href="https://www.tdi.texas.gov/consumer/storms/recoverytips.html" rel="noreferrer">Texas storm recovery guidance</a></p>
+            </article>
+            <article className="card">
+              <h3 className="card__title">A hail or wind storm just passed</h3>
+              <p>Start a dated record before opinions pile up: ground-level photographs, interior water, fallen material, temporary work, and every inspection. Weather data and roof condition belong in the same file, but they are not the same proof.</p>
+              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/dfw/">Use the DFW storm guide</Link></p>
+            </article>
+            <article className="card">
+              <h3 className="card__title">The roof is old or keeps needing repair</h3>
+              <p>Find the installation date, earlier invoices, repair photographs, product name, permit, and warranty. A repair-versus-replacement conversation is much more useful when the roof’s age and problem history are known.</p>
+              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/materials/">Compare roof systems</Link></p>
+            </article>
+            <article className="card">
+              <h3 className="card__title">You already have roofing bids</h3>
+              <p>Ignore the totals for a moment. Put measurement, tear-off, wood price, exact products, flashing, ventilation, permit, payment, cleanup, and warranties into the same rows. Missing scope is not a discount.</p>
+              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/cost/">Open the bid-comparison guide</Link></p>
+            </article>
           </div>
         </div>
       </section>
@@ -102,6 +144,21 @@ export default function RoofingGuidePage() {
             <h2>What is included in a roof replacement?</h2>
           </div>
           <Sections sections={ROOFING_GUIDE} />
+        </div>
+      </section>
+
+      <section className="section section--night" aria-labelledby="roofing-project-path">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2.5rem' }}>
+            <p className="eyebrow">From question to home history</p>
+            <h2 id="roofing-project-path">A roof project has four records, not one contract</h2>
+          </div>
+          <ol className="chain">
+            <li><h3>Starting condition</h3><p>What was noticed, when it appeared, and dated photographs.</p><span className="provenance">The reason the project began</span></li>
+            <li><h3>Inspection</h3><p>Observed conditions, limitations, photographs, and repair or replacement options.</p><span className="provenance">Evidence before sales</span></li>
+            <li><h3>Scope and selection</h3><p>Measured quantity, exact assembly, price, contractor proof, and signed terms.</p><span className="provenance">What the homeowner bought</span></li>
+            <li><h3>Installation and closeout</h3><p>Hidden-work photographs, changes, permit result, invoice, and warranties.</p><span className="provenance">What the home received</span></li>
+          </ol>
         </div>
       </section>
 
@@ -148,28 +205,16 @@ export default function RoofingGuidePage() {
             <div className="prose">
               <p className="eyebrow">The Homesrolo difference</p>
               <h2>A roof guide should end with a usable home record</h2>
-              <p>A future owner needs the exact product, installer, date, scope, permits, photographs, final invoice, and warranties. Homesrolo is being built to keep that record with the home.</p>
+              <p>A future owner needs the exact product, installer, date, scope, permits, photographs, final invoice, and warranties. Homesrolo starts that history with the home and the roof project, so later records have a clear place to belong.</p>
               <p><Link className="btn btn--quiet" href="/how-it-works/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>See how the home record works</Link></p>
             </div>
             <div className="note">
-              <strong>No contractor directory to sort through.</strong> Start with the home and the roof problem. Homesrolo keeps that request with the property and will use a narrow network handoff when project routing opens.
+              <strong>No contractor directory to sort through.</strong> Start with the home and the roof problem. Homesrolo organizes the request around the property instead of sending the homeowner through a public list of companies.
             </div>
           </div>
         </div>
       </section>
 
-      <section className="section">
-        <div className="shell">
-          <div className="prose">
-            <h2>A note about this information</h2>
-            <ul style={{ color: 'var(--ink-soft)', paddingLeft: '1.15rem' }}>
-              {CONSTITUTION_DISCLOSURES.map(line => <li key={line} style={{ marginBottom: '0.45rem' }}>{line}</li>)}
-              <li style={{ marginBottom: '0.45rem' }}>Homesrolo is not an engineering firm and does not assess the condition of a structure.</li>
-            </ul>
-            <p><Link href="/about/">About Homesrolo</Link> &nbsp;|&nbsp; <Link href="/editorial-standards/">How we research and update these guides</Link></p>
-          </div>
-        </div>
-      </section>
     </>
   )
 }

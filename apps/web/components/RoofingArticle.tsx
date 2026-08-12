@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { type EducationalSection } from '../lib/content/education.ts'
-import { SITE_NAME, SITE_ORIGIN } from '../lib/site.ts'
+import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../lib/site.ts'
 import { PageHeader, Sections } from './Prose.tsx'
 
 export type RoofingSource = {
@@ -95,12 +95,43 @@ export function RoofingArticle({
         </div>
       </section>
 
+      <section className="section" aria-labelledby="roof-project-record">
+        <div className="shell">
+          <div className="grid grid--2" style={{ alignItems: 'start', gap: '3rem' }}>
+            <div className="prose">
+              <p className="eyebrow">The Homesrolo record</p>
+              <h2 id="roof-project-record">Do not wait until the job is over to build the roof record</h2>
+              <p>A roof is covered up as it is built. Once the shingles or panels are down, the deck repairs, underlayment, flashing, fasteners, and ventilation details are hard to verify. The useful record is built while the work is happening.</p>
+              <p>Start the home and roof project in Homesrolo, then use the record as the project’s organizing point. The lasting roof history comes from the evidence collected along the way, not from a contractor folder that disappears when the job closes.</p>
+              <p><a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my home record</a></p>
+            </div>
+            <div className="stack" style={{ '--stack-gap': '1rem' } as React.CSSProperties}>
+              <article className="card">
+                <p className="eyebrow">Before work</p>
+                <h3 className="card__title">Define what is being bought</h3>
+                <p>Save the roof measurement, every proposal, the signed scope, exact product names, insurance certificate, permit responsibility, payment terms, and written warranty promises.</p>
+              </article>
+              <article className="card">
+                <p className="eyebrow">During work</p>
+                <h3 className="card__title">Capture what will be covered</h3>
+                <p>Keep dated photographs of tear-off, deck condition and repairs, underlayment, valleys, wall and chimney flashing, penetrations, ventilation, and the delivered product labels.</p>
+              </article>
+              <article className="card">
+                <p className="eyebrow">At closeout</p>
+                <h3 className="card__title">Collect proof, not promises</h3>
+                <p>Keep the final invoice, proof of payment, permit and inspection result, change orders, cleanup confirmation, manufacturer registration, and the contractor’s workmanship warranty.</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="section">
         <div className="shell">
-          <div className="grid grid--2" style={{ alignItems: 'start', gap: '2.5rem' }}>
+          <details className="source-drawer">
+            <summary>Sources checked for this guide</summary>
             <div className="prose">
-              <h2>Sources and further reading</h2>
-              <p>We used the sources below for the facts on this page. Prices, permit rules, products, and warranties can change. Check the current source before starting work.</p>
+              <p>These links support the factual details above. Prices, permit rules, products, and warranties can change, so open the current source before making a project decision.</p>
               <ul className="source-list">
                 {sources.map(source => (
                   <li key={source.href}>
@@ -110,10 +141,7 @@ export function RoofingArticle({
                 ))}
               </ul>
             </div>
-            <aside className="note">
-              <strong>About this guide.</strong> Homesrolo explains roofing terms, records, and common project steps. It does not inspect a roof, price a job, select a company, or advise on an insurance claim.
-            </aside>
-          </div>
+          </details>
         </div>
       </section>
 

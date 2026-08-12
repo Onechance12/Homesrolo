@@ -127,6 +127,7 @@ if (!existsSync(OUT)) {
     // reviewed sources. Directory fixtures remain synthetic.
     const reviewedSourceHosts = new Set([
       'dallas.gov',
+      'consumer.ftc.gov',
       'www.angi.com',
       'www.gaf.com',
       'www.fortworthtexas.gov',

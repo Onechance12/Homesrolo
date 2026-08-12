@@ -53,6 +53,45 @@ export default function RoofingCostPage() {
           </div>
         </div>
       </section>
+      <section className="section section--night" aria-labelledby="roof-bid-example">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">Why the lowest bid is sometimes not the lowest cost</p>
+            <h2 id="roof-bid-example">Two totals are not comparable until the scope matches</h2>
+            <p>A proposal can look complete and still leave the expensive decisions for later. The differences below are ordinary examples of what hides between a one-page total and a defined roof project.</p>
+          </div>
+          <div className="table-scroll">
+            <table className="compare">
+              <thead><tr><th>Scope question</th><th>Bid that leaves risk open</th><th>Bid that defines the work</th></tr></thead>
+              <tbody>
+                <tr><th>Roof quantity</th><td>Replace complete roof</td><td>States measured squares, report source, pitch, and waste</td></tr>
+                <tr><th>Deck repairs</th><td>Wood extra if needed</td><td>Price per sheet, photo requirement, approval, and quantity on final invoice</td></tr>
+                <tr><th>Flashing</th><td>Replace as necessary</td><td>Names valleys, walls, chimney, step flashing, counterflashing, and exclusions</td></tr>
+                <tr><th>Ventilation</th><td>Install vents</td><td>States intake and exhaust type, count, placement, and whether old openings are closed</td></tr>
+                <tr><th>Warranty</th><td>Lifetime roof</td><td>Identifies product, workmanship term, manufacturer coverage, registration, and exclusions</td></tr>
+                <tr><th>Closeout</th><td>Final payment on completion</td><td>Defines completion as cleanup, punch list, permit result, invoice, photos, and warranties delivered</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="read-roof-bid">
+        <div className="shell">
+          <div className="prose">
+            <p className="eyebrow">A ten-minute first pass</p>
+            <h2 id="read-roof-bid">Read the scope before reading the total</h2>
+            <ol className="question-list">
+              <li><strong>Find the measurement.</strong> Mark the roof squares and the report or diagram used.</li>
+              <li><strong>Circle every exact product.</strong> Manufacturer, product line, color, underlayment, starter, ridge, vents, and accessories should be named.</li>
+              <li><strong>Underline every open price.</strong> Look for allowance, additional, as needed, unforeseen, code, and change order.</li>
+              <li><strong>Find the water details.</strong> Valleys, walls, chimney, skylights, pipe penetrations, edge metal, and low-slope transitions need a stated treatment.</li>
+              <li><strong>Read the payment trigger.</strong> Know what the company must finish and deliver before each payment becomes due.</li>
+              <li><strong>Define done.</strong> Cleanup, permit closeout, punch list, final invoice, photographs, warranty registration, and lien paperwork should not be assumed.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
     </RoofingArticle>
   )
 }
