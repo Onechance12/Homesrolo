@@ -43,6 +43,20 @@ export const ROOFING_GUIDE: readonly EducationalSection[] = Object.freeze([
     ]),
   },
   {
+    heading: 'Repair or replace is a condition question',
+    body: Object.freeze([
+      'Age by itself does not decide whether a roof needs replacement. The location and extent of the problem, earlier repairs, deck condition, remaining matching material, and the cost of a durable repair all matter.',
+      'A useful inspection separates observed conditions from conclusions. It identifies the slope or detail involved, shows photographs, explains whether the problem is isolated or repeated, and states what can and cannot be seen without removing material.',
+    ]),
+  },
+  {
+    heading: 'What a normal replacement day looks like',
+    body: Object.freeze([
+      'The property needs room for material delivery, a trailer or dumpster, crew vehicles, and safe access around the house. Roofing creates vibration, falling debris, noise, and thousands of nails, so attic belongings, wall hangings, vehicles, pets, gates, landscaping, and exterior equipment need a plan before tear-off starts.',
+      'The homeowner record should show who is supervising the crew, how unexpected wood damage is approved, how the house is protected if weather interrupts the work, and who performs the final cleanup and magnetic nail sweep.',
+    ]),
+  },
+  {
     heading: 'Insurance words that show up on roof paperwork',
     body: Object.freeze([
       'Replacement cost value is the estimated cost to replace damaged property with new material of similar kind and quality. Actual cash value subtracts depreciation. Some policies release recoverable depreciation after the work is finished and documented.',
@@ -89,6 +103,20 @@ export const ROOFING_COST_GUIDE: readonly EducationalSection[] = Object.freeze([
       'Save the original bid, signed contract, measurement, product sheets, change orders, invoices, permits, photographs, and warranties in the same home file.',
     ]),
   },
+  {
+    heading: 'Find the blank checks in the estimate',
+    body: Object.freeze([
+      'Allowance, as needed, code upgrade, and additional charge are not automatically bad terms, but each one leaves part of the final price open. The proposal should explain the unit price, who documents the need, and who approves the change before that work begins.',
+      'Decking is the common example. A bid that includes a price per sheet and a photograph-and-approval process gives the homeowner a way to manage a hidden condition. A bid that only says wood extra does not.',
+    ]),
+  },
+  {
+    heading: 'Price and payment schedule are separate decisions',
+    body: Object.freeze([
+      'Two proposals with the same total can create very different risk. One may tie payments to material delivery, completed work, permit closeout, and warranty delivery. Another may require most of the money before the roof is finished.',
+      'The signed agreement should state the deposit, progress payment, final-payment trigger, accepted payment method, financing terms if any, and what must be delivered before the project is considered complete.',
+    ]),
+  },
 ])
 
 /** /services/roofing/materials: common steep-slope choices in North Texas. */
@@ -119,6 +147,20 @@ export const ROOFING_MATERIALS_GUIDE: readonly EducationalSection[] = Object.fre
     body: Object.freeze([
       'Decking, underlayment, flashing, starter, drip edge, vents, pipe boots, and wall transitions handle much of the water and heat management. A roof can use a good shingle and still have poor details underneath it.',
       'During-construction photographs are valuable because these parts disappear once the roof covering is installed.',
+    ]),
+  },
+  {
+    heading: 'Impact resistant is a test result, not a damage guarantee',
+    body: Object.freeze([
+      'UL 2218 classifies products from Class 1 through Class 4 after a controlled steel-ball impact test. That rating can help identify products designed for better impact resistance, but it does not mean a roof is hail proof or predict what one storm will do to one house.',
+      'IBHS publishes a separate hail-impact performance rating for asphalt shingles. When hail performance matters, record the exact manufacturer, product line, color, rating source, and installation date instead of saving only the words Class 4.',
+    ]),
+  },
+  {
+    heading: 'Choose for repairability and proof, not only day-one appearance',
+    body: Object.freeze([
+      'Ask how a future repair is made, whether matching pieces are normally available, who in the market services the system, and whether another trade can work around solar panels, gutters, skylights, or mechanical equipment without creating a warranty problem.',
+      'Warranty length is not the same as coverage. Product-defect, workmanship, wind, hail, algae, labor, tear-off, disposal, transfer, registration, and maintenance terms can all be different. Save the actual warranty document and registration confirmation, not a brochure headline.',
     ]),
   },
 ])
@@ -153,6 +195,20 @@ export const ROOFING_CONTRACTOR_GUIDE: readonly EducationalSection[] = Object.fr
       'The contractor can explain its repair scope and price. Questions about coverage, claim value, or settlement belong with the insurer, a licensed public insurance adjuster, or an attorney.',
     ]),
   },
+  {
+    heading: 'Find out who will actually install the roof',
+    body: Object.freeze([
+      'The salesperson, contracting company, project manager, crew leader, and installation crew may be different people or businesses. The agreement should identify the company responsible for the work and give the homeowner one accountable contact for schedule, protection, changes, and cleanup.',
+      'Ask how the crew is supervised, how the company checks flashing and ventilation details, and what happens when the roof is left open or a problem is found. A polished sales presentation does not answer those field questions.',
+    ]),
+  },
+  {
+    heading: 'Closeout belongs in the agreement',
+    body: Object.freeze([
+      'Project completion should mean more than the crew leaving. Define the final walkthrough, debris and nail cleanup, permit or inspection record, corrected punch-list items, final invoice, lien releases when applicable, manufacturer registration, and workmanship warranty.',
+      'Holding the final record together makes later service simpler. It also gives a future buyer, inspector, or roofer evidence of what was installed instead of a guess based on color and age.',
+    ]),
+  },
 ])
 
 /** /services/roofing/dfw: regional roofing information. */
@@ -185,6 +241,20 @@ export const ROOFING_DFW_GUIDE: readonly EducationalSection[] = Object.freeze([
       'Add notes for deck repairs, ventilation changes, flashing work, and later service calls. That history helps the next contractor, buyer, inspector, or insurer understand the roof.',
     ]),
   },
+  {
+    heading: 'The first record after a storm is not a sales contract',
+    body: Object.freeze([
+      'Start with safe, dated observations from the ground and inside the house: water entry, displaced material, fallen limbs, damaged exterior items, and temporary protection. Keep receipts for emergency work and do not climb onto a wet or damaged roof.',
+      'A storm date, weather report, contractor inspection, insurer inspection, repair scope, and policy decision are separate records. Keeping them separate prevents one source from being used to claim more than it proves.',
+    ]),
+  },
+  {
+    heading: 'A DFW project needs a weather plan before tear-off',
+    body: Object.freeze([
+      'The schedule should state who watches the forecast, how much roof can be opened at one time, what dry-in standard is used at the end of the day, and who responds if water enters before the project is complete.',
+      'Material delivery, neighborhood access, gates, pets, pools, landscaping, solar equipment, and air-conditioning units also need a written plan. These are ordinary project details, but they are where avoidable disputes often begin.',
+    ]),
+  },
 ])
 
 /** /services/roofing/dallas: City of Dallas-specific education. */
@@ -210,6 +280,13 @@ export const ROOFING_DALLAS_GUIDE: readonly EducationalSection[] = Object.freeze
       'A complete closeout package answers the basic questions when the home is sold or the roof needs service later.',
     ]),
   },
+  {
+    heading: 'Check the permit record before final payment',
+    body: Object.freeze([
+      'The permit number should match the property and the work described. If an inspection or completion result applies, keep that result with the roof record instead of relying on a verbal statement that the permit was handled.',
+      'A permit confirms a local government record and required inspection process. It is not a product warranty, contractor endorsement, or promise that every concealed detail is correct, so the installation photographs and warranties still matter.',
+    ]),
+  },
 ])
 
 /** /services/roofing/fort-worth: City of Fort Worth-specific education. */
@@ -233,6 +310,13 @@ export const ROOFING_FORT_WORTH_GUIDE: readonly EducationalSection[] = Object.fr
     body: Object.freeze([
       'Before photographs show the starting condition. During photographs can capture deck repairs, underlayment, flashing, and ventilation before they are covered. After photographs show the completed roof and cleanup.',
       'Keep those images with the invoice, permit record, product information, and warranties.',
+    ]),
+  },
+  {
+    heading: 'Treat discovered decking as a documented change',
+    body: Object.freeze([
+      'The starting contract should state a unit price for deck replacement. When damaged wood is exposed, the useful record shows its location and condition, the quantity proposed for replacement, the homeowner approval, and the permit response before the work is covered.',
+      'The final invoice and project photographs should agree on the quantity replaced. This turns a common hidden condition into a traceable project decision rather than a surprise line at the end.',
     ]),
   },
 ])
@@ -273,6 +357,24 @@ export const ROOFING_QUICK_ANSWERS: readonly RoofingQuestion[] = Object.freeze([
     answer: 'A contractor may explain its repair scope and price. Texas does not allow a contractor to act as a public insurance adjuster on a claim when the contractor may also perform the work.',
     href: 'https://www.tdi.texas.gov/consumer/storms/roofing-and-insurance-know-the-law.html',
     source: 'Texas Department of Insurance',
+  },
+  {
+    question: 'Does a Class 4 shingle mean the roof is hail proof?',
+    answer: 'No. Class 4 is the highest classification in the UL 2218 controlled impact test. It identifies a tested level of impact resistance, but it does not guarantee that the shingle or roof will avoid damage in a real hailstorm.',
+    href: 'https://ibhs.org/roof-101/',
+    source: 'Insurance Institute for Business & Home Safety',
+  },
+  {
+    question: 'What roof documents matter when selling a house?',
+    answer: 'Keep the installation date, signed contract, final invoice, permit and inspection record, exact product and color, before-and-after photographs, deck-repair history, proof of payment, and transferable manufacturer and workmanship warranties.',
+  },
+  {
+    question: 'Can a weather report prove that one roof has hail damage?',
+    answer: 'No. A weather report can document conditions observed near an area and time. It does not inspect one property, identify the cause of one mark, determine the repair scope, or interpret what an insurance policy covers.',
+  },
+  {
+    question: 'What is the difference between a material warranty and a workmanship warranty?',
+    answer: 'A material warranty generally addresses qualifying product defects under the manufacturer terms. A workmanship warranty comes from the installer and addresses covered installation errors. Terms, exclusions, registration, transfer, labor, and duration can differ, so keep both actual documents.',
   },
 ])
 
