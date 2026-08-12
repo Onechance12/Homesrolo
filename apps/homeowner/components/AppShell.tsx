@@ -15,6 +15,7 @@ import { Skeleton, UnauthorizedState } from './states.tsx'
 import {
   HouseMark, IconDocs, IconGear, IconHome, IconProjects, IconShield, IconThread,
 } from './icons.tsx'
+import { SignOutButton } from './SignOutButton.tsx'
 
 const NAV = [
   { segment: '', label: 'Home', icon: IconHome },
@@ -78,6 +79,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
         </Link>
         <span className="topbar__home">{alias}</span>
+        <SignOutButton compact />
       </header>
 
       <nav className="rail" aria-label="Home file">
@@ -109,6 +111,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           {mode === 'synthetic'
             ? <span className="mono">Demo session — memory only</span>
             : null}
+          <SignOutButton compact />
         </div>
       </nav>
 

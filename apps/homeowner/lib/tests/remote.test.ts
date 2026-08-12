@@ -434,7 +434,6 @@ test('undefined routes return unavailable without ever building a request', asyn
   const { transport, requests } = recordingTransport({})
   const port = createRemotePort(transport)
   const results = await Promise.all([
-    port.requestMagicLink('a@example.com'),
     port.listProjects(HOME),
     port.getProject(HOME, REF('hprj', 'r')),
     port.addProject(HOME, { title: 'T', trade: 'G', performedOn: '2026-08-01', contractor: 'C', summary: 'S' }),
@@ -449,6 +448,25 @@ test('undefined routes return unavailable without ever building a request', asyn
   }
   assert.equal(requests.length, 0,
     'no request may be sent to a route homeowner-api.v1 does not define')
+})
+
+test('magic-link request and sign-out use only their exact same-origin routes', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    if (request.path.endsWith('/magic-link')) {
+      return { kind: 'reply', status: 202, body: { data: { accepted: true } } }
+    }
+    return { kind: 'reply', status: 200, body: { data: { signedOut: true } } }
+  })
+  assert.deepEqual(await port.requestMagicLink(' Person@Example.com '), {
+    ok: true, value: { accepted: true },
+  })
+  await port.signOut()
+  assert.deepEqual(requests, [
+    { method: 'POST', path: '/api/v1/auth/magic-link', body: { email: 'person@example.com' } },
+    { method: 'POST', path: '/api/v1/auth/signout' },
+  ])
 })
 
 // --- request construction -----------------------------------------------------
@@ -502,11 +520,11 @@ test('a well-formed ref of the wrong kind never reaches a home route', async () 
   assert.equal(requests.length, 0, 'wrong-kind refs must be rejected before the wire')
 })
 
-test('signOut fails loudly instead of pretending a session ended', async () => {
+test('signOut fails loudly when the server does not confirm revocation', async () => {
   const { transport, requests } = recordingTransport({})
   const port = createRemotePort(transport)
-  await assert.rejects(() => port.signOut(), /no defined route/)
-  assert.equal(requests.length, 0)
+  await assert.rejects(() => port.signOut(), /sign-out failed/)
+  assert.deepEqual(requests, [{ method: 'POST', path: '/api/v1/auth/signout' }])
 })
 
 test('the demo doorway does not exist in remote mode', async () => {

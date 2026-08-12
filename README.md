@@ -5,11 +5,12 @@ education-first assistant that helps homeowners understand maintenance and
 work history without acting as a contractor CRM, public adjuster, insurer, or
 claim advocate.
 
-**Status: Phase 0.5.** Contracts, architecture policy, and a statically
-exported public web experience. There is still no account system, database,
-API route, upload, property resolver, live assistant, share transport, payment,
-analytics, or production connection to Jobrolo. Every company and project on
-the site is synthetic.
+**Status: Phase 1 foundation.** The separate homeowner app now has passwordless
+email authentication, opaque server sessions, a private Supabase persistence
+boundary, private home workspaces, and the guided six-system intake. The public
+directory remains a statically exported synthetic experience. Uploads,
+controller verification, public sharing, a live assistant, payments,
+analytics, and a production Jobrolo connection are still unavailable.
 
 ## Contents
 

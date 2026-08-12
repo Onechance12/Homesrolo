@@ -142,6 +142,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
   // One route file now serves both the authenticated list read and the strict
   // create-home command. The file inventory remains an allowlist.
   const ROUTE_ALLOWLIST = [
+    'app/api/v1/auth/callback/route.ts',
+    'app/api/v1/auth/magic-link/route.ts',
+    'app/api/v1/auth/signout/route.ts',
     'app/api/v1/session/route.ts',
     'app/api/v1/homes/route.ts',
     'app/api/v1/homes/[homeRef]/route.ts',
@@ -149,17 +152,28 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
-    'the route inventory must remain exactly the four defined paths')
+    'the route inventory must remain exactly the seven defined paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    if (rel === 'app/api/v1/homes/[homeRef]/intake/route.ts') {
+    if (rel === 'app/api/v1/auth/callback/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} completes one magic link`)
+      assert.match(content, /completeHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/magic-link/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} requests one magic link`)
+      assert.match(content, /requestHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/signout/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} revokes one session`)
+      assert.match(content, /signOutHomeowner/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/intake/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the intake command`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
         `${rel} must not expose an intake read`)
     } else {
       assert.match(content, /export async function GET/, `${rel} serves GET`)
     }
-    if (rel === 'app/api/v1/homes/route.ts') {
+    if (rel.startsWith('app/api/v1/auth/')) {
+      // The three explicit authentication routes were checked above.
+    } else if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
@@ -167,7 +181,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     }
     assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE|HEAD|OPTIONS)/,
       `${rel} must export no generic mutation method`)
-    assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
+    if (!rel.startsWith('app/api/v1/auth/')) {
+      assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
+    }
   }
   for (const rel of appSources) {
     assert.doesNotMatch(rel, /middleware\.(ts|tsx)$/, 'no middleware exists')
@@ -189,8 +205,13 @@ test('the server seam is isolated: only routes touch it, and only it touches src
     if (isServerSide) {
       assert.doesNotMatch(content, /from '.*fixtures/,
         `${rel} must never serve synthetic fixtures: a server does not invent homeowners`)
-      assert.doesNotMatch(content, /process\.env/,
-        `${rel} reads no environment; providers arrive through the runtime seam`)
+      if (rel === 'lib/server/runtime.ts') {
+        assert.equal((content.match(/process\.env/g) ?? []).length, 1,
+          'the runtime seam is the one server file allowed to read environment configuration')
+      } else {
+        assert.doesNotMatch(content, /process\.env/,
+          `${rel} receives configuration through the runtime seam`)
+      }
     }
   }
 })

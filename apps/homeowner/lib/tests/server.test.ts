@@ -64,6 +64,9 @@ test('the cookie module never logs and the adapter never projects the handle', (
 
 test('authenticated route modules are explicitly dynamic', () => {
   const routes = [
+    '../../app/api/v1/auth/callback/route.ts',
+    '../../app/api/v1/auth/magic-link/route.ts',
+    '../../app/api/v1/auth/signout/route.ts',
     '../../app/api/v1/session/route.ts',
     '../../app/api/v1/homes/route.ts',
     '../../app/api/v1/homes/[homeRef]/route.ts',

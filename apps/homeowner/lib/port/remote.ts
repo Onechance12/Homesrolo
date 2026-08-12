@@ -177,20 +177,38 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return result
     },
 
-    // --- routes the server has not defined: unavailable, no request built ----
-
-    async requestMagicLink() {
-      // The session capability is false and no route exists; the sign-in form
-      // is hidden, and even a direct call refuses without touching the wire.
-      return UNDEFINED_ROUTE
+    async requestMagicLink(email) {
+      const normalized = email.trim().toLowerCase()
+      if (normalized.length < 3 || normalized.length > 254
+        || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return call({
+        method: 'POST',
+        path: `${API}/auth/magic-link`,
+        body: { email: normalized },
+      }, value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)
+          || (value as { accepted?: unknown }).accepted !== true
+          || Object.keys(value).length !== 1) {
+          throw new Error('invalid magic-link acceptance')
+        }
+        return { accepted: true as const }
+      }, 202)
     },
 
     async signOut() {
-      // No sign-out route is defined yet. The UI disables the control in
-      // remote mode; a direct call must FAIL rather than resolve as though a
-      // session had actually ended.
-      throw new Error('signOut has no defined route in homeowner-api.v1')
+      const result = await call({ method: 'POST', path: `${API}/auth/signout` }, value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)
+          || (value as { signedOut?: unknown }).signedOut !== true) {
+          throw new Error('invalid sign-out reply')
+        }
+        return true
+      })
+      if (!result.ok) throw new Error('sign-out failed')
     },
+
+    // --- routes the server has not defined: unavailable, no request built ----
 
     async listProjects() { return UNDEFINED_ROUTE },
     async getProject() { return UNDEFINED_ROUTE },

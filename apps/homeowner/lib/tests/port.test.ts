@@ -9,9 +9,11 @@ import { PORT_IMPLEMENTATION_STATUS, SYNTHETIC_NOTICE } from '../port/types.ts'
  * unknown refs, and results that are values, not exceptions.
  */
 
-test('nothing behind the port claims to be implemented', () => {
-  for (const [flag, value] of Object.entries(PORT_IMPLEMENTATION_STATUS)) {
-    assert.equal(value, false, `PORT_IMPLEMENTATION_STATUS.${flag} must stay false until the runtime exists`)
+test('the port status names the two real foundations and no future capability', () => {
+  assert.equal(PORT_IMPLEMENTATION_STATUS.realAuthenticationImplemented, true)
+  assert.equal(PORT_IMPLEMENTATION_STATUS.realPersistenceImplemented, true)
+  for (const flag of ['uploadsImplemented', 'sharingImplemented', 'aiAssistantImplemented', 'connectedToJobrolo'] as const) {
+    assert.equal(PORT_IMPLEMENTATION_STATUS[flag], false, `${flag} remains outside the basic foundation`)
   }
   assert.match(SYNTHETIC_NOTICE, /synthetic/i)
   assert.match(SYNTHETIC_NOTICE, /not built/i)

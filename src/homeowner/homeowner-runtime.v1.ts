@@ -12,8 +12,8 @@ export const HOMEOWNER_RUNTIME_VERSION = 'homeowner-runtime.v1-draft' as const
 
 export const HOMEOWNER_RUNTIME_STATUS = Object.freeze({
   contractsImplemented: true,
-  authenticationImplemented: false,
-  persistenceImplemented: false,
+  authenticationImplemented: true,
+  persistenceImplemented: true,
   objectStorageImplemented: false,
   uploadsImplemented: false,
   invitationsImplemented: false,
@@ -564,5 +564,5 @@ export interface HomeownerAuditPort {
 }
 
 export const HOMEOWNER_RUNTIME_WARNING =
-  'These contracts do not prove ownership, authenticate a person, persist data, expose an upload route, ' +
-  'or authorize third-party content. A production adapter must use fresh server-side identity and membership state.'
+  'These private workspaces do not prove ownership or legal control. The configured adapter authenticates an email ' +
+  'and persists private homeowner-recalled data, but exposes no upload, public share, or third-party content grant.'

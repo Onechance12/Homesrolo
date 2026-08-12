@@ -21,8 +21,8 @@
 
 /** What is actually implemented behind the port today. All false: mock only. */
 export const PORT_IMPLEMENTATION_STATUS = Object.freeze({
-  realAuthenticationImplemented: false,
-  realPersistenceImplemented: false,
+  realAuthenticationImplemented: true,
+  realPersistenceImplemented: true,
   uploadsImplemented: false,
   sharingImplemented: false,
   aiAssistantImplemented: false,

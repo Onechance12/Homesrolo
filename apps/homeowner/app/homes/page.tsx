@@ -1,16 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { usePort, useSession } from '../../lib/port/provider.tsx'
+import { usePort, usePortMode, useSession } from '../../lib/port/provider.tsx'
 import { usePortCall } from '../../lib/port/hooks.ts'
 import { HouseMark, IconHome, IconPlus } from '../../components/icons.tsx'
 import { EmptyState, ErrorState, Skeleton, UnauthorizedState } from '../../components/states.tsx'
 import { SYNTHETIC_NOTICE, homeLabel, homeLocality } from '../../lib/port/types.ts'
 import { RELATIONSHIP_COPY } from '../../components/relationship.ts'
+import { SignOutButton } from '../../components/SignOutButton.tsx'
 
 /** Home selection: a person may keep more than one home's file. */
 export default function HomesPage() {
   const port = usePort()
+  const mode = usePortMode()
   const { state: session } = useSession()
   const { state, retry } = usePortCall(() => port.listHomes())
 
@@ -23,7 +25,9 @@ export default function HomesPage() {
             <>
               <p className="mono" style={{ marginBottom: '0.4rem' }}>Step 2 of 2 — the home</p>
               <h1 style={{ fontSize: '1.5rem' }}>Whose file are we opening?</h1>
-              <p className="mono" style={{ marginTop: '0.35rem' }}>{SYNTHETIC_NOTICE}</p>
+              {mode === 'synthetic'
+                ? <p className="mono" style={{ marginTop: '0.35rem' }}>{SYNTHETIC_NOTICE}</p>
+                : <p style={{ color: 'var(--ink-soft)', marginTop: '0.35rem' }}>Choose a private home file or start one.</p>}
 
               <div className="stack" style={{ marginTop: '1.25rem', ['--stack-gap' as never]: '0.6rem' }}>
                 {state.status === 'loading' && <Skeleton lines={4} label="Loading homes" />}
@@ -64,6 +68,7 @@ export default function HomesPage() {
                 <Link className="btn btn--quiet btn--block" href="/homes/new">
                   <IconPlus /> Start a new home file
                 </Link>
+                <SignOutButton />
               </div>
             </>
           )}

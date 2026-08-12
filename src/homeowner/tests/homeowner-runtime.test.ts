@@ -52,10 +52,15 @@ const membership = {
   createdAt: now,
 }
 
-test('runtime status describes contracts without claiming live infrastructure', () => {
+test('runtime status names the implemented private foundation without claiming later systems', () => {
   assert.equal(HOMEOWNER_RUNTIME_STATUS.contractsImplemented, true)
-  for (const [name, value] of Object.entries(HOMEOWNER_RUNTIME_STATUS)) {
-    if (name !== 'contractsImplemented') assert.equal(value, false, name)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.authenticationImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.persistenceImplemented, true)
+  for (const name of [
+    'objectStorageImplemented', 'uploadsImplemented', 'invitationsImplemented',
+    'publicSharingImplemented', 'jobroloTransportImplemented', 'productionReady',
+  ] as const) {
+    assert.equal(HOMEOWNER_RUNTIME_STATUS[name], false, name)
   }
   assert.match(HOMEOWNER_RUNTIME_WARNING, /do not prove ownership/)
 })

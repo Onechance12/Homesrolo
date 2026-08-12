@@ -1,7 +1,9 @@
 # Homeowner Phase 1 Runtime Foundation
 
-Status: **draft contracts, adapter ports, three read routes, and one fail-closed
-create-home command; no live provider or real data.**
+Status: **configured private runtime foundation.** Passwordless email identity,
+opaque Homesrolo sessions, private Postgres persistence, home creation, and the
+six-system intake are implemented. Uploads, invitations, sharing, controller
+verification, and Jobrolo transport remain unavailable.
 
 The first HomesRolo homeowner application is a private workspace for a person
 to organize one home, its projects, photos, documents, warranties, and timeline.
@@ -18,18 +20,16 @@ It does not establish legal ownership and it does not unlock contractor records.
 6. Third-party contributions remain behind the existing verified-controller or
    exact-active-share boundary. Home membership does not reveal their existence.
 
-The command boundary defines idempotency-friendly opaque command
+The command boundary uses idempotency-friendly opaque command
 references for creating one private home workspace and one homeowner project.
 It defines semantic warranty and maintenance records separately from raw
-document bytes. The create-home HTTP command is wired, but its capability stays
-false and its unconfigured adapter refuses every write until real persistence
-is installed and verified.
+document bytes. Create-home and intake saves use transaction-bound command
+receipts; a changed payload cannot reuse an earlier command reference.
 
-The next contract slice defines the initial living record without claiming it
-is stored: one source-labeled property-facts record and exactly one entry for
+The initial living record stores one source-labeled property-facts record and exactly one entry for
 each of the six supported home systems. Unknown stays unknown, approximate
 years keep their precision, and only a fresh workspace-controller grant may
-record the intake. No systems HTTP route or persistence adapter exists yet.
+record the intake.
 
 The Phase 2A server application boundary now defines strict session, home-list,
 and exact-home browser projections. It resolves identity from a server-owned
@@ -64,8 +64,7 @@ code and cannot enumerate Jobrolo projects. The separately reviewed
 
 ## Not yet implemented
 
-- authentication and recovery;
-- database persistence and migrations;
+- account recovery beyond requesting a fresh email link;
 - encrypted private object storage and malware scanning;
 - upload, download, export, deletion, and retention jobs;
 - invitations and co-owner/controller verification;
