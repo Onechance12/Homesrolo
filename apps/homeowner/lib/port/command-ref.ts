@@ -1,10 +1,14 @@
 /**
- * The ONE identifier the browser is allowed to mint: the opaque idempotency
- * ref for a create command. It carries no meaning and no authority — the
+ * The ONE kind of identifier the browser is allowed to mint: the opaque
+ * idempotency ref for a command. It carries no meaning and no authority — the
  * server derives requestedAt, the principal, and every membership fact from
  * the session, never from this value. Its only job is to make a retry of the
  * SAME submission indistinguishable from the original, so a homeowner who
  * taps "try again" after a network failure cannot open two files.
+ *
+ * Each command keeps its OWN attempt-group ref — the create-home command and
+ * the intake command never share one, so the two dedupe independently. Every
+ * held ref resets only when the draft changes.
  *
  * Shape matches homeowner-runtime.v1's opaqueRef('hcmd') exactly:
  * `hcmd_` + 43 base64url characters (32 random bytes).

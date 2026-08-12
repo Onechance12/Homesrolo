@@ -21,9 +21,12 @@ import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
  * The draft lives in memory only. A refresh starts the conversation over,
  * because pretending to have saved something is the one thing this app never
  * does. Submission goes through the same data port as everything else. In
- * remote mode only the home SHELL (name + area) rides the create command —
- * the profile and systems answers have no server contract yet, so the success
- * screen says plainly that they were not saved.
+ * remote mode it is two commands in sequence: the create command carries the
+ * home SHELL (name + area), and only after a verified 201 returns one homeRef
+ * does the intake command record the profile and systems answers — as the
+ * homeowner's RECOLLECTION, kept distinct from verified property history. If
+ * intake fails after create succeeded, the screen says exactly that, and the
+ * only retry it offers is intake-only against that same homeRef.
  */
 
 type SubmitState =
@@ -32,7 +35,16 @@ type SubmitState =
   | { kind: 'unavailable' }
   | { kind: 'signed_out' }
   | { kind: 'failed'; error: string }
-  | { kind: 'created'; homeRef: string }
+  /** Remote: the shell was created; the intake command is in flight. */
+  | { kind: 'recording'; homeRef: string }
+  /**
+   * Remote partial state: the shell exists under exactly this homeRef, the
+   * recollection does not. The only retry offered from here is intake-only —
+   * never a second create.
+   */
+  | { kind: 'shell_saved'; homeRef: string; problem: 'unavailable' | 'signed_out' | 'failed'; error?: string }
+  /** Remote: shell and recollection both saved. */
+  | { kind: 'saved'; homeRef: string }
 
 function ReviewCard({ draft }: { draft: IntakeDraft }) {
   return (
@@ -86,17 +98,23 @@ export default function NewHomePage() {
   const [approximate, setApproximate] = useState(false)
   const [submit, setSubmit] = useState<SubmitState>({ kind: 'idle' })
   const endRef = useRef<HTMLDivElement>(null)
-  // One commandRef per submission attempt group: retries of the SAME draft
-  // reuse it (idempotency-stable), an edited draft mints a fresh one.
-  const attemptRef = useRef<string | null>(null)
+  // One commandRef per command per submission attempt group: retries of the
+  // SAME draft reuse each ref (idempotency-stable), an edited draft mints
+  // fresh ones. The create and intake commands NEVER share a ref — they
+  // dedupe independently on the server.
+  const createAttemptRef = useRef<string | null>(null)
+  const intakeAttemptRef = useRef<string | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [state.transcript.length])
 
   useEffect(() => {
-    // Any change to the conversation ends the current attempt group.
-    if (!isComplete(state)) attemptRef.current = null
+    // Any change to the conversation ends both attempt groups.
+    if (!isComplete(state)) {
+      createAttemptRef.current = null
+      intakeAttemptRef.current = null
+    }
   }, [state])
 
   const step = state.step
@@ -110,17 +128,54 @@ export default function NewHomePage() {
     setApproximate(false)
   }
 
+  /**
+   * Intake-only retry entry point: records the recollection against the exact
+   * home the create command returned. It NEVER creates a home — a retry from
+   * the shell_saved state can only ever land here.
+   */
+  async function recordIntakeFor(homeRef: string) {
+    const draft = draftFrom(state)
+    const commandRef = commandRefForAttempt(intakeAttemptRef.current)
+    intakeAttemptRef.current = commandRef
+    setSubmit({ kind: 'recording', homeRef })
+    const recorded = await port.recordIntake({
+      commandRef,
+      homeRef,
+      // Precision survives: an approximate year is sent as approximate.
+      homeType: draft.profile.homeType,
+      yearBuilt: draft.profile.yearBuilt,
+      systems: draft.systems.map(system => ({
+        kind: system.kind,
+        present: system.present,
+        installedOrReplacedYear: system.year,
+      })),
+    })
+    if (!recorded.ok) {
+      setSubmit({
+        kind: 'shell_saved',
+        homeRef,
+        problem: recorded.error === 'unavailable' ? 'unavailable'
+          : recorded.error === 'not_signed_in' ? 'signed_out'
+            : 'failed',
+        error: recorded.error,
+      })
+      return
+    }
+    setSubmit({ kind: 'saved', homeRef })
+  }
+
   async function create() {
     if (!complete) return
     const draft = draftFrom(state)
-    const commandRef = commandRefForAttempt(attemptRef.current)
-    attemptRef.current = commandRef
+    const commandRef = commandRefForAttempt(createAttemptRef.current)
+    createAttemptRef.current = commandRef
     setSubmit({ kind: 'sending' })
     const result = await port.createHome({
       commandRef,
       alias: draft.home.displayLabel,
       locality: draft.home.privateLocationLabel,
-      // Draft-only in remote mode: the adapter never puts these on the wire.
+      // Rendered by the demo; in remote mode these ride the intake command,
+      // never the create wire.
       homeType: draft.profile.homeType === 'unknown' ? 'other' : draft.profile.homeType,
       yearBuilt: draft.profile.yearBuilt?.value ?? null,
     })
@@ -135,8 +190,8 @@ export default function NewHomePage() {
       return
     }
     if (mode === 'remote') {
-      // Stop and say exactly what was stored before leaving the draft behind.
-      setSubmit({ kind: 'created', homeRef: result.value.homeRef })
+      // Shell first; only a verified 201's homeRef receives the recollection.
+      await recordIntakeFor(result.value.homeRef)
       return
     }
     router.push(`/home/${result.value.homeRef}`)
@@ -260,18 +315,48 @@ export default function NewHomePage() {
               {complete && (
                 <>
                   <ReviewCard draft={draftFrom(state)} />
-                  {submit.kind === 'created' ? (
+                  {submit.kind === 'saved' ? (
                     <div className="state" role="status" style={{ marginTop: '1rem' }}>
                       <h3>Home file saved</h3>
                       <p>
-                        The server stored the home shell — its name and area. The
-                        systems and profile answers above were <strong>not</strong> saved:
-                        no server contract exists for them yet, so they remain this
-                        on-screen draft and nothing more.
+                        The home shell and your answers — home type, year built, and
+                        the six systems — were recorded as <strong>your
+                        recollection</strong>. Recollection is not verified property
+                        history: a contractor can confirm the big items later, and
+                        the file keeps the two apart.
                       </p>
                       <Link className="btn btn--primary" href={`/home/${submit.homeRef}`}>
                         Open this home’s file
                       </Link>
+                    </div>
+                  ) : submit.kind === 'recording' ? (
+                    <div className="state" role="status" style={{ marginTop: '1rem' }}>
+                      <h3>Home file created — saving your answers…</h3>
+                      <p>The shell is stored; your recollection is being recorded.</p>
+                    </div>
+                  ) : submit.kind === 'shell_saved' ? (
+                    <div className="state" role="alert" style={{ marginTop: '1rem' }}>
+                      <h3>The home file exists — your answers are not saved yet</h3>
+                      <p>
+                        The server stored the home shell (its name and area). The
+                        profile and systems answers above were <strong>not</strong>{' '}
+                        recorded{submit.problem === 'signed_out'
+                          ? ' because the server says you are signed out. Sign in again, then retry.'
+                          : submit.problem === 'unavailable'
+                            ? ' because saving them is not available right now.'
+                            : ` (${submit.error ?? 'error'}).`} They remain this
+                        on-screen draft — retrying below saves the answers to the
+                        same home file and never opens a second one.
+                      </p>
+                      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+                        <button type="button" className="btn btn--primary"
+                          onClick={() => recordIntakeFor(submit.homeRef)}>
+                          Retry saving the answers
+                        </button>
+                        <Link className="btn btn--quiet" href={`/home/${submit.homeRef}`}>
+                          Open the file without them
+                        </Link>
+                      </div>
                     </div>
                   ) : submit.kind === 'signed_out' ? (
                     <div style={{ marginTop: '1rem' }} role="alert">
@@ -318,9 +403,9 @@ export default function NewHomePage() {
                         </p>
                       ) : (
                         <p className="mono" style={{ marginTop: '0.8rem' }}>
-                          Saving stores the name and area only. The systems and profile
-                          answers stay in this draft — their server contract does not
-                          exist yet, so they will not be saved.
+                          Saving opens the home’s file, then records these answers as
+                          your recollection — kept clearly apart from verified property
+                          history until a contractor confirms them.
                         </p>
                       )}
                     </>

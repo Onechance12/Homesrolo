@@ -163,58 +163,122 @@ test('the intake persists nothing: a refresh honestly starts over', () => {
   assert.match(page, /refresh starts over/i, 'the screen says so out loud')
 })
 
-test('submitting the draft POSTs only the strict home shell; systems stay draft-only', async () => {
+test('submission is two exact commands: the shell, then the recollection on that home', async () => {
+  const HOME = 'hhom_' + 'b'.repeat(43)
   const requests: TransportRequest[] = []
   const port = createRemotePort(async request => {
     requests.push(request)
+    if (request.path === '/api/v1/homes') {
+      return { kind: 'reply', status: 201, body: { data: {
+        homeRef: HOME,
+        displayLabel: 'The Birch House',
+        privateLocationLabel: 'Sample Metro — North',
+        relationshipLabel: 'claimed_unverified',
+      } } }
+    }
     return { kind: 'reply', status: 201, body: { data: {
-      homeRef: 'hhom_' + 'b'.repeat(43),
-      displayLabel: 'The Birch House',
-      privateLocationLabel: 'Sample Metro — North',
-      relationshipLabel: 'claimed_unverified',
+      homeRef: HOME,
+      homeType: 'house',
+      yearBuilt: { value: 1987, precision: 'approximate' },
+      source: 'homeowner_recollection',
+      systems: [
+        { kind: 'roof', present: 'yes', installedOrReplacedYear: { value: 2019, precision: 'approximate' } },
+        { kind: 'heating', present: 'yes', installedOrReplacedYear: null },
+        { kind: 'cooling', present: 'unknown', installedOrReplacedYear: null },
+        { kind: 'water_heater', present: 'yes', installedOrReplacedYear: { value: 2024, precision: 'exact' } },
+        { kind: 'gutters', present: 'no', installedOrReplacedYear: null },
+        { kind: 'foundation', present: 'unknown', installedOrReplacedYear: null },
+      ],
+      updatedAt: '2026-08-11T16:00:00.000Z',
     } } }
   })
   const draft = draftFrom(completeRun())
-  const commandRef = commandRefForAttempt(null)
-  const result = await port.createHome({
-    commandRef,
+
+  // Command one: the shell. Its own attempt-group ref.
+  const createRef = commandRefForAttempt(null)
+  const created = await port.createHome({
+    commandRef: createRef,
     alias: draft.home.displayLabel,
     locality: draft.home.privateLocationLabel,
     homeType: 'house',
     yearBuilt: draft.profile.yearBuilt?.value ?? null,
   })
-  assert.ok(result.ok, 'a 201 with the exact server summary is the one success')
+  assert.ok(created.ok, 'the create command succeeds on a verified 201')
+  if (!created.ok) return
 
-  assert.equal(requests.length, 1, 'one attempt, exactly one POST')
-  const request = requests[0]
-  assert.ok(request)
-  assert.equal(request.method, 'POST')
-  assert.equal(request.path, '/api/v1/homes')
-  assert.deepEqual(request.body, {
-    commandRef,
+  // Command two: the recollection, against EXACTLY the returned homeRef,
+  // under a SEPARATE retry-stable ref.
+  const intakeRef = commandRefForAttempt(null)
+  assert.notEqual(intakeRef, createRef, 'the intake never reuses the create commandRef')
+  const recorded = await port.recordIntake({
+    commandRef: intakeRef,
+    homeRef: created.value.homeRef,
+    homeType: draft.profile.homeType,
+    yearBuilt: draft.profile.yearBuilt,
+    systems: draft.systems.map(system => ({
+      kind: system.kind,
+      present: system.present,
+      installedOrReplacedYear: system.year,
+    })),
+  })
+  assert.ok(recorded.ok, 'the recollection lands on the exact created home')
+
+  assert.equal(requests.length, 2, 'exactly two commands, in order')
+  const [createRequest, intakeRequest] = requests
+  assert.ok(createRequest && intakeRequest)
+  assert.equal(createRequest.path, '/api/v1/homes')
+  assert.deepEqual(createRequest.body, {
+    commandRef: createRef,
     displayLabel: 'The Birch House',
     privateLocationLabel: 'Sample Metro — North',
-  }, 'exactly homeownerApiCreateHomeInputSchema: the shell plus the idempotency ref')
+  }, 'the create command carries the shell plus its idempotency ref, nothing else')
+  assert.equal(intakeRequest.path, `/api/v1/homes/${HOME}/intake`)
+  assert.deepEqual(intakeRequest.body, {
+    commandRef: intakeRef,
+    homeType: 'house',
+    yearBuilt: { value: 1987, precision: 'approximate' },
+    systems: [
+      { kind: 'roof', present: 'yes', installedOrReplacedYear: { value: 2019, precision: 'approximate' } },
+      { kind: 'heating', present: 'yes', installedOrReplacedYear: null },
+      { kind: 'cooling', present: 'unknown', installedOrReplacedYear: null },
+      { kind: 'water_heater', present: 'yes', installedOrReplacedYear: { value: 2024, precision: 'exact' } },
+      { kind: 'gutters', present: 'no', installedOrReplacedYear: null },
+      { kind: 'foundation', present: 'unknown', installedOrReplacedYear: null },
+    ],
+  }, 'every uncertainty in the draft survives the wire exactly as answered')
 
-  // Not one recollected fact beyond the shell may ride this command: the
-  // systems/profile contract does not exist yet, and the server derives
-  // requestedAt and all authority itself.
-  const wire = JSON.stringify(request.body)
+  // No systems fact rides the create command; no authority rides either.
+  const createWire = JSON.stringify(createRequest.body)
   for (const leaked of ['roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
     'homeType', 'yearBuilt', 'systems', 'profile', 'precision', 'approximate', '1987', '2019',
     'requestedAt', 'principal', 'source']) {
-    assert.ok(!wire.includes(leaked), `"${leaked}" must never ride the create command`)
+    assert.ok(!createWire.includes(leaked), `"${leaked}" must never ride the create command`)
+  }
+  const intakeWire = JSON.stringify(intakeRequest.body)
+  for (const leaked of ['principal', 'controller', 'member', 'role', 'source', 'requestedAt',
+    'revision', 'provider', 'verif', 'grant', 'homeRef']) {
+    assert.ok(!intakeWire.includes(leaked), `"${leaked}" must never ride the intake command`)
   }
 
-  // A retry of this same attempt group reuses the same commandRef, so the
-  // server can treat "try again" as the same command rather than a second home.
-  assert.equal(commandRefForAttempt(commandRef), commandRef)
+  // Each ref is retry-stable within its own attempt group.
+  assert.equal(commandRefForAttempt(createRef), createRef)
+  assert.equal(commandRefForAttempt(intakeRef), intakeRef)
 })
 
-test('the success screen never claims the systems inventory was saved', () => {
+test('the screen keeps recollection honest: partial saves say so, retries are intake-only', () => {
   const page = readFileSync(path.join(import.meta.dirname, '../../app/homes/new/page.tsx'), 'utf8')
-  assert.match(page, /were <strong>not<\/strong> saved/,
-    'the remote success panel must say the systems answers were not saved')
-  assert.match(page, /will not be saved/,
-    'the pre-submit remote note must say the draft facts will not be saved')
+  assert.match(page, /your\s+recollection/i,
+    'the success panel names the record as the homeowner’s recollection')
+  assert.match(page, /not verified property\s+history/,
+    'recollection is kept clearly distinct from verified property history')
+  assert.match(page, /were <strong>not<\/strong>\s*\{' '\}\s*recorded|were <strong>not<\/strong> recorded/,
+    'the partial panel says the answers were not recorded')
+  assert.match(page, /never opens a second one/,
+    'the partial panel promises the retry cannot create a second home')
+  assert.match(page, /recordIntakeFor\(submit\.homeRef\)/,
+    'the retry button retries intake only, against the preserved exact homeRef')
+  assert.match(page, /createAttemptRef/, 'the create command holds its own attempt ref')
+  assert.match(page, /intakeAttemptRef/, 'the intake command holds its own attempt ref')
+  assert.doesNotMatch(page, /commandRefForAttempt\(createAttemptRef\.current\)[\s\S]*?recordIntake\(/,
+    'guard: recordIntake must not be fed the create attempt ref')
 })

@@ -146,12 +146,69 @@ export interface CreateHomeInput {
   readonly alias: string
   readonly locality: string
   /**
-   * Draft-only facts. The synthetic adapter renders them in the demo; the
-   * remote adapter NEVER puts them on the wire — no server contract exists
-   * for the profile or systems inventory yet (spec item 6).
+   * The synthetic adapter renders these in the demo; the remote adapter
+   * NEVER puts them on the create wire — profile and systems facts ride the
+   * SEPARATE exact-home intake command (recordIntake), which preserves year
+   * precision. The create command carries the home shell and nothing else.
    */
   readonly homeType: HomeFile['homeType']
   readonly yearBuilt: number | null
+}
+
+// --- the initial intake record (homeowner-runtime.v1, PR #16/#17) -------------
+
+/** Mirrors HOMEOWNER_SYSTEM_KINDS exactly, in order. */
+export const INTAKE_SYSTEM_KINDS = Object.freeze([
+  'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+] as const)
+export type IntakeSystemKind = (typeof INTAKE_SYSTEM_KINDS)[number]
+
+/**
+ * Mirrors homeownerApproximateYearSchema: a year that knows how sure it is.
+ * An approximate year stays approximate — precision never upgrades in transit.
+ */
+export interface IntakeYear {
+  readonly value: number
+  readonly precision: 'exact' | 'approximate'
+}
+
+/** Mirrors homeownerHomeTypeSchema exactly — `unknown` is an honest answer. */
+export type IntakeHomeType = 'house' | 'townhouse' | 'condo' | 'other' | 'unknown'
+
+export interface IntakeSystemEntry {
+  readonly kind: IntakeSystemKind
+  readonly present: 'yes' | 'no' | 'unknown'
+  /** Only a system that is present may carry a year. */
+  readonly installedOrReplacedYear: IntakeYear | null
+}
+
+export interface RecordIntakeInput {
+  /**
+   * A SEPARATE attempt-group ref from the create command's — the two commands
+   * dedupe independently. Same rules: minted once per attempt group, reused
+   * verbatim on retries, reset only when the draft changes.
+   */
+  readonly commandRef: string
+  /** The exact home the recollection belongs to. Path segment, never body. */
+  readonly homeRef: string
+  readonly homeType: IntakeHomeType
+  readonly yearBuilt: IntakeYear | null
+  /** Each supported kind exactly once. */
+  readonly systems: readonly IntakeSystemEntry[]
+}
+
+/**
+ * Mirrors homeownerApiIntakeViewSchema key for key. `source` is always
+ * `homeowner_recollection` — this is what the current homeowner remembers,
+ * deliberately distinct from verified property history.
+ */
+export interface IntakeRecordView {
+  readonly homeRef: string
+  readonly homeType: IntakeHomeType
+  readonly yearBuilt: IntakeYear | null
+  readonly source: 'homeowner_recollection'
+  readonly systems: readonly IntakeSystemEntry[]
+  readonly updatedAt: string
 }
 
 // --- projects -----------------------------------------------------------------
@@ -287,6 +344,12 @@ export interface HomeownerDataPort {
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>
   getHome(homeRef: string): Promise<PortResult<HomeViewEntry>>
   createHome(input: CreateHomeInput): Promise<PortResult<HomeListEntry>>
+  /**
+   * Record the homeowner's initial recollection — home type, year built, and
+   * the six systems — against one exact, already-created home. Never creates
+   * a home; a retry of this is always intake-only.
+   */
+  recordIntake(input: RecordIntakeInput): Promise<PortResult<IntakeRecordView>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>

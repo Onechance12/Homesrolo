@@ -15,7 +15,9 @@
  */
 
 import {
-  type HomeownerSession, type PortError, type RelationshipLabel, type ServerHomeSummary,
+  INTAKE_SYSTEM_KINDS,
+  type HomeownerSession, type IntakeRecordView, type IntakeSystemEntry, type IntakeYear,
+  type PortError, type RelationshipLabel, type ServerHomeSummary,
   type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -216,6 +218,53 @@ export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
     updatedAt: utcInstant,
   })(value, at)
   return { source: 'server', ...decoded }
+}
+
+function nullable<T>(item: Decoder<T>): Decoder<T | null> {
+  return (value, at) => (value === null ? null : item(value, at))
+}
+
+/** homeownerApproximateYearSchema: int 1800–9999, precision preserved. */
+const decodeIntakeYear: Decoder<IntakeYear> = object<IntakeYear>({
+  value: (value, at) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 1800 && value <= 9999
+      ? value
+      : fail(at, 'an integer year between 1800 and 9999'),
+  precision: oneOf(['exact', 'approximate'] as const),
+})
+
+const decodeIntakeSystem: Decoder<IntakeSystemEntry> = (value, at) => {
+  const decoded = object<IntakeSystemEntry>({
+    kind: oneOf(INTAKE_SYSTEM_KINDS),
+    present: oneOf(['yes', 'no', 'unknown'] as const),
+    installedOrReplacedYear: nullable(decodeIntakeYear),
+  })(value, at)
+  if (decoded.present !== 'yes' && decoded.installedOrReplacedYear !== null) {
+    return fail(at, 'a year only on a present system')
+  }
+  return decoded
+}
+
+/**
+ * homeownerApiIntakeViewSchema, key for key: the exact home, the recollection
+ * source, each supported system exactly once, precision-preserving years, and
+ * a canonical instant. Authority and provider internals (controller refs,
+ * revision, record refs) are UNKNOWN KEYS here and reject the response.
+ */
+export const decodeIntakeView: Decoder<IntakeRecordView> = (value, at) => {
+  const decoded = object<IntakeRecordView>({
+    homeRef: opaqueRef('hhom'),
+    homeType: oneOf(['house', 'townhouse', 'condo', 'other', 'unknown'] as const),
+    yearBuilt: nullable(decodeIntakeYear),
+    source: literal('homeowner_recollection'),
+    systems: array(decodeIntakeSystem),
+    updatedAt: utcInstant,
+  })(value, at)
+  const kinds = decoded.systems.map(system => system.kind)
+  if (kinds.length !== INTAKE_SYSTEM_KINDS.length || new Set(kinds).size !== kinds.length) {
+    return fail(`${at}.systems`, 'each supported system exactly once')
+  }
+  return decoded
 }
 
 export const decodeList = array

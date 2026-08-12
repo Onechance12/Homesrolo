@@ -276,7 +276,7 @@ test('createHome sends exactly one POST with the exact strict command body', asy
 
   const wire = JSON.stringify(request)
   assert.ok(!/homeType|yearBuilt|systems|roof|heating|cooling|water_heater|gutters|foundation|precision/i.test(wire),
-    'profile and systems facts are draft-only: no server contract exists for them')
+    'profile and systems facts ride the separate intake command, never the create wire')
   assert.ok(!/principal|requestedAt|role|member|basis|authoriz|controller|provider|storage|session|email/i.test(wire),
     'requestedAt and every authority fact are server-derived, never browser-supplied')
   assert.ok(!wire.includes('hprn_'), 'no principal ref crosses the wire from the browser')
@@ -333,6 +333,144 @@ test('createHome maps server errors and accepts nothing but a 201 summary', asyn
     const bad = createRemotePort(async () => ({ kind: 'reply' as const, status: 201, body }))
     assert.deepEqual(await bad.createHome(CREATE_INPUT), { ok: false, error: 'invalid' },
       JSON.stringify(body)?.slice(0, 60) ?? 'undefined body')
+  }
+})
+
+// --- intake: the exact-home recollection command (PR #16/#17) -----------------
+
+const INTAKE_CMD = REF('hcmd', 'q')
+const INTAKE_SYSTEMS = [
+  { kind: 'roof', present: 'yes', installedOrReplacedYear: { value: 2019, precision: 'approximate' } },
+  { kind: 'heating', present: 'yes', installedOrReplacedYear: null },
+  { kind: 'cooling', present: 'unknown', installedOrReplacedYear: null },
+  { kind: 'water_heater', present: 'yes', installedOrReplacedYear: { value: 2024, precision: 'exact' } },
+  { kind: 'gutters', present: 'no', installedOrReplacedYear: null },
+  { kind: 'foundation', present: 'unknown', installedOrReplacedYear: null },
+] as const
+
+const INTAKE_INPUT = {
+  commandRef: INTAKE_CMD,
+  homeRef: HOME,
+  homeType: 'house' as const,
+  yearBuilt: { value: 1987, precision: 'approximate' as const },
+  systems: INTAKE_SYSTEMS,
+}
+
+/** Exactly homeownerApiIntakeViewSchema. */
+const INTAKE_VIEW = {
+  homeRef: HOME,
+  homeType: 'house',
+  yearBuilt: { value: 1987, precision: 'approximate' },
+  source: 'homeowner_recollection',
+  systems: INTAKE_SYSTEMS.map(system => ({ ...system })),
+  updatedAt: '2026-08-11T16:00:00.000Z',
+}
+
+test('recordIntake sends one POST to the exact home with the exact strict body', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    return { kind: 'reply', status: 201, body: { data: INTAKE_VIEW } }
+  })
+  const result = await port.recordIntake(INTAKE_INPUT)
+  assert.ok(result.ok, 'a 201 with the exact view is the one success')
+  if (!result.ok) return
+  assert.equal(result.value.homeRef, HOME)
+  assert.equal(result.value.source, 'homeowner_recollection')
+  assert.deepEqual(result.value.yearBuilt, { value: 1987, precision: 'approximate' },
+    'an approximate year survives the round trip approximate')
+
+  assert.equal(requests.length, 1, 'one attempt, one request')
+  const request = requests[0]
+  assert.ok(request)
+  assert.equal(request.method, 'POST')
+  assert.equal(request.path, `/api/v1/homes/${HOME}/intake`,
+    'the exact home is addressed in the PATH')
+  assert.deepEqual(request.body, {
+    commandRef: INTAKE_CMD,
+    homeType: 'house',
+    yearBuilt: { value: 1987, precision: 'approximate' },
+    systems: INTAKE_SYSTEMS.map(system => ({ ...system })),
+  }, 'the body is homeownerApiRecordIntakeInputSchema — four keys, nothing else')
+  assert.ok(!('homeRef' in (request.body as Record<string, unknown>)),
+    'the homeRef lives in the path, never the body')
+
+  const wire = JSON.stringify(request)
+  assert.ok(!/principal|controller|member|role|source|requestedAt|revision|provider|storage|verif|authoriz|grant|url/i.test(wire),
+    'no authority, source, revision, or provider fact is browser-supplied')
+  assert.ok(!wire.includes('hprn_') && !wire.includes('hfac_') && !wire.includes('hsys_'),
+    'no principal or record ref crosses the wire from the browser')
+})
+
+test('the create and intake commands never share a commandRef', () => {
+  const createRef = commandRefForAttempt(null)
+  const intakeRef = commandRefForAttempt(null)
+  assert.notEqual(createRef, intakeRef,
+    'each command mints its own attempt-group ref; the two dedupe independently')
+  assert.equal(commandRefForAttempt(createRef), createRef)
+  assert.equal(commandRefForAttempt(intakeRef), intakeRef,
+    'each ref is retry-stable within its own attempt group')
+})
+
+test('malformed intake input never becomes a request', async () => {
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  const cases: readonly [string, unknown][] = [
+    ['malformed commandRef', { ...INTAKE_INPUT, commandRef: 'hcmd_short' }],
+    ['wrong-kind commandRef', { ...INTAKE_INPUT, commandRef: REF('hprn', 'p') }],
+    ['malformed homeRef', { ...INTAKE_INPUT, homeRef: 'hhom_short' }],
+    ['wrong-kind homeRef', { ...INTAKE_INPUT, homeRef: REF('hprj', 'r') }],
+    ['unknown homeType', { ...INTAKE_INPUT, homeType: 'castle' }],
+    ['missing a system', { ...INTAKE_INPUT, systems: INTAKE_SYSTEMS.slice(0, 5) }],
+    ['duplicate system', { ...INTAKE_INPUT, systems: [...INTAKE_SYSTEMS.slice(0, 5), INTAKE_SYSTEMS[0]] }],
+    ['unsupported kind', { ...INTAKE_INPUT, systems: [...INTAKE_SYSTEMS.slice(0, 5), { kind: 'pool', present: 'yes', installedOrReplacedYear: null }] }],
+    ['year on an absent system', { ...INTAKE_INPUT, systems: INTAKE_SYSTEMS.map((s, i) => i === 4 ? { ...s, installedOrReplacedYear: { value: 2020, precision: 'exact' } } : s) }],
+    ['year below 1800', { ...INTAKE_INPUT, yearBuilt: { value: 1700, precision: 'exact' } }],
+    ['fractional year', { ...INTAKE_INPUT, yearBuilt: { value: 1987.5, precision: 'exact' } }],
+    ['unknown precision', { ...INTAKE_INPUT, yearBuilt: { value: 1987, precision: 'roughly' } }],
+  ]
+  for (const [label, input] of cases) {
+    assert.deepEqual(await port.recordIntake(input as never), { ok: false, error: 'invalid' }, label)
+  }
+  assert.equal(requests.length, 0, 'nothing malformed may touch the wire')
+})
+
+test('a view naming a different home is invalid — an answer about another home is no answer', async () => {
+  const otherHome = REF('hhom', 'z')
+  const port = createRemotePort(async () => ({
+    kind: 'reply' as const, status: 201, body: { data: { ...INTAKE_VIEW, homeRef: otherHome } },
+  }))
+  assert.deepEqual(await port.recordIntake(INTAKE_INPUT), { ok: false, error: 'invalid' })
+})
+
+test('recordIntake maps server errors and accepts nothing but a 201 view', async () => {
+  for (const [status, error] of [[401, 'not_signed_in'], [503, 'unavailable'], [403, 'forbidden'],
+    [404, 'not_found'], [400, 'invalid'], [429, 'rate_limited'], [200, 'unavailable']] as const) {
+    const port = createRemotePort(transportReturning(status, { data: INTAKE_VIEW }))
+    assert.deepEqual(await port.recordIntake(INTAKE_INPUT), { ok: false, error }, `status ${status}`)
+  }
+  const dead = createRemotePort(async () => ({ kind: 'network_failure' as const }))
+  assert.deepEqual(await dead.recordIntake(INTAKE_INPUT), { ok: false, error: 'unavailable' })
+})
+
+test('the intake view decoder rejects authority, provider, and shape drift', async () => {
+  const rejected: readonly [string, unknown][] = [
+    ['controller ref exposed', { ...INTAKE_VIEW, controllerPrincipalRef: REF('hprn', 'p') }],
+    ['record ref exposed', { ...INTAKE_VIEW, propertyFactsRef: REF('hfac', 'f') }],
+    ['revision exposed', { ...INTAKE_VIEW, revision: 1 }],
+    ['provider id exposed', { ...INTAKE_VIEW, providerId: 'auth0|123' }],
+    ['wrong source', { ...INTAKE_VIEW, source: 'contractor_attestation' }],
+    ['missing source', (() => { const { source: _s, ...rest } = INTAKE_VIEW; return rest })()],
+    ['five systems only', { ...INTAKE_VIEW, systems: INTAKE_VIEW.systems.slice(0, 5) }],
+    ['duplicate system kind', { ...INTAKE_VIEW, systems: [...INTAKE_VIEW.systems.slice(0, 5), INTAKE_VIEW.systems[0]] }],
+    ['year on absent system', { ...INTAKE_VIEW, systems: INTAKE_VIEW.systems.map((s, i) => i === 4 ? { ...s, installedOrReplacedYear: { value: 2020, precision: 'exact' } } : s) }],
+    ['precision dropped', { ...INTAKE_VIEW, yearBuilt: { value: 1987 } }],
+    ['non-canonical updatedAt', { ...INTAKE_VIEW, updatedAt: '2026-08-11T16:00:00Z' }],
+    ['offset updatedAt', { ...INTAKE_VIEW, updatedAt: '2026-08-11T16:00:00.000+02:00' }],
+  ]
+  for (const [label, body] of rejected) {
+    const port = createRemotePort(async () => ({ kind: 'reply' as const, status: 201, body: { data: body } }))
+    assert.deepEqual(await port.recordIntake(INTAKE_INPUT), { ok: false, error: 'invalid' }, label)
   }
 })
 

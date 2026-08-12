@@ -1,9 +1,9 @@
 # Phase 1–2 build spec — server authority and persistence
 
 Owner: Codex (integration lane). Written by the experience lane against main
-`0c06ce2` plus PR #15 (`codex/homeowner-persistence-v1`), which implements
-item 4's boundary fail-closed. Dependency-ordered: each item assumes
-everything above it. The
+`0c06ce2` plus PRs #15–#17, which implement the item-4 create boundary and
+the item-6 systems/intake boundary fail-closed. Dependency-ordered: each item
+assumes everything above it. The
 browser side of every step already exists and fails closed until the
 corresponding capability flips true.
 
@@ -61,17 +61,22 @@ schema must never make the home a child row of an account.
 
 ## Phase 2 — the living record
 
-6. **Systems inventory contract** — *open contract question from the
-   experience lane.* The guided intake
-   (`apps/homeowner/lib/intake/`) produces a typed draft:
-   per-system (`roof, heating, cooling, water_heater, gutters, foundation`)
-   an answer `present: yes|no|unknown` and an optional
-   `{ value, precision: exact|approximate }` year, all sourced
-   `homeowner_recollection`. No server schema exists for this. Needed: a
-   `homeowner_system` record + create/update command in `homeowner-runtime.v1`
-   vocabulary, preserving the precision field — an approximate year must
-   never be stored as an exact one. `homeType`/`yearBuilt` belong here too
-   (they are deliberately not columns on the home).
+6. **Systems inventory contract** — **decided and implemented fail-closed in
+   PRs #16/#17.** `homeowner-runtime.v1` defines `HomeownerPropertyFacts`
+   (`hfac_`) and `HomeownerSystem` (`hsys_`) records, both sourced
+   `homeowner_recollection` with precision-preserving
+   `{ value, precision: exact|approximate }` years — an approximate year is
+   never stored as exact, and only a present system may carry a year.
+   `POST /api/v1/homes/{homeRef}/intake` takes exactly
+   `{ commandRef, homeType, yearBuilt, systems }` (each supported kind once;
+   strict; the browser mints and retry-reuses this commandRef as a SEPARATE
+   ref from the create command's). `requestedAt`, the principal, the source,
+   and all authority are server-derived; success is 201 with the strict
+   intake view. The client submits create-then-intake against the returned
+   `homeRef`, and on a create-success/intake-failure partial it retries
+   intake only — never a second create. Remaining here: the persistence
+   provider, and a read route for recorded facts (today the view exists only
+   as the write response).
 
 7. **Project / maintenance / document-metadata writes.**
    `createHomeownerProjectInputSchema` exists; add the route. Maintenance and
