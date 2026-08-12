@@ -28,7 +28,13 @@ import {
   IDEAS_INTRO,
   LISTING_NOT_ENDORSEMENT,
   READING_A_LISTING,
+  ROOFING_CONTRACTOR_GUIDE,
+  ROOFING_COST_GUIDE,
+  ROOFING_DALLAS_GUIDE,
+  ROOFING_DFW_GUIDE,
+  ROOFING_FORT_WORTH_GUIDE,
   ROOFING_GUIDE,
+  ROOFING_MATERIALS_GUIDE,
   VERIFY_PRINCIPLES,
   type EducationalSection,
 } from '../../content/education.ts'
@@ -309,6 +315,12 @@ test('the site disclosures match the constitution verbatim', () => {
 
 const ALL_SECTIONS: ReadonlyArray<[string, readonly EducationalSection[]]> = [
   ['roofing guide', ROOFING_GUIDE],
+  ['roofing cost guide', ROOFING_COST_GUIDE],
+  ['roofing materials guide', ROOFING_MATERIALS_GUIDE],
+  ['roofing contractor guide', ROOFING_CONTRACTOR_GUIDE],
+  ['DFW roofing guide', ROOFING_DFW_GUIDE],
+  ['Dallas roofing guide', ROOFING_DALLAS_GUIDE],
+  ['Fort Worth roofing guide', ROOFING_FORT_WORTH_GUIDE],
   ['how it works', HOW_IT_WORKS_STEPS],
   ['how we verify', VERIFY_PRINCIPLES],
   ['reading a listing', READING_A_LISTING],

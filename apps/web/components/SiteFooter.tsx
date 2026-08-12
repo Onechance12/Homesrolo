@@ -27,6 +27,8 @@ export function SiteFooter() {
               <Link href="/how-it-works/">How it works</Link>
               <Link href="/how-we-verify/">How we verify</Link>
               <Link href="/services/roofing/">Roofing guide</Link>
+              <Link href="/services/roofing/cost/">Roof cost</Link>
+              <Link href="/services/roofing/materials/">Roof materials</Link>
               <Link href="/ideas/">Ideas</Link>
             </div>
             <div className="titleblock__cell">
@@ -36,7 +38,7 @@ export function SiteFooter() {
             </div>
           </div>
           <div className="titleblock__meta" aria-hidden="true">
-            <span>Phase 0.5 preview</span>
+            <span>Public education preview</span>
             <span>All data synthetic</span>
             <span>Ordered by name only</span>
             <span>Facts carry their source</span>
@@ -53,8 +55,8 @@ export function SiteFooter() {
               attributed and their content stays on the source.
             </li>
             <li>
-              Phase 0.5 preview. Every company and project shown is synthetic, and no account, upload, or
-              sharing feature exists yet.
+              Every public company and project example is synthetic. Private homeowner accounts and home
+              records live in the separate authenticated application.
             </li>
           </ul>
         </div>

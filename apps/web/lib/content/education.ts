@@ -73,6 +73,184 @@ export const ROOFING_GUIDE: readonly EducationalSection[] = Object.freeze([
   },
 ])
 
+/** /services/roofing/cost — a transparent way to read prices, not a quote. */
+export const ROOFING_COST_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Start with roof area, not house area',
+    body: Object.freeze([
+      'Roofing is commonly measured in squares. One square is one hundred square feet of roof surface. A home’s floor area is not its roof area: pitch, overhangs, attached garages, hips, valleys, and waste all change the quantity.',
+      'A price that does not state the measured roof area leaves no reliable way to compare it with another price. The useful starting line is the number of squares and the measurement report or diagram behind that number.',
+    ]),
+  },
+  {
+    heading: 'Why Dallas prices cover such a wide range',
+    body: Object.freeze([
+      'Published Dallas cost data spans a wide range because the word roof describes very different assemblies. Material, pitch, height, access, tear-off layers, decking repairs, flashing, ventilation, permits, disposal, and warranty terms can each move the total.',
+      'A simple one-story architectural-shingle roof and a steep two-story roof with dormers, valleys, metal sections, and extensive decking replacement are not comparable projects even when the houses have similar floor area.',
+    ]),
+  },
+  {
+    heading: 'The line items that make a quote readable',
+    body: Object.freeze([
+      'A useful scope identifies tear-off, deck inspection and the unit price for replacement sheets, underlayment, ice or water membrane where specified, drip edge, starter, field shingles or panels, hip and ridge material, flashing, pipe boots, ventilation, disposal, permits, and cleanup.',
+      'It also identifies the exact manufacturer and product line. Phrases such as architectural shingle or lifetime roof describe categories or marketing terms, not a complete material specification.',
+    ]),
+  },
+  {
+    heading: 'A practical comparison method',
+    body: Object.freeze([
+      'Put competing bids into the same rows before comparing totals. Mark an item as included, excluded, allowance, or not stated. A lower total can reflect a real efficiency, but it can also reflect missing ventilation, reused flashing, an undefined shingle, or no price for damaged decking.',
+      'Record the proposal, measurement, product data, change orders, final invoice, photographs, permit information, and warranties together. That record explains the price long after the sales conversation is forgotten.',
+    ]),
+  },
+])
+
+/** /services/roofing/materials — common steep-slope choices for North Texas. */
+export const ROOFING_MATERIALS_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Architectural asphalt shingles',
+    body: Object.freeze([
+      'Architectural asphalt shingles are the common baseline for steep-slope residential roofs. They are widely available, familiar to installers, and offered in many product tiers. The exact product, fastening pattern, underlayment, flashing, and ventilation matter as much as the broad material name.',
+      'Impact-resistant labeling is not one uniform level of real-world performance. Independent hail testing can separate products that carry similar marketing language, and the product name needs to be recorded for any later comparison.',
+    ]),
+  },
+  {
+    heading: 'Standing-seam and formed metal',
+    body: Object.freeze([
+      'Residential metal roofing includes standing-seam panels, exposed-fastener panels, and formed metal shingles. These systems differ in seams, fasteners, coatings, details, maintenance, and price, so metal roof is not a complete specification.',
+      'Hail may leave visible dents in metal without creating the same damage mode seen in asphalt shingles. Appearance, water shedding, panel thickness, coating, and the details at penetrations are separate questions.',
+    ]),
+  },
+  {
+    heading: 'Tile, slate, and synthetic products',
+    body: Object.freeze([
+      'Concrete or clay tile and natural slate are heavier than asphalt systems and can require confirmation that the structure is suitable for the load. They also require installers and repair methods familiar with the specific system.',
+      'Synthetic slate, shake, and composite products vary widely by manufacturer. Product approvals, impact testing, fire classification, installation instructions, and warranty exclusions are more useful than the category name alone.',
+    ]),
+  },
+  {
+    heading: 'The assembly below the visible material',
+    body: Object.freeze([
+      'The roof covering is only the visible layer. Decking condition, underlayment, flashing, starter, edge metal, ventilation, penetrations, and transitions determine how the assembly handles water and heat.',
+      'The durable home record therefore stores both the covering and the hidden assembly: exact products, installation date, photographs before the covering went down, and warranty documents.',
+    ]),
+  },
+])
+
+/** /services/roofing/choose-a-contractor — neutral due-diligence education. */
+export const ROOFING_CONTRACTOR_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Verify identity before comparing promises',
+    body: Object.freeze([
+      'A company name, physical address, responsible person, and consistent contact information establish who is making the proposal. Texas does not use one statewide government roofing licence as a universal quality screen, while local contractor registration and permit rules can still apply.',
+      'Trade-association credentials and manufacturer designations can add information, but they are not substitutes for confirming identity, insurance, references, and the local permit path.',
+    ]),
+  },
+  {
+    heading: 'Ask for evidence that can be checked',
+    body: Object.freeze([
+      'Useful evidence includes a current certificate of insurance that can be confirmed with the issuer, recent local references, a written scope, exact products, a payment schedule, workmanship terms, manufacturer warranty requirements, and the name of the party responsible for permits.',
+      'A review score describes past reviewers. It does not prove current insurance, the crew assigned to a home, the material that will arrive, or the scope in a particular contract. Those facts need their own sources and dates.',
+    ]),
+  },
+  {
+    heading: 'Read the contract as a construction record',
+    body: Object.freeze([
+      'A readable agreement identifies the roof area, tear-off, deck-repair price, each material system, flashing and ventilation work, cleanup, permit responsibility, start or scheduling terms, payment milestones, change-order process, warranties, and cancellation terms.',
+      'Verbal upgrades and assurances are difficult to verify later. When a detail matters, its value comes from being written into the scope and preserved with the final project record.',
+    ]),
+  },
+  {
+    heading: 'Texas insurance boundaries matter',
+    body: Object.freeze([
+      'Texas prohibits a contractor from acting as a public insurance adjuster on a claim when the contractor may also perform the work. Texas also prohibits waiving, absorbing, rebating, or hiding an insurance deductible.',
+      'A contractor can explain its own repair scope and price. Advice or representation about policy coverage, claim value, or settlement belongs to the insurer, a licensed public insurance adjuster, or an attorney, depending on the question.',
+    ]),
+  },
+])
+
+/** /services/roofing/dfw — regional roofing context that is actually local. */
+export const ROOFING_DFW_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'North Texas weather changes the material conversation',
+    body: Object.freeze([
+      'Dallas–Fort Worth has hot summers and recurring severe thunderstorms. Large hail, damaging wind, flooding, and tornadoes occur in the region, although no single property experiences every event. Roofing choices therefore involve impact performance, wind details, heat, ventilation, and repairability rather than color alone.',
+      'A label such as impact resistant is a starting point. The exact product and independent test result provide more information than the label by itself.',
+    ]),
+  },
+  {
+    heading: 'There is no single DFW permit rule',
+    body: Object.freeze([
+      'Dallas, Fort Worth, Arlington, Plano, Frisco, and the other cities in the metroplex administer their own permit and contractor-registration rules. The rule attached to the property address controls; a practice that is normal in one city may not be the process in the next.',
+      'Permit responsibility, required inspections, and any work that triggers structural review belong in the written scope before construction begins.',
+    ]),
+  },
+  {
+    heading: 'A storm date is not a roof diagnosis',
+    body: Object.freeze([
+      'A weather report can establish that hail or wind was observed near an area. It cannot establish the condition of one roof, what caused a mark, or what a policy covers. Those are separate evidence questions.',
+      'Dated property photographs, inspection records, repair history, product information, and weather records become more useful when preserved together without turning one source into a conclusion it cannot support.',
+    ]),
+  },
+  {
+    heading: 'The DFW roof file that remains useful',
+    body: Object.freeze([
+      'Keep the measurement, signed scope, permit and inspection record, product delivery information, installation photographs, final invoice, proof of payment, manufacturer registration, and workmanship warranty.',
+      'Also record deck repairs, ventilation changes, flashing details, and any later service visit. Those details help a future contractor, buyer, inspector, or insurer understand what actually exists on the home.',
+    ]),
+  },
+])
+
+/** /services/roofing/dallas — City of Dallas-specific education. */
+export const ROOFING_DALLAS_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Dallas treats roof replacement as permitted work',
+    body: Object.freeze([
+      'The City of Dallas describes a roofing permit as the record that allows installation, repair, or replacement of a residential or commercial roof. Current requirements and fees belong to the city record for the property, not to a generic metroplex rule.',
+      'A proposal is clearer when it names who will apply, how the permit will be documented, and which inspection or closeout record will be delivered to the homeowner.',
+    ]),
+  },
+  {
+    heading: 'Price comparisons need a Dallas-ready scope',
+    body: Object.freeze([
+      'Published Dallas price ranges are broad. Roof area, pitch, stories, access, material, tear-off, deck repair, flashing, ventilation, permits, disposal, and warranty coverage explain much of that spread.',
+      'Comparing the same scope rows is more reliable than comparing totals from proposals that describe different work.',
+    ]),
+  },
+  {
+    heading: 'Keep the closeout evidence',
+    body: Object.freeze([
+      'The useful final file includes the permit record, inspection or completion evidence, exact product, installation photographs, final invoice, proof of payment, and both warranty documents.',
+      'That file is the answer when a later buyer, contractor, inspector, or insurer asks when the roof changed and what was installed.',
+    ]),
+  },
+])
+
+/** /services/roofing/fort-worth — City of Fort Worth-specific education. */
+export const ROOFING_FORT_WORTH_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Fort Worth separates shingle work from structural roof work',
+    body: Object.freeze([
+      'Fort Worth states that shingle replacement alone does not require a permit, while replacement of decking, lathing, sheathing, rafters, or ridge boards does. A project can therefore cross the permit line after tear-off reveals damaged decking.',
+      'The written scope benefits from naming who handles that change, what each replacement sheet costs, and how any required permit will be documented.',
+    ]),
+  },
+  {
+    heading: 'Local roof details are not generic',
+    body: Object.freeze([
+      'Fort Worth’s published roofing information addresses underlayment, drip edge, crickets, roof layers, and other assembly details. Those requirements and the manufacturer instructions need to be reconciled for the actual roof system.',
+      'A proposal that lists only shingles leaves the hidden assembly unresolved.',
+    ]),
+  },
+  {
+    heading: 'Preserve the before, during, and after record',
+    body: Object.freeze([
+      'Before photographs show the starting condition. During photographs can show deck repairs, underlayment, flashing, and ventilation before they are covered. After photographs, invoices, permit records, and warranties show how the project closed.',
+      'Stored together, those records remain useful long after a text thread or sales conversation disappears.',
+    ]),
+  },
+])
+
 /** /how-it-works — the Home Project Passport explained. */
 export const HOW_IT_WORKS_STEPS: readonly EducationalSection[] = Object.freeze([
   {
