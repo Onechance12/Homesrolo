@@ -41,14 +41,7 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
             <p style={{ fontWeight: 650 }}>{session.session.displayName ?? 'Signed in'}</p>
             <p className="mono">{session.session.principalRef.slice(0, 16)}…{mode === 'synthetic' ? ' · demo session, memory only' : ''}</p>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-              {mode === 'remote' ? (
-                <button type="button" className="btn btn--quiet" disabled
-                  title="The sign-out route is not defined yet">
-                  Sign out — not available yet
-                </button>
-              ) : (
-                <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
-              )}
+              <button type="button" className="btn btn--quiet" onClick={signOut}>Sign out</button>
               <Link className="btn btn--quiet" href="/homes">Switch home</Link>
             </div>
           </div>
@@ -64,7 +57,7 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
             <div className="field">
               <label htmlFor="alias">Alias</label>
               <input id="alias" type="text" defaultValue={homeLabel(home.state.value)} disabled />
-              <span className="field__hint">Renaming is not wired in the demo shell.</span>
+              <span className="field__hint">Renaming this saved home is not available yet.</span>
             </div>
             <div className="field">
               <label htmlFor="area">Area</label>
@@ -92,7 +85,9 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
           ))}
         </ul>
         <p className="mono" style={{ marginTop: '0.6rem' }}>
-          Every flag is false on purpose. The shell ships before the runtime, and says so.
+          Authentication and private home persistence are live. Uploads, sharing,
+          the assistant, and the professional-network connection remain off until
+          their own reviewed releases.
         </p>
       </section>
     </div>

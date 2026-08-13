@@ -13,7 +13,7 @@
 import { createHomeownerHttpHandler } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import type { HomeownerHttpResponse } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import { sessionHandleFromCookieHeader } from './cookie.ts'
-import { homeownerApiService } from './runtime.ts'
+import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 function toWebResponse(response: HomeownerHttpResponse): Response {
   return new Response(JSON.stringify(response.body), {
@@ -23,6 +23,26 @@ function toWebResponse(response: HomeownerHttpResponse): Response {
 }
 
 const MAX_JSON_BYTES = 4096
+
+export function mutationOriginAllowed(
+  method: string,
+  requestOrigin: string | null,
+  expectedOrigin: string,
+): boolean {
+  return method !== 'POST' || requestOrigin === expectedOrigin
+}
+
+function forbiddenMutationResponse(): Response {
+  return new Response(JSON.stringify({ error: { code: 'forbidden' } }), {
+    status: 403,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+}
 
 async function boundedJsonBody(request: Request): Promise<unknown> {
   if (request.method !== 'POST' || request.body === null) return undefined
@@ -60,6 +80,14 @@ async function boundedJsonBody(request: Request): Promise<unknown> {
 
 export async function handleHomeownerRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
+  const configuration = homeownerRuntimeConfiguration()
+  if (configuration && !mutationOriginAllowed(
+    request.method,
+    request.headers.get('origin'),
+    configuration.appOrigin,
+  )) {
+    return forbiddenMutationResponse()
+  }
   const handler = createHomeownerHttpHandler(homeownerApiService())
   const hasBody = request.body !== null
   const jsonBody = await boundedJsonBody(request)

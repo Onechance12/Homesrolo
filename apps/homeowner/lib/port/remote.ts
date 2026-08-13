@@ -37,6 +37,7 @@ import {
   type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
 } from './types.ts'
 import type { JsonTransport, TransportReply, TransportRequest } from './transport.ts'
+import { roofingIntent } from '../roofing-intent.ts'
 import {
   decodeList, decodeProject, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
@@ -181,16 +182,18 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return result
     },
 
-    async requestMagicLink(email) {
+    async requestMagicLink(email, requestedIntent = null) {
       const normalized = email.trim().toLowerCase()
       if (normalized.length < 3 || normalized.length > 254
         || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
         return { ok: false, error: 'invalid' }
       }
+      const intent = requestedIntent === null ? null : roofingIntent(requestedIntent)
+      if (requestedIntent !== null && intent === null) return { ok: false, error: 'invalid' }
       return call({
         method: 'POST',
         path: `${API}/auth/magic-link`,
-        body: { email: normalized },
+        body: intent ? { email: normalized, intent } : { email: normalized },
       }, value => {
         if (!value || typeof value !== 'object' || Array.isArray(value)
           || (value as { accepted?: unknown }).accepted !== true

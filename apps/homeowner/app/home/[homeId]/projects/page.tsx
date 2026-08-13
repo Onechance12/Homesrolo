@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.
 import { IconProjects } from '../../../../components/icons.tsx'
 import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
 import type { RoofingNeed, RoofingTiming } from '../../../../lib/port/types.ts'
+import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
 
 const NEEDS: readonly { value: RoofingNeed; label: string }[] = [
   { value: 'repair', label: 'Repair a leak or damage' },
@@ -26,13 +27,21 @@ const TIMING: readonly { value: RoofingTiming; label: string }[] = [
   { value: 'not_sure', label: 'I am not sure yet' },
 ]
 
-export default function ProjectsPage({ params }: { params: Promise<{ homeId: string }> }) {
+export default function ProjectsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ homeId: string }>
+  searchParams: Promise<{ intent?: string | string[] }>
+}) {
   const { homeId } = use(params)
+  const query = use(searchParams)
+  const carriedIntent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
   const router = useRouter()
   const mode = usePortMode()
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
-  const [need, setNeed] = useState<RoofingNeed>('not_sure')
+  const [need, setNeed] = useState<RoofingNeed>(() => carriedIntent ?? 'not_sure')
   const [timing, setTiming] = useState<RoofingTiming>('not_sure')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
@@ -85,6 +94,12 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
           </div>
         </div>
         <form onSubmit={startProject} className="roof-start__form">
+          {carriedIntent && carriedIntent !== 'not_sure' ? (
+            <div className="notice" role="status">
+              We carried over <strong>{ROOFING_INTENT_LABEL[carriedIntent]}</strong> from the roofing guide.
+              You can change it below before anything is saved.
+            </div>
+          ) : null}
           <fieldset>
             <legend>Choose the closest answer</legend>
             <div className="choice-grid">
@@ -125,7 +140,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ homeId: str
               onChange={event => changeNotes(event.target.value)}
               placeholder="Leak location, storm date, roof age, access notes, or questions."
             />
-            <span className="field__hint">Optional. You can add photos and paperwork as the file grows.</span>
+            <span className="field__hint">Optional. This release saves these notes with the private roof project.</span>
           </div>
 
           {failed && (

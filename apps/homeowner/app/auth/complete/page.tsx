@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { exchangeHomeownerProviderCredential } from '../../../lib/port/transport.ts'
+import { roofingIntent, withRoofingIntent } from '../../../lib/roofing-intent.ts'
 
 export default function CompleteSignInPage() {
   const [failed, setFailed] = useState(false)
@@ -9,6 +10,8 @@ export default function CompleteSignInPage() {
   useEffect(() => {
     let active = true
     async function complete() {
+      const query = new URLSearchParams(window.location.search)
+      const intent = roofingIntent(query.get('intent'))
       const fragment = new URLSearchParams(window.location.hash.slice(1))
       const accessToken = fragment.get('access_token')
       // Remove provider credentials from the address bar and browser history
@@ -20,7 +23,7 @@ export default function CompleteSignInPage() {
       }
       try {
         if (!await exchangeHomeownerProviderCredential(accessToken)) throw new Error('exchange_failed')
-        window.location.replace('/homes')
+        window.location.replace(withRoofingIntent('/homes', intent))
       } catch {
         if (active) setFailed(true)
       }

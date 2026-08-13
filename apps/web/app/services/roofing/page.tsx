@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
 import { ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
-import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
   title: 'Texas roofing guide: costs, materials, contractors, and DFW rules',
@@ -86,7 +86,7 @@ export default function RoofingGuidePage() {
             <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides. Important claims link to the source so you can check them.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
-            <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my roof project</a>
+            <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start my roof project</a>
             <Link className="btn btn--quiet" href="/professionals/">See how the project works</Link>
           </div>
         </div>
