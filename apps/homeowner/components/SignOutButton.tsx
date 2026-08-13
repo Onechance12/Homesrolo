@@ -33,4 +33,3 @@ export function SignOutButton({ compact = false }: { readonly compact?: boolean 
     </button>
   )
 }
-

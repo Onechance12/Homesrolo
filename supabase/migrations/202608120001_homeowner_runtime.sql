@@ -365,4 +365,3 @@ grant execute on function public.homesrolo_create_private_home_workspace(text, t
 grant execute on function public.homesrolo_record_initial_intake(text, text, text, integer, text, text, text, text, integer, text, jsonb, timestamptz) to service_role;
 
 commit;
-

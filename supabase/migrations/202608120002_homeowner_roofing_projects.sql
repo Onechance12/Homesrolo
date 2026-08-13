@@ -106,4 +106,3 @@ grant execute on function public.homesrolo_create_homeowner_roofing_project(
 ) to service_role;
 
 commit;
-
