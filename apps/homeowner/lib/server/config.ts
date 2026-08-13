@@ -12,6 +12,7 @@ const configurationSchema = z.object({
   publishableKey: providerKey,
   secretKey: providerKey,
   appOrigin: httpsUrl,
+  privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict()
 
 export interface HomeownerRuntimeConfiguration {
@@ -19,10 +20,11 @@ export interface HomeownerRuntimeConfiguration {
   readonly publishableKey: string
   readonly secretKey: string
   readonly appOrigin: string
+  readonly privateUploadsEnabled: boolean
 }
 
 /**
- * Reads only the four server-owned integration values. A partial or malformed
+ * Reads only the server-owned integration values. A partial or malformed
  * configuration enables nothing: the caller receives null and the runtime
  * stays on its fail-closed adapters.
  */
@@ -34,6 +36,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
+    privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
   })
   if (!parsed.success) return null
   return Object.freeze({
@@ -41,5 +44,6 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: parsed.data.publishableKey,
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
+    privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
   })
 }

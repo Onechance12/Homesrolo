@@ -5,8 +5,9 @@ import { isRealCalendarDate } from '../contracts/home-file-record.v1.ts'
  * Server-side contracts for the first private HomesRolo homeowner workspace.
  *
  * This module does not implement authentication, a database, object storage,
- * uploads, public sharing, or Jobrolo transport. It defines the boundary those
- * adapters must satisfy so the browser can never decide who may access a home.
+ * public sharing, or automatic professional distribution. It defines the
+ * boundary those adapters must satisfy so the browser can never decide who
+ * may access a home or where a roof request goes.
  */
 export const HOMEOWNER_RUNTIME_VERSION = 'homeowner-runtime.v1-draft' as const
 
@@ -14,11 +15,11 @@ export const HOMEOWNER_RUNTIME_STATUS = Object.freeze({
   contractsImplemented: true,
   authenticationImplemented: true,
   persistenceImplemented: true,
-  objectStorageImplemented: false,
-  uploadsImplemented: false,
+  objectStorageImplemented: true,
+  uploadsImplemented: true,
   invitationsImplemented: false,
   publicSharingImplemented: false,
-  jobroloTransportImplemented: false,
+  jobroloTransportImplemented: true,
   productionReady: false,
 } as const)
 
@@ -89,7 +90,9 @@ export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'project.create',
   'project.update',
   'artifact.create_metadata',
+  'artifact.upload',
   'artifact.read_metadata',
+  'project.submit_for_review',
   'warranty.create',
   'warranty.update',
   'maintenance.create',
@@ -481,6 +484,19 @@ export type CreateHomeWorkspaceInput = z.infer<typeof createHomeWorkspaceInputSc
 export type CreateHomeownerProjectInput = z.infer<typeof createHomeownerProjectInputSchema>
 export type RecordHomeownerIntakeInput = z.infer<typeof recordHomeownerIntakeInputSchema>
 
+export const storeHomeownerArtifactInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  projectRef: opaqueRef('hprj').optional(),
+  kind: homeownerArtifactMetadataSchema.shape.kind,
+  displayName: homeownerArtifactMetadataSchema.shape.displayName,
+  mediaType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  byteLength: homeownerArtifactMetadataSchema.shape.byteLength,
+  payloadSha256: homeownerArtifactMetadataSchema.shape.payloadSha256,
+  requestedAt: utcInstant,
+}).strict()
+
+export type StoreHomeownerArtifactInput = z.infer<typeof storeHomeownerArtifactInputSchema>
+
 export type HomeCreationDecision =
   | { readonly authorized: true; readonly principalRef: string }
   | {
@@ -545,6 +561,11 @@ export interface HomeownerCommandPort {
 }
 
 export interface HomeownerPrivateObjectPort {
+  storeArtifact(input: {
+    readonly grant: AuthorizedHomeownerAction<'artifact.upload'>
+    readonly command: StoreHomeownerArtifactInput
+    readonly bytes: Uint8Array
+  }): Promise<HomeownerArtifactMetadata>
   readExactObject(input: {
     readonly grant: AuthorizedHomeownerWorkspace
     readonly storageObjectRef: string
@@ -565,4 +586,4 @@ export interface HomeownerAuditPort {
 
 export const HOMEOWNER_RUNTIME_WARNING =
   'These private workspaces do not prove ownership or legal control. The configured adapter authenticates an email ' +
-  'and persists private homeowner-recalled data, but exposes no upload, public share, or third-party content grant.'
+  'and persists private homeowner-recalled data and private files. It exposes no public share or third-party content grant.'

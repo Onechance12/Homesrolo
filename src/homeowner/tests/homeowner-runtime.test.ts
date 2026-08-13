@@ -56,9 +56,12 @@ test('runtime status names the implemented private foundation without claiming l
   assert.equal(HOMEOWNER_RUNTIME_STATUS.contractsImplemented, true)
   assert.equal(HOMEOWNER_RUNTIME_STATUS.authenticationImplemented, true)
   assert.equal(HOMEOWNER_RUNTIME_STATUS.persistenceImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.objectStorageImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.uploadsImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.jobroloTransportImplemented, true)
   for (const name of [
-    'objectStorageImplemented', 'uploadsImplemented', 'invitationsImplemented',
-    'publicSharingImplemented', 'jobroloTransportImplemented', 'productionReady',
+    'invitationsImplemented', 'publicSharingImplemented',
+    'productionReady',
   ] as const) {
     assert.equal(HOMEOWNER_RUNTIME_STATUS[name], false, name)
   }
@@ -152,6 +155,26 @@ test('viewer cannot mutate and membership never grants third-party contribution 
 
   assert.equal('contribution.read' in Object.fromEntries(
     ['workspace.read', 'artifact.read_metadata'].map(action => [action, true]),
+  ), false)
+})
+
+test('private artifact upload is controller-only and does not grant disclosure authority', () => {
+  assert.equal(authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'artifact.upload',
+    recheckedAt: now,
+  }).authorized, true)
+  assert.deepEqual(authorizeHomeownerWorkspace({
+    principal,
+    membership: { ...membership, role: 'member' },
+    requestedHomeRef: homeRef,
+    action: 'artifact.upload',
+    recheckedAt: now,
+  }), { authorized: false, reason: 'role_denied' })
+  assert.equal('project.submit_for_review' in Object.fromEntries(
+    ['artifact.upload', 'artifact.read_metadata'].map(action => [action, true]),
   ), false)
 })
 

@@ -76,20 +76,29 @@ test('the app never claims to be indexed', () => {
   assert.match(layout, /robots:\s*\{\s*index:\s*false/)
 })
 
-test('the network exists in exactly one sanctioned file', () => {
+test('browser and server-to-server network calls exist only in their sanctioned transports', () => {
   // Constructs, not words: a comment naming the fetch ban is not a fetch, and
   // a status flag honestly recording a missing connection is not a connection.
-  // Phase 2 adds ONE sanctioned call site: the JSON transport. Everything else
-  // stays banned, so no component can grow a backend on the side.
-  const SANCTIONED = 'lib/port/transport.ts'
+  // Browser calls stay in the same-origin JSON transport. The one separate
+  // server integration is an authenticated, exact-endpoint Homesrolo-to-
+  // Jobrolo delivery adapter; it is never imported by browser code.
+  const BROWSER_TRANSPORT = 'lib/port/transport.ts'
+  const SERVER_TRANSPORT = 'lib/server/jobrolo-intake-client.ts'
   for (const rel of appSources) {
     const content = read(rel)
-    if (rel === SANCTIONED) {
+    if (rel === BROWSER_TRANSPORT) {
       assert.match(content, /credentials:\s*'same-origin'/, 'the transport is same-origin with cookies')
       assert.doesNotMatch(content, /https?:\/\//, 'the transport never carries an absolute URL')
       continue
     }
-    assert.doesNotMatch(content, /\bfetch\s*\(/, `${rel} must not call fetch; only ${SANCTIONED} may`)
+    if (rel === SERVER_TRANSPORT) {
+      assert.match(content, /SignedJobroloIntakeClient/, 'the server transport is explicit and named')
+      assert.match(content, /\/api\/integrations\/homesrolo\/v1\/project-intakes/,
+        'the server transport pins one exact integration path')
+      continue
+    }
+    assert.doesNotMatch(content, /\bfetch\s*\(/,
+      `${rel} must not call fetch; only the two reviewed transports may`)
     assert.doesNotMatch(content, /new\s+(XMLHttpRequest|WebSocket)\s*\(/, `${rel} must not open a connection`)
     assert.doesNotMatch(content, /process\.env\.(DATABASE|SECRET|API_KEY|TOKEN)/, `${rel} must not read secrets`)
   }
@@ -128,16 +137,16 @@ test('the browser never supplies principal identity to the wire', () => {
 test('no raw storage URLs or provider identifiers are projected into the UI', () => {
   for (const rel of appSources) {
     if (rel.startsWith('lib/tests')) continue // the tripwire may name its own targets
+    if (rel.startsWith('lib/server') || rel.startsWith('app/api/')) continue
     const content = read(rel)
     assert.doesNotMatch(content, /storageObjectRef|storageUrl|signedUrl|s3:|gs:\/\//i,
       `${rel} must not project storage internals`)
   }
   const wire = read('lib/port/wire.ts')
-  // The narrowed Phase-2A surface decodes no href, URL, or link field at all;
-  // if one returns (e.g. with a timeline route), it must come with an
-  // app-internal-route confinement check, not a bare string decoder.
-  assert.doesNotMatch(wire, /href|url:/i,
-    'no server-supplied link field is decoded on the narrowed surface')
+  assert.doesNotMatch(wire, /storageUrl|signedUrl|providerObjectId/i,
+    'the browser decoder accepts no provider URL or object identifier')
+  assert.match(wire, /downloadHref:\s*`\/api\/v1\/homes\//,
+    'artifact download links are derived from opaque refs and stay same-origin')
 })
 
 test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
@@ -154,7 +163,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
@@ -181,6 +193,19 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function POST/, `${rel} serves only the roofing command`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
         `${rel} must not expose a duplicate read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the artifact list`)
+      assert.match(content, /export async function POST/, `${rel} serves the bounded upload`)
+      assert.match(content, /handleArtifactUpload/, `${rel} delegates upload policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves one private download`)
+      assert.match(content, /handleArtifactDownload/, `${rel} delegates download policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves one consent-bound review submission`)
+      assert.match(content, /submitProjectForHomesroloReview/,
+        `${rel} delegates to the isolated server integration seam`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose a read surface`)
     } else {
       assert.match(content, /export async function GET/, `${rel} serves GET`)
     }
@@ -189,13 +214,17 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
     assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE|HEAD|OPTIONS)/,
       `${rel} must export no generic mutation method`)
-    if (!rel.startsWith('app/api/v1/auth/')) {
+    if (!rel.startsWith('app/api/v1/auth/')
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
       assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
     }
   }
@@ -230,10 +259,11 @@ test('the server seam is isolated: only routes touch it, and only it touches src
   }
 })
 
-test('the shell does not import private contracts or other repositories', () => {
+test('the browser shell does not import private contracts or other repositories', () => {
   // Imports, not mentions: PORT_IMPLEMENTATION_STATUS may honestly record that
   // no Jobrolo connection exists; what must never exist is code reaching one.
   for (const rel of appSources) {
+    if (rel.startsWith('lib/server') || rel.startsWith('app/api/') || rel.startsWith('lib/tests')) continue
     const content = read(rel)
     assert.doesNotMatch(content, /from '.*src\/contracts/, `${rel} must not import root contracts`)
     assert.doesNotMatch(content, /from ['"][^'"]*(jobrolo|thresher|claim.?network)/i,
@@ -251,6 +281,25 @@ test('the magic-link form renders only on server-reported capability', () => {
     'nothing claims a send the server did not accept')
   assert.match(signin, /mode === 'synthetic'\s*\?\s*\(?\s*<SyntheticEntry/,
     'synthetic mode keeps the honest demo entry')
+})
+
+test('project review renders only on its exact server-reported capability', () => {
+  const project = read('app/home/[homeId]/projects/[projectId]/page.tsx')
+  assert.match(
+    project,
+    /!project\.isSynthetic\s*&&\s*session\.state\.kind === 'signed_in'\s*&&\s*session\.state\.capabilities\.projectReview \? /,
+    'the review form is fail-closed until the session reports projectReview',
+  )
+  assert.doesNotMatch(project, /capabilities\.sharing/,
+    'generic sharing authority must not enable project review')
+  assert.match(project, /previewProjectForReview/,
+    'the homeowner first receives the exact server-derived disclosure')
+  assert.match(project, /reviewedDisclosureDigest:\s*reviewPreview\.disclosureDigest/,
+    'submission is bound to the digest the homeowner actually reviewed')
+  assert.match(project, /Review the exact information going to Chance/,
+    'the exact contact, home, project, and selected files are visibly reviewed')
+  assert.match(project, /reviewPreview\.consentText/,
+    'the server-pinned consent wording is shown at approval time')
 })
 
 test('a nameless server session renders a neutral label, never "as null"', () => {
@@ -272,7 +321,7 @@ test('disabled affordances say why, instead of pretending', () => {
   const settings = read('app/home/[homeId]/settings/page.tsx')
   assert.match(settings, /not built yet/i)
   const documents = read('app/home/[homeId]/documents/page.tsx')
-  assert.match(documents, /Uploads are not available yet/i)
+  assert.match(documents, /Uploads are unavailable/i)
 })
 
 test('one bounded roofing intent continues through the existing homeowner flow', () => {

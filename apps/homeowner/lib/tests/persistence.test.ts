@@ -30,7 +30,16 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     publishableKey: CONFIG.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
+    privateUploadsEnabled: false,
   })
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'true',
+  })?.privateUploadsEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'yes',
+  }), null)
 })
 
 test('magic-link callback query permits one bounded intent and rejects ambiguity', () => {
@@ -161,4 +170,23 @@ test('the roofing project migration is private, exact-home scoped, and receipt-b
   assert.match(migration, /action in \('home\.create', 'intake\.record', 'project\.create'\)/i)
   assert.match(migration, /grant execute on function public\.homesrolo_create_homeowner_roofing_project[\s\S]+to service_role/i)
   assert.doesNotMatch(migration, /grant (select|insert|update|delete|execute)[\s\S]+to (anon|authenticated)/i)
+})
+
+test('private artifact migration keeps bytes private and every command exact-home scoped', () => {
+  const migration = readFileSync(path.resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/202608120003_homeowner_private_artifacts.sql',
+  ), 'utf8')
+  assert.match(migration, /'homesrolo-homeowner-private'[\s\S]+false[\s\S]+26214400/i)
+  assert.match(migration, /allowed_mime_types[\s\S]+application\/pdf[\s\S]+image\/jpeg[\s\S]+image\/png/i)
+  assert.match(migration, /alter table public\.homesrolo_homeowner_artifacts enable row level security/i)
+  assert.match(migration, /revoke all on table public\.homesrolo_homeowner_artifacts from public, anon, authenticated/i)
+  assert.match(migration, /foreign key \(project_ref, home_ref\)[\s\S]+references public\.homesrolo_homeowner_projects\(project_ref, home_ref\)/i)
+  assert.match(migration, /role = 'workspace_controller'/i)
+  assert.match(migration, /membership_ref = p_membership_ref[\s\S]+revision = p_membership_revision[\s\S]+state = 'active'/i)
+  assert.match(migration, /unique \(controller_principal_ref, command_ref\)/i)
+  assert.match(migration, /storage_key text not null unique check \(storage_key ~/i)
+  assert.match(migration, /check \(storage_key = home_ref \|\| '\/' \|\| storage_object_ref\)/i)
+  assert.match(migration, /action in \('home\.create', 'intake\.record', 'project\.create', 'artifact\.upload'\)/i)
+  assert.doesNotMatch(migration, /create policy|public\s*=\s*true|to (anon|authenticated)/i)
 })

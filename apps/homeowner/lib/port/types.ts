@@ -23,7 +23,7 @@
 export const PORT_IMPLEMENTATION_STATUS = Object.freeze({
   realAuthenticationImplemented: true,
   realPersistenceImplemented: true,
-  uploadsImplemented: false,
+  uploadsImplemented: true,
   sharingImplemented: false,
   aiAssistantImplemented: false,
   connectedToJobrolo: false,
@@ -37,13 +37,14 @@ export const SYNTHETIC_NOTICE =
 
 /**
  * What the server actually offers, reported by GET /api/v1/session — exactly
- * the five booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * the six booleans homeowner-api.v1 defines. The synthetic adapter reports
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
   readonly magicLinkSignIn: boolean
   readonly persistence: boolean
   readonly uploads: boolean
+  readonly projectReview: boolean
   readonly invitations: boolean
   readonly sharing: boolean
 }
@@ -52,6 +53,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   magicLinkSignIn: false,
   persistence: false,
   uploads: false,
+  projectReview: false,
   invitations: false,
   sharing: false,
 })
@@ -242,7 +244,7 @@ export interface StartRoofingProjectInput {
 
 // --- documents and warranties -------------------------------------------------
 
-export type DocumentKind = 'contract' | 'invoice' | 'warranty' | 'photo_set' | 'permit' | 'manual'
+export type DocumentKind = 'document' | 'contract' | 'invoice' | 'warranty' | 'photo_set' | 'permit' | 'manual'
 
 export interface DocumentSummary {
   readonly documentRef: string
@@ -252,7 +254,70 @@ export interface DocumentSummary {
   readonly kind: DocumentKind
   readonly addedOn: string
   readonly pages: number
+  readonly mediaType?: 'application/pdf' | 'image/jpeg' | 'image/png'
+  readonly byteLength?: number
+  readonly downloadHref?: string
   readonly isSynthetic: boolean
+}
+
+export type PrivateArtifactKind = 'photo' | 'document' | 'warranty'
+
+export interface UploadPrivateArtifactInput {
+  readonly commandRef: string
+  readonly kind: PrivateArtifactKind
+  readonly file: File
+  readonly projectRef?: string
+}
+
+export interface SubmitProjectForReviewInput {
+  readonly commandRef: string
+  readonly reviewedDisclosureDigest: string
+  readonly name: string
+  readonly phone?: string
+  readonly preferredContact: 'email' | 'phone' | 'text'
+  readonly selectedArtifactRefs: readonly string[]
+  readonly consentAccepted: true
+}
+
+export interface PreviewProjectForReviewInput {
+  readonly name: string
+  readonly phone?: string
+  readonly preferredContact: 'email' | 'phone' | 'text'
+  readonly selectedArtifactRefs: readonly string[]
+}
+
+export interface ProjectReviewPreview {
+  readonly projectRef: string
+  readonly disclosureDigest: string
+  readonly homeowner: {
+    readonly name: string
+    readonly email: string
+    readonly phone?: string
+    readonly preferredContact: 'email' | 'phone' | 'text'
+  }
+  readonly property: { readonly label: string }
+  readonly project: {
+    readonly title: string
+    readonly category: 'roofing'
+    readonly status: ProjectStatus
+    readonly summary: string
+  }
+  readonly attachments: readonly {
+    readonly artifactRef: string
+    readonly displayName: string
+    readonly kind: PrivateArtifactKind
+    readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
+    readonly byteLength: number
+  }[]
+  readonly consentText: string
+}
+
+export interface ProjectReviewSubmission {
+  readonly submissionRef: string
+  readonly projectRef: string
+  readonly status: 'awaiting_chance_review' | 'reconciliation_required'
+  readonly submittedAt: string
+  readonly message: string
 }
 
 export interface Warranty {
@@ -347,6 +412,20 @@ export interface HomeownerDataPort {
   ): Promise<PortResult<ProjectSummary>>
 
   listDocuments(homeRef: string): Promise<PortResult<readonly DocumentSummary[]>>
+  uploadPrivateArtifact(
+    homeRef: string,
+    input: UploadPrivateArtifactInput,
+  ): Promise<PortResult<DocumentSummary>>
+  previewProjectForReview(
+    homeRef: string,
+    projectRef: string,
+    input: PreviewProjectForReviewInput,
+  ): Promise<PortResult<ProjectReviewPreview>>
+  submitProjectForReview(
+    homeRef: string,
+    projectRef: string,
+    input: SubmitProjectForReviewInput,
+  ): Promise<PortResult<ProjectReviewSubmission>>
   listWarranties(homeRef: string): Promise<PortResult<readonly Warranty[]>>
   listTimeline(homeRef: string): Promise<PortResult<readonly TimelineEntry[]>>
   listMaintenance(homeRef: string): Promise<PortResult<readonly MaintenanceItem[]>>

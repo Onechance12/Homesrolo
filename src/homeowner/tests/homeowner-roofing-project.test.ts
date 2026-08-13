@@ -91,6 +91,7 @@ function service(input: {
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
       uploads: false,
+      projectReview: false,
       invitations: false,
       sharing: false,
     },

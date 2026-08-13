@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { SESSION_COOKIE_NAME, sessionHandleFromCookieHeader } from '../server/cookie.ts'
 import { handleHomeownerRequest, mutationOriginAllowed } from '../server/adapter.ts'
+import { artifactUploadEnvelopeAllowed } from '../server/artifact-http.ts'
+import { projectReviewCapabilityEnabled } from '../server/runtime.ts'
 
 /**
  * The route adapter over the UNCONFIGURED runtime: no identity provider, no
@@ -22,9 +24,17 @@ const ALL_FALSE = {
   magicLinkSignIn: false,
   persistence: false,
   uploads: false,
+  projectReview: false,
   invitations: false,
   sharing: false,
 }
+
+test('project review is enabled only with both the homeowner provider and Jobrolo intake client', () => {
+  assert.equal(projectReviewCapabilityEnabled(false, false), false)
+  assert.equal(projectReviewCapabilityEnabled(false, true), false)
+  assert.equal(projectReviewCapabilityEnabled(true, false), false)
+  assert.equal(projectReviewCapabilityEnabled(true, true), true)
+})
 
 test('configured browser mutations require the exact application origin', () => {
   const expected = 'https://app.homesrolo.com'
@@ -83,6 +93,8 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/[homeRef]/projects/route.ts',
     '../../app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
     '../../app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
@@ -124,12 +136,37 @@ test('protected reads are bounded 401 signed_out, cookie or not', async () => {
     `/api/v1/homes/${HOME}`,
     `/api/v1/homes/${HOME}/projects`,
     `/api/v1/homes/${HOME}/projects/hprj_${'r'.repeat(43)}`,
+    `/api/v1/homes/${HOME}/artifacts`,
   ]) {
     for (const headers of [undefined, { cookie: `${SESSION_COOKIE_NAME}=${HANDLE}` }]) {
       const response = await get(path, headers)
       assert.equal(response.status, 401, `${path} ${headers ? 'with' : 'without'} cookie`)
       assert.deepEqual(await response.json(), { error: { code: 'signed_out' } })
     }
+  }
+})
+
+test('artifact upload envelope requires exact origin, multipart boundary, and a bounded length', () => {
+  const origin = 'https://app.homesrolo.com'
+  const request = (headers: Record<string, string>) => new Request(`${BASE}/upload`, {
+    method: 'POST',
+    headers,
+    body: new Uint8Array([1]),
+  })
+  assert.equal(artifactUploadEnvelopeAllowed(request({
+    origin,
+    'content-length': '1024',
+    'content-type': 'multipart/form-data; boundary=exact',
+  }), origin), true)
+  for (const headers of [
+    { 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-length': '99999999', 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-length': '1024', 'content-type': 'application/json' },
+    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data' },
+    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact', 'content-encoding': 'gzip' },
+  ] as readonly Record<string, string>[]) {
+    assert.equal(artifactUploadEnvelopeAllowed(request(headers), origin), false)
   }
 })
 

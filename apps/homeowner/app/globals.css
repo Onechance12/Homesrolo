@@ -724,6 +724,28 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
   color: var(--ink-soft);
 }
 .notice strong { color: var(--ink); }
+.notice--success { border-left-color: var(--pine); background: var(--pine-wash); }
+
+.review-files {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.review-files legend { font-weight: 650; padding: 0 0.25rem; }
+.review-files > p { color: var(--ink-faint); font-size: 0.82rem; }
+.review-files label,
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-height: 44px;
+  padding: 0.45rem 0;
+}
+.review-files input,
+.consent-row input { width: 1.1rem; height: 1.1rem; margin-top: 0.2rem; flex: none; accent-color: var(--clay); }
+.consent-row span { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.5; }
 
 .stack > * + * { margin-top: var(--stack-gap, 1rem); }
 .pagehead { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }

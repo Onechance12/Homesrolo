@@ -6,6 +6,7 @@ import {
   createHomeownerProjectInputSchema,
   createHomeWorkspaceInputSchema,
   homeownerApproximateYearSchema,
+  homeownerArtifactMetadataSchema,
   homeownerHomeTypeSchema,
   homeownerProjectSchema,
   homeownerSystemKindSchema,
@@ -15,14 +16,21 @@ import {
   parseHomeownerMembership,
   privateHomeProfileSchema,
   recordHomeownerIntakeInputSchema,
+  storeHomeownerArtifactInputSchema,
   requireHomeownerActionGrant,
   type HomeownerCommandPort,
   type HomeownerIdentityPort,
+  type HomeownerPrivateObjectPort,
   type HomeownerMembership,
   type HomeownerProject,
   type HomeownerRepositoryPort,
+  type HomeownerWorkspaceAction,
   type PrivateHomeProfile,
 } from './homeowner-runtime.v1.ts'
+import {
+  homeownerArtifactUploadInputSchema,
+  validateHomeownerArtifactPayload,
+} from './homeowner-artifacts.v1.ts'
 
 /**
  * Server application boundary for the private homeowner app.
@@ -41,6 +49,7 @@ export const homeownerApiCapabilitiesSchema = z.object({
   magicLinkSignIn: z.boolean(),
   persistence: z.boolean(),
   uploads: z.boolean(),
+  projectReview: z.boolean(),
   invitations: z.boolean(),
   sharing: z.boolean(),
 }).strict()
@@ -158,6 +167,19 @@ export type HomeownerApiStartRoofingProjectInput = z.infer<
 >
 export type HomeownerApiProjectView = z.infer<typeof homeownerApiProjectViewSchema>
 
+export const homeownerApiArtifactViewSchema = z.object({
+  artifactRef: opaqueRef('hart'),
+  homeRef: opaqueRef('hhom'),
+  projectRef: opaqueRef('hprj').nullable(),
+  kind: homeownerArtifactMetadataSchema.shape.kind,
+  displayName: homeownerArtifactMetadataSchema.shape.displayName,
+  mediaType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  byteLength: homeownerArtifactMetadataSchema.shape.byteLength,
+  createdAt: homeownerUtcInstantSchema,
+}).strict()
+
+export type HomeownerApiArtifactView = z.infer<typeof homeownerApiArtifactViewSchema>
+
 export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   projectCount: z.number().int().min(0),
   documentCount: z.number().int().min(0),
@@ -173,6 +195,7 @@ export type HomeownerApiProblemCode =
   | 'not_found'
   | 'forbidden'
   | 'invalid_request'
+  | 'conflict'
   | 'unavailable'
 
 export class HomeownerApiError extends Error {
@@ -194,6 +217,7 @@ export interface HomeownerApiServiceOptions {
   readonly identity: HomeownerIdentityPort
   readonly repository: HomeownerRepositoryPort
   readonly commands: HomeownerCommandPort
+  readonly privateObjects?: HomeownerPrivateObjectPort
   readonly now: () => string
   /**
    * These values must come from verified server configuration. A route must not
@@ -228,6 +252,20 @@ function safeProject(project: HomeownerProject): HomeownerApiProjectView {
   })
 }
 
+function safeArtifact(input: unknown): HomeownerApiArtifactView {
+  const artifact = homeownerArtifactMetadataSchema.parse(input)
+  return homeownerApiArtifactViewSchema.parse({
+    artifactRef: artifact.artifactRef,
+    homeRef: artifact.homeRef,
+    projectRef: artifact.projectRef ?? null,
+    kind: artifact.kind,
+    displayName: artifact.displayName,
+    mediaType: artifact.mediaType,
+    byteLength: artifact.byteLength,
+    createdAt: artifact.createdAt,
+  })
+}
+
 const ROOFING_NEED_TITLE: Readonly<Record<
   z.infer<typeof homeownerApiRoofingNeedSchema>,
   string
@@ -257,6 +295,7 @@ export class HomeownerApiService {
   readonly #identity: HomeownerIdentityPort
   readonly #repository: HomeownerRepositoryPort
   readonly #commands: HomeownerCommandPort
+  readonly #privateObjects: HomeownerPrivateObjectPort | null
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
 
@@ -264,6 +303,7 @@ export class HomeownerApiService {
     this.#identity = options.identity
     this.#repository = options.repository
     this.#commands = options.commands
+    this.#privateObjects = options.privateObjects ?? null
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
   }
@@ -349,8 +389,8 @@ export class HomeownerApiService {
     return homeownerApiHomeViewSchema.parse({
       ...safeSummary(home, membership),
       projectCount: projects.length,
-      documentCount: artifacts.filter(item => item.kind === 'document').length,
-      warrantyCount: warranties.length,
+      documentCount: artifacts.length,
+      warrantyCount: warranties.length + artifacts.filter(item => item.kind === 'warranty').length,
       maintenanceCount: maintenance.length,
       updatedAt: home.updatedAt,
     })
@@ -376,6 +416,114 @@ export class HomeownerApiService {
     const project = projects.find(candidate => candidate.projectRef === parsedProjectRef.data)
     if (!project) throw new HomeownerApiError('not_found')
     return project
+  }
+
+  async listArtifacts(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<readonly HomeownerApiArtifactView[]> {
+    const grant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'artifact.read_metadata',
+    )
+    if (!this.#capabilities.uploads) throw new HomeownerApiError('unavailable')
+    const artifacts = await this.#repository.listArtifactMetadata(grant)
+    return artifacts.map(safeArtifact)
+  }
+
+  async uploadArtifact(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+    bytes: Uint8Array,
+  ): Promise<HomeownerApiArtifactView> {
+    const parsed = homeownerArtifactUploadInputSchema.safeParse(input)
+    if (!parsed.success) throw new HomeownerApiError('invalid_request')
+    let payload
+    try {
+      payload = validateHomeownerArtifactPayload({
+        kind: parsed.data.kind,
+        displayName: parsed.data.displayName,
+        bytes,
+      })
+    } catch {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'artifact.upload')
+    if (!this.#capabilities.uploads || !this.#privateObjects) {
+      throw new HomeownerApiError('unavailable')
+    }
+    if (parsed.data.projectRef) {
+      const projects = await this.#repository.listProjects(grant)
+      if (!projects.some(project => project.projectRef === parsed.data.projectRef
+        && project.homeRef === grant.homeRef)) {
+        throw new HomeownerApiError('not_found')
+      }
+    }
+    const command = storeHomeownerArtifactInputSchema.parse({
+      ...parsed.data,
+      displayName: payload.displayName,
+      mediaType: payload.mediaType,
+      byteLength: payload.byteLength,
+      payloadSha256: payload.payloadSha256,
+      requestedAt: this.#now(),
+    })
+    const stored = homeownerArtifactMetadataSchema.parse(await this.#privateObjects.storeArtifact({
+      grant,
+      command,
+      bytes: payload.bytes,
+    }))
+    const coherent = stored.homeRef === grant.homeRef
+      && stored.controllerPrincipalRef === grant.principalRef
+      && stored.projectRef === command.projectRef
+      && stored.kind === command.kind
+      && stored.displayName === command.displayName
+      && stored.mediaType === command.mediaType
+      && stored.byteLength === command.byteLength
+      && stored.payloadSha256 === command.payloadSha256
+      && stored.contentClass === 'homeowner_private'
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeArtifact(stored)
+  }
+
+  async readArtifactContent(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedArtifactRef: string,
+  ): Promise<{ readonly artifact: HomeownerApiArtifactView; readonly bytes: Uint8Array }> {
+    const parsedArtifactRef = opaqueRef('hart').safeParse(requestedArtifactRef)
+    if (!parsedArtifactRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'artifact.read_metadata',
+    )
+    if (!this.#capabilities.uploads || !this.#privateObjects) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const artifacts = await this.#repository.listArtifactMetadata(grant)
+    const artifact = artifacts.find(candidate => candidate.artifactRef === parsedArtifactRef.data)
+    if (!artifact || artifact.homeRef !== grant.homeRef) throw new HomeownerApiError('not_found')
+    const bytes = await this.#privateObjects.readExactObject({
+      grant,
+      storageObjectRef: artifact.storageObjectRef,
+      expectedSha256: artifact.payloadSha256,
+      maximumBytes: artifact.byteLength,
+    })
+    if (bytes.byteLength !== artifact.byteLength) throw new HomeownerApiError('unavailable')
+    const finalGrant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'artifact.read_metadata',
+    )
+    if (finalGrant.principalRef !== grant.principalRef
+      || finalGrant.homeRef !== grant.homeRef
+      || finalGrant.membershipRef !== grant.membershipRef
+      || finalGrant.membershipRevision !== grant.membershipRevision) {
+      throw new HomeownerApiError('not_found')
+    }
+    return { artifact: safeArtifact(artifact), bytes }
   }
 
   async startRoofingProject(
@@ -514,7 +662,7 @@ export class HomeownerApiService {
     })
   }
 
-  async #workspaceGrant<Action extends 'workspace.read' | 'project.create'>(
+  async #workspaceGrant<Action extends HomeownerWorkspaceAction>(
     context: HomeownerApiRequestContext,
     requestedHomeRef: string,
     action: Action,
@@ -547,4 +695,4 @@ export class HomeownerApiService {
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation, exact-home intake, and private roofing-project creation are defined but remain fail-closed until server persistence is configured. Email delivery, uploads, invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'
+  'Home creation, exact-home intake, roofing projects, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'

@@ -9,10 +9,11 @@ import { PORT_IMPLEMENTATION_STATUS, SYNTHETIC_NOTICE } from '../port/types.ts'
  * unknown refs, and results that are values, not exceptions.
  */
 
-test('the port status names the two real foundations and no future capability', () => {
+test('the port status names the real private foundation and no later sharing capability', () => {
   assert.equal(PORT_IMPLEMENTATION_STATUS.realAuthenticationImplemented, true)
   assert.equal(PORT_IMPLEMENTATION_STATUS.realPersistenceImplemented, true)
-  for (const flag of ['uploadsImplemented', 'sharingImplemented', 'aiAssistantImplemented', 'connectedToJobrolo'] as const) {
+  assert.equal(PORT_IMPLEMENTATION_STATUS.uploadsImplemented, true)
+  for (const flag of ['sharingImplemented', 'aiAssistantImplemented', 'connectedToJobrolo'] as const) {
     assert.equal(PORT_IMPLEMENTATION_STATUS[flag], false, `${flag} remains outside the basic foundation`)
   }
   assert.match(SYNTHETIC_NOTICE, /synthetic/i)
