@@ -16,6 +16,7 @@ export interface HomeownerHttpRequest {
   readonly pathname: string
   readonly search: string
   readonly hasBody: boolean
+  readonly jsonBody: unknown
   readonly sessionHandle: string | null
 }
 
@@ -32,9 +33,14 @@ const JSON_HEADERS = Object.freeze({
 })
 
 const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
+const HOME_INTAKE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/intake$/
+const HOME_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects$/
+const HOME_PROJECT_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})$/
+const HOME_ARTIFACTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/artifacts$/
+const HOME_ROOFING_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/roofing-projects$/
 
-function success(data: unknown): HomeownerHttpResponse {
-  return { status: 200, headers: JSON_HEADERS, body: { data } }
+function success(data: unknown, status = 200): HomeownerHttpResponse {
+  return { status, headers: JSON_HEADERS, body: { data } }
 }
 
 function problem(status: number, code: string): HomeownerHttpResponse {
@@ -55,28 +61,86 @@ function mappedError(error: unknown): HomeownerHttpResponse {
 }
 
 /**
- * Serves exactly the three read routes in homeowner-api.v1. No write route,
- * redirect, upload, or guessed fallback exists in this boundary.
+ * Serves the three read routes plus the one exact create-home command. No
+ * redirect, upload, generic mutation, or guessed fallback exists here.
  */
 export function createHomeownerHttpHandler(service: HomeownerApiService) {
   return async function handle(request: HomeownerHttpRequest): Promise<HomeownerHttpResponse> {
-    if (request.method !== 'GET') return problem(405, 'method_not_allowed')
-    if (request.search !== '' || request.hasBody) return problem(400, 'invalid_request')
-
     const context: HomeownerApiRequestContext = {
       sessionHandle: request.sessionHandle,
     }
 
     try {
-      if (request.pathname === '/api/v1/session') {
-        return success(await service.readSession(context))
+      if (request.method === 'GET') {
+        if (request.search !== '' || request.hasBody || request.jsonBody !== undefined) {
+          return problem(400, 'invalid_request')
+        }
+        if (request.pathname === '/api/v1/session') {
+          return success(await service.readSession(context))
+        }
+        if (request.pathname === '/api/v1/homes') {
+          return success(await service.listHomes(context))
+        }
+        const homeMatch = HOME_PATH.exec(request.pathname)
+        if (homeMatch?.[1]) {
+          return success(await service.readHome(context, homeMatch[1]))
+        }
+        const projectsMatch = HOME_PROJECTS_PATH.exec(request.pathname)
+        if (projectsMatch?.[1]) {
+          return success(await service.listProjects(context, projectsMatch[1]))
+        }
+        const projectMatch = HOME_PROJECT_PATH.exec(request.pathname)
+        if (projectMatch?.[1] && projectMatch[2]) {
+          return success(await service.readProject(context, projectMatch[1], projectMatch[2]))
+        }
+        const artifactsMatch = HOME_ARTIFACTS_PATH.exec(request.pathname)
+        if (artifactsMatch?.[1]) {
+          return success(await service.listArtifacts(context, artifactsMatch[1]))
+        }
+        return problem(404, 'not_found')
       }
-      if (request.pathname === '/api/v1/homes') {
-        return success(await service.listHomes(context))
+
+      if (request.method === 'POST' && request.pathname === '/api/v1/homes') {
+        if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+          return problem(400, 'invalid_request')
+        }
+        return success(await service.createHome(context, request.jsonBody), 201)
       }
-      const homeMatch = HOME_PATH.exec(request.pathname)
-      if (homeMatch?.[1]) {
-        return success(await service.readHome(context, homeMatch[1]))
+
+      if (request.method === 'POST') {
+        const roofingProjectMatch = HOME_ROOFING_PROJECTS_PATH.exec(request.pathname)
+        if (roofingProjectMatch?.[1]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.startRoofingProject(
+            context,
+            roofingProjectMatch[1],
+            request.jsonBody,
+          ), 201)
+        }
+        const intakeMatch = HOME_INTAKE_PATH.exec(request.pathname)
+        if (intakeMatch?.[1]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.recordInitialIntake(
+            context,
+            intakeMatch[1],
+            request.jsonBody,
+          ), 201)
+        }
+      }
+
+      if (request.pathname === '/api/v1/session'
+         || request.pathname === '/api/v1/homes'
+         || HOME_PATH.test(request.pathname)
+         || HOME_INTAKE_PATH.test(request.pathname)
+         || HOME_PROJECTS_PATH.test(request.pathname)
+         || HOME_PROJECT_PATH.test(request.pathname)
+         || HOME_ARTIFACTS_PATH.test(request.pathname)
+         || HOME_ROOFING_PROJECTS_PATH.test(request.pathname)) {
+        return problem(405, 'method_not_allowed')
       }
       return problem(404, 'not_found')
     } catch (error) {
@@ -86,4 +150,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines three authenticated reads only. It does not create sessions, send email, persist data, accept uploads, or expose write routes.'
+  'This boundary defines authenticated home, project, and artifact-metadata reads plus exact home, intake, and roofing-project commands. Multipart artifact upload and private content delivery remain separate server-only adapters; no generic write or Jobrolo delivery exists here.'

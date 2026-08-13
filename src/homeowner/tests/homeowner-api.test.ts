@@ -8,11 +8,14 @@ import {
   homeownerApiHomeViewSchema,
 } from '../homeowner-api.v1.ts'
 import {
+  HOMEOWNER_SYSTEM_KINDS,
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
+  type HomeownerCommandPort,
   type HomeownerMembership,
   type HomeownerPrincipal,
+  type HomeownerPrivateObjectPort,
   type HomeownerRepositoryPort,
 } from '../homeowner-runtime.v1.ts'
 
@@ -52,6 +55,61 @@ const home = {
   updatedAt: now,
 } as const
 
+const intakeSystems = HOMEOWNER_SYSTEM_KINDS.map((kind, index) => ({
+  recordVersion: HOMEOWNER_RUNTIME_VERSION,
+  systemRef: `hsys_${body(String.fromCharCode(97 + index))}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  kind,
+  present: kind === 'roof' ? 'yes' as const : 'unknown' as const,
+  installedOrReplacedYear: kind === 'roof'
+    ? { value: 2019, precision: 'approximate' as const }
+    : null,
+  source: 'homeowner_recollection' as const,
+  revision: 1,
+  createdAt: now,
+  updatedAt: now,
+}))
+
+const propertyFacts = {
+  recordVersion: HOMEOWNER_RUNTIME_VERSION,
+  propertyFactsRef: `hfac_${body('f')}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  homeType: 'house' as const,
+  yearBuilt: { value: 1988, precision: 'approximate' as const },
+  source: 'homeowner_recollection' as const,
+  revision: 1,
+  createdAt: now,
+  updatedAt: now,
+}
+
+const artifact = {
+  recordVersion: HOMEOWNER_RUNTIME_VERSION,
+  artifactRef: `hart_${body('a')}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  kind: 'document' as const,
+  displayName: 'Roof contract.pdf',
+  mediaType: 'application/pdf',
+  byteLength: 9,
+  payloadSha256: 'c'.repeat(64),
+  storageObjectRef: `hobj_${body('s')}`,
+  contentClass: 'homeowner_private' as const,
+  createdAt: now,
+}
+
+const intakeInput = {
+  commandRef: `hcmd_${body('i')}`,
+  homeType: 'house' as const,
+  yearBuilt: { value: 1988, precision: 'approximate' as const },
+  systems: intakeSystems.map(system => ({
+    kind: system.kind,
+    present: system.present,
+    installedOrReplacedYear: system.installedOrReplacedYear,
+  })),
+}
+
 function repository(overrides: Partial<HomeownerRepositoryPort> = {}): HomeownerRepositoryPort {
   return {
     async listMemberships(_authorization: AuthorizedHomeownerPrincipal) { return [membership] },
@@ -61,6 +119,8 @@ function repository(overrides: Partial<HomeownerRepositoryPort> = {}): Homeowner
     async readHome(grant: AuthorizedHomeownerWorkspace) {
       return grant.homeRef === homeRef ? home : null
     },
+    async readPropertyFacts() { return null },
+    async listSystems() { return [] },
     async listProjects() { return [] },
     async listArtifactMetadata() { return [] },
     async listWarranties() { return [] },
@@ -73,6 +133,7 @@ const capabilities = {
   magicLinkSignIn: false,
   persistence: false,
   uploads: false,
+  projectReview: false,
   invitations: false,
   sharing: false,
 }
@@ -80,6 +141,11 @@ const capabilities = {
 function service(input: {
   resolvedPrincipal?: HomeownerPrincipal | null
   repository?: HomeownerRepositoryPort
+  commands?: HomeownerCommandPort
+  persistence?: boolean
+  uploads?: boolean
+  projectReview?: boolean
+  privateObjects?: HomeownerPrivateObjectPort
 } = {}) {
   return new HomeownerApiService({
     identity: {
@@ -89,8 +155,19 @@ function service(input: {
       },
     },
     repository: input.repository ?? repository(),
+    commands: input.commands ?? {
+      async createPrivateHomeWorkspace() { return { home, membership } },
+      async createProject() { throw new Error('not used') },
+      async recordInitialIntake() { throw new Error('not used') },
+    },
+    ...(input.privateObjects ? { privateObjects: input.privateObjects } : {}),
     now: () => now,
-    capabilities,
+    capabilities: {
+      ...capabilities,
+      persistence: input.persistence ?? false,
+      uploads: input.uploads ?? false,
+      projectReview: input.projectReview ?? false,
+    },
   })
 }
 
@@ -111,6 +188,12 @@ test('session projection is truthful and never exposes a session or provider ide
   const signedOut = await service({ resolvedPrincipal: null }).readSession(context)
   assert.equal(signedOut.kind, 'signed_out')
   assert.equal('principalRef' in signedOut, false)
+})
+
+test('session reports project review independently from generic sharing', async () => {
+  const signedIn = await service({ projectReview: true }).readSession(context)
+  assert.equal(signedIn.capabilities.projectReview, true)
+  assert.equal(signedIn.capabilities.sharing, false)
 })
 
 test('inactive or unverified principals receive the signed-out projection', async () => {
@@ -158,7 +241,7 @@ test('exact home read rechecks membership and projects no authority or storage f
   const view = await service({ repository: repo }).readHome(context, homeRef)
   assert.ok(homeownerApiHomeViewSchema.parse(view))
   assert.equal(view.projectCount, 1)
-  assert.equal(view.documentCount, 1)
+  assert.equal(view.documentCount, 2)
   assert.equal(view.warrantyCount, 1)
   assert.equal(view.maintenanceCount, 1)
   assert.equal('createdByPrincipalRef' in view, false)
@@ -182,6 +265,141 @@ test('malformed, cross-home, and revoked reads fail closed without revealing aut
     service({ repository: revokedRepo }).readHome(context, homeRef),
     (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
   )
+})
+
+test('artifact metadata reads are exact-home and never expose storage or integrity fields', async () => {
+  const result = await service({
+    uploads: true,
+    repository: repository({ async listArtifactMetadata() { return [artifact] } }),
+  }).listArtifacts(context, homeRef)
+  assert.deepEqual(result, [{
+    artifactRef: artifact.artifactRef,
+    homeRef,
+    projectRef: null,
+    kind: 'document',
+    displayName: artifact.displayName,
+    mediaType: 'application/pdf',
+    byteLength: artifact.byteLength,
+    createdAt: now,
+  }])
+  assert.equal(JSON.stringify(result).includes('storageObjectRef'), false)
+  assert.equal(JSON.stringify(result).includes('payloadSha256'), false)
+  assert.equal(JSON.stringify(result).includes(principalRef), false)
+})
+
+test('artifact upload derives media, digest, principal, and time on the server', async () => {
+  const observed: Parameters<HomeownerPrivateObjectPort['storeArtifact']>[0][] = []
+  const privateObjects: HomeownerPrivateObjectPort = {
+    async storeArtifact(input) {
+      observed.push(input)
+      return {
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        artifactRef: artifact.artifactRef,
+        homeRef: input.grant.homeRef,
+        controllerPrincipalRef: input.grant.principalRef,
+        kind: input.command.kind,
+        displayName: input.command.displayName,
+        mediaType: input.command.mediaType,
+        byteLength: input.command.byteLength,
+        payloadSha256: input.command.payloadSha256,
+        storageObjectRef: artifact.storageObjectRef,
+        contentClass: 'homeowner_private',
+        createdAt: input.command.requestedAt,
+      }
+    },
+    async readExactObject() { throw new Error('not used') },
+  }
+  const bytes = new TextEncoder().encode('%PDF-1.7')
+  const result = await service({ uploads: true, privateObjects }).uploadArtifact(
+    context,
+    homeRef,
+    {
+      commandRef: `hcmd_${body('u')}`,
+      kind: 'document',
+      displayName: '../Roof contract.pdf',
+    },
+    bytes,
+  )
+  assert.equal(result.displayName, '.. Roof contract.pdf')
+  assert.equal(result.mediaType, 'application/pdf')
+  assert.equal('storageObjectRef' in result, false)
+  const stored = observed[0]
+  assert.ok(stored)
+  assert.equal(stored.grant.action, 'artifact.upload')
+  assert.equal(stored.command.requestedAt, now)
+  assert.match(stored.command.payloadSha256, /^[a-f0-9]{64}$/)
+  assert.deepEqual(stored.bytes, bytes)
+})
+
+test('artifact upload rejects member authority, bad bytes, and a project from another home', async () => {
+  const privateObjects: HomeownerPrivateObjectPort = {
+    async storeArtifact() { throw new Error('must not store') },
+    async readExactObject() { throw new Error('not used') },
+  }
+  const input = {
+    commandRef: `hcmd_${body('u')}`,
+    kind: 'document',
+    displayName: 'Contract.pdf',
+  }
+  await assert.rejects(
+    service({ uploads: true, privateObjects }).uploadArtifact(
+      context, homeRef, input, new TextEncoder().encode('plain text'),
+    ),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    service({
+      uploads: true,
+      privateObjects,
+      repository: repository({ async readMembership() { return { ...membership, role: 'member' } } }),
+    }).uploadArtifact(context, homeRef, input, new TextEncoder().encode('%PDF-1.7')),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+  await assert.rejects(
+    service({
+      uploads: true,
+      privateObjects,
+      repository: repository({
+        async listProjects() {
+          return [{ projectRef: `hprj_${body('j')}`, homeRef: otherHomeRef }] as never
+        },
+      }),
+    }).uploadArtifact(context, homeRef, {
+      ...input,
+      projectRef: `hprj_${body('j')}`,
+    }, new TextEncoder().encode('%PDF-1.7')),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+})
+
+test('artifact content rechecks membership after the storage read', async () => {
+  let membershipReads = 0
+  let objectReads = 0
+  const repo = repository({
+    async readMembership() {
+      membershipReads += 1
+      return membershipReads === 1
+        ? membership
+        : { ...membership, state: 'revoked', revokedAt: now }
+    },
+    async listArtifactMetadata() { return [artifact] },
+  })
+  const privateObjects: HomeownerPrivateObjectPort = {
+    async storeArtifact() { throw new Error('not used') },
+    async readExactObject(input) {
+      objectReads += 1
+      assert.equal(input.storageObjectRef, artifact.storageObjectRef)
+      return new Uint8Array(artifact.byteLength)
+    },
+  }
+  await assert.rejects(
+    service({ uploads: true, privateObjects, repository: repo }).readArtifactContent(
+      context, homeRef, artifact.artifactRef,
+    ),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+  assert.equal(objectReads, 1)
+  assert.equal(membershipReads, 2)
 })
 
 test('strict browser projections reject raw URLs, provider ids, and extra authority claims', () => {
@@ -218,4 +436,170 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
       `${noncanonical} must not cross the server/client boundary`,
     )
   }
+})
+
+test('home creation derives authority and time on the server', async () => {
+  let observed: unknown
+  const created = await service({
+    persistence: true,
+    commands: {
+      async createPrivateHomeWorkspace(input) {
+        observed = input
+        return { home, membership }
+      },
+      async createProject() { throw new Error('not used') },
+      async recordInitialIntake() { throw new Error('not used') },
+    },
+  }).createHome(context, {
+    commandRef: `hcmd_${body('c')}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+  })
+
+  assert.deepEqual(created, {
+    homeRef,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'A private homeowner location label',
+    relationshipLabel: 'claimed_unverified',
+  })
+  assert.deepEqual(observed, {
+    authorization: { authorized: true, principalRef },
+    command: {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      requestedAt: now,
+    },
+  })
+})
+
+test('home creation rejects browser authority, disabled persistence, and incoherent adapter output', async () => {
+  await assert.rejects(
+    service({ persistence: true }).createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      principalRef,
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    service().createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+  await assert.rejects(
+    service({
+      persistence: true,
+      commands: {
+        async createPrivateHomeWorkspace() {
+          return { home, membership: { ...membership, principalRef: otherPrincipalRef } }
+        },
+        async createProject() { throw new Error('not used') },
+        async recordInitialIntake() { throw new Error('not used') },
+      },
+    }).createHome(context, {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+})
+
+test('initial intake fresh-authorizes one exact home and derives source and time server-side', async () => {
+  let observed: unknown
+  const result = await service({
+    persistence: true,
+    commands: {
+      async createPrivateHomeWorkspace() { return { home, membership } },
+      async createProject() { throw new Error('not used') },
+      async recordInitialIntake(input) {
+        observed = input
+        return { propertyFacts, systems: intakeSystems }
+      },
+    },
+  }).recordInitialIntake(context, homeRef, intakeInput)
+
+  assert.equal(result.homeRef, homeRef)
+  assert.equal(result.source, 'homeowner_recollection')
+  assert.equal(result.systems.length, HOMEOWNER_SYSTEM_KINDS.length)
+  assert.equal(JSON.stringify(result).includes(principalRef), false)
+  assert.equal(JSON.stringify(result).includes('membershipRef'), false)
+  assert.deepEqual(observed, {
+    grant: {
+      authorized: true,
+      principalRef,
+      homeRef,
+      membershipRef: membership.membershipRef,
+      membershipRevision: 1,
+      action: 'intake.record',
+      recheckedAt: now,
+    },
+    command: { ...intakeInput, requestedAt: now },
+  })
+})
+
+test('initial intake rejects browser authority, non-controller access, and disabled persistence', async () => {
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      source: 'verified_contractor_record',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+
+  const viewerRepo = repository({
+    async readMembership() { return { ...membership, role: 'viewer' } },
+  })
+  await assert.rejects(
+    service({ repository: viewerRepo, persistence: true }).recordInitialIntake(
+      context,
+      homeRef,
+      intakeInput,
+    ),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+
+  await assert.rejects(
+    service().recordInitialIntake(context, homeRef, intakeInput),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
+})
+
+test('initial intake rejects missing/duplicate systems and incoherent command output', async () => {
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      systems: intakeInput.systems.slice(0, -1),
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    service({ persistence: true }).recordInitialIntake(context, homeRef, {
+      ...intakeInput,
+      systems: intakeInput.systems.map(system => ({ ...system, kind: 'roof' })),
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+
+  await assert.rejects(
+    service({
+      persistence: true,
+      commands: {
+        async createPrivateHomeWorkspace() { return { home, membership } },
+        async createProject() { throw new Error('not used') },
+        async recordInitialIntake() {
+          return {
+            propertyFacts: { ...propertyFacts, controllerPrincipalRef: otherPrincipalRef },
+            systems: intakeSystems,
+          }
+        },
+      },
+    }).recordInitialIntake(context, homeRef, intakeInput),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
 })

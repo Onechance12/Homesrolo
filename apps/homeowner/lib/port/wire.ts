@@ -3,8 +3,8 @@
  * remote adapter consumes, and the single HTTP-status-to-PortError map.
  *
  * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
- * server defines exactly three reads — session, home list, home view — and the
- * decoders below mirror those schemas key for key. Speculative decoders for
+ * server defines three reads plus the create-home and exact-home intake
+ * responses, and the decoders below mirror those schemas key for key. Speculative decoders for
  * routes the server has not defined were deleted rather than kept "for later":
  * an unsupported route returns unavailable in the adapter and never decodes.
  *
@@ -15,8 +15,8 @@
  */
 
 import {
-  type HomeownerSession, type PortError, type RelationshipLabel, type ServerHomeSummary,
-  type ServerHomeView, type SessionState, type SignInCapabilities,
+  type DocumentSummary, type HomeownerSession, type PortError, type Project, type ProjectReviewPreview, type ProjectReviewSubmission, type RecordedHomeIntake, type RelationshipLabel,
+  type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
 /** Matches homeowner-api.v1's HOMEOWNER_API_VERSION exactly. */
@@ -88,6 +88,15 @@ function boundedLabel(max: number): Decoder<string> {
   }
 }
 
+function trimmedText(max: number): Decoder<string> {
+  return (value, at) => {
+    if (typeof value !== 'string') return fail(at, 'a string')
+    if (value !== value.trim()) return fail(at, 'a trimmed string')
+    if (value.length > max) return fail(at, `a string of at most ${max} characters`)
+    return value
+  }
+}
+
 const boolean: Decoder<boolean> = (value, at) =>
   typeof value === 'boolean' ? value : fail(at, 'a boolean')
 
@@ -106,6 +115,15 @@ function oneOf<const T extends readonly string[]>(allowed: T): Decoder<T[number]
       ? (value as T[number])
       : fail(at, `one of ${allowed.join('|')}`)
 }
+
+function matching(pattern: RegExp, expected: string): Decoder<string> {
+  return (value, at) => typeof value === 'string' && pattern.test(value)
+    ? value
+    : fail(at, expected)
+}
+
+const optional = <T>(decoder: Decoder<T>): Decoder<T | undefined> => (value, at) =>
+  value === undefined ? undefined : decoder(value, at)
 
 /** Opaque refs: exact prefix and 43-char body, or the response is rejected. */
 function opaqueRef(prefix: string): Decoder<string> {
@@ -134,6 +152,30 @@ const utcInstant: Decoder<string> = (value, at) => {
   return value
 }
 
+const nullable = <T>(decoder: Decoder<T>): Decoder<T | null> => (value, at) =>
+  value === null ? null : decoder(value, at)
+
+const calendarDate: Decoder<string> = (value, at) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return fail(at, 'a calendar date')
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    return fail(at, 'a real calendar date')
+  }
+  return value
+}
+
+const wholeYear: Decoder<number> = (value, at) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1800 && value <= 9999
+    ? value
+    : fail(at, 'a whole year from 1800 through 9999')
+
+const decodeApproximateYear = object<{ value: number; precision: 'exact' | 'approximate' }>({
+  value: wholeYear,
+  precision: oneOf(['exact', 'approximate'] as const),
+})
+
 // --- resource decoders (exactly homeowner-api.v1) -----------------------------
 
 const RELATIONSHIP_LABELS = [
@@ -144,6 +186,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   magicLinkSignIn: boolean,
   persistence: boolean,
   uploads: boolean,
+  projectReview: boolean,
   invitations: boolean,
   sharing: boolean,
 })
@@ -217,6 +260,176 @@ export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
   })(value, at)
   return { source: 'server', ...decoded }
 }
+
+const SYSTEM_KINDS = [
+  'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+] as const
+
+const decodeRecordedSystem = object<RecordedHomeIntake['systems'][number]>({
+  kind: oneOf(SYSTEM_KINDS),
+  present: oneOf(['yes', 'no', 'unknown'] as const),
+  installedOrReplacedYear: nullable(decodeApproximateYear),
+})
+
+export const decodeRecordedHomeIntake: Decoder<RecordedHomeIntake> = (value, at) => {
+  const decoded = object<RecordedHomeIntake>({
+    homeRef: opaqueRef('hhom'),
+    homeType: oneOf(['house', 'townhouse', 'condo', 'other', 'unknown'] as const),
+    yearBuilt: nullable(decodeApproximateYear),
+    source: literal('homeowner_recollection'),
+    systems: array(decodeRecordedSystem),
+    updatedAt: utcInstant,
+  })(value, at)
+  const kinds = decoded.systems.map(system => system.kind)
+  if (kinds.length !== SYSTEM_KINDS.length
+    || new Set(kinds).size !== SYSTEM_KINDS.length
+    || SYSTEM_KINDS.some(kind => !kinds.includes(kind))) {
+    return fail(`${at}.systems`, 'each supported system exactly once')
+  }
+  for (const [index, system] of decoded.systems.entries()) {
+    if (system.present !== 'yes' && system.installedOrReplacedYear !== null) {
+      fail(`${at}.systems[${index}].installedOrReplacedYear`, 'null unless present is yes')
+    }
+  }
+  return decoded
+}
+
+type WireProject = {
+  projectRef: string
+  homeRef: string
+  title: string
+  category: 'roofing' | 'exterior' | 'interior' | 'electrical' | 'plumbing' | 'hvac' | 'landscaping' | 'other'
+  status: Project['status']
+  occurredOn: string | null
+  summary: string
+  createdAt: string
+  updatedAt: string
+}
+
+const PROJECT_CATEGORIES = [
+  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac', 'landscaping', 'other',
+] as const
+
+const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> = Object.freeze({
+  roofing: 'Roofing',
+  exterior: 'Exterior',
+  interior: 'Interior',
+  electrical: 'Electrical',
+  plumbing: 'Plumbing',
+  hvac: 'HVAC',
+  landscaping: 'Landscaping',
+  other: 'Other',
+})
+
+export const decodeProject: Decoder<Project> = (value, at) => {
+  const decoded = object<WireProject>({
+    projectRef: opaqueRef('hprj'),
+    homeRef: opaqueRef('hhom'),
+    title: boundedLabel(120),
+    category: oneOf(PROJECT_CATEGORIES),
+    status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+    occurredOn: nullable(calendarDate),
+    summary: trimmedText(2000),
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (decoded.updatedAt < decoded.createdAt) {
+    return fail(`${at}.updatedAt`, 'a time on or after createdAt')
+  }
+  return {
+    projectRef: decoded.projectRef,
+    homeRef: decoded.homeRef,
+    title: decoded.title,
+    trade: PROJECT_CATEGORY_LABEL[decoded.category],
+    performedOn: decoded.occurredOn ?? decoded.createdAt.slice(0, 10),
+    status: decoded.status,
+    photoCount: 0,
+    documentCount: 0,
+    isSynthetic: false,
+    summary: decoded.summary,
+    contractor: '',
+    materials: [],
+    photos: [],
+    documents: [],
+    warranty: null,
+  }
+}
+
+type WireArtifact = {
+  artifactRef: string
+  homeRef: string
+  projectRef: string | null
+  kind: 'photo' | 'document' | 'warranty'
+  displayName: string
+  mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
+  byteLength: number
+  createdAt: string
+}
+
+export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
+  const decoded = object<WireArtifact>({
+    artifactRef: opaqueRef('hart'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: nullable(opaqueRef('hprj')),
+    kind: oneOf(['photo', 'document', 'warranty'] as const),
+    displayName: boundedLabel(160),
+    mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+    byteLength: countInt,
+    createdAt: utcInstant,
+  })(value, at)
+  if (decoded.byteLength < 1 || decoded.byteLength > 25 * 1024 * 1024) {
+    return fail(`${at}.byteLength`, 'a byte length from 1 through 25 MiB')
+  }
+  return {
+    documentRef: decoded.artifactRef,
+    homeRef: decoded.homeRef,
+    projectRef: decoded.projectRef,
+    title: decoded.displayName,
+    kind: decoded.kind === 'photo' ? 'photo_set' : decoded.kind,
+    addedOn: decoded.createdAt.slice(0, 10),
+    pages: 0,
+    mediaType: decoded.mediaType,
+    byteLength: decoded.byteLength,
+    downloadHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/content`,
+    isSynthetic: false,
+  }
+}
+
+export const decodeProjectReviewSubmission: Decoder<ProjectReviewSubmission> =
+  object<ProjectReviewSubmission>({
+    submissionRef: opaqueRef('hsub'),
+    projectRef: opaqueRef('hprj'),
+    status: oneOf(['awaiting_chance_review', 'reconciliation_required'] as const),
+    submittedAt: utcInstant,
+    message: boundedLabel(240),
+  })
+
+export const decodeProjectReviewPreview: Decoder<ProjectReviewPreview> =
+  object<ProjectReviewPreview>({
+    projectRef: opaqueRef('hprj'),
+    disclosureDigest: matching(/^[a-f0-9]{64}$/, 'a SHA-256 digest'),
+    homeowner: object<ProjectReviewPreview['homeowner']>({
+      name: boundedLabel(120),
+      email: boundedLabel(254),
+      phone: optional(matching(/^\+[1-9][0-9]{7,14}$/, 'an E.164 phone number')),
+      preferredContact: oneOf(['email', 'phone', 'text'] as const),
+    }),
+    property: object<ProjectReviewPreview['property']>({ label: boundedLabel(240) }),
+    project: object<ProjectReviewPreview['project']>({
+      title: boundedLabel(160),
+      category: oneOf(['roofing'] as const),
+      status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+      summary: trimmedText(4000),
+    }),
+    attachments: array(object<ProjectReviewPreview['attachments'][number]>({
+      artifactRef: opaqueRef('hart'),
+      displayName: boundedLabel(160),
+      kind: oneOf(['photo', 'document', 'warranty'] as const),
+      mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+      byteLength: countInt,
+    })),
+    consentText: boundedLabel(1000),
+  })
 
 export const decodeList = array
 

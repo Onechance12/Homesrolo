@@ -187,6 +187,93 @@ a:hover { color: var(--clay); }
 .prose > * + * { margin-top: 1.05rem; }
 .prose p { color: var(--ink-soft); }
 
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 1.35rem;
+  color: var(--ink-faint);
+  font-size: 0.84rem;
+}
+.breadcrumbs a { color: var(--clay-deep); }
+.article-meta {
+  margin-top: 1.4rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+.answer-strip { padding-block: 1.5rem; border-bottom: 1px solid var(--rule); background: var(--paper-raised); }
+.answer-box { max-width: var(--measure); }
+.answer-box .eyebrow { margin-bottom: 0.45rem; }
+.answer-box > p:last-child { color: var(--ink); font-size: 1.05rem; line-height: 1.65; }
+.answer-grid { display: grid; gap: 1rem; }
+@media (min-width: 48rem) { .answer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.answer-card { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper-raised); padding: 1.25rem; }
+.answer-card h3 { font-size: 1.06rem; margin-bottom: 0.55rem; }
+.answer-card p { color: var(--ink-soft); }
+.answer-card__source { margin-top: 0.7rem; font-size: 0.84rem; }
+.question-list { display: grid; gap: 0.75rem; padding-left: 1.35rem; }
+.question-list li { padding-left: 0.25rem; color: var(--ink-soft); }
+.plain-checklist { list-style: none; display: grid; gap: 0.85rem; margin: 0; padding: 0; }
+.plain-checklist li {
+  position: relative;
+  padding: 0.9rem 1rem 0.9rem 2.5rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+}
+.plain-checklist li::before {
+  content: '✓';
+  position: absolute;
+  left: 0.9rem;
+  top: 0.88rem;
+  color: var(--clay-deep);
+  font-weight: 800;
+}
+.source-list { list-style: none; padding: 0; margin: 1.25rem 0 0; display: grid; gap: 1rem; }
+.source-list li { display: grid; gap: 0.15rem; padding-bottom: 0.85rem; border-bottom: 1px solid var(--rule); }
+.source-list a { font-weight: 650; }
+.source-list span { color: var(--ink-faint); font-size: 0.85rem; }
+.source-drawer {
+  max-width: var(--measure);
+  padding-block: 0.9rem;
+  border-block: 1px solid var(--rule);
+}
+.source-drawer summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
+}
+.source-drawer[open] summary { margin-bottom: 1rem; }
+.roofing-link-card {
+  display: grid;
+  gap: 0.55rem;
+  min-height: 9rem;
+  padding: 1.35rem;
+  border: 1px solid var(--night-rule);
+  border-radius: var(--radius);
+  background: var(--night-raised);
+  color: var(--night-ink);
+  text-decoration: none;
+}
+.roofing-link-card strong { font-size: 1.05rem; }
+.roofing-link-card span { color: var(--night-soft); line-height: 1.55; }
+.roofing-link-card:hover { border-color: var(--night-accent); color: var(--night-ink); transform: translateY(-2px); }
+.cost-table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: 0.94rem; }
+.cost-table th, .cost-table td { text-align: left; vertical-align: top; padding: 0.8rem; border-bottom: 1px solid var(--rule); }
+.cost-table th { color: var(--ink); font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.cost-table td { color: var(--ink-soft); }
+@media (max-width: 39.99rem) {
+  .cost-table, .cost-table tbody, .cost-table tr, .cost-table th, .cost-table td { display: block; }
+  .cost-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .cost-table tr { padding: 0.8rem 0; border-bottom: 1px solid var(--rule); }
+  .cost-table td { border: 0; padding: 0.25rem 0; }
+  .cost-table td::before { content: attr(data-label); display: block; color: var(--ink); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+}
+
 .section { padding-block: clamp(3rem, 2rem + 5vw, 5.75rem); position: relative; }
 .section--sunken { background: var(--paper-sunken); border-block: 1px solid var(--rule); }
 
@@ -234,6 +321,22 @@ a:hover { color: var(--clay); }
   color: var(--night-accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 9' preserveAspectRatio='none'%3E%3Cpath d='M2 6.5 C 24 3.5, 60 2.5, 87 4.5 S 114 6.5, 118 4.5' fill='none' stroke='oklch(0.78 0.11 65 / 0.6)' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
 }
+.section--night .card {
+  background: var(--night-raised);
+  border-color: var(--night-rule);
+  box-shadow: none;
+}
+.section--night .card p,
+.section--night .question-list li,
+.section--night .plain-checklist li { color: var(--night-soft); }
+.section--night .card::after { background: var(--night-accent); }
+.section--night .plain-checklist li { background: var(--night-raised); border-color: var(--night-rule); }
+.section--night .plain-checklist li::before { color: var(--night-accent); }
+.section--night .compare th,
+.section--night .compare td { border-color: var(--night-rule); }
+.section--night .compare thead th { color: var(--night-faint); }
+.section--night .compare tbody th { color: var(--night-ink); }
+.section--night .compare td { color: var(--night-soft); }
 
 .eyebrow {
   font-family: var(--font-body);
@@ -421,6 +524,59 @@ a:hover { color: var(--clay); }
 }
 .nav a:hover { color: var(--clay-deep); text-decoration: underline; }
 .nav a[aria-current='page'] { color: var(--ink); font-weight: 650; }
+.mobile-nav { display: none; }
+@media (max-width: 47.99rem) {
+  .masthead__inner {
+    flex-wrap: nowrap;
+    gap: 0.75rem;
+    padding-block: 0.55rem;
+  }
+  .wordmark { font-size: 1.12rem; }
+  .wordmark svg { width: 18px; height: 18px; }
+  .nav--desktop { display: none; }
+  .mobile-nav {
+    display: block;
+    margin-left: auto;
+    position: relative;
+  }
+  .mobile-nav summary {
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 650;
+    list-style: none;
+    padding: 0.42rem 0.78rem;
+  }
+  .mobile-nav summary::-webkit-details-marker { display: none; }
+  .mobile-nav[open] summary { background: var(--paper-warm); }
+  .mobile-nav__links {
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    border-radius: 0.75rem;
+    box-shadow: 0 14px 36px color-mix(in srgb, var(--ink) 14%, transparent);
+    display: grid;
+    gap: 0;
+    min-width: min(18rem, calc(100vw - 2rem));
+    padding: 0.45rem;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.55rem);
+  }
+  .mobile-nav__links a {
+    border-radius: 0.5rem;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+    padding: 0.68rem 0.75rem;
+    text-decoration: none;
+  }
+  .mobile-nav__links a:hover,
+  .mobile-nav__links a[aria-current='page'] {
+    background: var(--paper-warm);
+    color: var(--ink);
+  }
+}
 .nav a[aria-current='page']::after {
   content: '';
   position: absolute;
@@ -432,9 +588,8 @@ a:hover { color: var(--clay); }
   background: var(--clay);
 }
 
-/* The colophon is drawn as a drawing sheet's title block: a boxed grid with
-   ruled cells, sheet metadata in the margin, and the disclosures given a full
-   ruled panel of their own rather than fine print. */
+/* The footer keeps the title-block character while the legal boundary sits in
+   a conventional, quiet line beneath the navigation. */
 .colophon {
   border-top: 1px solid var(--rule);
   background: var(--paper-sunken);
@@ -479,16 +634,24 @@ a:hover { color: var(--clay); }
   color: var(--ink-faint);
 }
 
-.disclosures {
-  margin-top: 1.75rem;
-  padding: 1.35rem 1.5rem;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
-  background: var(--paper-raised);
-  font-size: 0.88rem;
-  color: var(--ink-faint);
+@media (max-width: 47.99rem) {
+  .colophon { margin-top: 2.75rem; padding-block: 2rem 1.5rem; }
+  .titleblock__grid { grid-template-columns: 1fr 1fr; }
+  .titleblock__cell { padding: 1rem; border-bottom: 0; }
+  .titleblock__cell:first-child { grid-column: 1 / -1; border-bottom: 1px solid var(--rule); }
+  .titleblock__cell:nth-child(3) { border-left: 1px solid var(--rule); }
+  .titleblock__meta { display: none; }
+  .colophon a { font-size: 0.84rem; padding-block: 0.14rem; }
+  .footer-legal { margin-top: 1rem; font-size: 0.7rem; }
 }
-.disclosures li { margin-bottom: 0.4rem; }
+
+.footer-legal {
+  max-width: 96ch;
+  margin: 1.25rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
 
 /* --- provenance ledger metadata ------------------------------------------ */
 

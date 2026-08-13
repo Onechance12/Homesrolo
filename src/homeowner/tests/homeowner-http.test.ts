@@ -3,9 +3,11 @@ import { test } from 'node:test'
 import { HomeownerApiService } from '../homeowner-api.v1.ts'
 import { createHomeownerHttpHandler, HOMEOWNER_HTTP_WARNING } from '../homeowner-http.v1.ts'
 import {
+  HOMEOWNER_SYSTEM_KINDS,
   HOMEOWNER_RUNTIME_VERSION,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
+  type HomeownerCommandPort,
   type HomeownerMembership,
   type HomeownerPrincipal,
   type HomeownerRepositoryPort,
@@ -53,10 +55,59 @@ const repository: HomeownerRepositoryPort = {
       updatedAt: now,
     }
   },
+  async readPropertyFacts() { return null },
+  async listSystems() { return [] },
   async listProjects() { return [] },
   async listArtifactMetadata() { return [] },
   async listWarranties() { return [] },
   async listMaintenance() { return [] },
+}
+
+const commands: HomeownerCommandPort = {
+  async createPrivateHomeWorkspace() {
+    return {
+      home: {
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        homeRef,
+        createdByPrincipalRef: principalRef,
+        displayLabel: 'Our home',
+        privateLocationLabel: 'Private location',
+        createdAt: now,
+        updatedAt: now,
+      },
+      membership,
+    }
+  },
+  async createProject() { throw new Error('not used') },
+  async recordInitialIntake() {
+    return {
+      propertyFacts: {
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        propertyFactsRef: `hfac_${body('f')}`,
+        homeRef,
+        controllerPrincipalRef: principalRef,
+        homeType: 'house',
+        yearBuilt: { value: 1988, precision: 'approximate' },
+        source: 'homeowner_recollection',
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+      systems: HOMEOWNER_SYSTEM_KINDS.map((kind, index) => ({
+        recordVersion: HOMEOWNER_RUNTIME_VERSION,
+        systemRef: `hsys_${body(String.fromCharCode(97 + index))}`,
+        homeRef,
+        controllerPrincipalRef: principalRef,
+        kind,
+        present: 'unknown' as const,
+        installedOrReplacedYear: null,
+        source: 'homeowner_recollection' as const,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    }
+  },
 }
 
 function handler() {
@@ -67,11 +118,13 @@ function handler() {
       },
     },
     repository,
+    commands,
     now: () => now,
     capabilities: {
       magicLinkSignIn: false,
-      persistence: false,
-      uploads: false,
+      persistence: true,
+      uploads: true,
+      projectReview: false,
       invitations: false,
       sharing: false,
     },
@@ -84,17 +137,19 @@ const request = (overrides: Partial<Parameters<ReturnType<typeof handler>>[0]> =
   pathname: '/api/v1/session',
   search: '',
   hasBody: false,
+  jsonBody: undefined,
   sessionHandle: 'server-cookie-session',
   ...overrides,
 })
 
-test('the exact three browser reads use the one-key data envelope and no-store headers', async () => {
+test('browser reads, including exact-home artifact metadata, use one safe no-store envelope', async () => {
   const handle = handler()
   const session = await handle(request())
   const homes = await handle(request({ pathname: '/api/v1/homes' }))
   const home = await handle(request({ pathname: `/api/v1/homes/${homeRef}` }))
+  const artifacts = await handle(request({ pathname: `/api/v1/homes/${homeRef}/artifacts` }))
 
-  for (const response of [session, homes, home]) {
+  for (const response of [session, homes, home, artifacts]) {
     assert.equal(response.status, 200)
     assert.deepEqual(Object.keys(response.body as object), ['data'])
     assert.equal(response.headers['cache-control'], 'no-store')
@@ -133,7 +188,7 @@ test('unknown, malformed, cross-home, and write routes fail closed', async () =>
     [request({ pathname: '/api/v1/homes/hhom_short' }), 404],
     [request({ pathname: `/api/v1/homes/${otherHomeRef}` }), 404],
     [request({ pathname: '/api/v1/projects' }), 404],
-    [request({ method: 'POST', pathname: '/api/v1/homes' }), 405],
+    [request({ method: 'POST', pathname: '/api/v1/projects', hasBody: true, jsonBody: {} }), 404],
   ] as const
   for (const [input, status] of cases) {
     const response = await handle(input)
@@ -149,11 +204,13 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   const broken = new HomeownerApiService({
     identity: { async resolvePrincipal() { return principal } },
     repository: { ...repository, async listMemberships() { throw new Error('private database detail') } },
+    commands,
     now: () => now,
     capabilities: {
       magicLinkSignIn: false,
       persistence: false,
       uploads: false,
+      projectReview: false,
       invitations: false,
       sharing: false,
     },
@@ -162,5 +219,83 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   assert.equal(response.status, 503)
   assert.deepEqual(response.body, { error: { code: 'unavailable' } })
   assert.equal(JSON.stringify(response.body).includes('database'), false)
-  assert.match(HOMEOWNER_HTTP_WARNING, /does not create sessions/)
+  assert.match(HOMEOWNER_HTTP_WARNING, /no generic write/)
+})
+
+test('POST /api/v1/homes accepts only the strict command and returns one safe summary', async () => {
+  const handle = handler()
+  const response = await handle(request({
+    method: 'POST',
+    pathname: '/api/v1/homes',
+    hasBody: true,
+    jsonBody: {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+    },
+  }))
+  assert.equal(response.status, 201)
+  assert.deepEqual(response.body, { data: {
+    homeRef,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+    relationshipLabel: 'claimed_unverified',
+  } })
+  assert.equal(JSON.stringify(response.body).includes(principalRef), false)
+
+  for (const jsonBody of [
+    undefined,
+    null,
+    { commandRef: `hcmd_${body('c')}`, displayLabel: 'Our home' },
+    {
+      commandRef: `hcmd_${body('c')}`,
+      displayLabel: 'Our home',
+      privateLocationLabel: 'Private location',
+      role: 'workspace_controller',
+    },
+  ]) {
+    const rejected = await handle(request({
+      method: 'POST', pathname: '/api/v1/homes', hasBody: true, jsonBody,
+    }))
+    assert.equal(rejected.status, 400)
+  }
+})
+
+test('POST exact-home intake accepts only a complete recollection command', async () => {
+  const handle = handler()
+  const jsonBody = {
+    commandRef: `hcmd_${body('i')}`,
+    homeType: 'house',
+    yearBuilt: { value: 1988, precision: 'approximate' },
+    systems: HOMEOWNER_SYSTEM_KINDS.map(kind => ({
+      kind,
+      present: 'unknown',
+      installedOrReplacedYear: null,
+    })),
+  }
+  const response = await handle(request({
+    method: 'POST',
+    pathname: `/api/v1/homes/${homeRef}/intake`,
+    hasBody: true,
+    jsonBody,
+  }))
+  assert.equal(response.status, 201)
+  assert.equal((response.body as { data: { source: string } }).data.source,
+    'homeowner_recollection')
+  assert.equal(JSON.stringify(response.body).includes(principalRef), false)
+
+  for (const rejectedBody of [
+    { ...jsonBody, requestedAt: now },
+    { ...jsonBody, role: 'workspace_controller' },
+    { ...jsonBody, systems: jsonBody.systems.slice(0, -1) },
+    { ...jsonBody, systems: jsonBody.systems.map(system => ({ ...system, kind: 'roof' })) },
+  ]) {
+    const rejected = await handle(request({
+      method: 'POST',
+      pathname: `/api/v1/homes/${homeRef}/intake`,
+      hasBody: true,
+      jsonBody: rejectedBody,
+    }))
+    assert.equal(rejected.status, 400)
+  }
 })

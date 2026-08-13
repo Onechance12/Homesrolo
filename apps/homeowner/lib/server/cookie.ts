@@ -17,6 +17,8 @@
 
 export const SESSION_COOKIE_NAME = 'hrolo_session'
 
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
+
 /** Opaque handle bounds: base64url-ish charset, sane length window. */
 const HANDLE_PATTERN = /^[A-Za-z0-9_-]{16,256}$/
 
@@ -44,3 +46,14 @@ export function sessionHandleFromCookieHeader(header: string | null): string | n
   if (value === undefined || !HANDLE_PATTERN.test(value)) return null
   return value
 }
+
+export function sessionCookie(handle: string): string {
+  if (!HANDLE_PATTERN.test(handle)) throw new Error('invalid session handle')
+  return `${SESSION_COOKIE_NAME}=${handle}; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Lax`
+}
+
+export function clearSessionCookie(): string {
+  return `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+}
+
+export const SESSION_LIFETIME_SECONDS = SESSION_MAX_AGE_SECONDS

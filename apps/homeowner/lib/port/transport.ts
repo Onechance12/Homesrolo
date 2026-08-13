@@ -24,6 +24,18 @@ export type TransportReply =
 
 export type JsonTransport = (request: TransportRequest) => Promise<TransportReply>
 
+export interface ArtifactUploadTransportRequest {
+  readonly path: string
+  readonly commandRef: string
+  readonly kind: 'photo' | 'document' | 'warranty'
+  readonly projectRef?: string
+  readonly file: File
+}
+
+export type ArtifactUploadTransport = (
+  request: ArtifactUploadTransportRequest,
+) => Promise<TransportReply>
+
 export const fetchJsonTransport: JsonTransport = async request => {
   try {
     /* eslint-disable no-restricted-globals -- the one sanctioned call site */
@@ -46,4 +58,48 @@ export const fetchJsonTransport: JsonTransport = async request => {
   } catch {
     return { kind: 'network_failure' }
   }
+}
+
+export const fetchArtifactUploadTransport: ArtifactUploadTransport = async request => {
+  const form = new FormData()
+  form.set('commandRef', request.commandRef)
+  form.set('kind', request.kind)
+  if (request.projectRef) form.set('projectRef', request.projectRef)
+  form.set('file', request.file, request.file.name)
+  try {
+    /* eslint-disable no-restricted-globals -- sanctioned transport seam */
+    const response = await fetch(request.path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+      body: form,
+    })
+    /* eslint-enable no-restricted-globals */
+    let body: unknown = undefined
+    try { body = await response.json() } catch { body = undefined }
+    return { kind: 'reply', status: response.status, body }
+  } catch {
+    return { kind: 'network_failure' }
+  }
+}
+
+/**
+ * Completes the provider's standard one-time-link redirect. Only the short-lived
+ * access credential from the URL fragment crosses this exact same-origin path;
+ * refresh credentials are never read or transmitted. The server validates it
+ * with the configured provider and returns only an HttpOnly Homesrolo cookie.
+ */
+export async function exchangeHomeownerProviderCredential(accessToken: string): Promise<boolean> {
+  if (accessToken.length < 32 || accessToken.length > 4096 || /\s/.test(accessToken)) return false
+  const reply = await fetchJsonTransport({
+    method: 'POST',
+    path: '/api/v1/auth/exchange',
+    body: { access_token: accessToken },
+  })
+  if (reply.kind !== 'reply' || reply.status !== 200) return false
+  if (!reply.body || typeof reply.body !== 'object' || Array.isArray(reply.body)
+    || Object.keys(reply.body).length !== 1 || !Object.hasOwn(reply.body, 'data')) return false
+  const data = (reply.body as { data?: unknown }).data
+  return !!data && typeof data === 'object' && !Array.isArray(data)
+    && Object.keys(data).length === 1 && (data as { signedIn?: unknown }).signedIn === true
 }

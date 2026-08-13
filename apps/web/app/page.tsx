@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Illustration } from '../components/Illustration.tsx'
-import { SITE_DESCRIPTION } from '../lib/site.ts'
+import { HOMEOWNER_APP_ORIGIN, SITE_DESCRIPTION } from '../lib/site.ts'
 
 export const metadata = {
   description: SITE_DESCRIPTION,
@@ -96,10 +96,10 @@ export default function HomePage() {
                 Home Project Passport is how real work becomes something a homeowner actually holds.
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.75rem' }}>
-                <Link className="btn btn--primary" href="/how-it-works/">
-                  See how it works <span className="btn__arrow" aria-hidden="true">→</span>
-                </Link>
-                <Link className="btn btn--quiet" href="/how-we-verify/">How we verify</Link>
+                <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>
+                  Create my home account <span className="btn__arrow" aria-hidden="true">→</span>
+                </a>
+                <Link className="btn btn--quiet" href="/services/roofing/">Get roofing help</Link>
               </div>
             </div>
 
@@ -175,20 +175,19 @@ export default function HomePage() {
         <div className="shell">
           <div className="grid grid--2" style={{ gap: '3rem' }}>
             <div className="prose">
-              <p className="kicker">Sheet 04 · <strong>Why not another directory</strong></p>
-              <h2>Most listings ask you to trust <em>an adjective.</em></h2>
+              <p className="kicker">Sheet 04 · <strong>Start a project</strong></p>
+              <h2>The home comes before the <em>contractor.</em></h2>
               <p>
-                Sites full of star ratings and badges rarely tell you what was checked, who checked it, or when.
-                Homesrolo starts from the opposite end: a record of work that a homeowner released, with the
-                materials and dates attached, and facts that each name their own source.
+                A roof project should begin with the house, the problem, and the records already attached to it.
+                Homesrolo starts there instead of asking you to sort through a paid list of companies.
               </p>
               <p>
-                That means some listings look sparse. A company with a confirmed registration and nothing else
-                shows exactly that. Sparse and honest is the point.
+                Create the home record, describe the roof need, and keep every later photo, product, invoice, and
+                warranty with that same property file.
               </p>
               <p style={{ marginTop: '1.5rem' }}>
                 <Link className="btn btn--quiet" href="/professionals/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>
-                  Look at a sample listing <span className="btn__arrow" aria-hidden="true">→</span>
+                  Start a roof project <span className="btn__arrow" aria-hidden="true">→</span>
                 </Link>
               </p>
             </div>

@@ -9,9 +9,12 @@ import { PORT_IMPLEMENTATION_STATUS, SYNTHETIC_NOTICE } from '../port/types.ts'
  * unknown refs, and results that are values, not exceptions.
  */
 
-test('nothing behind the port claims to be implemented', () => {
-  for (const [flag, value] of Object.entries(PORT_IMPLEMENTATION_STATUS)) {
-    assert.equal(value, false, `PORT_IMPLEMENTATION_STATUS.${flag} must stay false until the runtime exists`)
+test('the port status names the real private foundation and no later sharing capability', () => {
+  assert.equal(PORT_IMPLEMENTATION_STATUS.realAuthenticationImplemented, true)
+  assert.equal(PORT_IMPLEMENTATION_STATUS.realPersistenceImplemented, true)
+  assert.equal(PORT_IMPLEMENTATION_STATUS.uploadsImplemented, true)
+  for (const flag of ['sharingImplemented', 'aiAssistantImplemented', 'connectedToJobrolo'] as const) {
+    assert.equal(PORT_IMPLEMENTATION_STATUS[flag], false, `${flag} remains outside the basic foundation`)
   }
   assert.match(SYNTHETIC_NOTICE, /synthetic/i)
   assert.match(SYNTHETIC_NOTICE, /not built/i)
@@ -74,6 +77,7 @@ test('unknown refs are not_found, never fabricated', async () => {
 test('a created home and project exist in memory and feed the timeline', async () => {
   await syntheticPort.enterDemoSession('Test homeowner')
   const created = await syntheticPort.createHome({
+    commandRef: `hcmd_${'a'.repeat(43)}`,
     alias: 'Test Bungalow', locality: 'Sample Metro — West', homeType: 'house', yearBuilt: 1975,
   })
   assert.ok(created.ok)
@@ -118,6 +122,7 @@ test('minted refs use the runtime boundary vocabulary', async () => {
     'sessions carry principal refs in the homeowner-runtime.v1 shape')
 
   const home = await syntheticPort.createHome({
+    commandRef: `hcmd_${'b'.repeat(43)}`,
     alias: 'Prefix House', locality: 'Sample Metro', homeType: 'house', yearBuilt: null,
   })
   assert.ok(home.ok)

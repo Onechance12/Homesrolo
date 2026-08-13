@@ -84,6 +84,15 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
         )}
       </header>
 
+      <section className="roof-callout" aria-labelledby="roof-callout-title">
+        <div>
+          <p className="mono">Need roof work?</p>
+          <h2 id="roof-callout-title">Start the project from this home file.</h2>
+          <p>Tell Homesrolo what you need. The request and every next step stay attached to the home.</p>
+        </div>
+        <Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Start a roof project</Link>
+      </section>
+
       <dl className="cardgrid cardgrid--2 cardgrid--4" style={{ margin: 0 }}>
         <Link className="stat" href={`/home/${homeId}/projects`}>
           <dt>Projects</dt>
@@ -115,7 +124,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
         {file.source === 'server' ? (
           <EmptyState
             title="The record view is not available yet"
-            body="The server does not serve the timeline route yet. The counts above are live; the entries arrive with that route."
+            body="Projects are live now. The full home timeline comes next."
+            action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>Open roof projects</Link>}
           />
         ) : (
           <>
@@ -125,7 +135,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
           <EmptyState
             title="The record starts with you"
             body="Nothing has been added to this home's file yet. Its first project entry becomes page one."
-            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Record a project</Link>}
+            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Start a roof project</Link>}
           />
         )}
         {timeline.state.status === 'ready' && (

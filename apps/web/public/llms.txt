@@ -1,0 +1,28 @@
+# Homesrolo
+
+> Homesrolo helps homeowners understand major home projects and keep a durable history of the work performed on a property. Public guides show the sources behind material facts. Home records remain private unless the homeowner chooses to share them.
+
+## Roofing
+
+- [Texas roofing center](https://homesrolo.com/services/roofing/): Cost, materials, contractor checks, insurance boundaries, and Dallas Fort Worth rules.
+- [Repair or replace a roof](https://homesrolo.com/services/roofing/repair-or-replace/): Evidence that separates a durable repair from a complete roof replacement.
+- [Roof replacement cost](https://homesrolo.com/services/roofing/cost/): Dallas market benchmarks and a line-by-line estimate comparison.
+- [Roofing materials](https://homesrolo.com/services/roofing/materials/): Asphalt, impact-resistant, metal, tile, slate, composite, and the full roof assembly.
+- [Contractor checklist](https://homesrolo.com/services/roofing/choose-a-contractor/): Documents to verify and 12 questions to ask before signing.
+- [Dallas Fort Worth roofing](https://homesrolo.com/services/roofing/dfw/): North Texas weather, local rules, and project records.
+- [Dallas roofing](https://homesrolo.com/services/roofing/dallas/): Dallas roofing permits, bids, and closeout records.
+- [Fort Worth roofing](https://homesrolo.com/services/roofing/fort-worth/): Fort Worth permit triggers, wood repairs, and scope details.
+
+## Trust and method
+
+- [About Homesrolo](https://homesrolo.com/about/)
+- [Editorial standards](https://homesrolo.com/editorial-standards/)
+- [How Homesrolo verifies facts](https://homesrolo.com/how-we-verify/)
+- [Sitemap](https://homesrolo.com/sitemap.xml)
+
+## Important limits
+
+- Homesrolo does not inspect roofs, price individual jobs, select a contractor, or advise on an insurance claim.
+- Cost figures are dated market benchmarks, not quotes for a particular home.
+- Permit rules and laws can change. The current source is linked from each guide.
+- Homesrolo is built around the home and its project record, not a pay-to-rank contractor directory.

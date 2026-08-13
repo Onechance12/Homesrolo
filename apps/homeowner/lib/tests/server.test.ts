@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { SESSION_COOKIE_NAME, sessionHandleFromCookieHeader } from '../server/cookie.ts'
-import { handleHomeownerRequest } from '../server/adapter.ts'
+import { handleHomeownerRequest, mutationOriginAllowed } from '../server/adapter.ts'
+import { artifactUploadEnvelopeAllowed } from '../server/artifact-http.ts'
+import { projectReviewCapabilityEnabled } from '../server/runtime.ts'
 
 /**
  * The route adapter over the UNCONFIGURED runtime: no identity provider, no
@@ -22,9 +24,26 @@ const ALL_FALSE = {
   magicLinkSignIn: false,
   persistence: false,
   uploads: false,
+  projectReview: false,
   invitations: false,
   sharing: false,
 }
+
+test('project review is enabled only with both the homeowner provider and Jobrolo intake client', () => {
+  assert.equal(projectReviewCapabilityEnabled(false, false), false)
+  assert.equal(projectReviewCapabilityEnabled(false, true), false)
+  assert.equal(projectReviewCapabilityEnabled(true, false), false)
+  assert.equal(projectReviewCapabilityEnabled(true, true), true)
+})
+
+test('configured browser mutations require the exact application origin', () => {
+  const expected = 'https://app.homesrolo.com'
+  assert.equal(mutationOriginAllowed('GET', null, expected), true)
+  assert.equal(mutationOriginAllowed('POST', expected, expected), true)
+  for (const origin of [null, '', 'https://homesrolo.com', 'https://app.homesrolo.com.evil.test']) {
+    assert.equal(mutationOriginAllowed('POST', origin, expected), false)
+  }
+})
 
 // --- cookie parsing -----------------------------------------------------------
 
@@ -64,9 +83,18 @@ test('the cookie module never logs and the adapter never projects the handle', (
 
 test('authenticated route modules are explicitly dynamic', () => {
   const routes = [
+    '../../app/api/v1/auth/callback/route.ts',
+    '../../app/api/v1/auth/magic-link/route.ts',
+    '../../app/api/v1/auth/signout/route.ts',
     '../../app/api/v1/session/route.ts',
     '../../app/api/v1/homes/route.ts',
     '../../app/api/v1/homes/[homeRef]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/intake/route.ts',
+    '../../app/api/v1/homes/[homeRef]/projects/route.ts',
+    '../../app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
@@ -103,12 +131,42 @@ test('a well-formed cookie still reads signed_out: no identity provider exists',
 // --- protected reads, fail-closed runtime -------------------------------------
 
 test('protected reads are bounded 401 signed_out, cookie or not', async () => {
-  for (const path of ['/api/v1/homes', `/api/v1/homes/${HOME}`]) {
+  for (const path of [
+    '/api/v1/homes',
+    `/api/v1/homes/${HOME}`,
+    `/api/v1/homes/${HOME}/projects`,
+    `/api/v1/homes/${HOME}/projects/hprj_${'r'.repeat(43)}`,
+    `/api/v1/homes/${HOME}/artifacts`,
+  ]) {
     for (const headers of [undefined, { cookie: `${SESSION_COOKIE_NAME}=${HANDLE}` }]) {
       const response = await get(path, headers)
       assert.equal(response.status, 401, `${path} ${headers ? 'with' : 'without'} cookie`)
       assert.deepEqual(await response.json(), { error: { code: 'signed_out' } })
     }
+  }
+})
+
+test('artifact upload envelope requires exact origin, multipart boundary, and a bounded length', () => {
+  const origin = 'https://app.homesrolo.com'
+  const request = (headers: Record<string, string>) => new Request(`${BASE}/upload`, {
+    method: 'POST',
+    headers,
+    body: new Uint8Array([1]),
+  })
+  assert.equal(artifactUploadEnvelopeAllowed(request({
+    origin,
+    'content-length': '1024',
+    'content-type': 'multipart/form-data; boundary=exact',
+  }), origin), true)
+  for (const headers of [
+    { 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-length': '99999999', 'content-type': 'multipart/form-data; boundary=exact' },
+    { origin, 'content-length': '1024', 'content-type': 'application/json' },
+    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data' },
+    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact', 'content-encoding': 'gzip' },
+  ] as readonly Record<string, string>[]) {
+    assert.equal(artifactUploadEnvelopeAllowed(request(headers), origin), false)
   }
 })
 
@@ -132,12 +190,106 @@ test('non-GET methods are 405 and query strings or bodies are 400', async () => 
   assert.equal(withBody.status, 200)
 })
 
+test('the create-home adapter accepts only bounded JSON and still fails closed without identity', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'c'.repeat(43)}`,
+    displayLabel: 'Our home',
+    privateLocationLabel: 'Private location',
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401, 'a valid command still needs a real server session')
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  const rejected = [
+    new Request(`${BASE}/api/v1/homes`, { method: 'POST' }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(validBody),
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{bad json',
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        ...validBody, principalRef: `hprn_${'p'.repeat(43)}`,
+      }),
+    }),
+    new Request(`${BASE}/api/v1/homes`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        ...validBody, privateLocationLabel: 'x'.repeat(5000),
+      }),
+    }),
+  ]
+  for (const request of rejected) {
+    const response = await handleHomeownerRequest(request)
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
+  }
+})
+
+test('the exact-home intake adapter stays bounded and fail-closed without identity', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'i'.repeat(43)}`,
+    homeType: 'house',
+    yearBuilt: null,
+    systems: ['roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation']
+      .map(kind => ({ kind, present: 'unknown', installedOrReplacedYear: null })),
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/intake`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401)
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  const forged = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/intake`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...validBody, principalRef: `hprn_${'p'.repeat(43)}` }),
+  }))
+  assert.equal(forged.status, 400)
+  assert.deepEqual(await forged.json(), { error: { code: 'invalid_request' } })
+})
+
+test('the roofing-project adapter accepts only a bounded exact-home command and stays fail-closed', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'r'.repeat(43)}`,
+    need: 'repair',
+    timing: 'urgent',
+    notes: 'Leak above the back room.',
+  }
+  const valid = await handleHomeownerRequest(new Request(`${BASE}/api/v1/homes/${HOME}/roofing-projects`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(validBody),
+  }))
+  assert.equal(valid.status, 401)
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  for (const bad of [
+    { ...validBody, principalRef: `hprn_${'p'.repeat(43)}` },
+    { ...validBody, need: 'insurance_claim' },
+    { ...validBody, timing: 'tomorrow_at_8' },
+    { ...validBody, notes: 'x'.repeat(5000) },
+  ]) {
+    const response = await handleHomeownerRequest(new Request(
+      `${BASE}/api/v1/homes/${HOME}/roofing-projects`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bad) },
+    ))
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
+  }
+})
+
 test('unknown paths and wrong-kind refs are 404 through the adapter', async () => {
   for (const path of [
     '/api/v1/anything',
     '/api/v1/homes/hhom_short',
     `/api/v1/homes/hprj_${'r'.repeat(43)}`,
-    `/api/v1/homes/${HOME}/projects`,
     '/api/v1/session/magic-link',
   ]) {
     const response = await get(path, { cookie: `${SESSION_COOKIE_NAME}=${HANDLE}` })

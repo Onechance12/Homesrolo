@@ -5,11 +5,25 @@ education-first assistant that helps homeowners understand maintenance and
 work history without acting as a contractor CRM, public adjuster, insurer, or
 claim advocate.
 
-**Status: Phase 0.5.** Contracts, architecture policy, and a statically
-exported public web experience. There is still no account system, database,
-API route, upload, property resolver, live assistant, share transport, payment,
-analytics, or production connection to Jobrolo. Every company and project on
-the site is synthetic.
+**Status: Phase 1 foundation.** The separate homeowner app now has passwordless
+email authentication, opaque server sessions, a private Supabase persistence
+boundary, private home workspaces, the guided six-system intake, and a narrow
+roof-project request, and default-off private PDF/JPEG/PNG file storage. The
+public roofing path now routes homeowners into this private account flow rather
+than a contractor directory. Malware scanning, export/deletion workflows,
+controller verification, public sharing, a live assistant, payments, and
+analytics are still unavailable. A default-off signed Jobrolo handoff is now
+implemented; it becomes available only after both services are configured and
+their database migrations are applied.
+
+The first homeowner workflow is: request a passwordless email link, create a
+private home workspace, and open a roof repair, replacement, inspection, or
+storm-damage project. Homesrolo saves that project inside its own account and
+database. With explicit consent, the homeowner may select exact project files
+and send one minimized roofing request to a private Jobrolo review item assigned
+only to Chance. It does not create a Jobrolo user, lead, customer, or project,
+and it does not send the request to a contractor. Chance decides whether and
+where to distribute it.
 
 ## Contents
 

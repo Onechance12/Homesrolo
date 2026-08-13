@@ -13,7 +13,7 @@
 import { createHomeownerHttpHandler } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import type { HomeownerHttpResponse } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import { sessionHandleFromCookieHeader } from './cookie.ts'
-import { homeownerApiService } from './runtime.ts'
+import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 function toWebResponse(response: HomeownerHttpResponse): Response {
   return new Response(JSON.stringify(response.body), {
@@ -22,14 +22,81 @@ function toWebResponse(response: HomeownerHttpResponse): Response {
   })
 }
 
+const MAX_JSON_BYTES = 4096
+
+export function mutationOriginAllowed(
+  method: string,
+  requestOrigin: string | null,
+  expectedOrigin: string,
+): boolean {
+  return method !== 'POST' || requestOrigin === expectedOrigin
+}
+
+function forbiddenMutationResponse(): Response {
+  return new Response(JSON.stringify({ error: { code: 'forbidden' } }), {
+    status: 403,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+}
+
+async function boundedJsonBody(request: Request): Promise<unknown> {
+  if (request.method !== 'POST' || request.body === null) return undefined
+  const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (mediaType !== 'application/json') return undefined
+  const declared = request.headers.get('content-length')
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > MAX_JSON_BYTES)) return undefined
+  try {
+    const reader = request.body.getReader()
+    const chunks: Uint8Array[] = []
+    let byteLength = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > MAX_JSON_BYTES) {
+        await reader.cancel()
+        return undefined
+      }
+      chunks.push(value)
+    }
+    if (byteLength === 0) return undefined
+    const bytes = new Uint8Array(byteLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
+}
+
 export async function handleHomeownerRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
+  const configuration = homeownerRuntimeConfiguration()
+  if (configuration && !mutationOriginAllowed(
+    request.method,
+    request.headers.get('origin'),
+    configuration.appOrigin,
+  )) {
+    return forbiddenMutationResponse()
+  }
   const handler = createHomeownerHttpHandler(homeownerApiService())
+  const hasBody = request.body !== null
+  const jsonBody = await boundedJsonBody(request)
   const response = await handler({
     method: request.method,
     pathname: url.pathname,
     search: url.search,
-    hasBody: request.body !== null,
+    hasBody,
+    jsonBody,
     sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
   })
   return toWebResponse(response)

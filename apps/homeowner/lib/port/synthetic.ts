@@ -20,7 +20,7 @@ import {
 import {
   NO_CAPABILITIES,
   type AddProjectInput, type CreateHomeInput, type HomeFile, type HomeListEntry,
-  type HomeSummary, type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
+  type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
   type PortResult, type Project, type ProjectSummary, type SessionState,
 } from './types.ts'
 
@@ -105,7 +105,7 @@ export const syntheticPort: HomeownerDataPort = {
 
   async createHome(input: CreateHomeInput) {
     await wait()
-    const gate = requireSession<HomeSummary>()
+    const gate = requireSession<HomeListEntry>()
     if (gate) return gate
     const home: HomeFile = {
       homeRef: mint('hhom'),
@@ -123,7 +123,13 @@ export const syntheticPort: HomeownerDataPort = {
       isSynthetic: true,
     }
     memory.createdHomes.push(home)
-    return ok(home)
+    // input.commandRef is ignored here: the demo has no dedupe to serve, and
+    // pretending to honor idempotency would be a claim the mock can't keep.
+    return ok({ source: 'synthetic' as const, ...home })
+  },
+
+  async recordInitialIntake() {
+    return err('unavailable')
   },
 
   async listProjects(homeRef) {
@@ -176,12 +182,68 @@ export const syntheticPort: HomeownerDataPort = {
     return ok({ projectRef, homeRef, title, trade, performedOn, status, photoCount, documentCount, isSynthetic: true as const })
   },
 
+  async startRoofingProject(homeRef, input) {
+    await wait()
+    const gate = requireSession<ProjectSummary>()
+    if (gate) return gate
+    if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
+    const titles = {
+      repair: 'Roof repair',
+      replacement: 'Roof replacement',
+      inspection: 'Roof inspection',
+      storm_damage: 'Storm damage roof review',
+      not_sure: 'Roofing help',
+    } as const
+    const timing = {
+      urgent: 'As soon as possible',
+      within_30_days: 'Within 30 days',
+      researching: 'Researching options',
+      not_sure: 'Not sure yet',
+    } as const
+    const project: Project = {
+      projectRef: mint('hprj'),
+      homeRef,
+      title: titles[input.need],
+      trade: 'Roofing',
+      performedOn: new Date().toISOString().slice(0, 10),
+      status: 'planned',
+      photoCount: 0,
+      documentCount: 0,
+      summary: input.notes.trim()
+        ? `Timing: ${timing[input.timing]}\n\n${input.notes.trim()}`
+        : `Timing: ${timing[input.timing]}`,
+      contractor: '',
+      materials: [],
+      photos: [],
+      documents: [],
+      warranty: null,
+      isSynthetic: true,
+    }
+    memory.createdProjects.push(project)
+    return ok(project)
+  },
+
   async listDocuments(homeRef) {
     await wait()
     const gate = requireSession<readonly import('./types.ts').DocumentSummary[]>()
     if (gate) return gate
     if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
     return ok(homeRef === BIRCH_REF ? allDocuments() : [])
+  },
+
+  async uploadPrivateArtifact() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async submitProjectForReview() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async previewProjectForReview() {
+    await wait()
+    return err('unavailable')
   },
 
   async listWarranties(homeRef) {

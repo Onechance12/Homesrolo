@@ -123,11 +123,28 @@ if (!existsSync(OUT)) {
       if (page.includes(token)) fail(`${rel(file)}: exported HTML contains private token "${token}"`)
     }
 
-    // Every outbound link must be a synthetic example.com host.
+    // Educational pages may cite this small set of primary or explicitly
+    // reviewed sources. Directory fixtures remain synthetic.
+    const reviewedSourceHosts = new Set([
+      'dallas.gov',
+      'consumer.ftc.gov',
+      'www.angi.com',
+      'www.gaf.com',
+      'www.fortworthtexas.gov',
+      'ibhs.org',
+      'www.ibhs.org',
+      'www.ncei.noaa.gov',
+      'www.nrca.net',
+      'www.rcat.net',
+      'www.tdi.texas.gov',
+    ])
     for (const match of page.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
       const url = new URL(match[1])
       const synthetic = url.hostname === 'example.com' || url.hostname.endsWith('.example.com')
-      if (!synthetic) fail(`${rel(file)}: non-synthetic external link ${url.href}`)
+      const canonical = url.hostname === 'homesrolo.com' || url.hostname === 'app.homesrolo.com'
+      if (!synthetic && !canonical && !reviewedSourceHosts.has(url.hostname)) {
+        fail(`${rel(file)}: unreviewed external link ${url.href}`)
+      }
       if (url.protocol !== 'https:') fail(`${rel(file)}: insecure external link ${url.href}`)
     }
   }
@@ -155,6 +172,14 @@ if (!existsSync(OUT)) {
   if (!existsSync(sitemapPath)) fail('sitemap.xml was not exported')
   else if (/\/companies\//.test(readFileSync(sitemapPath, 'utf8'))) {
     fail('sitemap.xml must not list synthetic company profiles')
+  }
+
+  const llmsPath = path.join(OUT, 'llms.txt')
+  if (!existsSync(llmsPath)) fail('llms.txt was not exported')
+  else {
+    const llms = readFileSync(llmsPath, 'utf8')
+    if (!llms.includes('https://homesrolo.com/services/roofing/')) fail('llms.txt must name the canonical roofing center')
+    if (/homesrolo\.example\.com|\/companies\/[a-z0-9-]+/i.test(llms)) fail('llms.txt must not advertise placeholder hosts or sample company profiles')
   }
 
   if (!existsSync(path.join(OUT, '404.html'))) fail('404.html was not exported')

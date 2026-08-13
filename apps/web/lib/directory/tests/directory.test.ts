@@ -22,13 +22,23 @@ import {
 import { NEUTRAL_ORDERING_STATEMENT, neutralOrder } from '../ordering.ts'
 import { DEMO_PROFILE_SLUG, SYNTHETIC_PROFILES, SYNTHETIC_NOTICE, findSyntheticProfile } from '../fixtures.ts'
 import {
+  ABOUT_HOMESROLO,
   CONSTITUTION_DISCLOSURES,
+  EDITORIAL_STANDARDS,
   FOR_PROFESSIONALS,
   HOW_IT_WORKS_STEPS,
   IDEAS_INTRO,
   LISTING_NOT_ENDORSEMENT,
   READING_A_LISTING,
+  ROOFING_CONTRACTOR_GUIDE,
+  ROOFING_COST_GUIDE,
+  ROOFING_DALLAS_GUIDE,
+  ROOFING_DFW_GUIDE,
+  ROOFING_FORT_WORTH_GUIDE,
   ROOFING_GUIDE,
+  ROOFING_MATERIALS_GUIDE,
+  ROOFING_QUICK_ANSWERS,
+  ROOFING_REPAIR_REPLACE_GUIDE,
   VERIFY_PRINCIPLES,
   type EducationalSection,
 } from '../../content/education.ts'
@@ -309,6 +319,15 @@ test('the site disclosures match the constitution verbatim', () => {
 
 const ALL_SECTIONS: ReadonlyArray<[string, readonly EducationalSection[]]> = [
   ['roofing guide', ROOFING_GUIDE],
+  ['roof repair or replacement guide', ROOFING_REPAIR_REPLACE_GUIDE],
+  ['roofing cost guide', ROOFING_COST_GUIDE],
+  ['roofing materials guide', ROOFING_MATERIALS_GUIDE],
+  ['roofing contractor guide', ROOFING_CONTRACTOR_GUIDE],
+  ['DFW roofing guide', ROOFING_DFW_GUIDE],
+  ['Dallas roofing guide', ROOFING_DALLAS_GUIDE],
+  ['Fort Worth roofing guide', ROOFING_FORT_WORTH_GUIDE],
+  ['about Homesrolo', ABOUT_HOMESROLO],
+  ['editorial standards', EDITORIAL_STANDARDS],
   ['how it works', HOW_IT_WORKS_STEPS],
   ['how we verify', VERIFY_PRINCIPLES],
   ['reading a listing', READING_A_LISTING],
@@ -355,9 +374,23 @@ test('the roofing guide stays educational and names the deductible warning sign'
   const joined = ROOFING_GUIDE.flatMap(section => section.body).join(' ')
   assert.match(joined, /replacement cost value/i)
   assert.match(joined, /actual cash value/i)
-  assert.match(joined, /treated as fraud in many states/i,
+  assert.match(joined, /cannot waive, absorb, rebate, or hide it/i,
     'the deductible prohibition is education a homeowner can act on safely')
   assert.doesNotMatch(joined, /\byou should\b/i, 'a guide describes; it does not instruct')
+})
+
+test('roofing quick answers are sourced where needed and pass the copy audit', () => {
+  assert.ok(ROOFING_QUICK_ANSWERS.length >= 5)
+  for (const item of ROOFING_QUICK_ANSWERS) {
+    assert.ok(item.question.endsWith('?'))
+    assert.ok(item.answer.length >= 60)
+    assert.deepEqual(auditResponse(item.question).violations, [])
+    assert.deepEqual(auditResponse(item.answer).violations, [])
+    if (item.href) {
+      assert.equal(new URL(item.href).protocol, 'https:')
+      assert.ok(item.source)
+    }
+  }
 })
 
 // =============================================================================

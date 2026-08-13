@@ -4,6 +4,7 @@ import {
   HOMEOWNER_RUNTIME_STATUS,
   HOMEOWNER_RUNTIME_VERSION,
   HOMEOWNER_RUNTIME_WARNING,
+  HOMEOWNER_SYSTEM_KINDS,
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
   createHomeWorkspaceInputSchema,
@@ -12,11 +13,16 @@ import {
   homeownerMaintenanceSchema,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
+  homeownerPropertyFactsSchema,
+  homeownerSystemSchema,
   homeownerWarrantySchema,
   parseHomeownerMaintenance,
+  parseHomeownerPropertyFacts,
   privateHomeProfileSchema,
   parseHomeownerMembership,
   parseHomeownerWarranty,
+  parseHomeownerSystem,
+  recordHomeownerIntakeInputSchema,
   requireHomeownerActionGrant,
 } from '../homeowner-runtime.v1.ts'
 
@@ -46,10 +52,18 @@ const membership = {
   createdAt: now,
 }
 
-test('runtime status describes contracts without claiming live infrastructure', () => {
+test('runtime status names the implemented private foundation without claiming later systems', () => {
   assert.equal(HOMEOWNER_RUNTIME_STATUS.contractsImplemented, true)
-  for (const [name, value] of Object.entries(HOMEOWNER_RUNTIME_STATUS)) {
-    if (name !== 'contractsImplemented') assert.equal(value, false, name)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.authenticationImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.persistenceImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.objectStorageImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.uploadsImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.jobroloTransportImplemented, true)
+  for (const name of [
+    'invitationsImplemented', 'publicSharingImplemented',
+    'productionReady',
+  ] as const) {
+    assert.equal(HOMEOWNER_RUNTIME_STATUS[name], false, name)
   }
   assert.match(HOMEOWNER_RUNTIME_WARNING, /do not prove ownership/)
 })
@@ -144,6 +158,26 @@ test('viewer cannot mutate and membership never grants third-party contribution 
   ), false)
 })
 
+test('private artifact upload is controller-only and does not grant disclosure authority', () => {
+  assert.equal(authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'artifact.upload',
+    recheckedAt: now,
+  }).authorized, true)
+  assert.deepEqual(authorizeHomeownerWorkspace({
+    principal,
+    membership: { ...membership, role: 'member' },
+    requestedHomeRef: homeRef,
+    action: 'artifact.upload',
+    recheckedAt: now,
+  }), { authorized: false, reason: 'role_denied' })
+  assert.equal('project.submit_for_review' in Object.fromEntries(
+    ['artifact.upload', 'artifact.read_metadata'].map(action => [action, true]),
+  ), false)
+})
+
 test('browser/provider identity, raw URLs, and extra authority claims are rejected', () => {
   assert.throws(() => homeownerPrincipalSchema.parse({
     ...principal,
@@ -227,6 +261,108 @@ test('private home creation requires an active verified principal but proves no 
     requestedAt: now,
     verifiedOwner: true,
   }))
+})
+
+test('initial intake preserves uncertainty and requires every system exactly once', () => {
+  const systems = HOMEOWNER_SYSTEM_KINDS.map((kind, index) => ({
+    kind,
+    present: index === 1 ? 'unknown' as const : 'yes' as const,
+    installedOrReplacedYear: index === 1
+      ? null
+      : { value: 2019 + index, precision: index === 0 ? 'approximate' as const : 'exact' as const },
+  }))
+  const command = {
+    commandRef: `hcmd_${body('i')}`,
+    homeType: 'house' as const,
+    yearBuilt: { value: 1987, precision: 'approximate' as const },
+    systems,
+    requestedAt: now,
+  }
+  const parsed = recordHomeownerIntakeInputSchema.parse(command)
+  assert.deepEqual(parsed.yearBuilt, { value: 1987, precision: 'approximate' })
+  assert.deepEqual(parsed.systems[0]?.installedOrReplacedYear,
+    { value: 2019, precision: 'approximate' })
+
+  assert.throws(() => recordHomeownerIntakeInputSchema.parse({
+    ...command,
+    systems: [...systems.slice(0, -1), systems[0]],
+  }), /each supported system exactly once/)
+  assert.throws(() => recordHomeownerIntakeInputSchema.parse({
+    ...command,
+    systems: systems.map(system => system.kind === 'heating'
+      ? { ...system, installedOrReplacedYear: { value: 2020, precision: 'exact' } }
+      : system),
+  }), /only a present system may carry a year/)
+  assert.throws(() => recordHomeownerIntakeInputSchema.parse({
+    ...command,
+    yearBuilt: { value: 2027, precision: 'exact' },
+  }), /year built may not be in the future/)
+  assert.throws(() => recordHomeownerIntakeInputSchema.parse({
+    ...command,
+    controllerPrincipalRef: principalRef,
+  }), /unrecognized/i)
+})
+
+test('persisted home facts and systems remain recollection, never upgraded to proof', () => {
+  const facts = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    propertyFactsRef: `hfac_${body('f')}`,
+    homeRef,
+    controllerPrincipalRef: principalRef,
+    homeType: 'house' as const,
+    yearBuilt: { value: 1987, precision: 'approximate' as const },
+    source: 'homeowner_recollection' as const,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const system = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    systemRef: `hsys_${body('s')}`,
+    homeRef,
+    controllerPrincipalRef: principalRef,
+    kind: 'roof' as const,
+    present: 'yes' as const,
+    installedOrReplacedYear: { value: 2019, precision: 'approximate' as const },
+    source: 'homeowner_recollection' as const,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  assert.ok(homeownerPropertyFactsSchema.parse(facts))
+  assert.ok(parseHomeownerPropertyFacts(facts))
+  assert.ok(homeownerSystemSchema.parse(system))
+  assert.ok(parseHomeownerSystem(system))
+  assert.throws(() => homeownerPropertyFactsSchema.parse({ ...facts, source: 'verified' }))
+  assert.throws(() => homeownerSystemSchema.parse({ ...system, verified: true }))
+  assert.throws(() => parseHomeownerSystem({
+    ...system,
+    present: 'no',
+  }), /only a present system/i)
+  assert.throws(() => parseHomeownerSystem({
+    ...system,
+    installedOrReplacedYear: { value: 2027, precision: 'exact' },
+  }), /future/i)
+})
+
+test('only a fresh controller grant may record the initial intake', () => {
+  const controller = authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'intake.record',
+    recheckedAt: now,
+  })
+  assert.equal(requireHomeownerActionGrant(controller, 'intake.record')?.action, 'intake.record')
+
+  const member = authorizeHomeownerWorkspace({
+    principal,
+    membership: { ...membership, role: 'member' },
+    requestedHomeRef: homeRef,
+    action: 'intake.record',
+    recheckedAt: now,
+  })
+  assert.deepEqual(member, { authorized: false, reason: 'role_denied' })
 })
 
 test('project commands use the runtime vocabulary and reject impossible dates', () => {

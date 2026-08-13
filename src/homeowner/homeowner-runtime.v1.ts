@@ -5,20 +5,21 @@ import { isRealCalendarDate } from '../contracts/home-file-record.v1.ts'
  * Server-side contracts for the first private HomesRolo homeowner workspace.
  *
  * This module does not implement authentication, a database, object storage,
- * uploads, public sharing, or Jobrolo transport. It defines the boundary those
- * adapters must satisfy so the browser can never decide who may access a home.
+ * public sharing, or automatic professional distribution. It defines the
+ * boundary those adapters must satisfy so the browser can never decide who
+ * may access a home or where a roof request goes.
  */
 export const HOMEOWNER_RUNTIME_VERSION = 'homeowner-runtime.v1-draft' as const
 
 export const HOMEOWNER_RUNTIME_STATUS = Object.freeze({
   contractsImplemented: true,
-  authenticationImplemented: false,
-  persistenceImplemented: false,
-  objectStorageImplemented: false,
-  uploadsImplemented: false,
+  authenticationImplemented: true,
+  persistenceImplemented: true,
+  objectStorageImplemented: true,
+  uploadsImplemented: true,
   invitationsImplemented: false,
   publicSharingImplemented: false,
-  jobroloTransportImplemented: false,
+  jobroloTransportImplemented: true,
   productionReady: false,
 } as const)
 
@@ -85,10 +86,13 @@ export function parseHomeownerMembership(input: unknown): HomeownerMembership {
 export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'workspace.read',
   'workspace.update',
+  'intake.record',
   'project.create',
   'project.update',
   'artifact.create_metadata',
+  'artifact.upload',
   'artifact.read_metadata',
+  'project.submit_for_review',
   'warranty.create',
   'warranty.update',
   'maintenance.create',
@@ -223,6 +227,92 @@ export const privateHomeProfileSchema = z.object({
   updatedAt: utcInstant,
 }).strict()
 
+export const HOMEOWNER_SYSTEM_KINDS = Object.freeze([
+  'roof',
+  'heating',
+  'cooling',
+  'water_heater',
+  'gutters',
+  'foundation',
+] as const)
+
+export const homeownerSystemKindSchema = z.enum(HOMEOWNER_SYSTEM_KINDS)
+
+export const homeownerApproximateYearSchema = z.object({
+  value: z.number().int().min(1800).max(9999),
+  precision: z.enum(['exact', 'approximate']),
+}).strict()
+
+export const homeownerHomeTypeSchema = z.enum([
+  'house',
+  'townhouse',
+  'condo',
+  'other',
+  'unknown',
+])
+
+export const homeownerPropertyFactsSchema = z.object({
+  recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
+  propertyFactsRef: opaqueRef('hfac'),
+  homeRef: opaqueRef('hhom'),
+  controllerPrincipalRef: opaqueRef('hprn'),
+  homeType: homeownerHomeTypeSchema,
+  yearBuilt: homeownerApproximateYearSchema.nullable(),
+  source: z.literal('homeowner_recollection'),
+  revision: z.number().int().min(1),
+  createdAt: utcInstant,
+  updatedAt: utcInstant,
+}).strict()
+
+export const homeownerSystemSchema = z.object({
+  recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
+  systemRef: opaqueRef('hsys'),
+  homeRef: opaqueRef('hhom'),
+  controllerPrincipalRef: opaqueRef('hprn'),
+  kind: homeownerSystemKindSchema,
+  present: z.enum(['yes', 'no', 'unknown']),
+  installedOrReplacedYear: homeownerApproximateYearSchema.nullable(),
+  source: z.literal('homeowner_recollection'),
+  revision: z.number().int().min(1),
+  createdAt: utcInstant,
+  updatedAt: utcInstant,
+}).strict()
+
+function assertYearNotAfterInstant(
+  year: z.infer<typeof homeownerApproximateYearSchema> | null,
+  instant: string,
+  label: string,
+): void {
+  if (year && year.value > new Date(instant).getUTCFullYear()) {
+    throw new Error(`${label} may not be in the future`)
+  }
+}
+
+export function parseHomeownerPropertyFacts(input: unknown) {
+  const facts = homeownerPropertyFactsSchema.parse(input)
+  if (facts.updatedAt < facts.createdAt) {
+    throw new Error('Property facts may not be updated before they were created')
+  }
+  assertYearNotAfterInstant(facts.yearBuilt, facts.createdAt, 'Year built')
+  return facts
+}
+
+export function parseHomeownerSystem(input: unknown) {
+  const system = homeownerSystemSchema.parse(input)
+  if (system.present !== 'yes' && system.installedOrReplacedYear !== null) {
+    throw new Error('Only a present system may carry an installed or replaced year')
+  }
+  if (system.updatedAt < system.createdAt) {
+    throw new Error('A system record may not be updated before it was created')
+  }
+  assertYearNotAfterInstant(
+    system.installedOrReplacedYear,
+    system.createdAt,
+    'Installed or replaced year',
+  )
+  return system
+}
+
 export const homeownerProjectSchema = z.object({
   recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
   projectRef: opaqueRef('hprj'),
@@ -320,6 +410,8 @@ export function parseHomeownerMaintenance(input: unknown) {
 }
 
 export type PrivateHomeProfile = z.infer<typeof privateHomeProfileSchema>
+export type HomeownerPropertyFacts = z.infer<typeof homeownerPropertyFactsSchema>
+export type HomeownerSystem = z.infer<typeof homeownerSystemSchema>
 export type HomeownerProject = z.infer<typeof homeownerProjectSchema>
 export type HomeownerArtifactMetadata = z.infer<typeof homeownerArtifactMetadataSchema>
 export type HomeownerWarranty = z.infer<typeof homeownerWarrantySchema>
@@ -342,8 +434,68 @@ export const createHomeownerProjectInputSchema = z.object({
   requestedAt: utcInstant,
 }).strict()
 
+const recordHomeownerSystemInputSchema = z.object({
+  kind: homeownerSystemKindSchema,
+  present: z.enum(['yes', 'no', 'unknown']),
+  installedOrReplacedYear: homeownerApproximateYearSchema.nullable(),
+}).strict().superRefine((system, context) => {
+  if (system.present !== 'yes' && system.installedOrReplacedYear !== null) {
+    context.addIssue({
+      code: 'custom',
+      path: ['installedOrReplacedYear'],
+      message: 'only a present system may carry a year',
+    })
+  }
+})
+
+export const recordHomeownerIntakeInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  homeType: homeownerHomeTypeSchema,
+  yearBuilt: homeownerApproximateYearSchema.nullable(),
+  systems: z.array(recordHomeownerSystemInputSchema).length(HOMEOWNER_SYSTEM_KINDS.length),
+  requestedAt: utcInstant,
+}).strict().superRefine((command, context) => {
+  const kinds = command.systems.map(system => system.kind)
+  if (new Set(kinds).size !== HOMEOWNER_SYSTEM_KINDS.length
+    || HOMEOWNER_SYSTEM_KINDS.some(kind => !kinds.includes(kind))) {
+    context.addIssue({
+      code: 'custom',
+      path: ['systems'],
+      message: 'the intake must contain each supported system exactly once',
+    })
+  }
+  const requestedYear = new Date(command.requestedAt).getUTCFullYear()
+  if (command.yearBuilt && command.yearBuilt.value > requestedYear) {
+    context.addIssue({ code: 'custom', path: ['yearBuilt'], message: 'year built may not be in the future' })
+  }
+  command.systems.forEach((system, index) => {
+    if (system.installedOrReplacedYear
+      && system.installedOrReplacedYear.value > requestedYear) {
+      context.addIssue({
+        code: 'custom',
+        path: ['systems', index, 'installedOrReplacedYear'],
+        message: 'installed or replaced year may not be in the future',
+      })
+    }
+  })
+})
+
 export type CreateHomeWorkspaceInput = z.infer<typeof createHomeWorkspaceInputSchema>
 export type CreateHomeownerProjectInput = z.infer<typeof createHomeownerProjectInputSchema>
+export type RecordHomeownerIntakeInput = z.infer<typeof recordHomeownerIntakeInputSchema>
+
+export const storeHomeownerArtifactInputSchema = z.object({
+  commandRef: opaqueRef('hcmd'),
+  projectRef: opaqueRef('hprj').optional(),
+  kind: homeownerArtifactMetadataSchema.shape.kind,
+  displayName: homeownerArtifactMetadataSchema.shape.displayName,
+  mediaType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  byteLength: homeownerArtifactMetadataSchema.shape.byteLength,
+  payloadSha256: homeownerArtifactMetadataSchema.shape.payloadSha256,
+  requestedAt: utcInstant,
+}).strict()
+
+export type StoreHomeownerArtifactInput = z.infer<typeof storeHomeownerArtifactInputSchema>
 
 export type HomeCreationDecision =
   | { readonly authorized: true; readonly principalRef: string }
@@ -377,6 +529,8 @@ export interface HomeownerRepositoryPort {
   ): Promise<readonly HomeownerMembership[]>
   readMembership(principalRef: string, homeRef: string): Promise<HomeownerMembership | null>
   readHome(grant: AuthorizedHomeownerWorkspace): Promise<PrivateHomeProfile | null>
+  readPropertyFacts(grant: AuthorizedHomeownerWorkspace): Promise<HomeownerPropertyFacts | null>
+  listSystems(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerSystem[]>
   listProjects(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerProject[]>
   listArtifactMetadata(
     grant: AuthorizedHomeownerWorkspace,
@@ -397,9 +551,21 @@ export interface HomeownerCommandPort {
     readonly grant: AuthorizedHomeownerAction<'project.create'>
     readonly command: CreateHomeownerProjectInput
   }): Promise<HomeownerProject>
+  recordInitialIntake(input: {
+    readonly grant: AuthorizedHomeownerAction<'intake.record'>
+    readonly command: RecordHomeownerIntakeInput
+  }): Promise<{
+    readonly propertyFacts: HomeownerPropertyFacts
+    readonly systems: readonly HomeownerSystem[]
+  }>
 }
 
 export interface HomeownerPrivateObjectPort {
+  storeArtifact(input: {
+    readonly grant: AuthorizedHomeownerAction<'artifact.upload'>
+    readonly command: StoreHomeownerArtifactInput
+    readonly bytes: Uint8Array
+  }): Promise<HomeownerArtifactMetadata>
   readExactObject(input: {
     readonly grant: AuthorizedHomeownerWorkspace
     readonly storageObjectRef: string
@@ -419,5 +585,5 @@ export interface HomeownerAuditPort {
 }
 
 export const HOMEOWNER_RUNTIME_WARNING =
-  'These contracts do not prove ownership, authenticate a person, persist data, expose an upload route, ' +
-  'or authorize third-party content. A production adapter must use fresh server-side identity and membership state.'
+  'These private workspaces do not prove ownership or legal control. The configured adapter authenticates an email ' +
+  'and persists private homeowner-recalled data and private files. It exposes no public share or third-party content grant.'
