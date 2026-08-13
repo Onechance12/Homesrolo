@@ -60,8 +60,9 @@ export default function ForProfessionalsPage() {
                 over your files. The release names what was published and nothing else.
               </div>
               <div className="note">
-                <strong>Nothing is live.</strong> There is no sign-up, no claiming a profile, and no account
-                system in this preview.
+                <strong>The professional side is not live.</strong> Professional sign-up, profile claiming,
+                and professional accounts are not available yet. Homeowner accounts and private roof projects
+                are a separate live system.
               </div>
             </div>
           </div>

@@ -23,6 +23,8 @@ const robots = read('app/robots.ts')
 const sitemap = read('app/sitemap.ts')
 const professionals = read('app/professionals/page.tsx')
 const roofing = read('app/services/roofing/page.tsx')
+const roofingArticle = read('components/RoofingArticle.tsx')
+const howItWorks = read('app/how-it-works/page.tsx')
 const site = read('lib/site.ts')
 
 // --- target size (WCAG 2.5.8) -------------------------------------------------
@@ -125,9 +127,24 @@ test('the profile renders the retraction disclaimers, not just the model', () =>
 
 test('the homeowner conversion path starts a project instead of publishing a contractor directory', () => {
   assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/app\.homesrolo\.com'/)
+  assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
   assert.match(site, /label: 'Start a project'/)
   assert.match(professionals, /Create my home account/)
+  assert.match(professionals, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
   assert.match(professionals, /Start with your home, not a contractor list/)
   assert.doesNotMatch(professionals, /SYNTHETIC_PROFILES|sample listings|ordered by name/)
   assert.match(roofing, /Start my roof project/)
+  assert.match(roofing, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
+  assert.match(roofingArticle, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
+})
+
+test('how it works states the live homeowner boundary without overclaiming', () => {
+  assert.match(howItWorks, /Private passwordless homeowner accounts/)
+  assert.match(howItWorks, /private home files/)
+  assert.match(howItWorks, /private\s+roof-project requests work today/)
+  for (const unavailable of ['File uploads', 'invitations', 'sharing', 'homeowner assistant', 'professional network']) {
+    assert.match(howItWorks, new RegExp(unavailable))
+  }
+  assert.match(howItWorks, /does not hire a\s+contractor or send the request outside the homeowner account/)
+  assert.doesNotMatch(howItWorks, /There are no accounts|no home\s+files/)
 })

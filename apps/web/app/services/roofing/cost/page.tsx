@@ -16,9 +16,9 @@ const SOURCES = [
 ] as const
 
 const RELATED = [
+  { href: '/services/roofing/repair-or-replace/', title: 'Repair or replace?', description: 'Compare the evidence for a targeted repair and a complete roof system.' },
   { href: '/services/roofing/materials/', title: 'Compare roofing materials', description: 'Separate material categories from actual product and assembly details.' },
   { href: '/services/roofing/choose-a-contractor/', title: 'Compare contractors', description: 'The evidence and contract terms that matter before a project starts.' },
-  { href: '/services/roofing/dfw/', title: 'DFW roofing guide', description: 'Weather, local rules, and records for North Texas homes.' },
 ] as const
 
 export default function RoofingCostPage() {

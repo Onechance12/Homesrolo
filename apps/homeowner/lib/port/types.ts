@@ -19,7 +19,7 @@
  * for the flags a test pins to `false` until the real runtime exists.
  */
 
-/** What is actually implemented behind the port today. All false: mock only. */
+/** What is actually implemented behind the port today. */
 export const PORT_IMPLEMENTATION_STATUS = Object.freeze({
   realAuthenticationImplemented: true,
   realPersistenceImplemented: true,
@@ -324,7 +324,10 @@ export interface HomeownerDataPort {
    * session capabilities report it live. Acceptance is generic on purpose: the
    * result never reveals whether the address exists.
    */
-  requestMagicLink(email: string): Promise<PortResult<{ readonly accepted: true }>>
+  requestMagicLink(
+    email: string,
+    intent?: RoofingNeed | null,
+  ): Promise<PortResult<{ readonly accepted: true }>>
   signOut(): Promise<void>
 
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { HomeownerAuthService } from '../server/auth.ts'
+import { validMagicLinkCallbackQuery } from '../server/auth-http.ts'
 import { readHomeownerRuntimeConfiguration } from '../server/config.ts'
 import {
   SESSION_COOKIE_NAME,
@@ -30,6 +31,23 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
   })
+})
+
+test('magic-link callback query permits one bounded intent and rejects ambiguity', () => {
+  assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
+    token_hash: 't'.repeat(43), type: 'email',
+  })), true)
+  assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
+    token_hash: 't'.repeat(43), type: 'email', intent: 'repair',
+  })), true)
+  for (const query of [
+    'token_hash=x&type=email&intent=insurance_claim',
+    'token_hash=x&type=email&next=https://evil.test',
+    'token_hash=x&token_hash=y&type=email',
+    'token_hash=x&type=email&intent=repair&intent=replacement',
+  ]) {
+    assert.equal(validMagicLinkCallbackQuery(new URLSearchParams(query)), false, query)
+  }
 })
 
 test('opaque sessions are hashed at rest and cookies carry the browser security attributes', () => {
@@ -77,7 +95,7 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
     now: () => new Date('2026-08-12T10:00:00.000Z'),
   })
 
-  assert.equal(await service.requestMagicLink(' Person@Example.com '), 'accepted')
+  assert.equal(await service.requestMagicLink(' Person@Example.com ', 'storm_damage'), 'accepted')
   const handle = await service.completeMagicLink('t'.repeat(43))
   assert.ok(handle)
   assert.match(handle, /^[A-Za-z0-9_-]{43}$/)
@@ -85,7 +103,7 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
     email: 'person@example.com',
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: 'https://app.homesrolo.com/auth/complete',
+      emailRedirectTo: 'https://app.homesrolo.com/auth/complete?intent=storm_damage',
     },
   })
   assert.deepEqual(authCalls[1], { token_hash: 't'.repeat(43), type: 'email' })

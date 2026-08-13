@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { use, useState } from 'react'
 import { usePort, usePortMode, useSession } from '../../lib/port/provider.tsx'
 import { SYNTHETIC_NOTICE } from '../../lib/port/types.ts'
+import { roofingIntent, withRoofingIntent } from '../../lib/roofing-intent.ts'
+import type { RoofingNeed } from '../../lib/port/types.ts'
 import { HouseMark } from '../../components/icons.tsx'
 import { Skeleton } from '../../components/states.tsx'
 
@@ -29,7 +31,7 @@ type MagicLinkState =
   | { kind: 'invalid' }
   | { kind: 'failed' }
 
-function MagicLinkForm() {
+function MagicLinkForm({ intent }: { intent: RoofingNeed | null }) {
   const port = usePort()
   const [email, setEmail] = useState('')
   const [state, setState] = useState<MagicLinkState>({ kind: 'idle' })
@@ -37,7 +39,7 @@ function MagicLinkForm() {
   async function request(event: React.FormEvent) {
     event.preventDefault()
     setState({ kind: 'sending' })
-    const result = await port.requestMagicLink(email.trim())
+    const result = await port.requestMagicLink(email.trim(), intent)
     if (result.ok) { setState({ kind: 'accepted' }); return }
     if (result.error === 'rate_limited') { setState({ kind: 'rate_limited' }); return }
     if (result.error === 'invalid') { setState({ kind: 'invalid' }); return }
@@ -130,7 +132,13 @@ function SyntheticEntry() {
   )
 }
 
-export default function SignInPage() {
+export default function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ intent?: string | string[] }>
+}) {
+  const query = use(searchParams)
+  const intent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
   const mode = usePortMode()
   const { state: session } = useSession()
 
@@ -142,8 +150,8 @@ export default function SignInPage() {
           <p className="mono" style={{ marginBottom: '0.4rem' }}>Homeowner sign in</p>
           <h1 style={{ fontSize: '1.5rem' }}>Open your home&rsquo;s file.</h1>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
-            Every roof, repair, document, and warranty — kept on the home itself,
-            not scattered across contractors and inboxes.
+            Start with the home and its roof projects. Documents, photos, and warranties
+            are planned for the same private file as Homesrolo grows.
           </p>
 
           {mode === 'synthetic' ? (
@@ -159,11 +167,13 @@ export default function SignInPage() {
                   ? `You are already signed in as ${session.session.displayName}.`
                   : 'You are already signed in.'}
               </p>
-              <Link className="btn btn--primary btn--block" href="/homes">Go to your homes</Link>
+              <Link className="btn btn--primary btn--block" href={withRoofingIntent('/homes', intent)}>
+                {intent ? 'Continue my roof project' : 'Go to your homes'}
+              </Link>
             </div>
           ) : session.capabilities.magicLinkSignIn ? (
             <div style={{ marginTop: '1.25rem' }}>
-              <MagicLinkForm />
+              <MagicLinkForm intent={intent} />
             </div>
           ) : (
             <div className="state" style={{ marginTop: '1.25rem' }}>

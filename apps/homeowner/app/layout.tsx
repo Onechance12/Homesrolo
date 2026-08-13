@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     default: 'Homesrolo — your home file',
     template: '%s — Homesrolo',
   },
-  description: 'Keep the projects, documents, photos, warranties, and maintenance history for your home in one private file.',
+  description: 'Start a private home record and keep roof projects connected to the property. Documents, photos, warranties, and maintenance history are planned for the same file.',
   // Private account pages should never appear in search results.
   robots: { index: false, follow: false },
 }

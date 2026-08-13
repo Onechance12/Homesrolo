@@ -73,6 +73,59 @@ export const ROOFING_GUIDE: readonly EducationalSection[] = Object.freeze([
   },
 ])
 
+/** /services/roofing/repair-or-replace: evidence-led repairability guide. */
+export const ROOFING_REPAIR_REPLACE_GUIDE: readonly EducationalSection[] = Object.freeze([
+  {
+    heading: 'Start with the problem, not the roof’s birthday',
+    body: Object.freeze([
+      'Installation date is useful context, but age alone does not prove that a roof needs replacement. The material, installation, maintenance, storm history, earlier repairs, ventilation, and present condition all affect repairability.',
+      'A useful evaluation identifies the actual problem first: where water entered, which component failed, how far the condition extends, and what remains hidden. The answer may be a small flashing repair, a larger section repair, or a complete roof system.',
+    ]),
+  },
+  {
+    heading: 'What makes a targeted roof repair credible',
+    body: Object.freeze([
+      'A repair is easier to support when the problem is isolated, the surrounding roof is serviceable, compatible replacement material exists, the deck and nearby details are sound, and the proposed work addresses the source instead of covering the symptom.',
+      'The written repair scope should name the location, material to be removed, deck or flashing work, replacement components, tie-in method, photographs, price, and workmanship coverage. “Seal leak” is not enough detail to compare or verify later.',
+    ]),
+  },
+  {
+    heading: 'When replacement deserves a real comparison',
+    body: Object.freeze([
+      'A full replacement becomes more reasonable to compare when problems repeat across different slopes, the roof covering is too brittle to work around reliably, matching material is unavailable, deeper assembly problems are widespread, or several repairs would still leave an uncertain system.',
+      'Replacement is not proven by a sales opinion. The comparison should show the observed conditions, the limits of a repair, the complete replacement scope, and which future costs or unresolved areas remain under each option.',
+    ]),
+  },
+  {
+    heading: 'A leak does not identify its own source',
+    body: Object.freeze([
+      'Water can travel along decking, framing, fasteners, or underlayment before it appears on a ceiling. The visible stain may be below a pipe boot, wall flashing, valley, vent, skylight, fastener, condensation problem, or opening farther upslope.',
+      'A useful leak record includes the first observed time, weather at the time, interior photographs, attic observations when safely accessible, roof-area photographs, earlier repair history, and the test or reasoning used to identify the source.',
+    ]),
+  },
+  {
+    heading: 'Storm evidence and roof condition are different records',
+    body: Object.freeze([
+      'A weather report can document hail or wind reported near an area and time. It cannot inspect one roof, decide what caused one mark, define the construction scope, or interpret what one policy covers.',
+      'After a storm, photographs, temporary-protection receipts, inspection observations, insurance communications, repair proposals, and the final construction record should keep their own source and date. That separation makes disagreements easier to understand.',
+    ]),
+  },
+  {
+    heading: 'Compare three numbers instead of one',
+    body: Object.freeze([
+      'The useful comparison separates immediate protection or diagnosis, a durable repair, and complete replacement. Each price should describe its scope, exclusions, wood-repair allowance, permit responsibility, warranty, and what happens if concealed conditions are found.',
+      'A low repair price can be expensive if it repeats without solving the source. A replacement can also be unnecessary when a defined local repair restores a serviceable roof. Comparable written scopes make that tradeoff visible.',
+    ]),
+  },
+  {
+    heading: 'Ask for the conclusion in writing',
+    body: Object.freeze([
+      'A decision-ready inspection identifies each relevant area on a roof diagram, includes clear photographs, distinguishes observation from opinion, explains what is repairable, states important limitations, and names any material-matching or code issue.',
+      'Keep that inspection beside the repair and replacement proposals. The record preserves why the decision was made and gives the next roofer, buyer, inspector, or warranty provider more than a date and a total.',
+    ]),
+  },
+])
+
 /** /services/roofing/cost: how to compare roofing prices. */
 export const ROOFING_COST_GUIDE: readonly EducationalSection[] = Object.freeze([
   {

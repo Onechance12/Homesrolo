@@ -272,7 +272,21 @@ test('disabled affordances say why, instead of pretending', () => {
   const settings = read('app/home/[homeId]/settings/page.tsx')
   assert.match(settings, /not built yet/i)
   const documents = read('app/home/[homeId]/documents/page.tsx')
-  assert.match(documents, /Uploads are not built/i)
+  assert.match(documents, /Uploads are not available yet/i)
+})
+
+test('one bounded roofing intent continues through the existing homeowner flow', () => {
+  const signin = read('app/signin/page.tsx')
+  const homes = read('app/homes/page.tsx')
+  const newHome = read('app/homes/new/page.tsx')
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  for (const content of [signin, homes, newHome]) {
+    assert.match(content, /withRoofingIntent/)
+    assert.match(content, /roofingIntent/)
+  }
+  assert.match(projects, /carriedIntent/)
+  assert.match(projects, /before anything is saved/)
+  assert.doesNotMatch([signin, homes, newHome, projects].join('\n'), /insurance_claim/)
 })
 
 test('photo plates are drawn and say so', () => {

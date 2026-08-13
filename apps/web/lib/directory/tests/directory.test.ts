@@ -38,6 +38,7 @@ import {
   ROOFING_GUIDE,
   ROOFING_MATERIALS_GUIDE,
   ROOFING_QUICK_ANSWERS,
+  ROOFING_REPAIR_REPLACE_GUIDE,
   VERIFY_PRINCIPLES,
   type EducationalSection,
 } from '../../content/education.ts'
@@ -318,6 +319,7 @@ test('the site disclosures match the constitution verbatim', () => {
 
 const ALL_SECTIONS: ReadonlyArray<[string, readonly EducationalSection[]]> = [
   ['roofing guide', ROOFING_GUIDE],
+  ['roof repair or replacement guide', ROOFING_REPAIR_REPLACE_GUIDE],
   ['roofing cost guide', ROOFING_COST_GUIDE],
   ['roofing materials guide', ROOFING_MATERIALS_GUIDE],
   ['roofing contractor guide', ROOFING_CONTRACTOR_GUIDE],

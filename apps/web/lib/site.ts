@@ -15,6 +15,12 @@ export const SITE_ORIGIN = 'https://homesrolo.com'
 /** The separate authenticated homeowner application. */
 export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
 
+/**
+ * The only public-to-private roofing handoff. The value is deliberately a
+ * closed enum rather than homeowner text, an address, or another identifier.
+ */
+export const HOMEOWNER_ROOFING_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?intent=not_sure`
+
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
@@ -34,6 +40,7 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/professionals/',
   '/academy/',
   '/services/roofing/',
+  '/services/roofing/repair-or-replace/',
   '/services/roofing/cost/',
   '/services/roofing/materials/',
   '/services/roofing/choose-a-contractor/',
