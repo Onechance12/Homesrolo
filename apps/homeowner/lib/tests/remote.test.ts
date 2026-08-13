@@ -533,9 +533,21 @@ test('magic-link request and sign-out use only their exact same-origin routes', 
   assert.deepEqual(await port.requestMagicLink(' Person@Example.com '), {
     ok: true, value: { accepted: true },
   })
+  assert.deepEqual(await port.requestMagicLink(' Person@Example.com ', 'storm_damage'), {
+    ok: true, value: { accepted: true },
+  })
+  assert.deepEqual(await port.requestMagicLink(
+    ' Person@Example.com ',
+    'insurance_claim' as 'repair',
+  ), { ok: false, error: 'invalid' })
   await port.signOut()
   assert.deepEqual(requests, [
     { method: 'POST', path: '/api/v1/auth/magic-link', body: { email: 'person@example.com' } },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/magic-link',
+      body: { email: 'person@example.com', intent: 'storm_damage' },
+    },
     { method: 'POST', path: '/api/v1/auth/signout' },
   ])
 })

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { type EducationalSection } from '../lib/content/education.ts'
-import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../lib/site.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL, SITE_NAME, SITE_ORIGIN } from '../lib/site.ts'
 import { PageHeader, Sections } from './Prose.tsx'
 
 export type RoofingSource = {
@@ -103,7 +103,7 @@ export function RoofingArticle({
               <h2 id="roof-project-record">Do not wait until the job is over to build the roof record</h2>
               <p>A roof is covered up as it is built. Once the shingles or panels are down, the deck repairs, underlayment, flashing, fasteners, and ventilation details are hard to verify. The useful record is built while the work is happening.</p>
               <p>Start the home and roof project in Homesrolo, then use the record as the project’s organizing point. The lasting roof history comes from the evidence collected along the way, not from a contractor folder that disappears when the job closes.</p>
-              <p><a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my home record</a></p>
+              <p><a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start my home record</a></p>
             </div>
             <div className="stack" style={{ '--stack-gap': '1rem' } as React.CSSProperties}>
               <article className="card">

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { usePort, usePortMode, useSession } from '../../../lib/port/provider.tsx'
 import { HouseMark } from '../../../components/icons.tsx'
 import { UnauthorizedState } from '../../../components/states.tsx'
@@ -12,6 +12,7 @@ import {
 } from '../../../lib/intake/machine.ts'
 import { SYSTEM_LABEL, SYSTEM_ORDER, type IntakeDraft } from '../../../lib/intake/script.ts'
 import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
+import { roofingIntent, withRoofingIntent } from '../../../lib/roofing-intent.ts'
 
 /**
  * Opening a home's file is a conversation, not a form. The script is
@@ -73,7 +74,13 @@ function ReviewCard({ draft }: { draft: IntakeDraft }) {
   )
 }
 
-export default function NewHomePage() {
+export default function NewHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ intent?: string | string[] }>
+}) {
+  const query = use(searchParams)
+  const intent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
   const port = usePort()
   const mode = usePortMode()
   const { state: session } = useSession()
@@ -169,7 +176,9 @@ export default function NewHomePage() {
       await saveIntake(result.value.homeRef, draft)
       return
     }
-    router.push(`/home/${result.value.homeRef}`)
+    router.push(intent
+      ? withRoofingIntent(`/home/${result.value.homeRef}/projects`, intent)
+      : `/home/${result.value.homeRef}`)
   }
 
   return (
@@ -177,9 +186,11 @@ export default function NewHomePage() {
       <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
       <main id="main" tabIndex={-1} className="gate__main">
         <div className="gate__card gate__card--wide">
-          {session.kind === 'signed_out' ? <UnauthorizedState /> : (
+          {session.kind === 'signed_out' ? (
+            <UnauthorizedState signInHref={withRoofingIntent('/signin', intent)} />
+          ) : (
             <>
-              <Link href="/homes" className="backlink">← Back to your homes</Link>
+              <Link href={withRoofingIntent('/homes', intent)} className="backlink">← Back to your homes</Link>
               <p className="mono" style={{ marginBottom: '0.4rem' }}>New home file · guided</p>
               <h1 style={{ fontSize: '1.4rem' }}>Tell us about the home.</h1>
               <p className="mono" style={{ marginTop: '0.35rem' }}>
@@ -298,8 +309,13 @@ export default function NewHomePage() {
                         stored as <strong>your recollection</strong>. They are not a
                         contractor verification or legal proof of ownership.
                       </p>
-                      <Link className="btn btn--primary" href={`/home/${submit.homeRef}`}>
-                        Open this home’s file
+                      <Link
+                        className="btn btn--primary"
+                        href={intent
+                          ? withRoofingIntent(`/home/${submit.homeRef}/projects`, intent)
+                          : `/home/${submit.homeRef}`}
+                      >
+                        {intent ? 'Continue to the roof project' : 'Open this home’s file'}
                       </Link>
                     </div>
                   ) : submit.kind === 'partial' ? (
@@ -329,7 +345,7 @@ export default function NewHomePage() {
                         The server says you are signed out, so nothing was saved.
                         Your draft stays on this screen.
                       </p>
-                      <UnauthorizedState />
+                      <UnauthorizedState signInHref={withRoofingIntent('/signin', intent)} />
                     </div>
                   ) : (
                     <>

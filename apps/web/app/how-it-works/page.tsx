@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
 import { HOW_IT_WORKS_STEPS } from '../../lib/content/education.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
 
 export const metadata = {
   title: 'How it works',
@@ -41,19 +42,25 @@ export default function HowItWorksPage() {
       <section className="section">
         <div className="shell">
           <div className="prose">
-            <h2>What is not built yet</h2>
+            <h2>What works today, and what comes next</h2>
             <p>
-              This is a preview of the shape, not a working product. There are no accounts, no uploads, no home
-              files, no sharing, and no assistant. Every company and project shown anywhere on this site is
-              synthetic.
+              Private passwordless homeowner accounts, private home files, guided starting details, and private
+              roof-project requests work today. They live in a separate authenticated homeowner application; a
+              project started there is saved to that homeowner&rsquo;s home file.
             </p>
             <p>
-              The private home file and the cross-system sharing contract are designed and reviewed, and both are
-              deliberately inert: the sharing layer authorises nothing at all in its current state.
+              File uploads, invitations, sharing, the homeowner assistant, and delivery of a project to the
+              Homesrolo professional network are not available yet. Starting a private project does not hire a
+              contractor or send the request outside the homeowner account.
             </p>
-            <p style={{ marginTop: '1.5rem' }}>
+            <p>
+              Public company and project examples remain synthetic. A private home file never becomes public just
+              because an account or project was created.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+              <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a roof project</a>
               <Link className="btn btn--quiet" href="/how-we-verify/">What a verified fact means</Link>
-            </p>
+            </div>
           </div>
         </div>
       </section>

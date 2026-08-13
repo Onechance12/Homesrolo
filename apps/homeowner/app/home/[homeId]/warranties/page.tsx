@@ -1,7 +1,7 @@
 'use client'
 
 import { use } from 'react'
-import { usePort } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 
@@ -24,6 +24,7 @@ function coverageRemaining(startsOn: string, endsOn: string): number {
 export default function WarrantiesPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
+  const mode = usePortMode()
   const { state, retry } = usePortCall(() => port.listWarranties(homeId), value => value.length === 0)
 
   return (
@@ -74,7 +75,11 @@ export default function WarrantiesPage({ params }: { params: Promise<{ homeId: s
         </div>
       )}
 
-      <p className="mono">Coverage bars measure against the demo&rsquo;s fixed date of {DEMO_TODAY}.</p>
+      <p className="mono">
+        {mode === 'synthetic'
+          ? `Coverage bars in this demo use the fixed date ${DEMO_TODAY}.`
+          : 'Warranty filing is not available yet. No coverage is inferred from a roof project.'}
+      </p>
     </div>
   )
 }
