@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
-import { HOMEOWNER_APP_ORIGIN } from '../../lib/site.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
 
 export const metadata = {
   title: 'Start a roof project',
@@ -18,7 +18,7 @@ export default function ProfessionalsPage() {
             lede="Create a private Homesrolo account, add the home, and tell us what the roof needs. Your home record becomes the starting point for the project and stays with the property."
           />
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '2rem' }}>
-            <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>
+            <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>
               Create my home account <span className="btn__arrow" aria-hidden="true">&rarr;</span>
             </a>
             <Link className="btn btn--quiet" href="/services/roofing/">Review the roofing guide</Link>

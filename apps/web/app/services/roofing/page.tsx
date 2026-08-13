@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
 import { ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
-import { HOMEOWNER_APP_ORIGIN, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
   title: 'Texas roofing guide: costs, materials, contractors, and DFW rules',
@@ -16,6 +16,11 @@ export const metadata: Metadata = {
 }
 
 const GUIDES = [
+  {
+    href: '/services/roofing/repair-or-replace/',
+    title: 'Roof repair or replacement?',
+    body: 'A condition-first framework for leaks, isolated damage, repeated problems, material matching, and written repairability evidence.',
+  },
   {
     href: '/services/roofing/cost/',
     title: 'Roof replacement cost in Texas',
@@ -81,7 +86,7 @@ export default function RoofingGuidePage() {
             <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides. Important claims link to the source so you can check them.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
-            <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Start my roof project</a>
+            <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start my roof project</a>
             <Link className="btn btn--quiet" href="/professionals/">See how the project works</Link>
           </div>
         </div>
@@ -108,7 +113,7 @@ export default function RoofingGuidePage() {
             <article className="card">
               <h3 className="card__title">The roof is old or keeps needing repair</h3>
               <p>Find the installation date, earlier invoices, repair photographs, product name, permit, and warranty. A repair-versus-replacement conversation is much more useful when the roof’s age and problem history are known.</p>
-              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/materials/">Compare roof systems</Link></p>
+              <p style={{ marginTop: '1rem' }}><Link href="/services/roofing/repair-or-replace/">Use the repair-or-replace guide</Link></p>
             </article>
             <article className="card">
               <h3 className="card__title">You already have roofing bids</h3>

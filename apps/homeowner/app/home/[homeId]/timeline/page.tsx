@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { use } from 'react'
-import { usePort } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 
@@ -14,6 +14,7 @@ import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.
 export default function TimelinePage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
+  const mode = usePortMode()
   const timeline = usePortCall(() => port.listTimeline(homeId), value => value.length === 0)
   const maintenance = usePortCall(() => port.listMaintenance(homeId), value => value.length === 0)
 
@@ -78,7 +79,11 @@ export default function TimelinePage({ params }: { params: Promise<{ homeId: str
         )}
       </section>
 
-      <p className="mono">A durable record outlives owners and companies. This demo&rsquo;s version lives in memory only.</p>
+      <p className="mono">
+        {mode === 'synthetic'
+          ? 'This demo timeline lives in memory and disappears on refresh.'
+          : 'Timeline aggregation is not available yet. Saved roof projects remain in the Projects section.'}
+      </p>
     </div>
   )
 }

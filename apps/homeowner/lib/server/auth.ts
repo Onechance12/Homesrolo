@@ -4,6 +4,8 @@ import { z } from 'zod'
 import type { HomeownerRuntimeConfiguration } from './config.ts'
 import { hashSessionHandle, mintOpaqueRef } from './supabase-provider.ts'
 import { SESSION_LIFETIME_SECONDS } from './cookie.ts'
+import { roofingIntent, withRoofingIntent } from '../roofing-intent.ts'
+import type { RoofingNeed } from '../port/types.ts'
 
 const emailSchema = z.string().trim().email().max(254)
 const tokenHashSchema = z.string().regex(/^[A-Za-z0-9_-]{20,256}$/)
@@ -29,14 +31,19 @@ export class HomeownerAuthService {
     this.#now = input.now ?? (() => new Date())
   }
 
-  async requestMagicLink(rawEmail: unknown): Promise<MagicLinkRequestResult> {
+  async requestMagicLink(
+    rawEmail: unknown,
+    rawIntent: unknown = null,
+  ): Promise<MagicLinkRequestResult> {
     const parsed = emailSchema.safeParse(rawEmail)
     if (!parsed.success) throw new Error('invalid_email')
+    const intent = rawIntent === null ? null : roofingIntent(rawIntent)
+    if (rawIntent !== null && intent === null) throw new Error('invalid_intent')
     const { error } = await this.#auth.auth.signInWithOtp({
       email: parsed.data.toLowerCase(),
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${this.#configuration.appOrigin}/auth/complete`,
+        emailRedirectTo: `${this.#configuration.appOrigin}${withRoofingIntent('/auth/complete', intent)}`,
       },
     })
     if (!error) return 'accepted'
@@ -93,6 +100,14 @@ export class HomeownerAuthService {
       p_now: this.#now().toISOString(),
     })
   }
+}
+
+export function homesPathForRoofingIntent(rawIntent: unknown): string {
+  return withRoofingIntent('/homes', roofingIntent(rawIntent))
+}
+
+export function validatedRoofingIntent(rawIntent: unknown): RoofingNeed | null {
+  return roofingIntent(rawIntent)
 }
 
 export function magicLinkEmailIsValid(value: unknown): boolean {

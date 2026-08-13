@@ -1,7 +1,7 @@
 'use client'
 
 import { use } from 'react'
-import { usePort } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconDocs } from '../../../../components/icons.tsx'
@@ -20,6 +20,7 @@ const KIND_LABEL: Record<DocumentKind, string> = {
 export default function DocumentsPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
+  const mode = usePortMode()
   const { state, retry } = usePortCall(() => port.listDocuments(homeId), value => value.length === 0)
 
   return (
@@ -30,8 +31,11 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
       </div>
 
       <div className="notice">
-        <strong>Uploads are not built.</strong> In this demo shell, documents are synthetic
-        entries. Real filing arrives with the authenticated runtime.
+        {mode === 'synthetic' ? (
+          <><strong>Demo documents.</strong> These entries are synthetic and disappear on refresh.</>
+        ) : (
+          <><strong>Uploads are not available yet.</strong> Your private home file is live, but no document can be added from this page yet.</>
+        )}
       </div>
 
       {state.status === 'loading' && <div className="panel"><Skeleton lines={5} label="Loading documents" /></div>}

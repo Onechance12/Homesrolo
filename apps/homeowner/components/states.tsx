@@ -70,15 +70,14 @@ export function ErrorState({ retry, error }: { retry?: () => void; error?: strin
   )
 }
 
-export function UnauthorizedState() {
+export function UnauthorizedState({ signInHref = '/signin' }: { signInHref?: string }) {
   return (
     <div className="state">
       <h2>You are signed out</h2>
       <p>
-        This is a home&rsquo;s private file, so it needs a session. In this demo shell a
-        session lives in memory only — a refresh clears it.
+        This is a home&rsquo;s private file. Sign in to see homes connected to your account.
       </p>
-      <Link className="btn btn--primary" href="/signin">Go to sign in</Link>
+      <Link className="btn btn--primary" href={signInHref}>Go to sign in</Link>
     </div>
   )
 }

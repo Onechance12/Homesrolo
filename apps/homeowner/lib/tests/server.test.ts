@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { SESSION_COOKIE_NAME, sessionHandleFromCookieHeader } from '../server/cookie.ts'
-import { handleHomeownerRequest } from '../server/adapter.ts'
+import { handleHomeownerRequest, mutationOriginAllowed } from '../server/adapter.ts'
 
 /**
  * The route adapter over the UNCONFIGURED runtime: no identity provider, no
@@ -25,6 +25,15 @@ const ALL_FALSE = {
   invitations: false,
   sharing: false,
 }
+
+test('configured browser mutations require the exact application origin', () => {
+  const expected = 'https://app.homesrolo.com'
+  assert.equal(mutationOriginAllowed('GET', null, expected), true)
+  assert.equal(mutationOriginAllowed('POST', expected, expected), true)
+  for (const origin of [null, '', 'https://homesrolo.com', 'https://app.homesrolo.com.evil.test']) {
+    assert.equal(mutationOriginAllowed('POST', origin, expected), false)
+  }
+})
 
 // --- cookie parsing -----------------------------------------------------------
 
