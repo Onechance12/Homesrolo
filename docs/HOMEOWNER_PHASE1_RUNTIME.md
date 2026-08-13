@@ -82,8 +82,9 @@ command.
 The homeowner runtime has its own principals, sessions, home references,
 database, object storage, and audit stream. It imports no Jobrolo application
 code and cannot enumerate Jobrolo projects. Its dedicated signed intake sends
-only the homeowner-approved roofing disclosure and selected artifacts to one
-configured Chance review inbox. It creates no Jobrolo lead, customer, project,
+only the homeowner-approved roofing disclosure to one configured Chance review
+inbox. Private files remain in Homesrolo unless the separate attachment-handoff
+gate is explicitly enabled. It creates no Jobrolo lead, customer, project,
 professional assignment, or automatic distribution. Unknown delivery outcomes
 are held for reconciliation and are never retried automatically.
 
@@ -93,6 +94,16 @@ client ID, and a shared HMAC secret. The secret never enters browser code. The
 session reports `projectReview: true` only when the homeowner provider and the
 complete signed-intake configuration are both present. Migration
 `202608120004` must be applied before enabling it.
+
+Jobrolo attachment handoff has its own default-off server gate:
+`HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED=false`. While it is false, the session
+reports `projectReviewAttachments: false`, the browser offers no file-selection
+control, and the server rejects every nonempty `selectedArtifactRefs` list
+before resolving identity or touching persistence, storage-transfer, or
+delivery providers. Private uploads remain independently controlled by
+`HOMESROLO_PRIVATE_UPLOADS_ENABLED`; a homeowner can keep files in Homesrolo
+without sending them to Jobrolo. Do not enable attachment handoff until the
+receiver's malware-scanning gate is independently configured and verified.
 
 ## Not yet implemented
 

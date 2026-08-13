@@ -187,6 +187,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   persistence: boolean,
   uploads: boolean,
   projectReview: boolean,
+  projectReviewAttachments: boolean,
   invitations: boolean,
   sharing: boolean,
 })

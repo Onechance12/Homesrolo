@@ -19,9 +19,10 @@ their database migrations are applied.
 The first homeowner workflow is: request a passwordless email link, create a
 private home workspace, and open a roof repair, replacement, inspection, or
 storm-damage project. Homesrolo saves that project inside its own account and
-database. With explicit consent, the homeowner may select exact project files
-and send one minimized roofing request to a private Jobrolo review item assigned
-only to Chance. It does not create a Jobrolo user, lead, customer, or project,
+database. With explicit consent, the homeowner may send one minimized roofing
+request to a private Jobrolo review item assigned only to Chance. Files stay in
+Homesrolo unless the separate, default-off attachment gate is enabled after the
+receiver's malware scanner is verified. It does not create a Jobrolo user, lead, customer, or project,
 and it does not send the request to a contractor. Chance decides whether and
 where to distribute it.
 

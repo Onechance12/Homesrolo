@@ -25,6 +25,7 @@ const ALL_FALSE = {
   persistence: false,
   uploads: false,
   projectReview: false,
+  projectReviewAttachments: false,
   invitations: false,
   sharing: false,
 }
