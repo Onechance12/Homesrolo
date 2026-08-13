@@ -231,6 +231,21 @@ export const syntheticPort: HomeownerDataPort = {
     return ok(homeRef === BIRCH_REF ? allDocuments() : [])
   },
 
+  async uploadPrivateArtifact() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async submitProjectForReview() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async previewProjectForReview() {
+    await wait()
+    return err('unavailable')
+  },
+
   async listWarranties(homeRef) {
     await wait()
     const gate = requireSession<readonly import('./types.ts').Warranty[]>()

@@ -15,7 +15,7 @@
  */
 
 import {
-  type HomeownerSession, type PortError, type Project, type RecordedHomeIntake, type RelationshipLabel,
+  type DocumentSummary, type HomeownerSession, type PortError, type Project, type ProjectReviewPreview, type ProjectReviewSubmission, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -116,6 +116,15 @@ function oneOf<const T extends readonly string[]>(allowed: T): Decoder<T[number]
       : fail(at, `one of ${allowed.join('|')}`)
 }
 
+function matching(pattern: RegExp, expected: string): Decoder<string> {
+  return (value, at) => typeof value === 'string' && pattern.test(value)
+    ? value
+    : fail(at, expected)
+}
+
+const optional = <T>(decoder: Decoder<T>): Decoder<T | undefined> => (value, at) =>
+  value === undefined ? undefined : decoder(value, at)
+
 /** Opaque refs: exact prefix and 43-char body, or the response is rejected. */
 function opaqueRef(prefix: string): Decoder<string> {
   const pattern = new RegExp(`^${prefix}_[A-Za-z0-9_-]{43}$`)
@@ -177,6 +186,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   magicLinkSignIn: boolean,
   persistence: boolean,
   uploads: boolean,
+  projectReview: boolean,
   invitations: boolean,
   sharing: boolean,
 })
@@ -344,6 +354,82 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     warranty: null,
   }
 }
+
+type WireArtifact = {
+  artifactRef: string
+  homeRef: string
+  projectRef: string | null
+  kind: 'photo' | 'document' | 'warranty'
+  displayName: string
+  mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
+  byteLength: number
+  createdAt: string
+}
+
+export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
+  const decoded = object<WireArtifact>({
+    artifactRef: opaqueRef('hart'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: nullable(opaqueRef('hprj')),
+    kind: oneOf(['photo', 'document', 'warranty'] as const),
+    displayName: boundedLabel(160),
+    mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+    byteLength: countInt,
+    createdAt: utcInstant,
+  })(value, at)
+  if (decoded.byteLength < 1 || decoded.byteLength > 25 * 1024 * 1024) {
+    return fail(`${at}.byteLength`, 'a byte length from 1 through 25 MiB')
+  }
+  return {
+    documentRef: decoded.artifactRef,
+    homeRef: decoded.homeRef,
+    projectRef: decoded.projectRef,
+    title: decoded.displayName,
+    kind: decoded.kind === 'photo' ? 'photo_set' : decoded.kind,
+    addedOn: decoded.createdAt.slice(0, 10),
+    pages: 0,
+    mediaType: decoded.mediaType,
+    byteLength: decoded.byteLength,
+    downloadHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/content`,
+    isSynthetic: false,
+  }
+}
+
+export const decodeProjectReviewSubmission: Decoder<ProjectReviewSubmission> =
+  object<ProjectReviewSubmission>({
+    submissionRef: opaqueRef('hsub'),
+    projectRef: opaqueRef('hprj'),
+    status: oneOf(['awaiting_chance_review', 'reconciliation_required'] as const),
+    submittedAt: utcInstant,
+    message: boundedLabel(240),
+  })
+
+export const decodeProjectReviewPreview: Decoder<ProjectReviewPreview> =
+  object<ProjectReviewPreview>({
+    projectRef: opaqueRef('hprj'),
+    disclosureDigest: matching(/^[a-f0-9]{64}$/, 'a SHA-256 digest'),
+    homeowner: object<ProjectReviewPreview['homeowner']>({
+      name: boundedLabel(120),
+      email: boundedLabel(254),
+      phone: optional(matching(/^\+[1-9][0-9]{7,14}$/, 'an E.164 phone number')),
+      preferredContact: oneOf(['email', 'phone', 'text'] as const),
+    }),
+    property: object<ProjectReviewPreview['property']>({ label: boundedLabel(240) }),
+    project: object<ProjectReviewPreview['project']>({
+      title: boundedLabel(160),
+      category: oneOf(['roofing'] as const),
+      status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+      summary: trimmedText(4000),
+    }),
+    attachments: array(object<ProjectReviewPreview['attachments'][number]>({
+      artifactRef: opaqueRef('hart'),
+      displayName: boundedLabel(160),
+      kind: oneOf(['photo', 'document', 'warranty'] as const),
+      mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+      byteLength: countInt,
+    })),
+    consentText: boundedLabel(1000),
+  })
 
 export const decodeList = array
 

@@ -123,7 +123,8 @@ function handler() {
     capabilities: {
       magicLinkSignIn: false,
       persistence: true,
-      uploads: false,
+      uploads: true,
+      projectReview: false,
       invitations: false,
       sharing: false,
     },
@@ -141,13 +142,14 @@ const request = (overrides: Partial<Parameters<ReturnType<typeof handler>>[0]> =
   ...overrides,
 })
 
-test('the exact three browser reads use the one-key data envelope and no-store headers', async () => {
+test('browser reads, including exact-home artifact metadata, use one safe no-store envelope', async () => {
   const handle = handler()
   const session = await handle(request())
   const homes = await handle(request({ pathname: '/api/v1/homes' }))
   const home = await handle(request({ pathname: `/api/v1/homes/${homeRef}` }))
+  const artifacts = await handle(request({ pathname: `/api/v1/homes/${homeRef}/artifacts` }))
 
-  for (const response of [session, homes, home]) {
+  for (const response of [session, homes, home, artifacts]) {
     assert.equal(response.status, 200)
     assert.deepEqual(Object.keys(response.body as object), ['data'])
     assert.equal(response.headers['cache-control'], 'no-store')
@@ -208,6 +210,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
       magicLinkSignIn: false,
       persistence: false,
       uploads: false,
+      projectReview: false,
       invitations: false,
       sharing: false,
     },
@@ -216,7 +219,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   assert.equal(response.status, 503)
   assert.deepEqual(response.body, { error: { code: 'unavailable' } })
   assert.equal(JSON.stringify(response.body).includes('database'), false)
-  assert.match(HOMEOWNER_HTTP_WARNING, /does not create sessions/)
+  assert.match(HOMEOWNER_HTTP_WARNING, /no generic write/)
 })
 
 test('POST /api/v1/homes accepts only the strict command and returns one safe summary', async () => {

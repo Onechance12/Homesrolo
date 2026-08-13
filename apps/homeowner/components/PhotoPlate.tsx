@@ -2,7 +2,8 @@ import type { ProjectPhoto } from '../lib/port/types.ts'
 
 /**
  * Drawn photo plates. The shell renders code-native art instead of image
- * files, for the same reason the public site does: no uploads exist, and a
+ * files: this component is synthetic-only, and private uploads are served only
+ * through authenticated exact-artifact routes. A
  * placeholder that looked like a photograph would imply one had happened.
  */
 

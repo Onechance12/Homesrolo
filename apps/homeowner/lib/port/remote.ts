@@ -36,10 +36,14 @@ import {
   NO_CAPABILITIES,
   type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
 } from './types.ts'
-import type { JsonTransport, TransportReply, TransportRequest } from './transport.ts'
+import {
+  fetchArtifactUploadTransport,
+  type ArtifactUploadTransport,
+  type JsonTransport, type TransportReply, type TransportRequest,
+} from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeList, decodeProject, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeList, decodeProject, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -52,6 +56,7 @@ const API = '/api/v1'
  */
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
+const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 function homeRefSegment(candidate: string): string | null {
   return HOME_REF.test(candidate) ? candidate : null
 }
@@ -65,7 +70,10 @@ const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
   error: 'unavailable' as const,
 })
 
-export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
+export function createRemotePort(
+  transport: JsonTransport,
+  artifactTransport: ArtifactUploadTransport = fetchArtifactUploadTransport,
+): HomeownerDataPort {
   async function call<T>(
     request: TransportRequest,
     decode: (value: unknown, at: string) => T,
@@ -265,9 +273,150 @@ export function createRemotePort(transport: JsonTransport): HomeownerDataPort {
       return result
     },
 
+    async listDocuments(homeRef) {
+      const ref = homeRefSegment(homeRef)
+      if (!ref) return { ok: false, error: 'not_found' }
+      return call({ method: 'GET', path: `${API}/homes/${ref}/artifacts` }, decodeList(decodeArtifact))
+    },
+
+    async uploadPrivateArtifact(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      const projectRef = input.projectRef === undefined
+        ? undefined
+        : projectRefSegment(input.projectRef) ?? null
+      if (!ref || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !['photo', 'document', 'warranty'].includes(input.kind)
+        || projectRef === null
+        || !input.file || typeof input.file.name !== 'string'
+        || typeof input.file.arrayBuffer !== 'function'
+        || input.file.size < 1
+        || input.file.size > 25 * 1024 * 1024) {
+        return { ok: false, error: 'invalid' }
+      }
+      let reply: TransportReply
+      try {
+        reply = await artifactTransport({
+          path: `${API}/homes/${ref}/artifacts`,
+          commandRef: input.commandRef,
+          kind: input.kind,
+          ...(projectRef ? { projectRef } : {}),
+          file: input.file,
+        })
+      } catch {
+        return { ok: false, error: 'unavailable' }
+      }
+      if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
+      if (reply.status !== 201) return { ok: false, error: portErrorForStatus(reply.status) }
+      try {
+        const artifact = decodeArtifact(unwrapEnvelope(reply.body), 'data')
+        if (artifact.homeRef !== ref || artifact.projectRef !== (projectRef ?? null)) {
+          return { ok: false, error: 'invalid' }
+        }
+        return { ok: true, value: artifact }
+      } catch {
+        return { ok: false, error: 'invalid' }
+      }
+    },
+
+    async previewProjectForReview(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const name = input.name.trim()
+      const phone = input.phone?.trim()
+      const refs = [...input.selectedArtifactRefs]
+      if (!home || !project
+        || name.length < 1 || name.length > 120
+        || !['email', 'phone', 'text'].includes(input.preferredContact)
+        || ((input.preferredContact === 'phone' || input.preferredContact === 'text') && !phone)
+        || (phone !== undefined && !/^\+[1-9][0-9]{7,14}$/.test(phone))
+        || refs.length > 10 || new Set(refs).size !== refs.length
+        || refs.some(ref => !ARTIFACT_REF.test(ref))) {
+        return { ok: false, error: 'invalid' }
+      }
+      let reply: TransportReply
+      try {
+        reply = await transport({
+          method: 'POST',
+          path: `${API}/homes/${home}/projects/${project}/submit-for-review`,
+          body: {
+            operation: 'preview',
+            name,
+            ...(phone ? { phone } : {}),
+            preferredContact: input.preferredContact,
+            selectedArtifactRefs: refs,
+          },
+        })
+      } catch {
+        return { ok: false, error: 'unavailable' }
+      }
+      if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
+      if (reply.status !== 200) {
+        return { ok: false, error: portErrorForStatus(reply.status) }
+      }
+      try {
+        const result = decodeProjectReviewPreview(unwrapEnvelope(reply.body), 'data')
+        if (result.projectRef !== project) return { ok: false, error: 'invalid' }
+        return { ok: true, value: result }
+      } catch {
+        return { ok: false, error: 'invalid' }
+      }
+    },
+
+    async submitProjectForReview(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const name = input.name.trim()
+      const phone = input.phone?.trim()
+      const refs = [...input.selectedArtifactRefs]
+      if (!home || !project || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !/^[a-f0-9]{64}$/.test(input.reviewedDisclosureDigest)
+        || name.length < 1 || name.length > 120
+        || !['email', 'phone', 'text'].includes(input.preferredContact)
+        || ((input.preferredContact === 'phone' || input.preferredContact === 'text') && !phone)
+        || (phone !== undefined && !/^\+[1-9][0-9]{7,14}$/.test(phone))
+        || refs.length > 10 || new Set(refs).size !== refs.length
+        || refs.some(ref => !ARTIFACT_REF.test(ref))
+        || input.consentAccepted !== true) {
+        return { ok: false, error: 'invalid' }
+      }
+      let reply: TransportReply
+      try {
+        reply = await transport({
+          method: 'POST',
+          path: `${API}/homes/${home}/projects/${project}/submit-for-review`,
+          body: {
+            operation: 'submit',
+            commandRef: input.commandRef,
+            reviewedDisclosureDigest: input.reviewedDisclosureDigest,
+            name,
+            ...(phone ? { phone } : {}),
+            preferredContact: input.preferredContact,
+            selectedArtifactRefs: refs,
+            consentAccepted: true,
+          },
+        })
+      } catch {
+        return { ok: false, error: 'unavailable' }
+      }
+      if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
+      if (reply.status !== 201 && reply.status !== 202) {
+        return { ok: false, error: portErrorForStatus(reply.status) }
+      }
+      try {
+        const result = decodeProjectReviewSubmission(unwrapEnvelope(reply.body), 'data')
+        if (result.projectRef !== project
+          || (reply.status === 201 && result.status !== 'awaiting_chance_review')
+          || (reply.status === 202 && result.status !== 'reconciliation_required')) {
+          return { ok: false, error: 'invalid' }
+        }
+        return { ok: true, value: result }
+      } catch {
+        return { ok: false, error: 'invalid' }
+      }
+    },
+
     // --- routes the server has not defined: unavailable, no request built ----
 
-    async listDocuments() { return UNDEFINED_ROUTE },
     async listWarranties() { return UNDEFINED_ROUTE },
     async listTimeline() { return UNDEFINED_ROUTE },
     async listMaintenance() { return UNDEFINED_ROUTE },

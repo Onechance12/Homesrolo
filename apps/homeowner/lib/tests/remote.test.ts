@@ -6,7 +6,9 @@ import { createRemotePort } from '../port/remote.ts'
 import {
   EXPECTED_API_VERSION, WireError, decodeSession, portErrorForStatus, unwrapEnvelope,
 } from '../port/wire.ts'
-import type { JsonTransport, TransportRequest } from '../port/transport.ts'
+import type {
+  ArtifactUploadTransportRequest, JsonTransport, TransportRequest,
+} from '../port/transport.ts'
 
 /**
  * The remote adapter under a fake transport, against the EXACT payloads of
@@ -38,6 +40,7 @@ const CAPABILITIES = {
   magicLinkSignIn: false,
   persistence: false,
   uploads: false,
+  projectReview: false,
   invitations: false,
   sharing: false,
 }
@@ -151,9 +154,9 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
   assert.throws(() => decodeSession({ ...SIGNED_OUT, apiVersion: 'homeowner-api.v2' }, 'data'),
     WireError, 'a different version is not silently accepted')
 
-  const { persistence: _p, ...fourCaps } = CAPABILITIES
-  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: fourCaps }, 'data'),
-    WireError, 'all five capability booleans are required')
+  const { projectReview: _projectReview, ...fiveCaps } = CAPABILITIES
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: fiveCaps }, 'data'),
+    WireError, 'all six capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
@@ -171,6 +174,15 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
     WireError, 'no synthetic marker exists on the wire')
   assert.throws(() => decodeSession({ ...SIGNED_IN, principalRef: 'hprn_short' }, 'data'),
     WireError, 'malformed principal refs are rejected')
+})
+
+test('the session decoder keeps project review distinct from generic sharing', () => {
+  const decoded = decodeSession({
+    ...SIGNED_IN,
+    capabilities: { ...CAPABILITIES, projectReview: true, sharing: false },
+  }, 'data')
+  assert.equal(decoded.capabilities.projectReview, true)
+  assert.equal(decoded.capabilities.sharing, false)
 })
 
 test('a failed or malformed session read is signed_out with no capabilities', async () => {
@@ -508,7 +520,6 @@ test('remaining undefined routes return unavailable without ever building a requ
   const port = createRemotePort(transport)
   const results = await Promise.all([
     port.addProject(HOME, { title: 'T', trade: 'G', performedOn: '2026-08-01', contractor: 'C', summary: 'S' }),
-    port.listDocuments(HOME),
     port.listWarranties(HOME),
     port.listTimeline(HOME),
     port.listMaintenance(HOME),
@@ -519,6 +530,133 @@ test('remaining undefined routes return unavailable without ever building a requ
   }
   assert.equal(requests.length, 0,
     'no request may be sent to a route homeowner-api.v1 does not define')
+})
+
+test('private artifacts list and upload through exact-home routes with safe projections', async () => {
+  const artifactRef = REF('hart', 'a')
+  const wireArtifact = {
+    artifactRef,
+    homeRef: HOME,
+    projectRef: null,
+    kind: 'document',
+    displayName: 'Roof contract.pdf',
+    mediaType: 'application/pdf',
+    byteLength: 128,
+    createdAt: '2026-08-10T16:00:00.000Z',
+  }
+  const { transport, requests } = recordingTransport({
+    [`GET /api/v1/homes/${HOME}/artifacts`]: [wireArtifact],
+  })
+  const uploads: ArtifactUploadTransportRequest[] = []
+  const port = createRemotePort(transport, async request => {
+    uploads.push(request)
+    return { kind: 'reply', status: 201, body: { data: wireArtifact } }
+  })
+  const listed = await port.listDocuments(HOME)
+  assert.ok(listed.ok)
+  if (!listed.ok) return
+  assert.equal(listed.value[0]?.kind, 'document')
+  assert.equal(listed.value[0]?.downloadHref,
+    `/api/v1/homes/${HOME}/artifacts/${artifactRef}/content`)
+  assert.equal(JSON.stringify(listed.value).includes('storage'), false)
+
+  const file = new File([new TextEncoder().encode('%PDF-1.7')], 'contract.pdf', {
+    type: 'text/plain',
+  })
+  const uploaded = await port.uploadPrivateArtifact(HOME, {
+    commandRef: REF('hcmd', 'u'),
+    kind: 'document',
+    file,
+  })
+  assert.ok(uploaded.ok)
+  assert.deepEqual(requests, [{ method: 'GET', path: `/api/v1/homes/${HOME}/artifacts` }])
+  assert.equal(uploads.length, 1)
+  assert.equal(uploads[0]?.path, `/api/v1/homes/${HOME}/artifacts`)
+  assert.equal(uploads[0]?.commandRef, REF('hcmd', 'u'))
+  assert.equal('principalRef' in (uploads[0] ?? {}), false)
+})
+
+test('artifact client rejects malformed refs, oversized files, and leaked server fields', async () => {
+  let called = 0
+  const port = createRemotePort(async () => ({
+    kind: 'reply',
+    status: 200,
+    body: { data: [] },
+  }), async () => {
+    called += 1
+    return { kind: 'reply', status: 503, body: {} }
+  })
+  const oversized = new File([new Uint8Array(25 * 1024 * 1024 + 1)], 'large.pdf')
+  assert.deepEqual(await port.uploadPrivateArtifact(HOME, {
+    commandRef: REF('hcmd', 'u'), kind: 'document', file: oversized,
+  }), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.listDocuments(REF('hprj', 'x')), { ok: false, error: 'not_found' })
+  assert.equal(called, 0)
+
+  const leaked = createRemotePort(async () => ({
+    kind: 'reply',
+    status: 200,
+    body: { data: [{
+      artifactRef: REF('hart', 'a'), homeRef: HOME, projectRef: null,
+      kind: 'document', displayName: 'contract.pdf', mediaType: 'application/pdf',
+      byteLength: 10, createdAt: '2026-08-10T16:00:00.000Z',
+      storageObjectRef: REF('hobj', 's'),
+    }] },
+  }))
+  assert.deepEqual(await leaked.listDocuments(HOME), { ok: false, error: 'invalid' })
+})
+
+test('project review uses a server preview and submits only its exact reviewed digest', async () => {
+  const ARTIFACT = REF('hart', 'a')
+  const DISCLOSURE = 'd'.repeat(64)
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    const operation = (request.body as { operation?: unknown } | undefined)?.operation
+    if (operation === 'preview') return {
+      kind: 'reply', status: 200, body: { data: {
+        projectRef: PROJECT,
+        disclosureDigest: DISCLOSURE,
+        homeowner: { name: 'Home Owner', email: 'owner@example.com', preferredContact: 'email' },
+        property: { label: 'Fort Worth, Texas' },
+        project: { title: 'Roof repair', category: 'roofing', status: 'planned', summary: 'Active leak.' },
+        attachments: [{
+          artifactRef: ARTIFACT, displayName: 'roof.jpg', kind: 'photo',
+          mediaType: 'image/jpeg', byteLength: 123,
+        }],
+        consentText: 'I agree to send this exact request to Chance\u2019s private Jobrolo review inbox.',
+      } },
+    }
+    return {
+      kind: 'reply', status: 201, body: { data: {
+        submissionRef: REF('hsub', 's'), projectRef: PROJECT,
+        status: 'awaiting_chance_review', submittedAt: '2026-08-12T20:00:00.000Z',
+        message: 'Sent to Chance\u2019s private review inbox.',
+      } },
+    }
+  })
+  const preview = await port.previewProjectForReview(HOME, PROJECT, {
+    name: ' Home Owner ', preferredContact: 'email', selectedArtifactRefs: [ARTIFACT],
+  })
+  assert.ok(preview.ok)
+  const submitted = await port.submitProjectForReview(HOME, PROJECT, {
+    commandRef: REF('hcmd', 'c'),
+    reviewedDisclosureDigest: DISCLOSURE,
+    name: 'Home Owner', preferredContact: 'email', selectedArtifactRefs: [ARTIFACT],
+    consentAccepted: true,
+  })
+  assert.ok(submitted.ok)
+  assert.deepEqual(requests.map(request => request.body), [
+    {
+      operation: 'preview', name: 'Home Owner', preferredContact: 'email',
+      selectedArtifactRefs: [ARTIFACT],
+    },
+    {
+      operation: 'submit', commandRef: REF('hcmd', 'c'), reviewedDisclosureDigest: DISCLOSURE,
+      name: 'Home Owner', preferredContact: 'email', selectedArtifactRefs: [ARTIFACT],
+      consentAccepted: true,
+    },
+  ])
 })
 
 test('magic-link request and sign-out use only their exact same-origin routes', async () => {
