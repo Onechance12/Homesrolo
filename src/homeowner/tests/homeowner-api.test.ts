@@ -134,6 +134,7 @@ const capabilities = {
   persistence: false,
   uploads: false,
   projectReview: false,
+  projectReviewAttachments: false,
   invitations: false,
   sharing: false,
 }
@@ -145,6 +146,7 @@ function service(input: {
   persistence?: boolean
   uploads?: boolean
   projectReview?: boolean
+  projectReviewAttachments?: boolean
   privateObjects?: HomeownerPrivateObjectPort
 } = {}) {
   return new HomeownerApiService({
@@ -167,6 +169,7 @@ function service(input: {
       persistence: input.persistence ?? false,
       uploads: input.uploads ?? false,
       projectReview: input.projectReview ?? false,
+      projectReviewAttachments: input.projectReviewAttachments ?? false,
     },
   })
 }
@@ -191,8 +194,12 @@ test('session projection is truthful and never exposes a session or provider ide
 })
 
 test('session reports project review independently from generic sharing', async () => {
-  const signedIn = await service({ projectReview: true }).readSession(context)
+  const signedIn = await service({
+    projectReview: true,
+    projectReviewAttachments: true,
+  }).readSession(context)
   assert.equal(signedIn.capabilities.projectReview, true)
+  assert.equal(signedIn.capabilities.projectReviewAttachments, true)
   assert.equal(signedIn.capabilities.sharing, false)
 })
 

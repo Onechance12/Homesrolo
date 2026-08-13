@@ -169,9 +169,12 @@ function harness(input: {
   membershipForRead?: (readNumber: number) => HomeownerMembership | null
   artifacts?: readonly HomeownerArtifactMetadata[]
   transport?: HomeownerProjectReviewTransport
+  attachmentsEnabled?: boolean
+  useServiceAttachmentDefault?: boolean
 } = {}) {
   const order: string[] = []
   const delivered: HomesroloJobroloProjectIntake[] = []
+  let identityReads = 0
   let membershipReads = 0
   let transferCalls = 0
   let deliverCalls = 0
@@ -297,6 +300,7 @@ function harness(input: {
     service: new HomeownerProjectReviewService({
       identity: {
         async resolvePrincipal(handle) {
+          identityReads += 1
           return handle === context.sessionHandle
             ? (input.identityPrincipal ?? principal)
             : null
@@ -305,11 +309,15 @@ function harness(input: {
       repository,
       persistence,
       transport: countedTransport,
+      ...(input.useServiceAttachmentDefault
+        ? {}
+        : { attachmentsEnabled: input.attachmentsEnabled ?? true }),
       now: () => now,
     }),
     state: {
       order,
       delivered,
+      get identityReads() { return identityReads },
       get membershipReads() { return membershipReads },
       get transferCalls() { return transferCalls },
       get deliverCalls() { return deliverCalls },
@@ -318,6 +326,43 @@ function harness(input: {
     },
   }
 }
+
+test('attachment handoff is default-off and rejects selected files before any provider work', async () => {
+  const previewHarness = harness({ useServiceAttachmentDefault: true })
+  await assert.rejects(
+    previewHarness.service.preview(context, homeRef, projectRef, {
+      operation: 'preview',
+      name: 'Home Owner',
+      preferredContact: 'email',
+      selectedArtifactRefs: [artifactRef],
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  assert.equal(previewHarness.state.identityReads, 0)
+  assert.equal(previewHarness.state.membershipReads, 0)
+  assert.equal(previewHarness.state.transferCalls, 0)
+  assert.equal(previewHarness.state.deliverCalls, 0)
+  assert.equal(previewHarness.state.stored, undefined)
+
+  const submitHarness = harness({ attachmentsEnabled: false })
+  await assert.rejects(
+    submitHarness.service.submit(context, homeRef, projectRef, validInput()),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  assert.equal(submitHarness.state.identityReads, 0)
+  assert.equal(submitHarness.state.membershipReads, 0)
+  assert.equal(submitHarness.state.transferCalls, 0)
+  assert.equal(submitHarness.state.deliverCalls, 0)
+  assert.equal(submitHarness.state.stored, undefined)
+
+  const requestOnlyHarness = harness({ attachmentsEnabled: false })
+  const result = await requestOnlyHarness.service.submit(context, homeRef, projectRef, validInput({
+    selectedArtifactRefs: [],
+  }))
+  assert.equal(result.status, 'awaiting_chance_review')
+  assert.deepEqual(requestOnlyHarness.state.delivered[0]?.attachments, [])
+  assert.equal(requestOnlyHarness.state.transferCalls, 0)
+})
 
 test('project review is controller-only and fails closed across principals', async () => {
   const memberHarness = harness({

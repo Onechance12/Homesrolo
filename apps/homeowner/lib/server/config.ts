@@ -13,6 +13,7 @@ const configurationSchema = z.object({
   secretKey: providerKey,
   appOrigin: httpsUrl,
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
+  jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict()
 
 export interface HomeownerRuntimeConfiguration {
@@ -21,6 +22,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly secretKey: string
   readonly appOrigin: string
   readonly privateUploadsEnabled: boolean
+  readonly jobroloAttachmentsEnabled: boolean
 }
 
 /**
@@ -37,6 +39,7 @@ export function readHomeownerRuntimeConfiguration(
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
+    jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
   })
   if (!parsed.success) return null
   return Object.freeze({
@@ -45,5 +48,6 @@ export function readHomeownerRuntimeConfiguration(
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
+    jobroloAttachmentsEnabled: parsed.data.jobroloAttachmentsEnabled === 'true',
   })
 }

@@ -300,6 +300,16 @@ test('project review renders only on its exact server-reported capability', () =
     'the exact contact, home, project, and selected files are visibly reviewed')
   assert.match(project, /reviewPreview\.consentText/,
     'the server-pinned consent wording is shown at approval time')
+  assert.match(project, /session\.state\.capabilities\.projectReviewAttachments && projectFiles\.length > 0/,
+    'file selection is hidden unless the server reports the separate attachment capability')
+  assert.match(project, /Your files stay in Homesrolo\./,
+    'the zero-file posture tells the homeowner where saved files remain')
+  assert.match(project, /no photos or documents are attached\./,
+    'the homeowner is told that only the request crosses the handoff')
+  assert.equal((project.match(
+    /selectedArtifactRefs: attachmentHandoffEnabled \? selectedArtifacts : \[\]/g,
+  ) ?? []).length, 2,
+  'both preview and submit force an empty file list when attachment handoff is disabled')
 })
 
 test('a nameless server session renders a neutral label, never "as null"', () => {

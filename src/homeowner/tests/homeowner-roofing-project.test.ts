@@ -92,6 +92,7 @@ function service(input: {
       persistence: input.persistence ?? true,
       uploads: false,
       projectReview: false,
+      projectReviewAttachments: false,
       invitations: false,
       sharing: false,
     },

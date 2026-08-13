@@ -50,6 +50,7 @@ export const homeownerApiCapabilitiesSchema = z.object({
   persistence: z.boolean(),
   uploads: z.boolean(),
   projectReview: z.boolean(),
+  projectReviewAttachments: z.boolean(),
   invitations: z.boolean(),
   sharing: z.boolean(),
 }).strict()

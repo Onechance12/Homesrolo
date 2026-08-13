@@ -31,11 +31,20 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
     privateUploadsEnabled: false,
+    jobroloAttachmentsEnabled: false,
   })
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'true',
   })?.privateUploadsEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'true',
+  })?.jobroloAttachmentsEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'yes',
+  }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'yes',

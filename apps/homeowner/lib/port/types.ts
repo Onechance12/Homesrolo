@@ -37,7 +37,7 @@ export const SYNTHETIC_NOTICE =
 
 /**
  * What the server actually offers, reported by GET /api/v1/session — exactly
- * the six booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * the seven booleans homeowner-api.v1 defines. The synthetic adapter reports
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
@@ -45,6 +45,7 @@ export interface SignInCapabilities {
   readonly persistence: boolean
   readonly uploads: boolean
   readonly projectReview: boolean
+  readonly projectReviewAttachments: boolean
   readonly invitations: boolean
   readonly sharing: boolean
 }
@@ -54,6 +55,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   persistence: false,
   uploads: false,
   projectReview: false,
+  projectReviewAttachments: false,
   invitations: false,
   sharing: false,
 })

@@ -52,13 +52,15 @@ export default function ProjectPage({
 
   async function previewForReview() {
     if (!name.trim() || reviewing || submitting) return
+    const attachmentHandoffEnabled = session.state.kind === 'signed_in'
+      && session.state.capabilities.projectReviewAttachments
     setReviewing(true)
     setReviewError(null)
     const result = await port.previewProjectForReview(homeId, projectId, {
       name,
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       preferredContact,
-      selectedArtifactRefs: selectedArtifacts,
+      selectedArtifactRefs: attachmentHandoffEnabled ? selectedArtifacts : [],
     })
     setReviewing(false)
     if (!result.ok) {
@@ -91,6 +93,8 @@ export default function ProjectPage({
   async function submitForReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!reviewPreview || !consentAccepted || submitting) return
+    const attachmentHandoffEnabled = session.state.kind === 'signed_in'
+      && session.state.capabilities.projectReviewAttachments
     submissionAttempt.current ??= mintCommandRef()
     setSubmitting(true)
     const result = await port.submitProjectForReview(homeId, projectId, {
@@ -99,7 +103,7 @@ export default function ProjectPage({
       name,
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       preferredContact,
-      selectedArtifactRefs: selectedArtifacts,
+      selectedArtifactRefs: attachmentHandoffEnabled ? selectedArtifacts : [],
       consentAccepted: true,
     })
     setSubmitting(false)
@@ -277,7 +281,7 @@ export default function ProjectPage({
                   }} required placeholder="+12145551212" inputMode="tel" autoComplete="tel" />
                 </label>
               ) : null}
-              {projectFiles.length > 0 ? (
+              {session.state.capabilities.projectReviewAttachments && projectFiles.length > 0 ? (
                 <fieldset className="review-files">
                   <legend>Choose files to include</legend>
                   <p>Nothing is selected automatically.</p>
@@ -294,7 +298,14 @@ export default function ProjectPage({
                     </label>
                   ))}
                 </fieldset>
-              ) : <p className="mono">No files will be included. You can still send the roofing request.</p>}
+              ) : session.state.capabilities.projectReviewAttachments ? (
+                <p className="mono">No files will be included. You can still send the roofing request.</p>
+              ) : (
+                <div className="notice">
+                  <strong>Your files stay in Homesrolo.</strong>{' '}
+                  Only this roofing request is sent to Chance; no photos or documents are attached.
+                </div>
+              )}
               {reviewError ? <div className="notice" role="alert">{reviewError}</div> : null}
               {!reviewPreview ? (
                 <button className="btn btn--primary" type="button" onClick={previewForReview}
@@ -316,7 +327,7 @@ export default function ProjectPage({
                       <div><dt>Details</dt><dd>{reviewPreview.project.summary || 'No additional details'}</dd></div>
                       <div><dt>Files</dt><dd>{reviewPreview.attachments.length
                         ? reviewPreview.attachments.map(file => file.displayName).join(', ')
-                        : 'No files selected'}</dd></div>
+                        : 'No files sent — saved files stay in Homesrolo'}</dd></div>
                     </dl>
                   </div>
                   <label className="consent-row">

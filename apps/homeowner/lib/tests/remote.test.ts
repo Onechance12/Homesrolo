@@ -41,6 +41,7 @@ const CAPABILITIES = {
   persistence: false,
   uploads: false,
   projectReview: false,
+  projectReviewAttachments: false,
   invitations: false,
   sharing: false,
 }
@@ -154,9 +155,9 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
   assert.throws(() => decodeSession({ ...SIGNED_OUT, apiVersion: 'homeowner-api.v2' }, 'data'),
     WireError, 'a different version is not silently accepted')
 
-  const { projectReview: _projectReview, ...fiveCaps } = CAPABILITIES
-  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: fiveCaps }, 'data'),
-    WireError, 'all six capability booleans are required')
+  const { projectReviewAttachments: _projectReviewAttachments, ...sixCaps } = CAPABILITIES
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: sixCaps }, 'data'),
+    WireError, 'all seven capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
@@ -176,12 +177,18 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
     WireError, 'malformed principal refs are rejected')
 })
 
-test('the session decoder keeps project review distinct from generic sharing', () => {
+test('the session decoder keeps project review and attachments distinct from generic sharing', () => {
   const decoded = decodeSession({
     ...SIGNED_IN,
-    capabilities: { ...CAPABILITIES, projectReview: true, sharing: false },
+    capabilities: {
+      ...CAPABILITIES,
+      projectReview: true,
+      projectReviewAttachments: true,
+      sharing: false,
+    },
   }, 'data')
   assert.equal(decoded.capabilities.projectReview, true)
+  assert.equal(decoded.capabilities.projectReviewAttachments, true)
   assert.equal(decoded.capabilities.sharing, false)
 })
 

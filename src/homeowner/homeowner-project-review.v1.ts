@@ -178,18 +178,21 @@ export class HomeownerProjectReviewService {
   readonly #persistence: HomeownerProjectReviewPersistencePort
   readonly #transport: HomeownerProjectReviewTransport
   readonly #now: () => string
+  readonly #attachmentsEnabled: boolean
 
   constructor(input: {
     readonly identity: HomeownerIdentityPort
     readonly repository: HomeownerRepositoryPort
     readonly persistence: HomeownerProjectReviewPersistencePort
     readonly transport: HomeownerProjectReviewTransport
+    readonly attachmentsEnabled?: boolean
     readonly now?: () => string
   }) {
     this.#identity = input.identity
     this.#repository = input.repository
     this.#persistence = input.persistence
     this.#transport = input.transport
+    this.#attachmentsEnabled = input.attachmentsEnabled ?? false
     this.#now = input.now ?? (() => new Date().toISOString())
   }
 
@@ -202,6 +205,9 @@ export class HomeownerProjectReviewService {
     const parsed = homeownerProjectReviewPreviewInputSchema.safeParse(input)
     if (!parsed.success || !opaqueRef('hhom').safeParse(requestedHomeRef).success
       || !opaqueRef('hprj').safeParse(requestedProjectRef).success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    if (!this.#attachmentsEnabled && parsed.data.selectedArtifactRefs.length > 0) {
       throw new HomeownerApiError('invalid_request')
     }
     const grant = await this.#grant(context, requestedHomeRef)
@@ -269,6 +275,9 @@ export class HomeownerProjectReviewService {
     const parsed = homeownerProjectReviewInputSchema.safeParse(input)
     if (!parsed.success || !opaqueRef('hhom').safeParse(requestedHomeRef).success
       || !opaqueRef('hprj').safeParse(requestedProjectRef).success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    if (!this.#attachmentsEnabled && parsed.data.selectedArtifactRefs.length > 0) {
       throw new HomeownerApiError('invalid_request')
     }
     const grant = await this.#grant(context, requestedHomeRef)

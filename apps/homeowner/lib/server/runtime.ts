@@ -47,6 +47,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   persistence: false,
   uploads: false,
   projectReview: false,
+  projectReviewAttachments: false,
   invitations: false,
   sharing: false,
 })
@@ -100,6 +101,10 @@ export function homeownerApiService(): HomeownerApiService {
           provider !== null,
           jobroloIntakeClient !== null,
         ),
+        projectReviewAttachments: projectReviewCapabilityEnabled(
+          provider !== null,
+          jobroloIntakeClient !== null,
+        ) && configuration?.jobroloAttachmentsEnabled === true,
         invitations: false,
         sharing: false,
       }) : UNCONFIGURED_CAPABILITIES,
@@ -115,6 +120,7 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
     repository: provider,
     persistence: provider,
     transport: jobroloIntakeClient,
+    attachmentsEnabled: configuration?.jobroloAttachmentsEnabled === true,
   })
   return projectReviewService
 }
