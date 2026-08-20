@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Homesrolo Roof Watch</title>
+  <desc id="desc">A drafting-sheet style card for the free annual North Texas roof inspection program.</desc>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#526078" stroke-opacity=".18"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#263348"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <path d="M760 440 950 280l190 160" fill="none" stroke="#f7f1e7" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M805 420v125h290V420" fill="none" stroke="#f7f1e7" stroke-width="12" stroke-linejoin="round"/>
+  <path d="m780 315 170-143 170 143" fill="none" stroke="#ad583e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+  <circle cx="950" cy="358" r="45" fill="none" stroke="#ad583e" stroke-width="8"/>
+  <path d="m983 391 56 56" stroke="#ad583e" stroke-width="12" stroke-linecap="round"/>
+  <text x="72" y="90" fill="#d4d5d7" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="6">HOMESROLO</text>
+  <text x="72" y="245" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700">Roof Watch</text>
+  <text x="72" y="324" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="46">A yearly roof check.</text>
+  <text x="72" y="382" fill="#f7f1e7" font-family="Georgia, 'Times New Roman', serif" font-size="46">The findings in writing.</text>
+  <line x1="72" y1="450" x2="642" y2="450" stroke="#ad583e" stroke-width="6"/>
+  <text x="72" y="507" fill="#d4d5d7" font-family="Arial, Helvetica, sans-serif" font-size="27">FREE ANNUAL VISITS · NORTH TEXAS</text>
+  <text x="72" y="557" fill="#d4d5d7" font-family="Arial, Helvetica, sans-serif" font-size="25">homesrolo.com/roof-watch</text>
+</svg>

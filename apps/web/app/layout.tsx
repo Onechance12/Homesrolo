@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { SiteHeader } from '../components/SiteHeader.tsx'
 import { SiteFooter } from '../components/SiteFooter.tsx'
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TAGLINE } from '../lib/site.ts'
+import { ROOF_WATCH_PHONE_DISPLAY, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TAGLINE } from '../lib/site.ts'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
@@ -29,6 +29,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     name: SITE_NAME,
     url: SITE_ORIGIN,
     description: SITE_DESCRIPTION,
+    logo: `${SITE_ORIGIN}/apple-icon.png`,
+    telephone: ROOF_WATCH_PHONE_DISPLAY,
+    contactPoint: {
+      '@type': 'ContactPoint',
+      contactType: 'Roof Watch availability',
+      telephone: ROOF_WATCH_PHONE_DISPLAY,
+      areaServed: 'North Texas',
+      availableLanguage: 'English',
+    },
   }
   const websiteSchema = {
     '@context': 'https://schema.org',

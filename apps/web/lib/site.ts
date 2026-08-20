@@ -15,6 +15,15 @@ export const SITE_ORIGIN = 'https://homesrolo.com'
 /** The separate authenticated homeowner application. */
 export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
 
+/** Public Roof Watch contact. Keep the SMS copy limited to service intent. */
+export const ROOF_WATCH_PHONE_DISPLAY = '(817) 886-2418'
+export const ROOF_WATCH_SMS_URL = 'sms:+18178862418?&body=ROOF%20WATCH%20-%20Please%20check%20availability%20for%20my%20city%20and%20ZIP.'
+
+export function roofWatchSmsUrl(city: string): string {
+  const message = `ROOF WATCH ${city.toUpperCase()} - Please check availability for ZIP `
+  return `sms:+18178862418?&body=${encodeURIComponent(message)}`
+}
+
 /**
  * The only public-to-private roofing handoff. The value is deliberately a
  * closed enum rather than homeowner text, an address, or another identifier.

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { HOMEOWNER_APP_ORIGIN } from '../lib/site.ts'
+import { HOMEOWNER_APP_ORIGIN, ROOF_WATCH_PHONE_DISPLAY } from '../lib/site.ts'
 
 /**
  * The colophon keeps the visual character of a drawing-sheet title block while
@@ -22,6 +22,8 @@ export function SiteFooter() {
               <Link href="/how-it-works/">How it works</Link>
               <Link href="/how-we-verify/">How we verify</Link>
               <Link href="/services/roofing/">Roofing guide</Link>
+              <Link href="/roof-watch/">Roof Watch</Link>
+              <Link href="/roof-watch/guides/">Roof Watch guides</Link>
               <Link href="/services/roofing/repair-or-replace/">Repair or replace</Link>
               <Link href="/services/roofing/cost/">Roof cost</Link>
               <Link href="/services/roofing/materials/">Roof materials</Link>
@@ -35,6 +37,7 @@ export function SiteFooter() {
               <Link href="/for-professionals/">For professionals</Link>
               <Link href="/about/">About</Link>
               <Link href="/editorial-standards/">Editorial standards</Link>
+              <a href="tel:+18178862418">Roof Watch: {ROOF_WATCH_PHONE_DISPLAY}</a>
             </div>
           </div>
           <div className="titleblock__meta" aria-hidden="true">

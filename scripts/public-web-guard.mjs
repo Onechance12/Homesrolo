@@ -135,6 +135,7 @@ if (!existsSync(OUT)) {
       'www.ibhs.org',
       'www.ncei.noaa.gov',
       'www.nrca.net',
+      'www.owenscorning.com',
       'www.rcat.net',
       'www.tdi.texas.gov',
     ])
@@ -170,8 +171,48 @@ if (!existsSync(OUT)) {
 
   const sitemapPath = path.join(OUT, 'sitemap.xml')
   if (!existsSync(sitemapPath)) fail('sitemap.xml was not exported')
-  else if (/\/companies\//.test(readFileSync(sitemapPath, 'utf8'))) {
-    fail('sitemap.xml must not list synthetic company profiles')
+  else {
+    const sitemap = readFileSync(sitemapPath, 'utf8')
+    if (/\/companies\//.test(sitemap)) fail('sitemap.xml must not list synthetic company profiles')
+
+    // A successful Next build can still export the not-found body at a real
+    // sitemap route (for example when an async dynamic param is read
+    // synchronously). Check the actual artifact, not only the build exit code.
+    const locations = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1])
+    if (locations.length === 0) fail('sitemap.xml contains no locations')
+    for (const location of locations) {
+      const url = new URL(location)
+      if (url.origin !== 'https://homesrolo.com') {
+        fail(`sitemap.xml contains a non-canonical origin: ${location}`)
+        continue
+      }
+
+      const route = url.pathname.replace(/^\/+|\/+$/g, '')
+      const outputPath = route ? path.join(OUT, route, 'index.html') : path.join(OUT, 'index.html')
+      if (!existsSync(outputPath)) {
+        fail(`${location}: sitemap route has no exported index.html`)
+        continue
+      }
+
+      const page = readFileSync(outputPath, 'utf8')
+      // Next embeds the not-found component's RSC payload in otherwise valid
+      // pages, so only treat a rendered error title or h1 as a failed export.
+      if (/<h1\b[^>]*>\s*That page (?:isn.t|isn’t) here|<title>[^<]*(?:404|Not Found)/i.test(page)) {
+        fail(`${rel(outputPath)}: sitemap route exported a not-found document`)
+      }
+      if (!/<meta name="robots" content="[^"]*index,\s*follow/i.test(page)) {
+        fail(`${rel(outputPath)}: sitemap route is not explicitly index, follow`)
+      }
+      if (!/<h1\b/i.test(page)) fail(`${rel(outputPath)}: sitemap route has no h1`)
+
+      if (url.pathname.startsWith('/roof-watch/')) {
+        if (!page.includes('Roof Watch')) fail(`${rel(outputPath)}: Roof Watch route lost its page sentinel`)
+        const canonical = page.match(/<link rel="canonical" href="([^"]+)"/i)?.[1]
+        if (canonical !== location) {
+          fail(`${rel(outputPath)}: canonical is ${canonical ?? 'missing'}; expected ${location}`)
+        }
+      }
+    }
   }
 
   const llmsPath = path.join(OUT, 'llms.txt')
