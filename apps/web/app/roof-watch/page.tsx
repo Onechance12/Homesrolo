@@ -6,8 +6,8 @@ import { HOMEOWNER_ROOFING_SIGNIN_URL, SITE_NAME, SITE_ORIGIN } from '../../lib/
 import { ROOF_WATCH_CITIES } from '../../lib/content/roof-watch-cities.ts'
 
 export const metadata: Metadata = {
-  title: 'Free roof inspections in North Texas — the Roof Watch program',
-  description: 'Roof Watch is a free annual roof inspection program for North Texas homes: a professional roof checkup every year, a written condition report saved in your own account, and small roof repairs included in writing. Serving Keller, Roanoke, Grapevine, Southlake, Flower Mound, and Fort Worth, TX.',
+  title: 'Roof Watch: free North Texas roof inspections',
+  description: 'Free yearly roof inspections for North Texas homes — written reports you own, small repairs included. Keller, Roanoke, Grapevine, Southlake, Flower Mound, Fort Worth.',
   alternates: { canonical: '/roof-watch/' },
   openGraph: {
     title: 'Roof Watch — free yearly roof inspections, and the record is yours',

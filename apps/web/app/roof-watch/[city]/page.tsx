@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   if (!city) return {}
   return {
     title: `Free roof inspection in ${city.name}, TX — Roof Watch`,
-    description: `${city.lede} Part of the free Roof Watch annual roof inspection program for North Texas.`,
+    description: `${city.lede.split('. ')[0]}.`,
     alternates: { canonical: `/roof-watch/${city.slug}/` },
     openGraph: {
       title: city.headline,
