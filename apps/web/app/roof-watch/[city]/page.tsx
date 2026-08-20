@@ -12,8 +12,9 @@ export function generateStaticParams() {
   return ROOF_WATCH_CITIES.map(city => ({ city: city.slug }))
 }
 
-export function generateMetadata({ params }: { params: { city: string } }): Metadata {
-  const city = ROOF_WATCH_CITIES.find(entry => entry.slug === params.city)
+export async function generateMetadata({ params }: { params: Promise<{ city: string }> }): Promise<Metadata> {
+  const { city: citySlug } = await params
+  const city = ROOF_WATCH_CITIES.find(entry => entry.slug === citySlug)
   if (!city) return {}
   return {
     title: `Free roof inspection in ${city.name}, TX — Roof Watch`,
@@ -27,8 +28,9 @@ export function generateMetadata({ params }: { params: { city: string } }): Meta
   }
 }
 
-export default function RoofWatchCityPage({ params }: { params: { city: string } }) {
-  const city = ROOF_WATCH_CITIES.find(entry => entry.slug === params.city)
+export default async function RoofWatchCityPage({ params }: { params: Promise<{ city: string }> }) {
+  const { city: citySlug } = await params
+  const city = ROOF_WATCH_CITIES.find(entry => entry.slug === citySlug)
   if (!city) notFound()
   const others = ROOF_WATCH_CITIES.filter(entry => entry.slug !== city.slug)
   const schema = {
