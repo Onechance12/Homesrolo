@@ -188,7 +188,7 @@ export default function RoofWatchPage() {
               <a className="btn btn--primary" href={PHONE_SMS}>Text ROOF WATCH now</a>{' '}
               <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Enroll online</a>
             </p>
-            <p style={{ marginTop: '1rem' }}>Still in research mode? Fair. Start with the <Link href="/services/roofing/">Texas roofing guide</Link>, and come back the next time a thunderstorm makes you think about your roof.</p>
+            <p style={{ marginTop: '1rem' }}>Still in research mode? Fair. Start with the <Link href="/roof-watch/guides/">Roof Watch guides</Link> or the <Link href="/services/roofing/">Texas roofing guide</Link>, and come back the next time a thunderstorm makes you think about your roof.</p>
           </div>
         </div>
       </section>
