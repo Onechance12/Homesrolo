@@ -78,10 +78,6 @@ export default async function RoofWatchCityPage({ params }: { params: Promise<{ 
               </section>
             ))}
             <section className="prose">
-              <h2>Your report belongs to you — not to a roofing company</h2>
-              <p>Every Roof Watch inspection in {city.name} is written into your own Homesrolo account: dated photographs, plain-language condition notes, and a record of anything repaired. It is your data. Show it to your insurer after a storm, hand it to any contractor for a bid, pass it to the buyer when you sell — or keep it to yourself. Cancel anytime and the entire history stays in your account.</p>
-            </section>
-            <section className="prose">
               <h2>{city.faqTwist.question}</h2>
               <p>{city.faqTwist.answer}</p>
             </section>
