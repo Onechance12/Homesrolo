@@ -17,6 +17,11 @@ export const metadata: Metadata = {
 
 const GUIDES = [
   {
+    href: '/roof-watch/',
+    title: 'Roof Watch: a free yearly roof check',
+    body: 'Homesrolo\u2019s free North Texas maintenance program: an annual professional inspection, a written condition report in your home\u2019s file, and small repairs included within written limits.',
+  },
+  {
     href: '/services/roofing/repair-or-replace/',
     title: 'Roof repair or replacement?',
     body: 'A condition-first framework for leaks, isolated damage, repeated problems, material matching, and written repairability evidence.',

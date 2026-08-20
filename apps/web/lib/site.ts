@@ -26,6 +26,7 @@ export type NavItem = { readonly href: string; readonly label: string }
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
   { href: '/how-it-works/', label: 'Home record' },
   { href: '/services/roofing/', label: 'Roofing' },
+  { href: '/roof-watch/', label: 'Roof Watch' },
   { href: '/professionals/', label: 'Start a project' },
   { href: '/how-we-verify/', label: 'How we verify' },
   { href: '/for-professionals/', label: 'For pros' },
