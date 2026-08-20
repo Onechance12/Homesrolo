@@ -14,9 +14,9 @@ export const metadata: Metadata = {
   },
 }
 
-const PHONE_DISPLAY = '(806) 678-0907'
-const PHONE_TEL = 'tel:+18066780907'
-const PHONE_SMS = 'sms:+18066780907?&body=ROOF%20WATCH%20-%20I%20want%20to%20enroll%20my%20home.'
+const PHONE_DISPLAY = '(817) 886-2418'
+const PHONE_TEL = 'tel:+18178862418'
+const PHONE_SMS = 'sms:+18178862418?&body=ROOF%20WATCH%20-%20I%20want%20to%20enroll%20my%20home.'
 
 const CITIES = ['Keller', 'Roanoke', 'Grapevine', 'Southlake', 'Flower Mound', 'Fort Worth'] as const
 
