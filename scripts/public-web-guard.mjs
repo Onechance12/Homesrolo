@@ -37,6 +37,7 @@ const EXPECTED_ROOF_WATCH_IMAGES = new Map([
   ['/roof-watch/guides/hail-first-72-hours/', ['/images/roof-watch/architectural-shingle-roof-condition.webp']],
   ['/roof-watch/guides/roof-inspection-report/', ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp']],
   ['/roof-watch/guides/texas-heat-roof/', ['/images/roof-watch/round-attic-vent-and-shingle-field.webp']],
+  ['/roof-watch/guides/selling-documented-home/', ['/images/roof-watch/roof-field-and-hip-ridge-detail.webp']],
   ['/roof-watch/keller/', ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp']],
   ['/roof-watch/roanoke/', ['/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp']],
   ['/roof-watch/grapevine/', ['/images/roof-watch/laminated-shingle-ridge-detail.webp']],
@@ -256,6 +257,7 @@ if (!existsSync(OUT)) {
       'www.osha.gov',
       'www.rcat.net',
       'www.tdi.texas.gov',
+      'www.trec.texas.gov',
     ])
     for (const match of page.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
       const url = new URL(match[1])

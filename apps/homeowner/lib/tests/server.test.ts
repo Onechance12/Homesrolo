@@ -23,6 +23,7 @@ const get = (path: string, headers?: Record<string, string>) =>
 const ALL_FALSE = {
   magicLinkSignIn: false,
   persistence: false,
+  projectQuotes: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,

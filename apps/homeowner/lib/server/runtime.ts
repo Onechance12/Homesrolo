@@ -45,6 +45,7 @@ const unconfiguredCommands: HomeownerCommandPort = {
 const UNCONFIGURED_CAPABILITIES = Object.freeze({
   magicLinkSignIn: false,
   persistence: false,
+  projectQuotes: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -92,10 +93,14 @@ export function homeownerApiService(): HomeownerApiService {
       repository: provider ?? unconfiguredRepository,
       commands: provider ?? unconfiguredCommands,
       ...(provider ? { privateObjects: provider } : {}),
+      ...(provider && configuration?.projectQuotesEnabled === true
+        ? { projectQuotes: provider }
+        : {}),
       now: () => new Date().toISOString(),
       capabilities: provider ? Object.freeze({
         magicLinkSignIn: true,
         persistence: true,
+        projectQuotes: configuration?.projectQuotesEnabled === true,
         uploads: configuration?.privateUploadsEnabled === true,
         projectReview: projectReviewCapabilityEnabled(
           provider !== null,
@@ -104,7 +109,8 @@ export function homeownerApiService(): HomeownerApiService {
         projectReviewAttachments: projectReviewCapabilityEnabled(
           provider !== null,
           jobroloIntakeClient !== null,
-        ) && configuration?.jobroloAttachmentsEnabled === true,
+        ) && configuration?.privateUploadsEnabled === true
+          && configuration?.jobroloAttachmentsEnabled === true,
         invitations: false,
         sharing: false,
       }) : UNCONFIGURED_CAPABILITIES,

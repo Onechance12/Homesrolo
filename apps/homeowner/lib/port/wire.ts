@@ -15,7 +15,7 @@
  */
 
 import {
-  type DocumentSummary, type HomeownerSession, type PortError, type Project, type ProjectReviewPreview, type ProjectReviewSubmission, type RecordedHomeIntake, type RelationshipLabel,
+  type DocumentSummary, type HomeownerSession, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -185,6 +185,7 @@ const RELATIONSHIP_LABELS = [
 const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilities>({
   magicLinkSignIn: boolean,
   persistence: boolean,
+  projectQuotes: boolean,
   uploads: boolean,
   projectReview: boolean,
   projectReviewAttachments: boolean,
@@ -394,6 +395,54 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     downloadHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/content`,
     isSynthetic: false,
   }
+}
+
+const QUOTE_SCOPE_KEYS = [
+  'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
+  'leak_barrier', 'primary_materials', 'starter_and_ridge', 'valleys',
+  'flashing_transitions', 'penetrations', 'ventilation', 'permits', 'cleanup',
+  'workmanship_warranty', 'manufacturer_warranty', 'payment_terms', 'exclusions',
+] as const satisfies readonly QuoteScopeKey[]
+
+const decodeQuoteScopeItem = object<QuoteScopeItem>({
+  status: oneOf(['included', 'excluded', 'allowance', 'not_stated'] as const),
+  detail: optional(boundedLabel(160)),
+})
+
+const decodeQuoteScope: Decoder<QuoteScope> = (value, at) => {
+  if (!isRecord(value)) return fail(at, 'an object')
+  const scope: Partial<Record<QuoteScopeKey, QuoteScopeItem>> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (!QUOTE_SCOPE_KEYS.includes(key as QuoteScopeKey)) {
+      return fail(`${at}.${key}`, 'a supported quote scope key')
+    }
+    scope[key as QuoteScopeKey] = decodeQuoteScopeItem(item, `${at}.${key}`)
+  }
+  return scope
+}
+
+export const decodeProjectQuote: Decoder<ProjectQuote> = (value, at) => {
+  const decoded = object<ProjectQuote>({
+    quoteRef: opaqueRef('hquo'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: opaqueRef('hprj'),
+    contractorLabel: boundedLabel(120),
+    proposalDate: nullable(calendarDate),
+    artifactRef: nullable(opaqueRef('hart')),
+    scope: decodeQuoteScope,
+    notes: trimmedText(500),
+    source: literal('homeowner_entry'),
+    revision: (entry, entryAt) => typeof entry === 'number'
+      && Number.isInteger(entry) && entry >= 1
+      ? entry
+      : fail(entryAt, 'a positive integer'),
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (decoded.updatedAt < decoded.createdAt) {
+    return fail(`${at}.updatedAt`, 'a time on or after createdAt')
+  }
+  return decoded
 }
 
 export const decodeProjectReviewSubmission: Decoder<ProjectReviewSubmission> =

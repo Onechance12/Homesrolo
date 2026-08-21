@@ -136,7 +136,7 @@ export const ROOFING_COST_GUIDE: readonly EducationalSection[] = Object.freeze([
     ]),
   },
   {
-    heading: 'Why Dallas prices vary so much',
+    heading: 'Why Texas roof prices vary so much',
     body: Object.freeze([
       'A one-story shingle roof with easy access is a different job from a steep two-story roof with dormers, several valleys, metal sections, and damaged decking. Both may sit on houses with the same floor area.',
       'Material, height, pitch, access, tear-off layers, wood repair, flashing, ventilation, permits, disposal, and warranty coverage all affect the final price.',
@@ -152,12 +152,12 @@ export const ROOFING_COST_GUIDE: readonly EducationalSection[] = Object.freeze([
   {
     heading: 'Compare the same rows',
     body: Object.freeze([
-      'Put each bid into the same list and mark every item included, excluded, allowance, or not stated. A lower price may be a good deal. It may also leave out ventilation, new flashing, or the cost of damaged decking.',
+      'Put each proposal into the same list and mark every item included, excluded, allowance, or not stated. Homesrolo records those differences without deciding which price is right for the home.',
       'Save the original bid, signed contract, measurement, product sheets, change orders, invoices, permits, photographs, and warranties in the same home file.',
     ]),
   },
   {
-    heading: 'Find the blank checks in the estimate',
+    heading: 'Find the open terms',
     body: Object.freeze([
       'Allowance, as needed, code upgrade, and additional charge are not automatically bad terms, but each one leaves part of the final price open. The proposal should explain the unit price, who documents the need, and who approves the change before that work begins.',
       'Decking is the common example. A bid that includes a price per sheet and a photograph-and-approval process gives the homeowner a way to manage a hidden condition. A bid that only says wood extra does not.',
@@ -385,9 +385,7 @@ export type RoofingQuestion = {
 export const ROOFING_QUICK_ANSWERS: readonly RoofingQuestion[] = Object.freeze([
   {
     question: 'How much does a roof replacement cost in Dallas?',
-    answer: 'Angi’s Dallas data, updated in August 2026, reports an average of $10,054 and a typical range of $5,960 to $14,203. Roof size, material, pitch, access, tear-off, wood repair, flashing, ventilation, permits, and warranty coverage can move a real bid outside that range.',
-    href: 'https://www.angi.com/articles/how-much-does-roof-replacement-cost/tx/dallas',
-    source: 'Angi Dallas cost guide',
+    answer: 'An address or house square footage cannot establish an accurate roof price. Measurement, pitch, valleys, flashing, tear-off layers, decking, ventilation, access, products, labor, permits, warranties, overhead, and profit all shape the written proposal. Compare actual proposals scope by scope.',
   },
   {
     question: 'Does Texas require a roofing contractor license?',

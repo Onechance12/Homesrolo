@@ -52,7 +52,7 @@ export default function RoofingGuidePage() {
     '@type': 'CollectionPage',
     name: 'Texas roofing guide for homeowners',
     url: `${SITE_ORIGIN}/services/roofing/`,
-    dateModified: '2026-08-12',
+    dateModified: '2026-08-21',
     inLanguage: 'en-US',
     isAccessibleForFree: true,
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
@@ -84,6 +84,7 @@ export default function RoofingGuidePage() {
             title="Understand the roof before you hire the roofer"
             lede="Straight answers about roof prices, materials, contractors, permits, storm paperwork, and the records worth keeping. We start with Dallas Fort Worth and Texas."
           />
+          <p className="article-meta"><time dateTime="2026-08-21">Updated August 21, 2026</time></p>
           <div className="note" style={{ marginTop: '2rem', maxWidth: 'var(--measure)' }}>
             <strong>Built for the homeowner.</strong> Contractors and manufacturers do not pay to influence these guides. Important claims link to the source so you can check them.
           </div>

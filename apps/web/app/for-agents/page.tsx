@@ -1,27 +1,24 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Homesrolo for real estate agents',
-  description: 'A closing gift that keeps your name in the house: the home’s permanent record plus free yearly roof inspections for your client. Costs you nothing, works for years, and turns documented homes into easier listings.',
-  alternates: { canonical: '/for-agents/' },
-  openGraph: {
-    title: 'The closing gift that’s still working in year five',
-    description: 'Give your buyers their home’s permanent record and free yearly roof inspections, with your name attached. Homesrolo for real estate agents.',
-    url: '/for-agents/',
-  },
-}
+  description: 'Help clients start a private home record and check Roof Watch availability—a practical closing gift that does not require changing your CRM.',
+  canonical: '/for-agents/',
+  socialTitle: 'A closing gift that does not end up in a cabinet',
+  socialDescription: 'Help buyers start documenting their home and check Roof Watch availability. Homesrolo for real estate agents.',
+})
 
 const PHONE_DISPLAY = '(817) 886-2418'
 const AGENT_SMS = 'sms:+18178862418?&body=AGENT%20-%20I%27m%20a%20real%20estate%20agent%20and%20I%20want%20the%20details.'
 
 const FAQ = [
-  { question: 'What does this cost me or my client?', answer: 'Nothing. Roof Watch is a free program: free enrollment, a free professional roof inspection every year, a written photographed report, and small repairs included within written limits. The home record account is free too. There is no agent fee, no referral kickback, and nothing your client will ever be billed for behind your back.' },
-  { question: 'Is this a CRM? Do I have to move my pipeline?', answer: 'No. Keep your CRM, your transaction software, your whole stack. Homesrolo manages something none of those tools touch: the truth about the house itself. Think of it as the layer under your tools, not a replacement for any of them.' },
-  { question: 'Whose data is the home record?', answer: 'The homeowner’s. Always. Your client owns their reports and chooses what to release and share. That is exactly why the gift lands so well: you are not signing them up for marketing, you are handing them an asset. What you get is the association: you are the agent who set it up.' },
-  { question: 'What exactly exists today, and what is coming?', answer: 'Today: your clients can enroll in Roof Watch by text with your name attached, their reports build in their own account, and homeowners can release records they choose to share. Coming: an agent view for the homes your clients choose to share with you, and listing-ready record exports. We would rather under-promise here and let the product catch up in public.' },
+  { question: 'What does this cost me or my client?', answer: 'There is currently no agent fee or Roof Watch enrollment fee. Annual inspections are offered at no charge for participating addresses, and the written limits are supplied before scheduling. Some minor maintenance may be included within those limits. There is no referral kickback or required contractor purchase.' },
+  { question: 'Is this a CRM? Do I have to move my pipeline?', answer: 'No. Keep your CRM and transaction software. Homesrolo is for the homeowner’s private record and project history, not the agent’s pipeline.' },
+  { question: 'Who controls the home record?', answer: 'The homeowner controls the private account. An agent does not automatically receive reports, project details, or account access. Homeowner-controlled sharing is a later feature, not something we claim is live today.' },
+  { question: 'What exactly exists today, and what is coming?', answer: 'Today, a client can create a private Homesrolo account, start a roof project, and text to check Roof Watch availability. Roof Watch sends its written program limits before scheduling and gives completed findings to the homeowner. Secure file uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are still coming.' },
 ] as const
 
 export default function ForAgentsPage() {
@@ -29,7 +26,9 @@ export default function ForAgentsPage() {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     name: 'Homesrolo for real estate agents',
-    description: 'A closing gift with a long tail: the home’s permanent record plus free yearly roof inspections, with the agent’s name attached.',
+    description: 'A practical closing gift: help a buyer start a private home record and check Roof Watch availability.',
+    dateModified: '2026-08-21',
+    isAccessibleForFree: true,
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
     url: `${SITE_ORIGIN}/for-agents/`,
   }
@@ -46,12 +45,12 @@ export default function ForAgentsPage() {
         <div className="shell">
           <PageHeader
             eyebrow="Homesrolo for real estate agents"
-            title="The closing gift that’s still working in year five"
-            lede="Wine gets drunk. Cutting boards get shoved in a cabinet. Here’s the other kind of closing gift: your client’s home gets its own permanent record and free yearly roof inspections, and your name is on the whole thing. It costs you nothing, and it’s still introducing you to their friends years from now."
+            title="A closing gift that doesn’t end up in a cabinet"
+            lede="Help a buyer start a private record for the home and check Roof Watch availability. It is useful after closing, does not require moving your CRM, and does not give the agent automatic access to the homeowner’s data."
           />
           <div className="answer-box" style={{ marginTop: '2rem' }}>
             <p className="kicker">Agents start here</p>
-            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{PHONE_DISPLAY}</strong>. You’ll get the how-it-works, the gift language for your closing packet, and a keyword your clients text so every enrollment traces back to you.</p>
+            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{PHONE_DISPLAY}</strong>. We’ll send the current program details and simple language for your closing packet. If a client follows up, have them include your name so we know who introduced them.</p>
             <p style={{ marginTop: '1rem' }}><a className="btn btn--primary" href={AGENT_SMS}>Text AGENT now</a></p>
           </div>
         </div>
@@ -61,17 +60,17 @@ export default function ForAgentsPage() {
           <div className="stack" style={{ '--stack-gap': '2.5rem' } as React.CSSProperties}>
             <section className="prose">
               <h2 id="fa-gift">The gift, from your client’s side of it</h2>
-              <p>They close on the house. Somewhere in your closing packet is a card that says their agent set up two things: a private record for their new home, and a free professional roof inspection every year through Roof Watch. A vetted local roofer walks the roof annually, small stuff gets fixed free within written limits, and a photographed report files into an account the homeowner owns.</p>
-              <p>Then the part that matters to you. Every year that report shows up, they remember who set it up. When the hail comes and their neighbor is arguing with an insurance adjuster from memory, your client pulls up dated photos. Guess whose name comes up at the barbecue.</p>
+              <p>They close on the house. In the packet is a simple note from you: open a private Homesrolo account, start the home record, and text to see whether Roof Watch serves the address. For participating addresses, the homeowner receives the written program limits before scheduling and receives the completed findings afterward. Photos are included when conditions allow.</p>
+              <p>The report belongs with the homeowner’s records; it does not automatically come back to the agent. We will not promise that a closing gift creates a referral. The useful part is simpler: you helped the client start documenting the home before the next repair, storm, or sale.</p>
             </section>
             <section className="prose">
               <h2>Sell-side: the listing with receipts</h2>
-              <p>A documented home is an easier sale, and every agent knows the moment that proves it: the inspection objection. When the buyer’s inspector flags the roof, a seller with a Homesrolo file answers with dated reports and photos instead of a shrug. Negotiations that usually take a week of dueling contractors get settled by paperwork that was sitting there all along.</p>
-              <p>“This home comes with its records” is a listing line your competition can’t fake, because the records carry their own provenance: who did the work, when, released by the homeowner on purpose.</p>
+              <p>When a buyer’s inspector flags the roof, a seller who kept dated reports, photos, repair receipts, product details, and warranties can answer with records instead of memory. That does not prevent another inspection or guarantee a smoother negotiation. It gives everyone the same starting facts.</p>
+              <p>“This home comes with its records” is a useful listing sentence only when the records actually exist and the homeowner chooses what to provide. The new <Link href="/roof-watch/guides/selling-documented-home/">selling with roof documentation guide</Link> shows what belongs in that packet—and what it cannot prove.</p>
             </section>
             <section className="prose">
-              <h2>Why not just a binder app?</h2>
-              <p>You may have gifted a home-binder app before. Nice idea, and mostly a folder: the homeowner uploads PDFs, the app sends reminders, everyone forgets about it by spring. Homesrolo is built the other way around. Records come from real work by identified companies, homeowners control what gets released, and the roof gets an actual professional on it every year. It’s the difference between a filing cabinet and a maintained, documented home. One of them holds value at resale.</p>
+              <h2>What it is—and what is not live yet</h2>
+              <p>Today, the homeowner can create a private account, start a roof project, and check Roof Watch availability by text. Secure uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are not live yet. We are saying that plainly because a home record only works if the product is as honest as the records inside it.</p>
             </section>
             <section className="prose">
               <h2>Straight answers</h2>

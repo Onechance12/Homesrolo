@@ -123,6 +123,7 @@ function handler() {
     capabilities: {
       magicLinkSignIn: false,
       persistence: true,
+      projectQuotes: false,
       uploads: true,
       projectReview: false,
       projectReviewAttachments: false,
@@ -210,6 +211,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
     capabilities: {
       magicLinkSignIn: false,
       persistence: false,
+      projectQuotes: false,
       uploads: false,
       projectReview: false,
       projectReviewAttachments: false,

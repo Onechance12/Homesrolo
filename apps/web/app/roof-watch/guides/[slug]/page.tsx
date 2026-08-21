@@ -53,6 +53,13 @@ const GUIDE_PHOTOS = {
     alt: 'Round attic vent in a field of dark asphalt shingles',
     caption: 'Selected from the operator\'s archival roof-photo library. A round attic vent is one part of the system; the photo alone does not establish balanced attic ventilation or diagnose heat damage.',
   },
+  'selling-documented-home': {
+    src: '/images/roof-watch/roof-field-and-hip-ridge-detail.webp',
+    width: 1200,
+    height: 991,
+    alt: 'Brown asphalt-shingle roof field with adjoining hip and ridge lines',
+    caption: 'Selected from the operator\'s archival roof-photo library. A wide reference view can help later readers identify the roof area shown; it is not a current condition finding or a substitute for a buyer inspection.',
+  },
 } as const
 
 export default async function RoofWatchGuidePage({ params }: { params: Promise<{ slug: string }> }) {

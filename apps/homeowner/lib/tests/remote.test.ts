@@ -39,6 +39,7 @@ function recordingTransport(replies: Record<string, unknown>) {
 const CAPABILITIES = {
   magicLinkSignIn: false,
   persistence: false,
+  projectQuotes: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -84,6 +85,24 @@ const PROJECT_VIEW = {
   summary: 'Timing: As soon as possible\n\nLeak above the back room.',
   createdAt: '2026-08-12T16:00:00.000Z',
   updatedAt: '2026-08-12T16:00:00.000Z',
+}
+
+const QUOTE = REF('hquo', 'q')
+const QUOTE_VIEW = {
+  quoteRef: QUOTE,
+  homeRef: HOME,
+  projectRef: PROJECT,
+  contractorLabel: 'Proposal from Northside Roofing',
+  proposalDate: '2026-08-20',
+  artifactRef: null,
+  scope: {
+    valleys: { status: 'allowance', detail: 'Open metal allowance.' },
+  },
+  notes: '',
+  source: 'homeowner_entry',
+  revision: 1,
+  createdAt: '2026-08-21T15:00:00.000Z',
+  updatedAt: '2026-08-21T15:00:00.000Z',
 }
 
 // --- mode selection -----------------------------------------------------------
@@ -155,9 +174,9 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
   assert.throws(() => decodeSession({ ...SIGNED_OUT, apiVersion: 'homeowner-api.v2' }, 'data'),
     WireError, 'a different version is not silently accepted')
 
-  const { projectReviewAttachments: _projectReviewAttachments, ...sixCaps } = CAPABILITIES
-  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: sixCaps }, 'data'),
-    WireError, 'all seven capability booleans are required')
+  const { projectQuotes: _projectQuotes, ...sevenCaps } = CAPABILITIES
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: sevenCaps }, 'data'),
+    WireError, 'all eight capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
@@ -483,6 +502,10 @@ test('project reads decode only the safe project projection and stay exact-home 
     data: { ...PROJECT_VIEW, homeRef: REF('hhom', 'x') },
   }))
   assert.deepEqual(await crossHome.getProject(HOME, PROJECT), { ok: false, error: 'invalid' })
+  const crossProject = createRemotePort(transportReturning(200, {
+    data: { ...PROJECT_VIEW, projectRef: REF('hprj', 'x') },
+  }))
+  assert.deepEqual(await crossProject.getProject(HOME, PROJECT), { ok: false, error: 'invalid' })
 })
 
 test('startRoofingProject sends one narrow request and rejects authority or unknown enums', async () => {
@@ -518,6 +541,97 @@ test('startRoofingProject sends one narrow request and rejects authority or unkn
   assert.deepEqual(await bad.startRoofingProject(HOME, { ...input, notes: 'x'.repeat(1501) }),
     { ok: false, error: 'invalid' })
   assert.equal(blocked.requests.length, 0)
+})
+
+test('project quotes use exact routes, preserve unreviewed as absence, and never carry price judgment', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    if (request.method === 'GET') {
+      return { kind: 'reply', status: 200, body: { data: [QUOTE_VIEW] } }
+    }
+    if (request.path.endsWith(`/quotes/${QUOTE}`)) {
+      return {
+        kind: 'reply', status: 200,
+        body: { data: { ...QUOTE_VIEW, revision: 2 } },
+      }
+    }
+    return { kind: 'reply', status: 201, body: { data: QUOTE_VIEW } }
+  })
+  const input = {
+    commandRef: REF('hcmd', 'c'),
+    contractorLabel: '  Proposal from Northside Roofing  ',
+    scope: { valleys: { status: 'allowance' as const, detail: 'Open metal allowance.' } },
+  }
+  const listed = await port.listProjectQuotes(HOME, PROJECT)
+  const created = await port.createProjectQuote(HOME, PROJECT, input)
+  const saved = await port.saveProjectQuote(HOME, PROJECT, QUOTE, {
+    ...input,
+    commandRef: REF('hcmd', 's'),
+    expectedRevision: 1,
+  })
+  assert.ok(listed.ok && created.ok && saved.ok)
+  if (!listed.ok || !created.ok || !saved.ok) return
+  assert.equal('measurement' in listed.value[0]!.scope, false)
+  assert.equal(saved.value.revision, 2)
+  assert.deepEqual(requests, [
+    { method: 'GET', path: `/api/v1/homes/${HOME}/projects/${PROJECT}/quotes` },
+    {
+      method: 'POST', path: `/api/v1/homes/${HOME}/projects/${PROJECT}/quotes`,
+      body: {
+        commandRef: REF('hcmd', 'c'),
+        contractorLabel: 'Proposal from Northside Roofing',
+        scope: { valleys: { status: 'allowance', detail: 'Open metal allowance.' } },
+      },
+    },
+    {
+      method: 'POST', path: `/api/v1/homes/${HOME}/projects/${PROJECT}/quotes/${QUOTE}`,
+      body: {
+        commandRef: REF('hcmd', 's'),
+        contractorLabel: 'Proposal from Northside Roofing',
+        scope: { valleys: { status: 'allowance', detail: 'Open metal allowance.' } },
+        expectedRevision: 1,
+      },
+    },
+  ])
+  assert.doesNotMatch(JSON.stringify(requests), /price|score|rank|recommend|jobrolo|principal/i)
+})
+
+test('quote client rejects unsupported scope, authority fields, malformed refs, and leaked projections', async () => {
+  const blocked = recordingTransport({})
+  const port = createRemotePort(blocked.transport)
+  const base = {
+    commandRef: REF('hcmd', 'c'),
+    contractorLabel: 'Proposal A',
+    scope: {},
+  }
+  assert.deepEqual(await port.createProjectQuote(HOME, PROJECT, {
+    ...base,
+    scope: { measurement: { status: 'unreviewed' as never } },
+  }), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.saveProjectQuote(HOME, PROJECT, REF('hart', 'x'), {
+    ...base, expectedRevision: 1,
+  }), { ok: false, error: 'invalid' })
+  assert.equal(blocked.requests.length, 0)
+
+  const leaked = createRemotePort(async () => ({
+    kind: 'reply', status: 200, body: { data: [{
+      ...QUOTE_VIEW,
+      controllerPrincipalRef: REF('hprn', 'p'),
+      priceScore: 90,
+    }] },
+  }))
+  assert.deepEqual(await leaked.listProjectQuotes(HOME, PROJECT), { ok: false, error: 'invalid' })
+
+  const emptyDetail = createRemotePort(async () => ({
+    kind: 'reply', status: 200, body: { data: [{
+      ...QUOTE_VIEW,
+      scope: { valleys: { status: 'included', detail: '' } },
+    }] },
+  }))
+  assert.deepEqual(await emptyDetail.listProjectQuotes(HOME, PROJECT), {
+    ok: false, error: 'invalid',
+  })
 })
 
 // --- the narrowed surface -----------------------------------------------------

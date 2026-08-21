@@ -31,6 +31,14 @@ import {
   homeownerArtifactUploadInputSchema,
   validateHomeownerArtifactPayload,
 } from './homeowner-artifacts.v1.ts'
+import {
+  createHomeownerProjectQuoteInputSchema,
+  homeownerProjectQuoteSchema,
+  homeownerQuoteScopeSchema,
+  saveHomeownerProjectQuoteInputSchema,
+  type HomeownerProjectQuote,
+  type HomeownerProjectQuotePort,
+} from './homeowner-project-quotes.v1.ts'
 
 /**
  * Server application boundary for the private homeowner app.
@@ -48,6 +56,7 @@ const opaqueRef = (prefix: string) =>
 export const homeownerApiCapabilitiesSchema = z.object({
   magicLinkSignIn: z.boolean(),
   persistence: z.boolean(),
+  projectQuotes: z.boolean(),
   uploads: z.boolean(),
   projectReview: z.boolean(),
   projectReviewAttachments: z.boolean(),
@@ -181,6 +190,36 @@ export const homeownerApiArtifactViewSchema = z.object({
 
 export type HomeownerApiArtifactView = z.infer<typeof homeownerApiArtifactViewSchema>
 
+export const homeownerApiCreateProjectQuoteInputSchema =
+  createHomeownerProjectQuoteInputSchema.omit({ projectRef: true, requestedAt: true })
+
+export const homeownerApiSaveProjectQuoteInputSchema =
+  saveHomeownerProjectQuoteInputSchema.omit({
+    projectRef: true,
+    quoteRef: true,
+    requestedAt: true,
+  })
+
+export const homeownerApiProjectQuoteViewSchema = z.object({
+  quoteRef: opaqueRef('hquo'),
+  homeRef: opaqueRef('hhom'),
+  projectRef: opaqueRef('hprj'),
+  contractorLabel: z.string().trim().min(1).max(120),
+  proposalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  artifactRef: opaqueRef('hart').nullable(),
+  scope: homeownerQuoteScopeSchema,
+  notes: z.string().trim().max(500),
+  source: z.literal('homeowner_entry'),
+  revision: z.number().int().min(1),
+  createdAt: homeownerUtcInstantSchema,
+  updatedAt: homeownerUtcInstantSchema,
+}).strict()
+
+export type HomeownerApiCreateProjectQuoteInput = z.infer<
+  typeof homeownerApiCreateProjectQuoteInputSchema
+>
+export type HomeownerApiProjectQuoteView = z.infer<typeof homeownerApiProjectQuoteViewSchema>
+
 export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   projectCount: z.number().int().min(0),
   documentCount: z.number().int().min(0),
@@ -219,6 +258,7 @@ export interface HomeownerApiServiceOptions {
   readonly repository: HomeownerRepositoryPort
   readonly commands: HomeownerCommandPort
   readonly privateObjects?: HomeownerPrivateObjectPort
+  readonly projectQuotes?: HomeownerProjectQuotePort
   readonly now: () => string
   /**
    * These values must come from verified server configuration. A route must not
@@ -267,6 +307,32 @@ function safeArtifact(input: unknown): HomeownerApiArtifactView {
   })
 }
 
+function safeProjectQuote(input: HomeownerProjectQuote): HomeownerApiProjectQuoteView {
+  const quote = homeownerProjectQuoteSchema.parse(input)
+  return homeownerApiProjectQuoteViewSchema.parse({
+    quoteRef: quote.quoteRef,
+    homeRef: quote.homeRef,
+    projectRef: quote.projectRef,
+    contractorLabel: quote.contractorLabel,
+    proposalDate: quote.proposalDate ?? null,
+    artifactRef: quote.artifactRef ?? null,
+    scope: quote.scope,
+    notes: quote.notes ?? '',
+    source: quote.source,
+    revision: quote.revision,
+    createdAt: quote.createdAt,
+    updatedAt: quote.updatedAt,
+  })
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  const row = value as Record<string, unknown>
+  return `{${Object.keys(row).sort().map(key =>
+    `${JSON.stringify(key)}:${stableJson(row[key])}`).join(',')}}`
+}
+
 const ROOFING_NEED_TITLE: Readonly<Record<
   z.infer<typeof homeownerApiRoofingNeedSchema>,
   string
@@ -297,6 +363,7 @@ export class HomeownerApiService {
   readonly #repository: HomeownerRepositoryPort
   readonly #commands: HomeownerCommandPort
   readonly #privateObjects: HomeownerPrivateObjectPort | null
+  readonly #projectQuotes: HomeownerProjectQuotePort | null
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
 
@@ -305,6 +372,7 @@ export class HomeownerApiService {
     this.#repository = options.repository
     this.#commands = options.commands
     this.#privateObjects = options.privateObjects ?? null
+    this.#projectQuotes = options.projectQuotes ?? null
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
   }
@@ -417,6 +485,154 @@ export class HomeownerApiService {
     const project = projects.find(candidate => candidate.projectRef === parsedProjectRef.data)
     if (!project) throw new HomeownerApiError('not_found')
     return project
+  }
+
+  async listProjectQuotes(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+  ): Promise<readonly HomeownerApiProjectQuoteView[]> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    if (!parsedProjectRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.persistence
+      || !this.#capabilities.projectQuotes
+      || !this.#projectQuotes) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const projects = await this.#repository.listProjects(grant)
+    const matchedProject = projects.find(project => project.projectRef === parsedProjectRef.data
+      && project.homeRef === grant.homeRef
+      && project.category === 'roofing')
+    if (!matchedProject) {
+      throw new HomeownerApiError('not_found')
+    }
+    const quotes = await this.#projectQuotes.listProjectQuotes(grant, parsedProjectRef.data)
+    return quotes.map(input => {
+      const quote = homeownerProjectQuoteSchema.parse(input)
+      if (quote.homeRef !== grant.homeRef
+        || quote.projectRef !== parsedProjectRef.data
+        || quote.controllerPrincipalRef !== matchedProject.controllerPrincipalRef) {
+        throw new HomeownerApiError('unavailable')
+      }
+      return safeProjectQuote(quote)
+    })
+  }
+
+  async createProjectQuote(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectQuoteView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    const parsedInput = homeownerApiCreateProjectQuoteInputSchema.safeParse(input)
+    if (!parsedProjectRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'quote.create')
+    if (!this.#capabilities.persistence
+      || !this.#capabilities.projectQuotes
+      || !this.#projectQuotes) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const projects = await this.#repository.listProjects(grant)
+    if (!projects.some(project => project.projectRef === parsedProjectRef.data
+      && project.homeRef === grant.homeRef
+      && project.category === 'roofing')) {
+      throw new HomeownerApiError('not_found')
+    }
+    if (parsedInput.data.artifactRef) {
+      const artifacts = await this.#repository.listArtifactMetadata(grant)
+      if (!artifacts.some(artifact => artifact.artifactRef === parsedInput.data.artifactRef
+        && artifact.homeRef === grant.homeRef
+        && artifact.projectRef === parsedProjectRef.data
+        && artifact.kind === 'document'
+        && artifact.mediaType === 'application/pdf'
+        && artifact.controllerPrincipalRef === grant.principalRef)) {
+        throw new HomeownerApiError('not_found')
+      }
+    }
+    const command = createHomeownerProjectQuoteInputSchema.parse({
+      ...parsedInput.data,
+      projectRef: parsedProjectRef.data,
+      requestedAt: this.#now(),
+    })
+    const created = homeownerProjectQuoteSchema.parse(
+      await this.#projectQuotes.createProjectQuote({ grant, command }),
+    )
+    const coherent = created.homeRef === grant.homeRef
+      && created.projectRef === parsedProjectRef.data
+      && created.controllerPrincipalRef === grant.principalRef
+      && created.contractorLabel === command.contractorLabel
+      && created.proposalDate === command.proposalDate
+      && created.artifactRef === command.artifactRef
+      && stableJson(created.scope) === stableJson(command.scope)
+      && created.notes === command.notes
+      && created.source === 'homeowner_entry'
+      && created.revision === 1
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProjectQuote(created)
+  }
+
+  async saveProjectQuote(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+    requestedQuoteRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectQuoteView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    const parsedQuoteRef = opaqueRef('hquo').safeParse(requestedQuoteRef)
+    const parsedInput = homeownerApiSaveProjectQuoteInputSchema.safeParse(input)
+    if (!parsedProjectRef.success || !parsedQuoteRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'quote.save')
+    if (!this.#capabilities.persistence
+      || !this.#capabilities.projectQuotes
+      || !this.#projectQuotes) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const projects = await this.#repository.listProjects(grant)
+    if (!projects.some(project => project.projectRef === parsedProjectRef.data
+      && project.homeRef === grant.homeRef
+      && project.category === 'roofing')) {
+      throw new HomeownerApiError('not_found')
+    }
+    if (parsedInput.data.artifactRef) {
+      const artifacts = await this.#repository.listArtifactMetadata(grant)
+      if (!artifacts.some(artifact => artifact.artifactRef === parsedInput.data.artifactRef
+        && artifact.homeRef === grant.homeRef
+        && artifact.projectRef === parsedProjectRef.data
+        && artifact.kind === 'document'
+        && artifact.mediaType === 'application/pdf'
+        && artifact.controllerPrincipalRef === grant.principalRef)) {
+        throw new HomeownerApiError('not_found')
+      }
+    }
+    const command = saveHomeownerProjectQuoteInputSchema.parse({
+      ...parsedInput.data,
+      projectRef: parsedProjectRef.data,
+      quoteRef: parsedQuoteRef.data,
+      requestedAt: this.#now(),
+    })
+    const saved = homeownerProjectQuoteSchema.parse(
+      await this.#projectQuotes.saveProjectQuote({ grant, command }),
+    )
+    const coherent = saved.quoteRef === command.quoteRef
+      && saved.homeRef === grant.homeRef
+      && saved.projectRef === command.projectRef
+      && saved.controllerPrincipalRef === grant.principalRef
+      && saved.contractorLabel === command.contractorLabel
+      && saved.proposalDate === command.proposalDate
+      && saved.artifactRef === command.artifactRef
+      && stableJson(saved.scope) === stableJson(command.scope)
+      && saved.notes === command.notes
+      && saved.source === 'homeowner_entry'
+      && saved.revision === command.expectedRevision + 1
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProjectQuote(saved)
   }
 
   async listArtifacts(
@@ -696,4 +912,4 @@ export class HomeownerApiService {
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation, exact-home intake, roofing projects, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'
+  'Home creation, exact-home intake, roofing projects, private quote records, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'

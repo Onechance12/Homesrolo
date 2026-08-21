@@ -25,6 +25,8 @@ export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = 
 })
 const ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   ...ROOF_WATCH_ROUTE_LAST_MODIFIED,
+  '/services/roofing/': '2026-08-21',
+  '/services/roofing/cost/': '2026-08-21',
   '/editorial-standards/': '2026-08-21',
 })
 export const ROUTE_IMAGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -41,6 +43,7 @@ export const ROUTE_IMAGES: Readonly<Record<string, readonly string[]>> = Object.
   '/roof-watch/guides/hail-first-72-hours/': ['/images/roof-watch/architectural-shingle-roof-condition.webp'],
   '/roof-watch/guides/roof-inspection-report/': ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp'],
   '/roof-watch/guides/texas-heat-roof/': ['/images/roof-watch/round-attic-vent-and-shingle-field.webp'],
+  '/roof-watch/guides/selling-documented-home/': ['/images/roof-watch/roof-field-and-hip-ridge-detail.webp'],
   '/roof-watch/keller/': ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp'],
   '/roof-watch/roanoke/': ['/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp'],
   '/roof-watch/grapevine/': ['/images/roof-watch/laminated-shingle-ridge-detail.webp'],

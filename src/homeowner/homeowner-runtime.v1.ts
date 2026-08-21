@@ -89,6 +89,8 @@ export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'intake.record',
   'project.create',
   'project.update',
+  'quote.create',
+  'quote.save',
   'artifact.create_metadata',
   'artifact.upload',
   'artifact.read_metadata',

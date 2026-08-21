@@ -30,9 +30,14 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     publishableKey: CONFIG.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
+    projectQuotesEnabled: false,
     privateUploadsEnabled: false,
     jobroloAttachmentsEnabled: false,
   })
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PROJECT_QUOTES_ENABLED: 'true',
+  })?.projectQuotesEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'true',
@@ -44,6 +49,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'yes',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PROJECT_QUOTES_ENABLED: 'yes',
   }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
@@ -198,4 +207,22 @@ test('private artifact migration keeps bytes private and every command exact-hom
   assert.match(migration, /check \(storage_key = home_ref \|\| '\/' \|\| storage_object_ref\)/i)
   assert.match(migration, /action in \('home\.create', 'intake\.record', 'project\.create', 'artifact\.upload'\)/i)
   assert.doesNotMatch(migration, /create policy|public\s*=\s*true|to (anon|authenticated)/i)
+})
+
+test('project quote migration is private, exact-project, receipt-backed, and revision safe', () => {
+  const migration = readFileSync(path.resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/202608210001_homeowner_project_quotes.sql',
+  ), 'utf8')
+  assert.match(migration, /create table if not exists public\.homesrolo_homeowner_project_quotes/i)
+  assert.match(migration, /alter table public\.homesrolo_homeowner_project_quotes enable row level security/i)
+  assert.match(migration, /revoke all on table public\.homesrolo_homeowner_project_quotes from public, anon, authenticated/i)
+  assert.match(migration, /foreign key \(project_ref, home_ref, controller_principal_ref\)[\s\S]+homesrolo_homeowner_projects\([\s\S]*project_ref, home_ref, controller_principal_ref[\s\S]*\)/i)
+  assert.match(migration, /foreign key \(artifact_ref, home_ref, project_ref, controller_principal_ref\)[\s\S]+homesrolo_homeowner_artifacts\([\s\S]*artifact_ref, home_ref, project_ref, controller_principal_ref[\s\S]*\)/i)
+  assert.match(migration, /role = 'workspace_controller'/i)
+  assert.match(migration, /kind = 'document'[\s\S]+media_type = 'application\/pdf'[\s\S]+state = 'available'/i)
+  assert.match(migration, /revision <> p_expected_revision[\s\S]+quote_revision_conflict/i)
+  assert.match(migration, /'quote\.create'[\s\S]+'quote\.save'/i)
+  assert.match(migration, /command_digest_mismatch/i)
+  assert.doesNotMatch(migration, /create policy|grant (select|insert|update|delete|execute)[\s\S]+to (anon|authenticated)/i)
 })

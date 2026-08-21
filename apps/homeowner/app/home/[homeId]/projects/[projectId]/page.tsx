@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useRef, useState, type FormEvent } from 'react'
+import { use, useEffect, useRef, useState, type FormEvent } from 'react'
 import { usePort, useSession } from '../../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../../components/states.tsx'
@@ -10,6 +10,7 @@ import { IconDocs } from '../../../../../components/icons.tsx'
 import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
 import { mintCommandRef } from '../../../../../lib/port/command-ref.ts'
 import type { ProjectReviewPreview } from '../../../../../lib/port/types.ts'
+import { RoofQuoteVault } from '../../../../../components/RoofQuoteVault.tsx'
 
 /**
  * A single project, rendered as the document it is becoming: the job's
@@ -23,11 +24,19 @@ export default function ProjectPage({
   const { homeId, projectId } = use(params)
   const port = usePort()
   const session = useSession()
+  const sessionReady = session.state.kind !== 'loading'
+  const uploadsEnabled = session.state.kind === 'signed_in'
+    && session.state.capabilities.uploads
+  const projectQuotesEnabled = session.state.kind === 'signed_in'
+    && session.state.capabilities.projectQuotes
   const { state, retry } = usePortCall(() => port.getProject(homeId, projectId))
-  const files = usePortCall(() => port.listDocuments(homeId))
+  const files = usePortCall(() => uploadsEnabled
+    ? port.listDocuments(homeId)
+    : Promise.resolve({ ok: true as const, value: [] }))
   const [uploadKind, setUploadKind] = useState<'photo' | 'document' | 'warranty'>('photo')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const uploadAttempt = useRef<string | null>(null)
   const uploadInput = useRef<HTMLInputElement | null>(null)
   const [name, setName] = useState('')
@@ -42,6 +51,10 @@ export default function ProjectPage({
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
   const [submissionUnknown, setSubmissionUnknown] = useState(false)
   const submissionAttempt = useRef<string | null>(null)
+
+  useEffect(() => {
+    files.retry()
+  }, [uploadsEnabled, files.retry])
 
   function resetPreparedReview() {
     setReviewPreview(null)
@@ -76,6 +89,7 @@ export default function ProjectPage({
     if (!uploadFile || uploading) return
     uploadAttempt.current ??= mintCommandRef()
     setUploading(true)
+    setUploadError(null)
     const result = await port.uploadPrivateArtifact(homeId, {
       commandRef: uploadAttempt.current,
       kind: uploadKind,
@@ -83,7 +97,10 @@ export default function ProjectPage({
       projectRef: projectId,
     })
     setUploading(false)
-    if (!result.ok) return
+    if (!result.ok) {
+      setUploadError('Homesrolo could not save this file. It was not sent to Jobrolo or a contractor.')
+      return
+    }
     uploadAttempt.current = null
     setUploadFile(null)
     if (uploadInput.current) uploadInput.current.value = ''
@@ -165,7 +182,7 @@ export default function ProjectPage({
         </dl>
       </article>
 
-      <section className="panel" aria-labelledby="project-photos">
+      {project.isSynthetic ? <section className="panel" aria-labelledby="project-photos">
         <div className="panel__head"><h2 id="project-photos">Photos</h2></div>
         {project.photos.length === 0 ? (
           <EmptyState title="No photos yet" body="Photos will live with this project as the file grows." />
@@ -174,14 +191,14 @@ export default function ProjectPage({
             {project.photos.map(photo => <PhotoPlate key={photo.photoRef} photo={photo} />)}
           </div>
         )}
-      </section>
+      </section> : null}
 
-      {!project.isSynthetic ? (
+      {!project.isSynthetic && uploadsEnabled ? (
         <section className="panel stack" aria-labelledby="project-files" style={{ ['--stack-gap' as never]: '0.8rem' }}>
           <div className="panel__head">
             <div>
               <h2 id="project-files">Project files</h2>
-              <p>Photos and papers saved to this roofing request.</p>
+              <p>Photos and papers saved to this project.</p>
             </div>
           </div>
           <form className="stack" style={{ ['--stack-gap' as never]: '0.65rem' }} onSubmit={uploadProjectFile}>
@@ -193,7 +210,7 @@ export default function ProjectPage({
                   uploadAttempt.current = null
                 }}>
                   <option value="photo">Photo</option>
-                  <option value="document">Document</option>
+                  <option value="document">Quote or other project document</option>
                   <option value="warranty">Warranty document</option>
                 </select>
               </label>
@@ -209,6 +226,7 @@ export default function ProjectPage({
             <button className="btn btn--quiet" type="submit" disabled={!uploadFile || uploading}>
               {uploading ? 'Adding file…' : 'Add to this project'}
             </button>
+            {uploadError ? <div className="notice" role="alert">{uploadError}</div> : null}
           </form>
           {files.state.status === 'loading' ? <Skeleton lines={2} label="Loading project files" /> : null}
           {files.state.status === 'error' ? <ErrorState retry={files.retry} error={files.state.error} /> : null}
@@ -235,7 +253,56 @@ export default function ProjectPage({
         </section>
       ) : null}
 
+      {!project.isSynthetic && sessionReady && !uploadsEnabled ? (
+        <section className="panel stack" aria-labelledby="project-files-unavailable"
+          style={{ ['--stack-gap' as never]: '0.65rem' }}>
+          <div className="panel__head">
+            <div>
+              <h2 id="project-files-unavailable">Project files</h2>
+              <p>Original proposals, photos, warranties, and project papers.</p>
+            </div>
+          </div>
+          <div className="notice">
+            <strong>Private uploads are unavailable right now.</strong>{' '}
+            Homesrolo will not pretend a file was stored, scanned, or attached when it was not.
+          </div>
+        </section>
+      ) : null}
+
+      {!project.isSynthetic && project.trade === 'Roofing' && projectQuotesEnabled ? (
+        <RoofQuoteVault
+          homeRef={homeId}
+          projectRef={projectId}
+          projectFiles={projectFiles}
+          uploadsEnabled={uploadsEnabled}
+        />
+      ) : null}
+
+      {!project.isSynthetic && project.trade === 'Roofing'
+        && sessionReady && !projectQuotesEnabled ? (
+        <section className="panel stack" aria-labelledby="roof-quotes-unavailable"
+          style={{ ['--stack-gap' as never]: '0.65rem' }}>
+          <div className="panel__head">
+            <div>
+              <h2 id="roof-quotes-unavailable">Roof proposals</h2>
+              <p>Private line-by-line proposal records.</p>
+            </div>
+          </div>
+          <div className="notice">
+            <strong>Proposal comparison is unavailable right now.</strong>{' '}
+            Homesrolo will not pretend a proposal was saved when the private record is not ready.
+          </div>
+        </section>
+      ) : null}
+
+      {!project.isSynthetic && !sessionReady ? (
+        <section className="panel" aria-label="Loading private project tools">
+          <Skeleton lines={2} label="Loading private project tools" />
+        </section>
+      ) : null}
+
       {!project.isSynthetic
+        && project.trade === 'Roofing'
         && session.state.kind === 'signed_in'
         && session.state.capabilities.projectReview ? (
         <section className="panel stack" aria-labelledby="request-help" style={{ ['--stack-gap' as never]: '0.8rem' }}>
@@ -346,7 +413,7 @@ export default function ProjectPage({
         </section>
       ) : null}
 
-      <section className="panel" aria-labelledby="project-docs">
+      {project.isSynthetic ? <section className="panel" aria-labelledby="project-docs">
         <div className="panel__head"><h2 id="project-docs">Papers</h2></div>
         {project.documents.length === 0 ? (
           <EmptyState title="No documents" body="Contracts and invoices for this job would be filed here." />
@@ -366,9 +433,9 @@ export default function ProjectPage({
             ))}
           </ul>
         )}
-      </section>
+      </section> : null}
 
-      <section className="panel" aria-labelledby="project-warranty">
+      {project.isSynthetic ? <section className="panel" aria-labelledby="project-warranty">
         <div className="panel__head"><h2 id="project-warranty">Warranty</h2></div>
         {project.warranty ? (
           <div className="stack" style={{ ['--stack-gap' as never]: '0.5rem' }}>
@@ -380,7 +447,7 @@ export default function ProjectPage({
         ) : (
           <EmptyState title="No warranty recorded" body="If this work carries coverage, it would be recorded here with its dates." />
         )}
-      </section>
+      </section> : null}
 
       {project.isSynthetic ? (
         <p className="mono">Synthetic record — no real project, company, or document exists behind it.</p>

@@ -43,7 +43,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeList, decodeProject, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -57,12 +57,80 @@ const API = '/api/v1'
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
+const QUOTE_REF = /^hquo_[A-Za-z0-9_-]{43}$/
+const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
+const QUOTE_SCOPE_KEYS = new Set([
+  'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
+  'leak_barrier', 'primary_materials', 'starter_and_ridge', 'valleys',
+  'flashing_transitions', 'penetrations', 'ventilation', 'permits', 'cleanup',
+  'workmanship_warranty', 'manufacturer_warranty', 'payment_terms', 'exclusions',
+])
+
+function validCalendarDate(value: string): boolean {
+  if (!CALENDAR_DATE.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
 function homeRefSegment(candidate: string): string | null {
   return HOME_REF.test(candidate) ? candidate : null
 }
 
 function projectRefSegment(candidate: string): string | null {
   return PROJECT_REF.test(candidate) ? candidate : null
+}
+
+function quoteInputBody(input: {
+  readonly commandRef: string
+  readonly contractorLabel: string
+  readonly proposalDate?: string
+  readonly artifactRef?: string
+  readonly scope: object
+  readonly notes?: string
+  readonly expectedRevision?: number
+}) {
+  const contractorLabel = input.contractorLabel.trim()
+  const notes = input.notes?.trim()
+  const date = input.proposalDate
+  if (!COMMAND_REF_PATTERN.test(input.commandRef)
+    || contractorLabel.length < 1 || contractorLabel.length > 120
+    || (date !== undefined && !validCalendarDate(date))
+    || (input.artifactRef !== undefined && !ARTIFACT_REF.test(input.artifactRef))
+    || (notes !== undefined && notes.length > 500)
+    || !input.scope || typeof input.scope !== 'object' || Array.isArray(input.scope)) {
+    return null
+  }
+  const scope: Record<string, { status: string; detail?: string }> = {}
+  for (const [key, value] of Object.entries(input.scope)) {
+    if (!QUOTE_SCOPE_KEYS.has(key) || !value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    const item = value as { status?: unknown; detail?: unknown }
+    const keys = Object.keys(item)
+    if (keys.some(itemKey => itemKey !== 'status' && itemKey !== 'detail')
+      || typeof item.status !== 'string'
+      || !['included', 'excluded', 'allowance', 'not_stated'].includes(item.status)
+      || (item.detail !== undefined && (typeof item.detail !== 'string'
+        || item.detail !== item.detail.trim() || item.detail.length > 160))) {
+      return null
+    }
+    scope[key] = {
+      status: item.status,
+      ...(item.detail ? { detail: item.detail } : {}),
+    }
+  }
+  if (input.expectedRevision !== undefined
+    && (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)) {
+    return null
+  }
+  return {
+    commandRef: input.commandRef,
+    contractorLabel,
+    ...(date ? { proposalDate: date } : {}),
+    ...(input.artifactRef ? { artifactRef: input.artifactRef } : {}),
+    scope,
+    ...(notes ? { notes } : {}),
+    ...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
+  }
 }
 
 const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
@@ -237,7 +305,10 @@ export function createRemotePort(
         { method: 'GET', path: `${API}/homes/${home}/projects/${project}` },
         decodeProject,
       )
-      if (result.ok && result.value.homeRef !== home) return { ok: false, error: 'invalid' }
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
       return result
     },
 
@@ -268,6 +339,56 @@ export function createRemotePort(
       if (result.ok && (result.value.homeRef !== ref
         || result.value.trade !== 'Roofing'
         || result.value.status !== 'planned')) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProjectQuotes(homeRef, projectRef) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/projects/${project}/quotes` },
+        decodeList(decodeProjectQuote),
+      )
+      if (result.ok && result.value.some(quote => quote.homeRef !== home
+        || quote.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async createProjectQuote(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const body = quoteInputBody(input)
+      if (!home || !project || !body) return { ok: false, error: 'invalid' }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/quotes`,
+        body,
+      }, decodeProjectQuote, 201)
+      if (result.ok && (result.value.homeRef !== home || result.value.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async saveProjectQuote(homeRef, projectRef, quoteRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const body = quoteInputBody(input)
+      if (!home || !project || !QUOTE_REF.test(quoteRef) || !body) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/quotes/${quoteRef}`,
+        body,
+      }, decodeProjectQuote)
+      if (result.ok && (result.value.quoteRef !== quoteRef
+        || result.value.homeRef !== home || result.value.projectRef !== project)) {
         return { ok: false, error: 'invalid' }
       }
       return result

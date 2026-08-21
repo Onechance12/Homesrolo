@@ -223,6 +223,21 @@ export const syntheticPort: HomeownerDataPort = {
     return ok(project)
   },
 
+  async listProjectQuotes() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async createProjectQuote() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async saveProjectQuote() {
+    await wait()
+    return err('unavailable')
+  },
+
   async listDocuments(homeRef) {
     await wait()
     const gate = requireSession<readonly import('./types.ts').DocumentSummary[]>()

@@ -90,6 +90,7 @@ function service(input: {
     capabilities: {
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
+      projectQuotes: false,
       uploads: false,
       projectReview: false,
       projectReviewAttachments: false,

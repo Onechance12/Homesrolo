@@ -8,7 +8,8 @@ claim advocate.
 **Status: Phase 1 foundation.** The separate homeowner app now has passwordless
 email authentication, opaque server sessions, a private Supabase persistence
 boundary, private home workspaces, the guided six-system intake, and a narrow
-roof-project request, and default-off private PDF/JPEG/PNG file storage. The
+roof-project request, a private roof-proposal scope comparison, and default-off
+private PDF/JPEG/PNG file storage. The
 public roofing path now routes homeowners into this private account flow rather
 than a contractor directory. Malware scanning, export/deletion workflows,
 controller verification, public sharing, a live assistant, payments, and
@@ -19,7 +20,17 @@ their database migrations are applied.
 The first homeowner workflow is: request a passwordless email link, create a
 private home workspace, and open a roof repair, replacement, inspection, or
 storm-damage project. Homesrolo saves that project inside its own account and
-database. With explicit consent, the homeowner may send one minimized roofing
+database. Inside a roofing project, the homeowner can record multiple proposal
+labels, link an original proposal PDF when uploads are safely enabled, and mark
+what each document says about measurement, materials, valleys, flashing,
+penetrations, ventilation, warranties, payment terms, and exclusions. Missing
+rows remain “not reviewed”; Homesrolo records no price score, ranking, or
+contractor recommendation.
+The proposal comparison has its own default-off
+`HOMESROLO_PROJECT_QUOTES_ENABLED` release gate so application code can deploy
+before migration `202608210001` is applied and verified.
+
+With explicit consent, the homeowner may send one minimized roofing
 request to a private Jobrolo review item assigned only to Chance. Files stay in
 Homesrolo unless the separate, default-off attachment gate is enabled after the
 receiver's malware scanner is verified. It does not create a Jobrolo user, lead, customer, or project,
@@ -42,6 +53,7 @@ where to distribute it.
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |
 | src/contracts/company-link.v1.ts | Draft Jobrolo-to-Homesrolo company claim binding (proposal for Codex) |
+| src/homeowner/homeowner-project-quotes.v1.ts | Private, revision-safe roof-proposal scope records; no price judgment or Jobrolo authority |
 | src/constitution/ | Pure request and response boundary checks |
 | apps/web/lib/directory/ | Public profile contract, draft project-linked reviews, draft Academy credentials, draft claiming, draft corrections and disputes, projection allowlist, neutral ordering, synthetic fixtures |
 | apps/web/app/ | Statically exported public site |
