@@ -25,7 +25,7 @@ export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = 
 })
 const ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   ...ROOF_WATCH_ROUTE_LAST_MODIFIED,
-  '/editorial-standards/': '2026-08-20',
+  '/editorial-standards/': '2026-08-21',
 })
 export const ROUTE_IMAGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
   '/roof-watch/': [
