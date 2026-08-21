@@ -125,4 +125,28 @@ export const ROOF_WATCH_GUIDES: readonly RoofWatchGuide[] = [
       { label: 'Insurance and your roof: maintenance checklist', href: 'https://www.tdi.texas.gov/tips/replacing-your-roof.html', publisher: 'Texas Department of Insurance' },
     ],
   },
+  {
+    slug: 'selling-documented-home',
+    title: 'Selling your house? The roof file is worth more than the staging.',
+    metaTitle: 'Selling a home with roof documentation',
+    description: 'Buyers negotiate against uncertainty. A dated, photographed roof history removes the biggest one. How documented homes handle the inspection period, and how to start a file before you list.',
+    eyebrow: 'Sell smarter',
+    sections: [
+      { heading: 'Every buyer is really buying one thing: certainty', body: [
+        'Run the standard version of the movie. Your house goes under contract. The buyer’s inspector spends three hours in it and produces a report with photos, arrows, and that one line about the roof: “recommend evaluation by a licensed roofing contractor.” Now there’s a repair addendum, two contractors with two opinions, a nervous buyer, and a week of your life.',
+        'Almost all of that friction is uncertainty, not damage. Nobody in the deal actually knows what that roof has been through, so everyone prices the mystery. And mystery always prices against the seller.',
+      ]},
+      { heading: 'What the same moment looks like with a file', body: [
+        'Same house, same inspector, same line about the roof. Except this seller opens their Homesrolo account and shares the file: last year’s inspection with photos, the two small repairs that came out of it, the year-over-year condition notes. Dated. Attributed. Boring, in the best possible way.',
+        'The buyer’s agent reads it in five minutes. The scary line item becomes a known quantity. Maybe there’s still a repair to negotiate, but it’s one repair, priced off evidence, instead of a mystery priced off fear.',
+      ]},
+      { heading: 'Agents already know this', body: [
+        'Ask any agent which listings are easiest to defend through the inspection period and you’ll hear the same thing: the ones with paperwork. A documented roof doesn’t just protect price. It shortens the negotiation, keeps deals from wobbling, and makes the listing itself different: “this home comes with its records” is a sentence most sellers simply cannot say.',
+        'If your agent set you up with Homesrolo at closing, you’ve been building this file all along. If not, forward them this page. They’ll want it for their next ten clients, not just you.',
+      ]},
+      { heading: 'Starting a file before you list', body: [
+        'A file started the year you sell is thinner than one started the year you bought, but it still beats no file. One Roof Watch inspection now gives you a professional baseline with photos, any small items get fixed free within the written limits, and the report is yours to hand across the table. Free, by text: ROOF WATCH to (817) 886-2418. The staging makes the photos prettier. The file makes the deal calmer.',
+      ]},
+    ],
+  },
 ] as const

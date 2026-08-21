@@ -35,6 +35,7 @@ export function SiteFooter() {
               <Link href="/professionals/">Start a roof project</Link>
               <a href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Homeowner sign in</a>
               <Link href="/for-professionals/">For professionals</Link>
+              <Link href="/for-agents/">For agents</Link>
               <Link href="/about/">About</Link>
               <Link href="/editorial-standards/">Editorial standards</Link>
               <a href="tel:+18178862418">Roof Watch: {ROOF_WATCH_PHONE_DISPLAY}</a>

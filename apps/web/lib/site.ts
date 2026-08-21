@@ -62,6 +62,7 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/roof-watch/guides/hail-first-72-hours/',
   '/roof-watch/guides/roof-inspection-report/',
   '/roof-watch/guides/texas-heat-roof/',
+  '/roof-watch/guides/selling-documented-home/',
   '/roof-watch/keller/',
   '/roof-watch/roanoke/',
   '/roof-watch/grapevine/',
@@ -77,6 +78,7 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/services/roofing/fort-worth/',
   '/ideas/',
   '/for-professionals/',
+  '/for-agents/',
   '/about/',
   '/editorial-standards/',
 ])
