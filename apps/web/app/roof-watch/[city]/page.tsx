@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { DocumentaryImage } from '../../../components/DocumentaryImage.tsx'
 import { PageHeader } from '../../../components/Prose.tsx'
 import {
-  HOMEOWNER_ROOFING_SIGNIN_URL,
+  HOMEOWNER_ROOF_WATCH_SIGNIN_URL,
   ROOF_WATCH_PHONE_DISPLAY,
   roofWatchSmsUrl,
   SITE_NAME,
@@ -139,7 +139,7 @@ export default async function RoofWatchCityPage({ params }: { params: Promise<{ 
             <p>Text <strong>ROOF WATCH {city.name.toUpperCase()}</strong> and your ZIP to <strong>{ROOF_WATCH_PHONE_DISPLAY}</strong>. We will confirm whether your address is currently served and send the written program limits before scheduling.</p>
             <p style={{ marginTop: '1rem' }}>
               <a className="btn btn--primary" href={smsUrl}>Text to check availability</a>{' '}
-              <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a private roof project</a>
+              <a className="btn btn--quiet" href={HOMEOWNER_ROOF_WATCH_SIGNIN_URL}>Start a private roof record</a>
             </p>
           </div>
         </div>

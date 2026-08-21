@@ -348,6 +348,13 @@ test('one bounded roofing intent continues through the existing homeowner flow',
   assert.doesNotMatch([signin, homes, newHome, projects].join('\n'), /insurance_claim/)
 })
 
+test('the inspection entry explains the private boundary before sign in', () => {
+  const signin = read('app/signin/page.tsx')
+  assert.match(signin, /intent === 'inspection'/)
+  assert.match(signin, /Start your private roof record/)
+  assert.match(signin, /does not schedule a Roof Watch visit or send your request to a contractor/)
+})
+
 test('photo plates are drawn and say so', () => {
   const plate = read('components/PhotoPlate.tsx')
   assert.match(plate, /drawn placeholder — no photo exists/)

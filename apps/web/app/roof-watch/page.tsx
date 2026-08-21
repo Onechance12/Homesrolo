@@ -4,7 +4,7 @@ import { DocumentaryImage } from '../../components/DocumentaryImage.tsx'
 import { Illustration } from '../../components/Illustration.tsx'
 import { PageHeader } from '../../components/Prose.tsx'
 import {
-  HOMEOWNER_ROOFING_SIGNIN_URL,
+  HOMEOWNER_ROOF_WATCH_SIGNIN_URL,
   ROOF_WATCH_PHONE_DISPLAY,
   ROOF_WATCH_SMS_URL,
   SITE_NAME,
@@ -156,7 +156,7 @@ export default function RoofWatchPage() {
               <p>Text <strong>ROOF WATCH</strong>, your city, and your ZIP to <strong>{ROOF_WATCH_PHONE_DISPLAY}</strong>. We will reply with current service availability and the written program limits. No roof visit is booked until you have those details.</p>
               <p style={{ marginTop: '1rem' }}>
                 <a className="btn btn--primary" href={ROOF_WATCH_SMS_URL}>Text to check availability</a>{' '}
-                <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a private roof project</a>
+                <a className="btn btn--quiet" href={HOMEOWNER_ROOF_WATCH_SIGNIN_URL}>Start a private roof record</a>
               </p>
             </div>
           </div>
@@ -288,7 +288,7 @@ export default function RoofWatchPage() {
             <p>Text <strong>ROOF WATCH</strong>, your city, and your ZIP to <strong>{ROOF_WATCH_PHONE_DISPLAY}</strong>. We will send the current service answer and written limits before you decide whether to schedule.</p>
             <p style={{ marginTop: '1rem' }}>
               <a className="btn btn--primary" href={ROOF_WATCH_SMS_URL}>Text to check availability</a>{' '}
-              <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a private roof project</a>
+              <a className="btn btn--quiet" href={HOMEOWNER_ROOF_WATCH_SIGNIN_URL}>Start a private roof record</a>
             </p>
             <p style={{ marginTop: '1rem' }}>Not ready to contact anyone? Start with the <Link href="/roof-watch/guides/hail-first-72-hours/">sourced hail-response checklist</Link>, the <Link href="/roof-watch/guides/roof-inspection-report/">inspection-report checklist</Link>, or the <Link href="/services/roofing/">Texas roofing guide</Link>.</p>
           </div>

@@ -139,6 +139,7 @@ export default function SignInPage({
 }) {
   const query = use(searchParams)
   const intent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
+  const isRoofInspectionEntry = intent === 'inspection'
   const mode = usePortMode()
   const { state: session } = useSession()
 
@@ -147,11 +148,17 @@ export default function SignInPage({
       <Link href="/" className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></Link>
       <main id="main" tabIndex={-1} className="gate__main">
         <div className="gate__card">
-          <p className="mono" style={{ marginBottom: '0.4rem' }}>Homeowner sign in</p>
-          <h1 style={{ fontSize: '1.5rem' }}>Open your home&rsquo;s file.</h1>
+          <p className="mono" style={{ marginBottom: '0.4rem' }}>
+            {isRoofInspectionEntry ? 'Roof inspection · homeowner sign in' : 'Homeowner sign in'}
+          </p>
+          <h1 style={{ fontSize: '1.5rem' }}>
+            {isRoofInspectionEntry ? 'Start your private roof record.' : <>Open your home&rsquo;s file.</>}
+          </h1>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
-            Start with the home and its roof projects. Documents, photos, and warranties
-            are planned for the same private file as Homesrolo grows.
+            {isRoofInspectionEntry
+              ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
+              : <>Start with the home and its roof projects. Documents, photos, and warranties
+                are planned for the same private file as Homesrolo grows.</>}
           </p>
 
           {mode === 'synthetic' ? (
@@ -168,7 +175,9 @@ export default function SignInPage({
                   : 'You are already signed in.'}
               </p>
               <Link className="btn btn--primary btn--block" href={withRoofingIntent('/homes', intent)}>
-                {intent ? 'Continue my roof project' : 'Go to your homes'}
+                {isRoofInspectionEntry
+                  ? 'Continue to my roof record'
+                  : intent ? 'Continue my roof project' : 'Go to your homes'}
               </Link>
             </div>
           ) : session.capabilities.magicLinkSignIn ? (
