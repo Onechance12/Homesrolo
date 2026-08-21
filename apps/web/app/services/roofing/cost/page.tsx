@@ -1,18 +1,18 @@
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_COST_GUIDE } from '../../../../lib/content/education.ts'
 import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
-  title: 'Roof replacement cost in Texas and Dallas Fort Worth',
-  description: 'A transparent Texas roof cost guide: roof squares, 2026 Dallas price context, materials, pitch, tear-off, decking, flashing, ventilation, permits, and bid comparison.',
+  title: 'How much does a new roof cost in Texas?',
+  description: 'No generic online price can quote a roof accurately. Learn which scope details change a Texas roof replacement and compare actual proposals line by line.',
   canonical: '/services/roofing/cost/',
   openGraphType: 'article',
   socialTitle: 'Roof replacement cost in Texas and DFW',
-  socialDescription: 'Understand what changes a roof price and compare bids line by line.',
+  socialDescription: 'Learn why roof prices vary and compare the written scope in actual proposals line by line.',
 })
 
 const SOURCES = [
-  { label: 'Dallas roof replacement cost data (updated August 2026)', publisher: 'Angi', href: 'https://www.angi.com/articles/how-much-does-roof-replacement-cost/tx/dallas' },
   { label: 'Roof replacement cost and estimate factors', publisher: 'GAF', href: 'https://www.gaf.com/en-us/plan-design/homeowner-education/roof-cost' },
   { label: 'Residential permitting', publisher: 'City of Dallas', href: 'https://dallas.gov/departments/sustainabledevelopment/buildinginspection/Pages/residential.aspx' },
 ] as const
@@ -26,22 +26,23 @@ const RELATED = [
 export default function RoofingCostPage() {
   return (
     <RoofingArticle
-      eyebrow="Texas roofing costs"
-      title="What does a roof replacement cost in Texas?"
-      lede="Roof prices make more sense once you separate the measurement, materials, labor, wood repair, permits, and warranty. Here is a practical way to compare Dallas Fort Worth estimates."
-      quickAnswer="Angi reports a 2026 Dallas average of $10,054, with most projects in its data falling between $5,960 and $14,203. That is a market benchmark, not a quote for a particular house. Start with the roof measurement and compare the same scope items on every bid."
+      eyebrow="Texas roof cost guide"
+      title="What does a new roof cost in Texas?"
+      lede="Two houses with the same floor plan can require different roofing work. Roof shape, flashing, valleys, ventilation, decking, access, material system, labor, overhead, and profit all belong to the actual project."
+      quickAnswer="An address or house square footage is not enough to price a roof. Compare the written proposals for that roof, and read the scope line by line before treating the totals as comparable. Homesrolo organizes the differences; it does not decide what the roof should cost."
       pathname="/services/roofing/cost/"
       sections={ROOFING_COST_GUIDE}
       sources={SOURCES}
       related={RELATED}
+      dateModified="2026-08-21"
     >
       <section className="section">
         <div className="shell">
           <div className="prose">
-            <p className="eyebrow">2026 Dallas context</p>
-            <h2>A published range is a benchmark, not a bid</h2>
-            <p><a href="https://www.angi.com/articles/how-much-does-roof-replacement-cost/tx/dallas">Angi’s Dallas cost guide</a>, updated in August 2026, reports an average of $10,054 and a typical range of $5,960 to $14,203. GAF cites a 2025 national average of $17,631 from Verisk. The two figures come from different data sets and cover different markets. Neither number replaces a measured local bid.</p>
-            <p>Use online estimates to set expectations. Use the written scope to decide what you are buying.</p>
+            <p className="eyebrow">Why one number falls short</p>
+            <h2>The same house can still be a different roofing job</h2>
+            <p>Floor area does not show roof area, pitch, hips, valleys, stories, penetrations, low-slope sections, access, or existing layers. It also cannot show whether old flashing can remain, how ventilation must be balanced, or what the crew will find after tear-off.</p>
+            <p>Some conditions remain unknown until a professional examines the roof or removal exposes the assembly. A broad online range can provide background context; the written proposals for this roof are the actual numbers available for comparison.</p>
             <table className="cost-table">
               <thead><tr><th>Cost driver</th><th>What changes</th><th>What the proposal needs to state</th></tr></thead>
               <tbody>
@@ -58,13 +59,13 @@ export default function RoofingCostPage() {
       <section className="section section--night" aria-labelledby="roof-bid-example">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2rem' }}>
-            <p className="eyebrow">Why the lowest bid is sometimes not the lowest cost</p>
-            <h2 id="roof-bid-example">Two totals are not comparable until the scope matches</h2>
-            <p>A proposal can look complete and still leave the expensive decisions for later. The differences below are ordinary examples of what hides between a one-page total and a defined roof project.</p>
+            <p className="eyebrow">Same total, different scope</p>
+            <h2 id="roof-bid-example">Compare what is written before comparing totals</h2>
+            <p>A proposal can look complete and still leave important decisions open. These are ordinary examples of the difference between a one-page total and a defined roof project.</p>
           </div>
           <div className="table-scroll">
             <table className="compare">
-              <thead><tr><th>Scope question</th><th>Bid that leaves risk open</th><th>Bid that defines the work</th></tr></thead>
+              <thead><tr><th>Scope question</th><th>Wording that needs clarification</th><th>Details that make proposals comparable</th></tr></thead>
               <tbody>
                 <tr><th>Roof quantity</th><td>Replace complete roof</td><td>States measured squares, report source, pitch, and waste</td></tr>
                 <tr><th>Deck repairs</th><td>Wood extra if needed</td><td>Price per sheet, photo requirement, approval, and quantity on final invoice</td></tr>
@@ -74,6 +75,23 @@ export default function RoofingCostPage() {
                 <tr><th>Closeout</th><td>Final payment on completion</td><td>Defines completion as cleanup, punch list, permit result, invoice, photos, and warranties delivered</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="save-roof-proposals">
+        <div className="shell">
+          <div className="grid grid--2" style={{ alignItems: 'start', gap: '3rem' }}>
+            <div className="prose">
+              <p className="eyebrow">Use your own proposals</p>
+              <h2 id="save-roof-proposals">Record the proposals. Compare the scope.</h2>
+              <p>Give each proposal a private label, then mark what it says about measurement, materials, tear-off, decking, valleys, flashing, penetrations, ventilation, permits, cleanup, warranties, payment terms, and exclusions. When reviewed private uploads are available, the original PDF can be linked to that record.</p>
+              <p><a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Compare my roof proposals</a></p>
+            </div>
+            <div className="note">
+              <strong>Homesrolo does not estimate the roof, rank the proposals, or automatically send proposal details or files anywhere.</strong>{' '}
+              It gives you one private place to see what is stated, what you have not reviewed, and what still needs a question. Anything included in a Jobrolo review is separately selected and consented to.
+            </div>
           </div>
         </div>
       </section>

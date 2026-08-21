@@ -36,6 +36,8 @@ const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
 const HOME_INTAKE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/intake$/
 const HOME_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects$/
 const HOME_PROJECT_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})$/
+const HOME_PROJECT_QUOTES_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes$/
+const HOME_PROJECT_QUOTE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes\/(hquo_[A-Za-z0-9_-]{43})$/
 const HOME_ARTIFACTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/artifacts$/
 const HOME_ROOFING_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/roofing-projects$/
 
@@ -57,6 +59,7 @@ function mappedError(error: unknown): HomeownerHttpResponse {
   if (error.code === 'forbidden') return problem(403, 'forbidden')
   if (error.code === 'not_found') return problem(404, 'not_found')
   if (error.code === 'invalid_request') return problem(400, 'invalid_request')
+  if (error.code === 'conflict') return problem(409, 'conflict')
   return problem(503, 'unavailable')
 }
 
@@ -93,6 +96,14 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
         if (projectMatch?.[1] && projectMatch[2]) {
           return success(await service.readProject(context, projectMatch[1], projectMatch[2]))
         }
+        const projectQuotesMatch = HOME_PROJECT_QUOTES_PATH.exec(request.pathname)
+        if (projectQuotesMatch?.[1] && projectQuotesMatch[2]) {
+          return success(await service.listProjectQuotes(
+            context,
+            projectQuotesMatch[1],
+            projectQuotesMatch[2],
+          ))
+        }
         const artifactsMatch = HOME_ARTIFACTS_PATH.exec(request.pathname)
         if (artifactsMatch?.[1]) {
           return success(await service.listArtifacts(context, artifactsMatch[1]))
@@ -108,6 +119,31 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const projectQuoteMatch = HOME_PROJECT_QUOTE_PATH.exec(request.pathname)
+        if (projectQuoteMatch?.[1] && projectQuoteMatch[2] && projectQuoteMatch[3]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.saveProjectQuote(
+            context,
+            projectQuoteMatch[1],
+            projectQuoteMatch[2],
+            projectQuoteMatch[3],
+            request.jsonBody,
+          ))
+        }
+        const projectQuotesMatch = HOME_PROJECT_QUOTES_PATH.exec(request.pathname)
+        if (projectQuotesMatch?.[1] && projectQuotesMatch[2]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.createProjectQuote(
+            context,
+            projectQuotesMatch[1],
+            projectQuotesMatch[2],
+            request.jsonBody,
+          ), 201)
+        }
         const roofingProjectMatch = HOME_ROOFING_PROJECTS_PATH.exec(request.pathname)
         if (roofingProjectMatch?.[1]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -138,6 +174,8 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
          || HOME_INTAKE_PATH.test(request.pathname)
          || HOME_PROJECTS_PATH.test(request.pathname)
          || HOME_PROJECT_PATH.test(request.pathname)
+         || HOME_PROJECT_QUOTES_PATH.test(request.pathname)
+         || HOME_PROJECT_QUOTE_PATH.test(request.pathname)
          || HOME_ARTIFACTS_PATH.test(request.pathname)
          || HOME_ROOFING_PROJECTS_PATH.test(request.pathname)) {
         return problem(405, 'method_not_allowed')
@@ -150,4 +188,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines authenticated home, project, and artifact-metadata reads plus exact home, intake, and roofing-project commands. Multipart artifact upload and private content delivery remain separate server-only adapters; no generic write or Jobrolo delivery exists here.'
+  'This boundary defines authenticated home, project, quote, and artifact-metadata reads plus exact home, intake, roofing-project, and private-quote commands. Multipart artifact upload and private content delivery remain separate server-only adapters; no generic write or Jobrolo delivery exists here.'

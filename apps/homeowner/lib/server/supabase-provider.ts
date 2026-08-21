@@ -28,6 +28,13 @@ import {
   type HomeownerProjectReviewReservation,
 } from '../../../../src/homeowner/homeowner-project-review.v1.ts'
 import { homesroloJobroloProjectIntakeReceiptSchema } from '../../../../src/contracts/homesrolo-jobrolo-project-intake.v1.ts'
+import {
+  HOMEOWNER_PROJECT_QUOTE_VERSION,
+  homeownerProjectQuoteCommandIntent,
+  homeownerProjectQuoteSchema,
+  type HomeownerProjectQuote,
+  type HomeownerProjectQuotePort,
+} from '../../../../src/homeowner/homeowner-project-quotes.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -186,6 +193,26 @@ function artifactFromRow(input: unknown) {
   })
 }
 
+function quoteFromRow(input: unknown): HomeownerProjectQuote {
+  const row = record(input)
+  return homeownerProjectQuoteSchema.parse({
+    recordVersion: HOMEOWNER_PROJECT_QUOTE_VERSION,
+    quoteRef: requiredString(row, 'quote_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    projectRef: requiredString(row, 'project_ref'),
+    controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
+    contractorLabel: requiredString(row, 'contractor_label'),
+    ...(row.proposal_date === null ? {} : { proposalDate: requiredString(row, 'proposal_date') }),
+    ...(row.artifact_ref === null ? {} : { artifactRef: requiredString(row, 'artifact_ref') }),
+    scope: row.scope,
+    ...(row.notes === null || row.notes === '' ? {} : { notes: requiredString(row, 'notes') }),
+    source: requiredString(row, 'source'),
+    revision: requiredNumber(row, 'revision'),
+    createdAt: canonicalInstant(row, 'created_at'),
+    updatedAt: canonicalInstant(row, 'updated_at'),
+  })
+}
+
 function stableJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
@@ -218,7 +245,8 @@ export function createSupabaseClients(configuration: HomeownerRuntimeConfigurati
 /** One server-only adapter implements identity, exact-home reads, and commands. */
 export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
-  HomeownerPrivateObjectPort, HomeownerProjectReviewPersistencePort {
+  HomeownerPrivateObjectPort, HomeownerProjectQuotePort,
+  HomeownerProjectReviewPersistencePort {
   readonly #client: SupabaseClient
   readonly #now: () => string
   readonly #supabaseOrigin: string | null
@@ -304,6 +332,16 @@ export class SupabaseHomeownerProvider implements
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(projectFromRow)
   }
+  async listProjectQuotes(grant: AuthorizedHomeownerWorkspace, projectRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_project_quotes')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .eq('project_ref', projectRef)
+      .order('created_at', { ascending: true })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(quoteFromRow)
+  }
   async listArtifactMetadata(grant: AuthorizedHomeownerWorkspace) {
     const { data, error } = await this.#client
       .from('homesrolo_homeowner_artifacts')
@@ -323,7 +361,7 @@ export class SupabaseHomeownerProvider implements
     const { data, error } = await this.#client.rpc('homesrolo_create_private_home_workspace', {
       p_principal_ref: input.authorization.principalRef,
       p_command_ref: input.command.commandRef,
-      p_command_digest: digest(input.command),
+      p_command_digest: digest(homeownerProjectQuoteCommandIntent(input.command)),
       p_home_ref: homeRef,
       p_membership_ref: membershipRef,
       p_display_label: input.command.displayLabel,
@@ -343,7 +381,7 @@ export class SupabaseHomeownerProvider implements
       p_membership_ref: input.grant.membershipRef,
       p_membership_revision: input.grant.membershipRevision,
       p_command_ref: input.command.commandRef,
-      p_command_digest: digest(input.command),
+      p_command_digest: digest(homeownerProjectQuoteCommandIntent(input.command)),
       p_project_ref: projectRef,
       p_title: input.command.title,
       p_summary: input.command.summary ?? '',
@@ -351,6 +389,61 @@ export class SupabaseHomeownerProvider implements
     })
     if (error) throw new HomeownerApiError('unavailable')
     return projectFromRow(data)
+  }
+
+  async createProjectQuote(input: Parameters<HomeownerProjectQuotePort['createProjectQuote']>[0]) {
+    const quoteRef = mintOpaqueRef('hquo')
+    const { data, error } = await this.#client.rpc('homesrolo_create_homeowner_project_quote', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_project_ref: input.command.projectRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: digest(input.command),
+      p_quote_ref: quoteRef,
+      p_contractor_label: input.command.contractorLabel,
+      p_proposal_date: input.command.proposalDate ?? null,
+      p_artifact_ref: input.command.artifactRef ?? null,
+      p_scope: input.command.scope,
+      p_notes: input.command.notes ?? '',
+      p_requested_at: input.command.requestedAt,
+    })
+    if (error) {
+      if (error.message.includes('command_digest_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return quoteFromRow(data)
+  }
+
+  async saveProjectQuote(input: Parameters<HomeownerProjectQuotePort['saveProjectQuote']>[0]) {
+    const { data, error } = await this.#client.rpc('homesrolo_save_homeowner_project_quote', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_project_ref: input.command.projectRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: digest(input.command),
+      p_quote_ref: input.command.quoteRef,
+      p_expected_revision: input.command.expectedRevision,
+      p_contractor_label: input.command.contractorLabel,
+      p_proposal_date: input.command.proposalDate ?? null,
+      p_artifact_ref: input.command.artifactRef ?? null,
+      p_scope: input.command.scope,
+      p_notes: input.command.notes ?? '',
+      p_requested_at: input.command.requestedAt,
+    })
+    if (error) {
+      if (error.message.includes('quote_revision_conflict')
+        || error.message.includes('command_digest_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return quoteFromRow(data)
   }
 
   async recordInitialIntake(input: Parameters<HomeownerCommandPort['recordInitialIntake']>[0]) {

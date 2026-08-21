@@ -22,7 +22,10 @@ function toWebResponse(response: HomeownerHttpResponse): Response {
   })
 }
 
-const MAX_JSON_BYTES = 4096
+// A fully reviewed 18-row proposal can carry bounded detail on every row.
+// Eight KiB contains that strict schema while remaining far below a generic
+// document body or file-upload surface.
+const MAX_JSON_BYTES = 8192
 
 export function mutationOriginAllowed(
   method: string,

@@ -24,6 +24,7 @@ export function RoofingArticle({
   sections,
   sources,
   related,
+  dateModified = '2026-08-12',
   children,
 }: {
   title: string
@@ -34,6 +35,7 @@ export function RoofingArticle({
   sections: readonly EducationalSection[]
   sources: readonly RoofingSource[]
   related: readonly RoofingRelatedLink[]
+  dateModified?: string
   children?: React.ReactNode
 }) {
   const canonical = `${SITE_ORIGIN}${pathname}`
@@ -44,7 +46,7 @@ export function RoofingArticle({
     description: lede,
     mainEntityOfPage: canonical,
     datePublished: '2026-08-12',
-    dateModified: '2026-08-12',
+    dateModified,
     inLanguage: 'en-US',
     isAccessibleForFree: true,
     citation: sources.map(source => source.href),
@@ -74,7 +76,7 @@ export function RoofingArticle({
             <span aria-current="page">{title}</span>
           </nav>
           <PageHeader eyebrow={eyebrow} title={title} lede={lede} />
-          <p className="article-meta">Published by Homesrolo | Updated August 12, 2026 | Sources linked below</p>
+          <p className="article-meta">Published by Homesrolo | Updated {new Date(`${dateModified}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} | Sources linked below</p>
         </div>
       </section>
 

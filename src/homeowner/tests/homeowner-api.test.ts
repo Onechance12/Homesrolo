@@ -132,6 +132,7 @@ function repository(overrides: Partial<HomeownerRepositoryPort> = {}): Homeowner
 const capabilities = {
   magicLinkSignIn: false,
   persistence: false,
+  projectQuotes: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -144,6 +145,7 @@ function service(input: {
   repository?: HomeownerRepositoryPort
   commands?: HomeownerCommandPort
   persistence?: boolean
+  projectQuotes?: boolean
   uploads?: boolean
   projectReview?: boolean
   projectReviewAttachments?: boolean
@@ -167,6 +169,7 @@ function service(input: {
     capabilities: {
       ...capabilities,
       persistence: input.persistence ?? false,
+      projectQuotes: input.projectQuotes ?? false,
       uploads: input.uploads ?? false,
       projectReview: input.projectReview ?? false,
       projectReviewAttachments: input.projectReviewAttachments ?? false,

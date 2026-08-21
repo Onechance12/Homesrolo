@@ -3,7 +3,8 @@
 Status: **configured private runtime foundation.** Passwordless email identity,
 opaque Homesrolo sessions, private Postgres persistence, home creation, the
 six-system intake, a private roof-project request, and private PDF/JPEG/PNG
-artifact storage, and the consent-bound Jobrolo review handoff are implemented.
+artifact storage, a private roof-proposal scope comparison, and the
+consent-bound Jobrolo review handoff are implemented.
 Invitations, public sharing, controller verification, and automatic
 professional distribution remain unavailable.
 
@@ -36,6 +37,8 @@ membership; a download rechecks it again after object retrieval. Browser
 responses contain no provider object key, integrity hash, or public URL.
 `HOMESROLO_PRIVATE_UPLOADS_ENABLED=true` is a separate, default-off release
 gate and must not be enabled before migration `202608120003` is applied.
+It must also remain off until malware quarantine/scanning, abuse controls,
+cleanup, deletion, and retention are implemented and verified.
 
 The initial living record stores one source-labeled property-facts record and exactly one entry for
 each of the six supported home systems. Unknown stays unknown, approximate
@@ -54,6 +57,13 @@ The matching framework-neutral HTTP boundary serves `GET /api/v1/session`,
 `POST /api/v1/homes/{opaque-home-ref}/intake`, exact-home project list/detail
 reads, `POST /api/v1/homes/{opaque-home-ref}/roofing-projects`, exact-home
 artifact metadata listing/upload, and exact-artifact private download.
+Roofing projects also expose an exact-project proposal list, strict create, and
+revision-backed full save. These quote routes store homeowner-entered company
+labels and partial scope classifications. An absent row means “not reviewed”;
+`not_stated` is an explicit homeowner classification. Migration
+`202608210001` must be applied and verified before the default-off
+`HOMESROLO_PROJECT_QUOTES_ENABLED=true` release gate is enabled. When the gate
+is false, the browser makes no quote-list or quote-write request.
 One additional controller-only route submits an exact roofing project for
 review. The browser supplies only contact preferences, explicitly selected
 artifact references, and consent; the server derives the authenticated email,
@@ -77,6 +87,13 @@ status, title, summary, principal scope, and timestamp. There is no generic
 browser project-create route and no contractor or Jobrolo authority in this
 command.
 
+The proposal command carries no address, authority, total, retail-material
+calculation, price score, ranking, or recommendation. A linked source must be
+an available PDF document from the same exact private home and roofing project.
+The server fresh-checks the controller and uses command receipts for idempotent
+create/save operations. Saves include an expected revision so another session
+cannot be silently overwritten.
+
 ## Separation from Jobrolo
 
 The homeowner runtime has its own principals, sessions, home references,
@@ -87,6 +104,10 @@ inbox. Private files remain in Homesrolo unless the separate attachment-handoff
 gate is explicitly enabled. It creates no Jobrolo lead, customer, project,
 professional assignment, or automatic distribution. Unknown delivery outcomes
 are held for reconciliation and are never retried automatically.
+Proposal labels, scope classifications, and comparison notes never enter the
+current Jobrolo V1 disclosure. A homeowner may separately choose an exact
+proposal PDF in the existing file-selection review, but nothing is selected
+automatically and the comparison metadata stays in Homesrolo.
 
 The handoff is default-off and requires all four server-only settings:
 `HOMESROLO_JOBROLO_INTAKE_ENABLED=true`, the exact Jobrolo intake URL, a bounded

@@ -163,6 +163,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/route.ts',
@@ -206,6 +208,13 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
         `${rel} delegates to the isolated server integration seam`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
         `${rel} must not expose a read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the private quote list`)
+      assert.match(content, /export async function POST/, `${rel} serves strict quote creation`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves revision-backed quote saving`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not add another quote read surface`)
     } else {
       assert.match(content, /export async function GET/, `${rel} serves GET`)
     }
@@ -216,6 +225,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
@@ -287,7 +298,7 @@ test('project review renders only on its exact server-reported capability', () =
   const project = read('app/home/[homeId]/projects/[projectId]/page.tsx')
   assert.match(
     project,
-    /!project\.isSynthetic\s*&&\s*session\.state\.kind === 'signed_in'\s*&&\s*session\.state\.capabilities\.projectReview \? /,
+    /!project\.isSynthetic\s*&&\s*project\.trade === 'Roofing'\s*&&\s*session\.state\.kind === 'signed_in'\s*&&\s*session\.state\.capabilities\.projectReview \? /,
     'the review form is fail-closed until the session reports projectReview',
   )
   assert.doesNotMatch(project, /capabilities\.sharing/,
@@ -310,6 +321,42 @@ test('project review renders only on its exact server-reported capability', () =
     /selectedArtifactRefs: attachmentHandoffEnabled \? selectedArtifacts : \[\]/g,
   ) ?? []).length, 2,
   'both preview and submit force an empty file list when attachment handoff is disabled')
+})
+
+test('roof proposal comparison is private, neutral, editable, and separate from Jobrolo', () => {
+  const project = read('app/home/[homeId]/projects/[projectId]/page.tsx')
+  const vault = read('components/RoofQuoteVault.tsx')
+  const joined = `${project}\n${vault}`
+  assert.match(project, /uploadsEnabled\s*\?\s*port\.listDocuments\(homeId\)/,
+    'the disabled upload capability makes zero artifact-list requests')
+  assert.match(project, /session\.state\.capabilities\.projectQuotes/,
+    'the proposal vault is gated independently from general persistence')
+  assert.match(project, /sessionReady\s*&&\s*!projectQuotesEnabled/,
+    'the page does not flash an unavailable quote state while session capabilities load')
+  assert.match(project, /Private uploads are unavailable right now/,
+    'the capability-off state is visible and truthful')
+  assert.match(vault, /Scope only—not a price score/)
+  assert.match(vault, /Homesrolo does not estimate this roof, rank proposals/)
+  assert.match(vault, /Not reviewed/)
+  assert.match(vault, /Not stated/)
+  assert.match(vault, /valleys/)
+  assert.match(vault, /penetrations/)
+  assert.match(vault, /expectedRevision/,
+    'saved classifications can be corrected without overwriting another session')
+  assert.match(vault, /reopen the record before making a correction/,
+    'a revision conflict invalidates the stale full-replacement draft')
+  for (const visibleField of ['Proposal date', 'Linked original', 'General notes']) {
+    assert.match(vault, new RegExp(visibleField), `${visibleField} is visible outside edit mode`)
+  }
+  assert.match(vault, /aria-label={`Edit proposal record:/,
+    'each edit control names the proposal it changes')
+  assert.match(vault, /These classifications and notes stay in Homesrolo/,
+    'structured quote metadata never implies Jobrolo disclosure')
+  assert.match(vault, /Nothing was sent to Jobrolo or a contractor/,
+    'a failed local save never implies cross-system delivery')
+  assert.doesNotMatch(joined, /fair.?price|overpriced|best proposal|recommended proposal|priceScore/i)
+  assert.doesNotMatch(vault, /submitProjectForReview|selectedArtifactRefs|jobroloTenant/i,
+    'the quote component has no Jobrolo transport or handoff authority')
 })
 
 test('a nameless server session renders a neutral label, never "as null"', () => {

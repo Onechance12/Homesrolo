@@ -37,12 +37,13 @@ export const SYNTHETIC_NOTICE =
 
 /**
  * What the server actually offers, reported by GET /api/v1/session — exactly
- * the seven booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * the eight booleans homeowner-api.v1 defines. The synthetic adapter reports
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
   readonly magicLinkSignIn: boolean
   readonly persistence: boolean
+  readonly projectQuotes: boolean
   readonly uploads: boolean
   readonly projectReview: boolean
   readonly projectReviewAttachments: boolean
@@ -53,6 +54,7 @@ export interface SignInCapabilities {
 export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   magicLinkSignIn: false,
   persistence: false,
+  projectQuotes: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -244,6 +246,63 @@ export interface StartRoofingProjectInput {
   readonly notes: string
 }
 
+export type QuoteScopeKey =
+  | 'measurement'
+  | 'roof_configuration'
+  | 'tear_off'
+  | 'decking'
+  | 'underlayment'
+  | 'leak_barrier'
+  | 'primary_materials'
+  | 'starter_and_ridge'
+  | 'valleys'
+  | 'flashing_transitions'
+  | 'penetrations'
+  | 'ventilation'
+  | 'permits'
+  | 'cleanup'
+  | 'workmanship_warranty'
+  | 'manufacturer_warranty'
+  | 'payment_terms'
+  | 'exclusions'
+
+export type QuoteScopeStatus = 'included' | 'excluded' | 'allowance' | 'not_stated'
+
+export interface QuoteScopeItem {
+  readonly status: QuoteScopeStatus
+  readonly detail?: string
+}
+
+export type QuoteScope = Readonly<Partial<Record<QuoteScopeKey, QuoteScopeItem>>>
+
+export interface ProjectQuote {
+  readonly quoteRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly contractorLabel: string
+  readonly proposalDate: string | null
+  readonly artifactRef: string | null
+  readonly scope: QuoteScope
+  readonly notes: string
+  readonly source: 'homeowner_entry'
+  readonly revision: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface CreateProjectQuoteInput {
+  readonly commandRef: string
+  readonly contractorLabel: string
+  readonly proposalDate?: string
+  readonly artifactRef?: string
+  readonly scope: QuoteScope
+  readonly notes?: string
+}
+
+export interface SaveProjectQuoteInput extends CreateProjectQuoteInput {
+  readonly expectedRevision: number
+}
+
 // --- documents and warranties -------------------------------------------------
 
 export type DocumentKind = 'document' | 'contract' | 'invoice' | 'warranty' | 'photo_set' | 'permit' | 'manual'
@@ -412,6 +471,21 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: StartRoofingProjectInput,
   ): Promise<PortResult<ProjectSummary>>
+  listProjectQuotes(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<PortResult<readonly ProjectQuote[]>>
+  createProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    input: CreateProjectQuoteInput,
+  ): Promise<PortResult<ProjectQuote>>
+  saveProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: SaveProjectQuoteInput,
+  ): Promise<PortResult<ProjectQuote>>
 
   listDocuments(homeRef: string): Promise<PortResult<readonly DocumentSummary[]>>
   uploadPrivateArtifact(

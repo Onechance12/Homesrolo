@@ -12,6 +12,7 @@ const configurationSchema = z.object({
   publishableKey: providerKey,
   secretKey: providerKey,
   appOrigin: httpsUrl,
+  projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
   jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict()
@@ -21,6 +22,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly publishableKey: string
   readonly secretKey: string
   readonly appOrigin: string
+  readonly projectQuotesEnabled: boolean
   readonly privateUploadsEnabled: boolean
   readonly jobroloAttachmentsEnabled: boolean
 }
@@ -38,6 +40,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
+    projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
     jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
   })
@@ -47,6 +50,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: parsed.data.publishableKey,
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
+    projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
     jobroloAttachmentsEnabled: parsed.data.jobroloAttachmentsEnabled === 'true',
   })
