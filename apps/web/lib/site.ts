@@ -30,6 +30,13 @@ export function roofWatchSmsUrl(city: string): string {
  */
 export const HOMEOWNER_ROOFING_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?intent=not_sure`
 
+/**
+ * Roof Watch can carry only the existing inspection choice into the private
+ * app. This opens a private project draft; it does not schedule a visit or
+ * send anything to a contractor.
+ */
+export const HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?intent=inspection`
+
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([

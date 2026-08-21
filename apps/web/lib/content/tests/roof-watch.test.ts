@@ -150,6 +150,7 @@ test('public Roof Watch pages do not promise unavailable account storage or enro
   assert.doesNotMatch(source, /enroll online/i)
   assert.doesNotMatch(source, /stays? (?:in your account|there) forever/i)
   assert.doesNotMatch(source, /verified roofing pro|vetted local (?:pro|roofer)/i)
-  assert.match(source, /Start a private roof project/)
+  assert.match(source, /Start a private roof record/)
+  assert.match(source, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL/)
   assert.match(source, /check availability/i)
 })

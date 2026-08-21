@@ -132,6 +132,7 @@ test('the profile renders the retraction disclaimers, not just the model', () =>
 test('the homeowner conversion path starts a project instead of publishing a contractor directory', () => {
   assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/app\.homesrolo\.com'/)
   assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
+  assert.match(site, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=inspection`/)
   assert.match(site, /label: 'Start a project'/)
   assert.match(professionals, /Create my home account/)
   assert.match(professionals, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
