@@ -1,26 +1,15 @@
 # Lane-scoped CI for the Phase 1 homeowner application shell.
 # Deliberately a separate workflow from ci.yml: the integration lane owns that
-# file. This lane follows the homeowner app together with the private runtime,
-# migrations, and the one versioned Jobrolo handoff contract it consumes.
+# file, and this one triggers only on changes inside apps/homeowner/**.
 
 name: Homeowner app
 
 on:
   push:
     branches: ['**']
-    paths:
-      - 'apps/homeowner/**'
-      - 'src/homeowner/**'
-      - 'src/contracts/homesrolo-jobrolo-project-intake.v1.ts'
-      - 'supabase/migrations/**'
-      - '.github/workflows/homeowner-app.yml'
+    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
   pull_request:
-    paths:
-      - 'apps/homeowner/**'
-      - 'src/homeowner/**'
-      - 'src/contracts/homesrolo-jobrolo-project-intake.v1.ts'
-      - 'supabase/migrations/**'
-      - '.github/workflows/homeowner-app.yml'
+    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
 
 jobs:
   homeowner:
