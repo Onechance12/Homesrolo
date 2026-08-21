@@ -8,6 +8,7 @@ import {
   authorizeHomeownerWorkspace,
   authorizePrivateHomeCreation,
   createHomeWorkspaceInputSchema,
+  homeownerProjectCommandIntent,
   createHomeownerProjectInputSchema,
   homeownerArtifactMetadataSchema,
   homeownerMaintenanceSchema,
@@ -375,6 +376,21 @@ test('project commands use the runtime vocabulary and reject impossible dates', 
     requestedAt: now,
   }
   assert.ok(createHomeownerProjectInputSchema.parse(command))
+  assert.deepEqual(
+    homeownerProjectCommandIntent(command),
+    {
+      commandRef: command.commandRef,
+      title: command.title,
+      category: command.category,
+      status: command.status,
+      occurredOn: command.occurredOn,
+    },
+    'receipt intent excludes server execution time so retries are stable',
+  )
+  assert.deepEqual(
+    homeownerProjectCommandIntent({ ...command, requestedAt: '2026-08-10T12:05:00.000Z' }),
+    homeownerProjectCommandIntent(command),
+  )
   assert.throws(() => createHomeownerProjectInputSchema.parse({
     ...command,
     status: 'recorded',

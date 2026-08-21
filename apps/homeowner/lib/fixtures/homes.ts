@@ -212,7 +212,9 @@ export function timelineFor(homeRef: string): readonly TimelineEntry[] {
       detail: 'The Birch House was added with its pre-purchase inspection report.',
       href: null, isSynthetic: true,
     },
-    ...FIXTURE_PROJECTS.map((p, i) => ({
+    ...FIXTURE_PROJECTS
+      .filter((p): p is typeof p & { performedOn: string } => p.performedOn !== null)
+      .map((p, i) => ({
       entryRef: opaque('hent', 'bcd'[i] ?? 'x'),
       homeRef,
       kind: 'project' as const,
@@ -221,7 +223,7 @@ export function timelineFor(homeRef: string): readonly TimelineEntry[] {
       detail: `${p.trade} — ${p.contractor}`,
       href: `/home/${homeRef}/projects/${p.projectRef}`,
       isSynthetic: true as const,
-    })),
+      })),
     ...FIXTURE_WARRANTIES.map((w, i) => ({
       entryRef: opaque('hent', 'ef'[i] ?? 'y'),
       homeRef,

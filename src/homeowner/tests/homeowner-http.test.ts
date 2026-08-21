@@ -124,6 +124,7 @@ function handler() {
       magicLinkSignIn: false,
       persistence: true,
       projectQuotes: false,
+      homeResearch: false,
       uploads: true,
       projectReview: false,
       projectReviewAttachments: false,
@@ -212,6 +213,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
       magicLinkSignIn: false,
       persistence: false,
       projectQuotes: false,
+      homeResearch: false,
       uploads: false,
       projectReview: false,
       projectReviewAttachments: false,
@@ -223,7 +225,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
   assert.equal(response.status, 503)
   assert.deepEqual(response.body, { error: { code: 'unavailable' } })
   assert.equal(JSON.stringify(response.body).includes('database'), false)
-  assert.match(HOMEOWNER_HTTP_WARNING, /no generic write/)
+  assert.match(HOMEOWNER_HTTP_WARNING, /no open-ended mutation/)
 })
 
 test('POST /api/v1/homes accepts only the strict command and returns one safe summary', async () => {

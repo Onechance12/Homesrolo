@@ -441,7 +441,7 @@ export const ABOUT_HOMESROLO: readonly EducationalSection[] = Object.freeze([
     heading: 'Why roofing comes first',
     body: Object.freeze([
       'Roofing combines a large purchase, technical construction details, local permit rules, severe-weather exposure, warranties, and sometimes an insurance claim. Homeowners are often asked to make decisions before they know which questions to ask.',
-      'Homesrolo starts by making those questions, sources, and records easier to understand. The same approach can later extend to other major home systems.',
+      'Homesrolo starts by making those questions, sources, and records easier to understand. The private project record already extends across major home systems; secure files, sharing, and public proof come later.',
     ]),
   },
   {
@@ -494,31 +494,31 @@ export const EDITORIAL_STANDARDS: readonly EducationalSection[] = Object.freeze(
 /** /how-it-works — the Home Project Passport explained. */
 export const HOW_IT_WORKS_STEPS: readonly EducationalSection[] = Object.freeze([
   {
-    heading: 'Work happens, and a record exists',
+    heading: 'Open one private file for the home',
     body: Object.freeze([
-      'A company completes real work on a home and records what was done: materials, dates, who performed it, '
-        + 'warranty documents, and photographs.',
+      'The homeowner starts with a familiar home name and general area. Optional details can stay unknown instead '
+        + 'of being guessed.',
     ]),
   },
   {
-    heading: 'The homeowner decides what to release',
+    heading: 'Record work from any point in its life',
     body: Object.freeze([
-      'Nothing becomes public because work happened. A homeowner reviews the record and releases the parts they '
-        + 'choose. An unreleased record stays private, and its existence is not published either.',
+      'Add something being considered, work happening now, or a project completed years ago. Roofing, interiors, '
+        + 'HVAC, plumbing, electrical, exterior work, appliances, landscaping, pest care, pools, and new construction share one history.',
     ]),
   },
   {
-    heading: 'The released record becomes a passport entry',
+    heading: 'Add supporting records when secure storage opens',
     body: Object.freeze([
-      'A released project carries its own provenance: what was done, by whom, with which materials, and when. '
-        + 'That is what makes it evidence rather than a claim.',
+      'Photos, contracts, invoices, manuals, warranties, insurance papers, and seasonal condition checks belong '
+        + 'with the home. Secure upload storage is not live yet, so the current product does not pretend those files were saved.',
     ]),
   },
   {
-    heading: 'The passport outlives the job and the owner',
+    heading: 'Choose what may leave the private account',
     body: Object.freeze([
-      'The home keeps its record. Access changes over time and is always controlled, but the underlying history '
-        + 'of the property is durable rather than scattered across companies that may no longer exist.',
+      'The planned Passport model adds explicit homeowner review and release controls before any record can support '
+        + 'sharing or public proof. Those release capabilities are not live today.',
     ]),
   },
 ])
@@ -601,10 +601,10 @@ export const IDEAS_INTRO: readonly EducationalSection[] = Object.freeze([
 /** /for-professionals — what a company gets, stated without promises. */
 export const FOR_PROFESSIONALS: readonly EducationalSection[] = Object.freeze([
   {
-    heading: 'Your work becomes a record you do not own alone',
+    heading: 'The planned record starts with homeowner control',
     body: Object.freeze([
-      'When a homeowner releases a project, the record carries who performed the work. It stays attached to the '
-        + 'home rather than living only in your files, and it remains after a job closes.',
+      'A future homeowner release could name who performed the work while keeping the project attached to the home. '
+        + 'The release and professional-facing record do not exist yet.',
     ]),
   },
   {

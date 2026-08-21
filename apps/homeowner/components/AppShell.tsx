@@ -18,12 +18,12 @@ import {
 import { SignOutButton } from './SignOutButton.tsx'
 
 const NAV = [
-  { segment: '', label: 'Home', icon: IconHome },
-  { segment: 'projects', label: 'Projects', icon: IconProjects },
-  { segment: 'documents', label: 'Documents', icon: IconDocs },
-  { segment: 'timeline', label: 'Timeline', icon: IconThread },
-  { segment: 'warranties', label: 'Warranties', icon: IconShield },
-  { segment: 'settings', label: 'Settings', icon: IconGear },
+  { segment: '', label: 'Home', tabLabel: 'Home', icon: IconHome },
+  { segment: 'projects', label: 'Projects', tabLabel: 'Projects', icon: IconProjects },
+  { segment: 'documents', label: 'Home library', tabLabel: 'Library', icon: IconDocs },
+  { segment: 'timeline', label: 'Events & care', tabLabel: 'Care', icon: IconThread },
+  { segment: 'warranties', label: 'Warranties', tabLabel: 'Warranties', icon: IconShield },
+  { segment: 'settings', label: 'Settings', tabLabel: 'Settings', icon: IconGear },
 ] as const
 
 /** The five that fit a thumb; settings lives in the rail and the Home screen. */
@@ -82,12 +82,12 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         <SignOutButton compact />
       </header>
 
-      <nav className="rail" aria-label="Home file">
+      <nav className="rail" aria-label="Home Rolodex">
         <Link href="/homes" className="rail__brand">
           <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
         </Link>
         <div className="rail__home">
-          <span className="mono">Home file</span>
+          <span className="mono">Home Rolodex</span>
           <strong>{alias}</strong>
           <Link href="/homes" style={{ fontSize: '0.8rem' }}>Switch home</Link>
         </div>
@@ -119,15 +119,15 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         {children}
       </main>
 
-      <nav className="tabbar" aria-label="Home file sections">
+      <nav className="tabbar" aria-label="Home Rolodex sections">
         {NAV.filter(item => (TAB_SEGMENTS as readonly string[]).includes(item.segment))
-          .map(({ segment, label, icon: Icon }) => (
+          .map(({ segment, tabLabel, icon: Icon }) => (
             <Link
               key={segment}
               href={navHref(homeId, segment)}
               aria-current={isCurrent(pathname, homeId, segment) ? 'page' : undefined}
             >
-              <Icon size={22} /> {label}
+              <Icon size={22} /> {tabLabel}
             </Link>
           ))}
       </nav>

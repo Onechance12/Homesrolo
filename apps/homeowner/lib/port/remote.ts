@@ -10,6 +10,7 @@
  *   GET  /api/v1/homes/{homeRef}  → decodeServerHomeView
  *   POST /api/v1/homes            → 201 decodeServerHomeSummary
  *   POST /api/v1/homes/{homeRef}/intake → 201 decodeRecordedHomeIntake
+ *   POST /api/v1/homes/{homeRef}/research → 200 decodeHomeResearchResult
  *
  * The create body is EXACTLY homeownerApiCreateHomeInputSchema:
  * `{ commandRef, displayLabel, privateLocationLabel }`. The commandRef is the
@@ -43,7 +44,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeHomeResearchResult, decodeList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -73,6 +74,15 @@ function validCalendarDate(value: string): boolean {
 }
 function homeRefSegment(candidate: string): string | null {
   return HOME_REF.test(candidate) ? candidate : null
+}
+
+function boundedResearchText(value: string, maximum: number): string | null {
+  const trimmed = value.trim()
+  return trimmed.length >= 1
+    && trimmed.length <= maximum
+    && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(trimmed)
+    ? trimmed
+    : null
 }
 
 function projectRefSegment(candidate: string): string | null {
@@ -258,6 +268,54 @@ export function createRemotePort(
       return result
     },
 
+    async researchHome(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      if (!input || typeof input !== 'object') return { ok: false, error: 'invalid' }
+      const address = typeof input.address === 'string'
+        ? boundedResearchText(input.address, 200)
+        : null
+      const message = typeof input.message === 'string'
+        ? boundedResearchText(input.message, 800)
+        : null
+      const history = Array.isArray(input.history) ? input.history : []
+      const normalizedHistory = history.map(turn => {
+        if (!turn || typeof turn !== 'object') return { role: null, text: null }
+        return {
+          role: turn.role === 'user' || turn.role === 'assistant' ? turn.role : null,
+          text: typeof turn.text === 'string' ? boundedResearchText(turn.text, 600) : null,
+        }
+      })
+      const totalCharacters = (message?.length ?? 0)
+        + normalizedHistory.reduce((total, turn) => total + (turn.text?.length ?? 0), 0)
+      if (!ref || !address || !message
+        || input.consentToResearchThisAddressOnline !== true
+        || address.includes('\n') || address.includes('\r') || address.includes('://')
+        || !/\p{L}/u.test(address) || !/\d/.test(address)
+        || !Array.isArray(input.history)
+        || history.length > 4
+        || normalizedHistory.some(turn => turn.role === null || !turn.text)
+        || totalCharacters > 2_800) {
+        return { ok: false, error: 'invalid' }
+      }
+      const body = {
+        address,
+        message,
+        consentToResearchThisAddressOnline: true as const,
+        history: normalizedHistory.map(turn => ({
+          role: turn.role as 'user' | 'assistant',
+          text: turn.text as string,
+        })),
+      }
+      if (new TextEncoder().encode(JSON.stringify(body)).byteLength > 8 * 1024) {
+        return { ok: false, error: 'invalid' }
+      }
+      return call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/research`,
+        body,
+      }, decodeHomeResearchResult)
+    },
+
     async requestMagicLink(email, requestedIntent = null) {
       const normalized = email.trim().toLowerCase()
       if (normalized.length < 3 || normalized.length > 254
@@ -313,6 +371,53 @@ export function createRemotePort(
     },
 
     async addProject() { return UNDEFINED_ROUTE },
+
+    async createProject(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      const categories = [
+        'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
+        'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
+      ] as const
+      const statuses = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+      const title = input.title.trim()
+      const summary = input.summary.trim()
+      const occurredOn = input.occurredOn?.trim()
+      if (!ref
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !categories.includes(input.category)
+        || !statuses.includes(input.status)
+        || title.length < 1
+        || title.length > 120
+        || summary.length > 2000
+        || (occurredOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(occurredOn))) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/projects`,
+        body: {
+          commandRef: input.commandRef,
+          title,
+          category: input.category,
+          status: input.status,
+          ...(occurredOn ? { occurredOn } : {}),
+          ...(summary ? { summary } : {}),
+        },
+      }, decodeProject, 201)
+      const trade = {
+        roofing: 'Roofing', exterior: 'Exterior', interior: 'Interior',
+        electrical: 'Electrical', plumbing: 'Plumbing', hvac: 'HVAC',
+        landscaping: 'Landscaping', appliances: 'Appliances', pest: 'Pest control',
+        pool: 'Pool', new_construction: 'New construction', other: 'Other',
+      } as const
+      if (result.ok && (result.value.homeRef !== ref
+        || result.value.trade !== trade[input.category]
+        || result.value.status !== input.status
+        || result.value.performedOn !== (occurredOn || null))) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
 
     async startRoofingProject(homeRef, input) {
       const ref = homeRefSegment(homeRef)

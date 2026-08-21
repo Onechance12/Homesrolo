@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
-  answer, back, canonicalDraft, draftFrom, initialIntake, isComplete, skip,
+  answer, back, canonicalDraft, draftFrom, editFromReview, finishOptionalLater,
+  initialIntake, isComplete, skip,
   type IntakeState,
 } from '../intake/machine.ts'
 import { SYSTEM_ORDER } from '../intake/script.ts'
@@ -67,6 +68,47 @@ test('skip records unknown, never an invented default', () => {
   // Nothing anywhere in the draft is a value the person did not give.
   const text = canonicalDraft(draft)
   assert.ok(!text.includes('null,"value"'), 'no half-filled year objects')
+})
+
+test('optional setup can finish after the two required labels without inventing details', () => {
+  let state = initialIntake(YEAR)
+  state = answer(state, { kind: 'text', value: 'Oak Street' })
+
+  const tooEarly = finishOptionalLater(state)
+  assert.equal(tooEarly.step.kind, 'location_label')
+  assert.match(tooEarly.error ?? '', /name and general location/i)
+
+  state = answer(state, { kind: 'text', value: 'Frisco, Texas' })
+  state = finishOptionalLater(state)
+  assert.ok(isComplete(state), 'two required labels are enough to reach review')
+
+  const draft = draftFrom(state)
+  assert.equal(draft.profile.homeType, 'unknown')
+  assert.equal(draft.profile.yearBuilt, null)
+  assert.equal(draft.systems.length, SYSTEM_ORDER.length)
+  assert.ok(draft.systems.every(system => system.present === 'unknown' && system.year === null),
+    'optional answers become explicit unknowns, never defaults')
+})
+
+test('review edits preserve every other answer and return directly to review', () => {
+  let state = completeRun()
+  const before = draftFrom(state)
+
+  state = editFromReview(state, { kind: 'display_label' })
+  assert.equal(state.step.kind, 'display_label')
+  assert.equal(state.editingFromReview, true)
+  state = answer(state, { kind: 'text', value: 'The Oak House' })
+  assert.ok(isComplete(state), 'an edited answer returns directly to review')
+  const edited = draftFrom(state)
+  assert.equal(edited.home.displayLabel, 'The Oak House')
+  assert.equal(edited.home.privateLocationLabel, before.home.privateLocationLabel)
+  assert.deepEqual(edited.profile, before.profile)
+  assert.deepEqual(edited.systems, before.systems)
+
+  state = editFromReview(state, { kind: 'home_type' })
+  state = back(state)
+  assert.ok(isComplete(state), 'back cancels an edit without replaying setup')
+  assert.equal(draftFrom(state).profile.homeType, before.profile.homeType)
 })
 
 test('validation rejects without corrupting or advancing the conversation', () => {

@@ -190,6 +190,23 @@ test('the roofing project migration is private, exact-home scoped, and receipt-b
   assert.doesNotMatch(migration, /grant (select|insert|update|delete|execute)[\s\S]+to (anon|authenticated)/i)
 })
 
+test('the all-home project migration preserves exact-home receipts and bounded categories', () => {
+  const migration = readFileSync(path.resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/202608210002_homeowner_all_projects.sql',
+  ), 'utf8')
+  assert.match(migration, /create or replace function public\.homesrolo_create_homeowner_project/i)
+  assert.match(migration, /role in \('workspace_controller', 'member'\)/i)
+  assert.match(migration, /membership_ref = p_membership_ref[\s\S]+revision = p_membership_revision[\s\S]+state = 'active'/i)
+  for (const category of ['new_construction', 'appliances', 'pest', 'pool']) {
+    assert.match(migration, new RegExp(`'${category}'`, 'i'))
+  }
+  assert.match(migration, /action = 'project\.create'/i)
+  assert.match(migration, /command_digest_mismatch/i)
+  assert.match(migration, /grant execute on function public\.homesrolo_create_homeowner_project[\s\S]+to service_role/i)
+  assert.doesNotMatch(migration, /create policy|grant (select|insert|update|delete|execute)[\s\S]+to (anon|authenticated)/i)
+})
+
 test('private artifact migration keeps bytes private and every command exact-home scoped', () => {
   const migration = readFileSync(path.resolve(
     import.meta.dirname,

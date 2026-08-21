@@ -6,6 +6,7 @@ import {
   homeownerArtifactMetadataSchema,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
+  homeownerProjectCommandIntent,
   homeownerProjectSchema,
   homeownerPropertyFactsSchema,
   homeownerSystemSchema,
@@ -375,19 +376,27 @@ export class SupabaseHomeownerProvider implements
 
   async createProject(input: Parameters<HomeownerCommandPort['createProject']>[0]) {
     const projectRef = mintOpaqueRef('hprj')
-    const { data, error } = await this.#client.rpc('homesrolo_create_homeowner_roofing_project', {
+    const { data, error } = await this.#client.rpc('homesrolo_create_homeowner_project', {
       p_principal_ref: input.grant.principalRef,
       p_home_ref: input.grant.homeRef,
       p_membership_ref: input.grant.membershipRef,
       p_membership_revision: input.grant.membershipRevision,
       p_command_ref: input.command.commandRef,
-      p_command_digest: digest(input.command),
+      p_command_digest: digest(homeownerProjectCommandIntent(input.command)),
       p_project_ref: projectRef,
       p_title: input.command.title,
+      p_category: input.command.category,
+      p_status: input.command.status,
+      p_occurred_on: input.command.occurredOn ?? null,
       p_summary: input.command.summary ?? '',
       p_requested_at: input.command.requestedAt,
     })
-    if (error) throw new HomeownerApiError('unavailable')
+    if (error) {
+      if (error.message.includes('command_digest_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
     return projectFromRow(data)
   }
 

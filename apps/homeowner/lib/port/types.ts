@@ -25,25 +25,26 @@ export const PORT_IMPLEMENTATION_STATUS = Object.freeze({
   realPersistenceImplemented: true,
   uploadsImplemented: true,
   sharingImplemented: false,
-  aiAssistantImplemented: false,
+  aiAssistantImplemented: true,
   connectedToJobrolo: false,
 } as const)
 
 /** Wording every mock surface must carry so a screenshot cannot overclaim. */
 export const SYNTHETIC_NOTICE =
-  'Demo shell with synthetic data. Accounts, saving, uploads, and sharing are not built yet.'
+  'This demo uses synthetic data only. It creates no account, stores nothing, uploads nothing, and shares nothing.'
 
 // --- session ------------------------------------------------------------------
 
 /**
  * What the server actually offers, reported by GET /api/v1/session — exactly
- * the eight booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * the nine booleans homeowner-api.v1 defines. The synthetic adapter reports
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
   readonly magicLinkSignIn: boolean
   readonly persistence: boolean
   readonly projectQuotes: boolean
+  readonly homeResearch: boolean
   readonly uploads: boolean
   readonly projectReview: boolean
   readonly projectReviewAttachments: boolean
@@ -55,6 +56,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
+  homeResearch: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -193,17 +195,87 @@ export interface RecordedHomeIntake {
   readonly updatedAt: string
 }
 
+// --- private home research ---------------------------------------------------
+
+/**
+ * Public-record fields the research assistant may propose for homeowner
+ * review. A proposal is never a saved home fact and carries no authority.
+ */
+export type HomeResearchFactField =
+  | 'year_built'
+  | 'property_type'
+  | 'square_footage'
+  | 'lot_size'
+  | 'roof'
+  | 'heating'
+  | 'cooling'
+  | 'water_heater'
+  | 'permit'
+  | 'tax_record'
+  | 'public_record'
+  | 'other'
+
+export interface HomeResearchTurn {
+  readonly role: 'user' | 'assistant'
+  readonly text: string
+}
+
+export interface HomeResearchInput {
+  readonly address: string
+  readonly message: string
+  readonly consentToResearchThisAddressOnline: true
+  readonly history: readonly HomeResearchTurn[]
+}
+
+export interface HomeResearchFact {
+  readonly field: HomeResearchFactField
+  readonly value: string
+  readonly confidence: 'low' | 'medium' | 'high'
+  readonly sourceUrls: readonly string[]
+}
+
+export interface HomeResearchSource {
+  readonly title: string
+  readonly url: string
+}
+
+export interface HomeResearchResult {
+  readonly requestRef: string
+  readonly answer: string
+  readonly answerSourceUrls: readonly string[]
+  readonly proposedFacts: readonly HomeResearchFact[]
+  readonly sources: readonly HomeResearchSource[]
+  readonly limitations: readonly string[]
+  readonly followUpQuestions: readonly string[]
+  readonly disclosure: 'Research is a draft. Confirm proposed facts before adding them to your home record.'
+}
+
 // --- projects -----------------------------------------------------------------
 
 /** Mirrors homeownerProjectSchema.status in homeowner-runtime.v1 exactly. */
 export type ProjectStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
+
+export type ProjectCategory =
+  | 'roofing'
+  | 'exterior'
+  | 'interior'
+  | 'electrical'
+  | 'plumbing'
+  | 'hvac'
+  | 'landscaping'
+  | 'appliances'
+  | 'pest'
+  | 'pool'
+  | 'new_construction'
+  | 'other'
 
 export interface ProjectSummary {
   readonly projectRef: string
   readonly homeRef: string
   readonly title: string
   readonly trade: string
-  readonly performedOn: string
+  /** Exact work date supplied by the homeowner, or null when it is not known. */
+  readonly performedOn: string | null
   readonly status: ProjectStatus
   readonly photoCount: number
   readonly documentCount: number
@@ -233,6 +305,19 @@ export interface AddProjectInput {
   readonly trade: string
   readonly performedOn: string
   readonly contractor: string
+  readonly summary: string
+}
+
+/**
+ * One bounded record for planned, active, or historical work on the home.
+ * The browser supplies no principal, membership, provider, or storage fields.
+ */
+export interface CreateProjectInput {
+  readonly commandRef: string
+  readonly title: string
+  readonly category: ProjectCategory
+  readonly status: ProjectStatus
+  readonly occurredOn?: string
   readonly summary: string
 }
 
@@ -463,10 +548,18 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: RecordHomeIntakeInput,
   ): Promise<PortResult<RecordedHomeIntake>>
+  researchHome(
+    homeRef: string,
+    input: HomeResearchInput,
+  ): Promise<PortResult<HomeResearchResult>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>
   addProject(homeRef: string, input: AddProjectInput): Promise<PortResult<ProjectSummary>>
+  createProject(
+    homeRef: string,
+    input: CreateProjectInput,
+  ): Promise<PortResult<ProjectSummary>>
   startRoofingProject(
     homeRef: string,
     input: StartRoofingProjectInput,

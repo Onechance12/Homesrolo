@@ -19,6 +19,10 @@ import {
 } from './config.ts'
 import { createSupabaseClients, SupabaseHomeownerProvider } from './supabase-provider.ts'
 import { jobroloIntakeClientForEnvironment } from './jobrolo-intake-client.ts'
+import {
+  OpenAIHomeResearchClient,
+  readHomeResearchConfiguration,
+} from './home-research.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -46,6 +50,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
+  homeResearch: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -69,6 +74,10 @@ const auth = configuration && clients
 
 let service: HomeownerApiService | null = null
 const jobroloIntakeClient = jobroloIntakeClientForEnvironment(environment)
+const homeResearchConfiguration = readHomeResearchConfiguration(environment)
+const homeResearchClient = homeResearchConfiguration
+  ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
+  : null
 let projectReviewService: HomeownerProjectReviewService | null = null
 
 export function projectReviewCapabilityEnabled(
@@ -101,6 +110,7 @@ export function homeownerApiService(): HomeownerApiService {
         magicLinkSignIn: true,
         persistence: true,
         projectQuotes: configuration?.projectQuotesEnabled === true,
+        homeResearch: homeResearchClient !== null,
         uploads: configuration?.privateUploadsEnabled === true,
         projectReview: projectReviewCapabilityEnabled(
           provider !== null,
@@ -129,4 +139,8 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
     attachmentsEnabled: configuration?.jobroloAttachmentsEnabled === true,
   })
   return projectReviewService
+}
+
+export function configuredHomeResearchClient(): OpenAIHomeResearchClient | null {
+  return homeResearchClient
 }

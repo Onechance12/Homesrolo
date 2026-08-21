@@ -13,7 +13,7 @@ import { ROOF_WATCH_GUIDES } from '../lib/content/roof-watch-guides.ts'
  * signal. The fixed value also keeps two builds of one commit byte-identical.
  */
 const ROOF_WATCH_HUB_LAST_MODIFIED = '2026-08-20'
-const ROOF_WATCH_GUIDES_INDEX_LAST_MODIFIED = '2026-08-20'
+const ROOF_WATCH_GUIDES_INDEX_LAST_MODIFIED = '2026-08-21'
 export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   '/roof-watch/': ROOF_WATCH_HUB_LAST_MODIFIED,
   '/roof-watch/guides/': ROOF_WATCH_GUIDES.reduce(
@@ -25,6 +25,8 @@ export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = 
 })
 const ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   ...ROOF_WATCH_ROUTE_LAST_MODIFIED,
+  '/': '2026-08-21',
+  '/for-agents/': '2026-08-21',
   '/services/roofing/': '2026-08-21',
   '/services/roofing/cost/': '2026-08-21',
   '/editorial-standards/': '2026-08-21',

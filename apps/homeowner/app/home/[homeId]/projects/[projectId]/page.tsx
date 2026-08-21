@@ -30,7 +30,7 @@ export default function ProjectPage({
   const projectQuotesEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.projectQuotes
   const { state, retry } = usePortCall(() => port.getProject(homeId, projectId))
-  const files = usePortCall(() => uploadsEnabled
+  const { state: filesState, retry: retryFiles } = usePortCall(() => uploadsEnabled
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
   const [uploadKind, setUploadKind] = useState<'photo' | 'document' | 'warranty'>('photo')
@@ -53,8 +53,8 @@ export default function ProjectPage({
   const submissionAttempt = useRef<string | null>(null)
 
   useEffect(() => {
-    files.retry()
-  }, [uploadsEnabled, files.retry])
+    retryFiles()
+  }, [uploadsEnabled, retryFiles])
 
   function resetPreparedReview() {
     setReviewPreview(null)
@@ -104,7 +104,7 @@ export default function ProjectPage({
     uploadAttempt.current = null
     setUploadFile(null)
     if (uploadInput.current) uploadInput.current.value = ''
-    files.retry()
+    retryFiles()
   }
 
   async function submitForReview(event: FormEvent<HTMLFormElement>) {
@@ -150,8 +150,8 @@ export default function ProjectPage({
   }
   if (state.status !== 'ready') return null
   const project = state.value
-  const projectFiles = files.state.status === 'ready'
-    ? files.state.value.filter(file => file.projectRef === project.projectRef)
+  const projectFiles = filesState.status === 'ready'
+    ? filesState.value.filter(file => file.projectRef === project.projectRef)
     : []
 
   return (
@@ -173,7 +173,7 @@ export default function ProjectPage({
           {project.summary}
         </p>
         <dl className="jobdoc__rows">
-          <div><dt>{project.status === 'planned' ? 'Started' : 'Performed'}</dt><dd>{project.performedOn}</dd></div>
+          <div><dt>Work date</dt><dd>{project.performedOn ?? 'Not recorded'}</dd></div>
           <div><dt>Trade</dt><dd>{project.trade}</dd></div>
           {project.contractor ? <div><dt>By</dt><dd>{project.contractor}</dd></div> : null}
           {project.materials.map(m => (
@@ -228,9 +228,9 @@ export default function ProjectPage({
             </button>
             {uploadError ? <div className="notice" role="alert">{uploadError}</div> : null}
           </form>
-          {files.state.status === 'loading' ? <Skeleton lines={2} label="Loading project files" /> : null}
-          {files.state.status === 'error' ? <ErrorState retry={files.retry} error={files.state.error} /> : null}
-          {projectFiles.length === 0 && files.state.status === 'ready'
+          {filesState.status === 'loading' ? <Skeleton lines={2} label="Loading project files" /> : null}
+          {filesState.status === 'error' ? <ErrorState retry={retryFiles} error={filesState.error} /> : null}
+          {projectFiles.length === 0 && filesState.status === 'ready'
             ? <p className="mono">No files are attached to this project yet.</p>
             : null}
           {projectFiles.length > 0 ? (

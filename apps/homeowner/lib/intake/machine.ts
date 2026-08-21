@@ -42,6 +42,8 @@ export interface IntakeState {
   readonly homeType: HomeTypeAnswer | 'unknown' | null
   readonly yearBuilt: ApproximateYear | 'unknown' | null
   readonly systems: readonly SystemDraftEntry[]
+  /** A review edit returns to review instead of replaying the remaining setup. */
+  readonly editingFromReview: boolean
 }
 
 export type IntakeInput =
@@ -108,6 +110,7 @@ export function initialIntake(currentYear: number): IntakeState {
     homeType: null,
     yearBuilt: null,
     systems: [],
+    editingFromReview: false,
   }
 }
 
@@ -132,6 +135,17 @@ function advance(state: IntakeState, said: string, patch: Partial<IntakeState>, 
   }
 }
 
+function nextAfterAnswer(state: IntakeState, regularNext: StepId): StepId {
+  return state.editingFromReview ? { kind: 'review' } : regularNext
+}
+
+function replaceSystem(
+  systems: readonly SystemDraftEntry[],
+  entry: SystemDraftEntry,
+): readonly SystemDraftEntry[] {
+  return [...systems.filter(system => system.kind !== entry.kind), entry]
+}
+
 function reject(state: IntakeState, error: string): IntakeState {
   return { ...state, error }
 }
@@ -144,14 +158,24 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
       const check = validateLabel(input.value, 80)
       if (!check.ok) return reject(state, check.error ?? 'Try a shorter name.')
       const value = input.value.trim()
-      return advance(state, value, { displayLabel: value }, { kind: 'location_label' })
+      return advance(
+        state,
+        value,
+        { displayLabel: value, editingFromReview: false },
+        nextAfterAnswer(state, { kind: 'location_label' }),
+      )
     }
     case 'location_label': {
       if (input.kind !== 'text') return reject(state, 'Type a neighborhood or town.')
       const check = validateLabel(input.value, 200)
       if (!check.ok) return reject(state, check.error ?? 'Try a shorter answer.')
       const value = input.value.trim()
-      return advance(state, value, { privateLocationLabel: value }, { kind: 'home_type' })
+      return advance(
+        state,
+        value,
+        { privateLocationLabel: value, editingFromReview: false },
+        nextAfterAnswer(state, { kind: 'home_type' }),
+      )
     }
     case 'home_type': {
       if (input.kind !== 'choice' || !['house', 'townhouse', 'condo', 'other'].includes(input.value)) {
@@ -159,7 +183,7 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
       }
       const value = input.value as HomeTypeAnswer
       return advance(state, choicesFor(step).find(c => c.value === value)?.label ?? value,
-        { homeType: value }, { kind: 'year_built' })
+        { homeType: value, editingFromReview: false }, nextAfterAnswer(state, { kind: 'year_built' }))
     }
     case 'year_built': {
       if (input.kind !== 'year') return reject(state, 'Enter a year, or skip.')
@@ -170,7 +194,8 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
         precision: input.approximate ? 'approximate' : 'exact',
       }
       const said = input.approximate ? `Around ${input.value}` : String(input.value)
-      return advance(state, said, { yearBuilt: year }, nextSystemStep(state, null))
+      return advance(state, said, { yearBuilt: year, editingFromReview: false },
+        nextAfterAnswer(state, nextSystemStep(state, null)))
     }
     case 'system_present': {
       if (input.kind !== 'choice' || !['yes', 'no', 'unknown'].includes(input.value)) {
@@ -180,8 +205,10 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
       const said = choicesFor(step).find(c => c.value === present)?.label ?? present
       if (present !== 'yes') {
         const entry: SystemDraftEntry = { kind: step.system, present, year: null }
-        return advance(state, said, { systems: [...state.systems, entry] },
-          nextSystemStep(state, step.system))
+        return advance(state, said, {
+          systems: replaceSystem(state.systems, entry),
+          editingFromReview: false,
+        }, nextAfterAnswer(state, nextSystemStep(state, step.system)))
       }
       return advance(state, said, {}, { kind: 'system_year', system: step.system })
     }
@@ -195,8 +222,10 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
         year: { value: input.value, precision: input.approximate ? 'approximate' : 'exact' },
       }
       const said = input.approximate ? `Around ${input.value}` : String(input.value)
-      return advance(state, said, { systems: [...state.systems, entry] },
-        nextSystemStep(state, step.system))
+      return advance(state, said, {
+        systems: replaceSystem(state.systems, entry),
+        editingFromReview: false,
+      }, nextAfterAnswer(state, nextSystemStep(state, step.system)))
     }
     case 'review':
       return reject(state, 'The conversation is finished — review the draft below.')
@@ -207,19 +236,30 @@ export function answer(state: IntakeState, input: IntakeInput): IntakeState {
 export function skip(state: IntakeState): IntakeState {
   const step = state.step
   if (step.kind === 'year_built') {
-    return advance(state, 'Not sure', { yearBuilt: 'unknown' }, nextSystemStep(state, null))
+    return advance(state, 'Not sure', { yearBuilt: 'unknown', editingFromReview: false },
+      nextAfterAnswer(state, nextSystemStep(state, null)))
   }
   if (step.kind === 'system_year') {
     // The system exists; its year is honestly unrecorded.
     const entry: SystemDraftEntry = { kind: step.system, present: 'yes', year: null }
-    return advance(state, 'Not sure', { systems: [...state.systems, entry] },
-      nextSystemStep(state, step.system))
+    return advance(state, 'Not sure', {
+      systems: replaceSystem(state.systems, entry),
+      editingFromReview: false,
+    }, nextAfterAnswer(state, nextSystemStep(state, step.system)))
   }
   return reject(state, 'This one needs an answer.')
 }
 
 /** One step back, restoring the previous question and dropping its answer. */
 export function back(state: IntakeState): IntakeState {
+  if (state.editingFromReview) {
+    return {
+      ...state,
+      step: { kind: 'review' },
+      error: null,
+      editingFromReview: false,
+    }
+  }
   const step = state.step
   switch (step.kind) {
     case 'display_label':
@@ -246,6 +286,57 @@ export function back(state: IntakeState): IntakeState {
       return rewind(state, { kind: 'system_present', system: last },
         { systems: state.systems.filter(s => s.kind !== last) })
     }
+  }
+}
+
+/**
+ * Once the two server-required labels exist, every remaining setup answer is
+ * optional. This closes the draft with explicit unknowns rather than making a
+ * person complete a systems questionnaire before they can enter the product.
+ */
+export function finishOptionalLater(state: IntakeState): IntakeState {
+  if (state.displayLabel === null || state.privateLocationLabel === null) {
+    return reject(state, 'Add a home name and general location first.')
+  }
+
+  const systems = [...state.systems]
+  const currentStep = state.step
+  if (currentStep.kind === 'system_year'
+    && !systems.some(system => system.kind === currentStep.system)) {
+    systems.push({ kind: currentStep.system, present: 'yes', year: null })
+  }
+  for (const kind of SYSTEM_ORDER) {
+    if (!systems.some(system => system.kind === kind)) {
+      systems.push({ kind, present: 'unknown', year: null })
+    }
+  }
+
+  const review: StepId = { kind: 'review' }
+  return {
+    ...state,
+    step: review,
+    error: null,
+    homeType: state.homeType ?? 'unknown',
+    yearBuilt: state.yearBuilt ?? 'unknown',
+    systems,
+    editingFromReview: false,
+    transcript: [
+      ...state.transcript,
+      { speaker: 'homeowner', text: 'I’ll add the optional details later' },
+      { speaker: 'homesrolo', text: promptFor(review) },
+    ],
+  }
+}
+
+/** Open one completed answer for editing without discarding the rest. */
+export function editFromReview(state: IntakeState, step: Exclude<StepId, { kind: 'review' }>): IntakeState {
+  if (!isComplete(state)) return reject(state, 'Finish the setup before editing the review.')
+  return {
+    ...state,
+    step,
+    error: null,
+    editingFromReview: true,
+    transcript: [...state.transcript, { speaker: 'homesrolo', text: promptFor(step) }],
   }
 }
 

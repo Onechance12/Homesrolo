@@ -148,6 +148,7 @@ function service(input: {
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
       projectQuotes: input.projectQuotes ?? true,
+      homeResearch: false,
       uploads: false,
       projectReview: false,
       projectReviewAttachments: false,
@@ -204,7 +205,7 @@ test('database quote invariants reject null statuses and tie project and artifac
   )
 })
 
-test('Supabase quote receipts hash stable intent while older commands keep their own digest', () => {
+test('Supabase project and quote receipts exclude server execution time from stable intent', () => {
   const provider = readFileSync('apps/homeowner/lib/server/supabase-provider.ts', 'utf8')
   const homeCreate = provider.slice(
     provider.indexOf('async createPrivateHomeWorkspace'),
@@ -223,7 +224,7 @@ test('Supabase quote receipts hash stable intent while older commands keep their
     provider.indexOf('async recordInitialIntake'),
   )
   assert.match(homeCreate, /p_command_digest: digest\(input\.command\)/)
-  assert.match(projectCreate, /p_command_digest: digest\(input\.command\)/)
+  assert.match(projectCreate, /digest\(homeownerProjectCommandIntent\(input\.command\)\)/)
   assert.match(quoteCreate, /digest\(homeownerProjectQuoteCommandIntent\(input\.command\)\)/)
   assert.match(quoteSave, /digest\(homeownerProjectQuoteCommandIntent\(input\.command\)\)/)
 })

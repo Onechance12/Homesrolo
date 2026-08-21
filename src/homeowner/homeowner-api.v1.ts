@@ -57,6 +57,7 @@ export const homeownerApiCapabilitiesSchema = z.object({
   magicLinkSignIn: z.boolean(),
   persistence: z.boolean(),
   projectQuotes: z.boolean(),
+  homeResearch: z.boolean(),
   uploads: z.boolean(),
   projectReview: z.boolean(),
   projectReviewAttachments: z.boolean(),
@@ -160,6 +161,10 @@ export const homeownerApiStartRoofingProjectInputSchema = z.object({
   notes: z.string().trim().max(1500).optional(),
 }).strict()
 
+/** A homeowner-authored record for work anywhere on the home. */
+export const homeownerApiCreateProjectInputSchema =
+  createHomeownerProjectInputSchema.omit({ requestedAt: true })
+
 export const homeownerApiProjectViewSchema = z.object({
   projectRef: opaqueRef('hprj'),
   homeRef: opaqueRef('hhom'),
@@ -174,6 +179,9 @@ export const homeownerApiProjectViewSchema = z.object({
 
 export type HomeownerApiStartRoofingProjectInput = z.infer<
   typeof homeownerApiStartRoofingProjectInputSchema
+>
+export type HomeownerApiCreateProjectInput = z.infer<
+  typeof homeownerApiCreateProjectInputSchema
 >
 export type HomeownerApiProjectView = z.infer<typeof homeownerApiProjectViewSchema>
 
@@ -774,6 +782,40 @@ export class HomeownerApiService {
       && created.status === 'planned'
       && created.summary === summary
       && created.occurredOn === undefined
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProject(created)
+  }
+
+  async createProject(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectView> {
+    const parsedInput = homeownerApiCreateProjectInputSchema.safeParse(input)
+    if (!parsedInput.success) throw new HomeownerApiError('invalid_request')
+    const requestedAt = this.#now()
+    if (parsedInput.data.occurredOn && parsedInput.data.occurredOn > requestedAt.slice(0, 10)) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'project.create')
+    if (!this.#capabilities.persistence) throw new HomeownerApiError('unavailable')
+
+    const { summary, ...stableInput } = parsedInput.data
+    const command = createHomeownerProjectInputSchema.parse({
+      ...stableInput,
+      ...(summary ? { summary } : {}),
+      requestedAt,
+    })
+    const created = homeownerProjectSchema.parse(
+      await this.#commands.createProject({ grant, command }),
+    )
+    const coherent = created.homeRef === grant.homeRef
+      && created.controllerPrincipalRef === grant.principalRef
+      && created.title === command.title
+      && created.category === command.category
+      && created.status === command.status
+      && created.occurredOn === command.occurredOn
+      && created.summary === command.summary
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeProject(created)
   }

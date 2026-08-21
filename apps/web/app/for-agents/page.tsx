@@ -1,24 +1,21 @@
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
 import { publicPageMetadata } from '../../lib/public-metadata.ts'
-import { SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
+import { AGENT_PHONE_DISPLAY, AGENT_SMS_URL, SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
   title: 'Homesrolo for real estate agents',
-  description: 'Help clients start a private home record and check Roof Watch availability—a practical closing gift that does not require changing your CRM.',
+  description: 'Help clients start a private home Rolodex and check Roof Watch, its first field program—a practical closing gift that does not replace your CRM.',
   canonical: '/for-agents/',
   socialTitle: 'A closing gift that does not end up in a cabinet',
   socialDescription: 'Help buyers start documenting their home and check Roof Watch availability. Homesrolo for real estate agents.',
 })
 
-const PHONE_DISPLAY = '(817) 886-2418'
-const AGENT_SMS = 'sms:+18178862418?&body=AGENT%20-%20I%27m%20a%20real%20estate%20agent%20and%20I%20want%20the%20details.'
-
 const FAQ = [
   { question: 'What does this cost me or my client?', answer: 'There is currently no agent fee or Roof Watch enrollment fee. Annual inspections are offered at no charge for participating addresses, and the written limits are supplied before scheduling. Some minor maintenance may be included within those limits. There is no referral kickback or required contractor purchase.' },
   { question: 'Is this a CRM? Do I have to move my pipeline?', answer: 'No. Keep your CRM and transaction software. Homesrolo is for the homeowner’s private record and project history, not the agent’s pipeline.' },
   { question: 'Who controls the home record?', answer: 'The homeowner controls the private account. An agent does not automatically receive reports, project details, or account access. Homeowner-controlled sharing is a later feature, not something we claim is live today.' },
-  { question: 'What exactly exists today, and what is coming?', answer: 'Today, a client can create a private Homesrolo account, start a roof project, and text to check Roof Watch availability. Roof Watch sends its written program limits before scheduling and gives completed findings to the homeowner. Secure file uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are still coming.' },
+  { question: 'What exactly exists today, and what is coming?', answer: 'Today, a client can create a private Homesrolo account, record past, current, or planned work across the home, compare roof proposals, and text to check Roof Watch availability. Secure file uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are still coming.' },
 ] as const
 
 export default function ForAgentsPage() {
@@ -46,12 +43,12 @@ export default function ForAgentsPage() {
           <PageHeader
             eyebrow="Homesrolo for real estate agents"
             title="A closing gift that doesn’t end up in a cabinet"
-            lede="Help a buyer start a private record for the home and check Roof Watch availability. It is useful after closing, does not require moving your CRM, and does not give the agent automatic access to the homeowner’s data."
+            lede="Help a buyer start a private home Rolodex and check Roof Watch availability. Roofing is the first field program under a broader record for the home—not the limit of Homesrolo. It does not require moving your CRM or give the agent automatic access to homeowner data."
           />
           <div className="answer-box" style={{ marginTop: '2rem' }}>
             <p className="kicker">Agents start here</p>
-            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{PHONE_DISPLAY}</strong>. We’ll send the current program details and simple language for your closing packet. If a client follows up, have them include your name so we know who introduced them.</p>
-            <p style={{ marginTop: '1rem' }}><a className="btn btn--primary" href={AGENT_SMS}>Text AGENT now</a></p>
+            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{AGENT_PHONE_DISPLAY}</strong>. We’ll send the current program details and simple language for your closing packet. If a client follows up, have them include your name so we know who introduced them.</p>
+            <p style={{ marginTop: '1rem' }}><a className="btn btn--primary" href={AGENT_SMS_URL}>Text AGENT now</a></p>
           </div>
         </div>
       </section>
@@ -61,6 +58,7 @@ export default function ForAgentsPage() {
             <section className="prose">
               <h2 id="fa-gift">The gift, from your client’s side of it</h2>
               <p>They close on the house. In the packet is a simple note from you: open a private Homesrolo account, start the home record, and text to see whether Roof Watch serves the address. For participating addresses, the homeowner receives the written program limits before scheduling and receives the completed findings afterward. Photos are included when conditions allow.</p>
+              <p>Roof Watch is the first useful example, not the entire idea. The private project record already accepts past, current, and planned work across roofing, interiors, HVAC, plumbing, electrical work, paint, gutters, appliances, and whatever comes next. Secure file storage and sharing across that history are still being built.</p>
               <p>The report belongs with the homeowner’s records; it does not automatically come back to the agent. We will not promise that a closing gift creates a referral. The useful part is simpler: you helped the client start documenting the home before the next repair, storm, or sale.</p>
             </section>
             <section className="prose">
@@ -70,7 +68,7 @@ export default function ForAgentsPage() {
             </section>
             <section className="prose">
               <h2>What it is—and what is not live yet</h2>
-              <p>Today, the homeowner can create a private account, start a roof project, and check Roof Watch availability by text. Secure uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are not live yet. We are saying that plainly because a home record only works if the product is as honest as the records inside it.</p>
+              <p>Today, the homeowner can create a private account, record past, current, or planned work across the home, compare roof proposals, and check Roof Watch availability by text. Secure uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are not live yet. We are saying that plainly because a home record only works if the product is as honest as the records inside it.</p>
             </section>
             <section className="prose">
               <h2>Straight answers</h2>
@@ -84,7 +82,7 @@ export default function ForAgentsPage() {
           </div>
           <div className="answer-box" style={{ marginTop: '2.5rem' }}>
             <p className="kicker">One text, and your closing packet gets better</p>
-            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{PHONE_DISPLAY}</strong>.</p>
+            <p>Text <strong>AGENT</strong> with your name and brokerage to <strong>{AGENT_PHONE_DISPLAY}</strong>.</p>
             <p style={{ marginTop: '1rem' }}>Curious what your clients get? See <Link href="/roof-watch/">Roof Watch</Link> and <Link href="/how-it-works/">how the home record works</Link>.</p>
           </div>
         </div>

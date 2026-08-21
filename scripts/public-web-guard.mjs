@@ -135,6 +135,7 @@ const FORBIDDEN_SOURCE = [
   ['analytics or cookies', /\b(?:gtag|googletagmanager|analytics\.track|mixpanel|posthog|document\.cookie)\b/],
   ['file upload', /\b(?:multer|formidable|<input[^>]+type=["']file)/],
   ['jobrolo application import', /from\s+['"][^'"]*\/(?:jobrolo|thresher|hcn|chance-brain)\//],
+  ['telephone link (public contact is SMS-only)', /\btel:/i],
 ]
 
 /**
@@ -236,6 +237,8 @@ if (!existsSync(OUT)) {
 
   for (const file of html) {
     const page = readFileSync(file, 'utf8')
+
+    if (/href="tel:/i.test(page)) fail(`${rel(file)}: exported HTML contains a telephone link`)
 
     for (const token of PRIVATE_TOKENS) {
       if (page.includes(token)) fail(`${rel(file)}: exported HTML contains private token "${token}"`)

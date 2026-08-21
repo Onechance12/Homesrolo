@@ -35,7 +35,7 @@ test('fixture dates are real calendar dates, and timelines are ordered', () => {
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
   }
   for (const project of FIXTURE_PROJECTS) {
-    assert.ok(isReal(project.performedOn), `${project.title} performedOn`)
+    assert.ok(project.performedOn && isReal(project.performedOn), `${project.title} performedOn`)
     for (const photo of project.photos) assert.ok(isReal(photo.takenOn), photo.caption)
   }
   for (const warranty of FIXTURE_WARRANTIES) {
