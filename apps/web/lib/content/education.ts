@@ -457,38 +457,38 @@ export const ABOUT_HOMESROLO: readonly EducationalSection[] = Object.freeze([
 
 export const EDITORIAL_STANDARDS: readonly EducationalSection[] = Object.freeze([
   {
-    heading: 'How a guide is researched',
+    heading: 'Why these standards matter',
     body: Object.freeze([
-      'We start with government agencies, local permit authorities, building-science organizations, trade groups, and manufacturer documents. Market-price sources are named and dated because their methods and results differ.',
-      'The source list appears on the same page as the guide. Legal and permit statements link to the issuing authority whenever a usable public source is available.',
+      'Roof work is expensive, technical, and hard to compare. A price with no context, an outdated permit rule, or a weather report treated as proof can point a homeowner in the wrong direction.',
+      'Our guides show where important facts came from, when the page was meaningfully updated, and the limits of the information.',
     ]),
   },
   {
-    heading: 'What we do with estimates and opinions',
+    heading: 'Where the facts come from',
     body: Object.freeze([
-      'Published cost figures are benchmarks, not bids for a particular home. We identify the publisher and date and explain the scope variables that can change the number.',
-      'Homesrolo does not turn a manufacturer claim, trade credential, star rating, or weather report into a broader conclusion than the source supports.',
+      'For laws and permits, we start with the agency or local authority responsible for the rule. For technical topics, we use building-science organizations, independent testing groups, trade organizations, and manufacturer documents.',
+      'Sources appear on the guide so readers can check them directly.',
     ]),
   },
   {
-    heading: 'How pages are updated',
+    heading: 'What sources can—and cannot—show',
     body: Object.freeze([
-      'Each roofing guide shows the date of its latest substantive update. Dates are not changed just to make an old page look new.',
-      'Permit rules, pricing, products, and warranties can change. Source links remain visible so a reader can check the current record.',
+      'Published costs are dated market benchmarks, not bids for a particular home. A manufacturer claim, credential, rating, photograph, or weather report is described only as far as the source supports it.',
+      'A public guide cannot inspect a home, quote a project, decide insurance coverage, or replace an appropriately licensed professional.',
     ]),
   },
   {
-    heading: 'Software can help with a draft; it cannot be the expert',
+    heading: 'Dates mean real changes',
     body: Object.freeze([
-      'Research and editing tools, including AI-assisted drafting, may help organize a page. Homesrolo remains responsible for what it publishes. Before publication, source-dependent claims are checked against current sources, prioritizing primary and issuing sources whenever they are available.',
-      'No tool is allowed to invent an inspection, photograph, author, reviewer, credential, local fact, or customer experience. Field photos must be real, owned or licensed, stripped of location metadata, and clearly labelled when they are archival examples.',
+      'Each guide shows the date of its latest meaningful update. We do not change dates just to make a page look new.',
+      'Because permit rules, prices, products, and warranties can change, source links stay visible. When we correct a material fact, we update the page date instead of changing it silently.',
     ]),
   },
   {
-    heading: 'Commercial separation',
+    heading: 'Citations are not endorsements',
     body: Object.freeze([
-      'No contractor, manufacturer, insurer, or advertiser paid to be cited in these guides. A citation identifies a source; it is not an endorsement.',
-      'If Homesrolo later offers sponsored placement, it will be labeled and kept out of neutral company ordering and verification facts.',
+      'No contractor, manufacturer, insurer, or advertiser pays to be cited in a guide.',
+      'A citation tells readers where a statement came from; it is not an endorsement.',
     ]),
   },
 ])
