@@ -11,10 +11,14 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run test && npm run test:directory && npm run web:build && npm run guard:web",
     "test:directory": "node --experimental-strip-types --test 'apps/web/lib/directory/tests/*.test.ts'",
+    "test:web-content": "node --experimental-strip-types --test 'apps/web/lib/content/tests/*.test.ts'",
+    "test:indexnow": "node --test scripts/indexnow-submit.test.mjs",
     "web:lint": "npm --prefix apps/web run lint",
     "web:typecheck": "npm --prefix apps/web run typecheck",
     "web:build": "npm --prefix apps/web run build",
-    "guard:web": "node scripts/public-web-guard.mjs"
+    "guard:web": "npm run test:web-content && npm run test:indexnow && node scripts/public-web-guard.mjs",
+    "indexnow:dry-run": "node scripts/indexnow-submit.mjs",
+    "indexnow:submit": "node scripts/indexnow-submit.mjs --submit"
   },
   "dependencies": {
     "zod": "^4.0.2"

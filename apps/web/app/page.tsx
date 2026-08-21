@@ -4,6 +4,7 @@ import { HOMEOWNER_APP_ORIGIN, SITE_DESCRIPTION } from '../lib/site.ts'
 
 export const metadata = {
   description: SITE_DESCRIPTION,
+  alternates: { canonical: '/' },
 }
 
 const PILLARS = [

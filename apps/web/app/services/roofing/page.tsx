@@ -1,25 +1,22 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../../components/Prose.tsx'
 import { ROOFING_GUIDE, ROOFING_QUICK_ANSWERS } from '../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../lib/public-metadata.ts'
 import { HOMEOWNER_ROOFING_SIGNIN_URL, SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Texas roofing guide: costs, materials, contractors, and DFW rules',
   description: 'Independent roofing information for Texas homeowners: roof replacement cost, materials, contractor checks, Dallas Fort Worth permits, storm records, and warranties.',
-  alternates: { canonical: '/services/roofing/' },
-  openGraph: {
-    title: 'Texas roofing guide for homeowners',
-    description: 'Understand roof costs, materials, contractors, local permits, and the records worth keeping in DFW and across Texas.',
-    url: '/services/roofing/',
-  },
-}
+  canonical: '/services/roofing/',
+  socialTitle: 'Texas roofing guide for homeowners',
+  socialDescription: 'Understand roof costs, materials, contractors, local permits, and the records worth keeping in DFW and across Texas.',
+})
 
 const GUIDES = [
   {
     href: '/roof-watch/',
     title: 'Roof Watch: a free yearly roof check',
-    body: 'Homesrolo\u2019s free North Texas maintenance program: an annual professional inspection, a written condition report in your home\u2019s file, and small repairs included within written limits.',
+    body: 'Homesrolo\u2019s free North Texas maintenance program: an annual professional inspection, written findings provided to you, and some minor maintenance that may be included within written limits.',
   },
   {
     href: '/services/roofing/repair-or-replace/',

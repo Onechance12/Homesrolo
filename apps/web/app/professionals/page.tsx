@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'Start a roof project',
   description: 'Create a private Homesrolo home record and start a roofing project without browsing contractor listings.',
-}
+  canonical: '/professionals/',
+})
 
 export default function ProfessionalsPage() {
   return (

@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_MATERIALS_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Best roofing materials for Texas heat, hail, and wind',
   description: 'Compare asphalt shingles, impact-resistant shingles, metal, tile, slate, and composite roofing for North Texas, including the roof parts hidden underneath.',
-  alternates: { canonical: '/services/roofing/materials/' },
-  openGraph: { title: 'Roofing materials for Texas homes', description: 'Compare common roof systems for North Texas heat, hail, wind, price, and repairability.', url: '/services/roofing/materials/' },
-}
+  canonical: '/services/roofing/materials/',
+  openGraphType: 'article',
+  socialTitle: 'Roofing materials for Texas homes',
+  socialDescription: 'Compare common roof systems for North Texas heat, hail, wind, price, and repairability.',
+})
 
 const SOURCES = [
   { label: 'Roofing materials', publisher: 'National Roofing Contractors Association', href: 'https://www.nrca.net/roofing-guidelines/roofing-materials' },

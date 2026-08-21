@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_DALLAS_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Dallas roofing guide: permits, costs, contractors, and records',
   description: 'Dallas homeowner roofing information: roof permits, cost variables, bid comparison, contractor scope, materials, warranties, and project closeout records.',
-  alternates: { canonical: '/services/roofing/dallas/' },
-  openGraph: { title: 'Dallas roofing guide for homeowners', description: 'Understand Dallas roof permits, pricing variables, scope, and the records worth keeping.', url: '/services/roofing/dallas/' },
-}
+  canonical: '/services/roofing/dallas/',
+  openGraphType: 'article',
+  socialTitle: 'Dallas roofing guide for homeowners',
+  socialDescription: 'Understand Dallas roof permits, pricing variables, scope, and the records worth keeping.',
+})
 
 const SOURCES = [
   { label: 'Residential permitting and inspections', publisher: 'City of Dallas', href: 'https://dallas.gov/departments/sustainabledevelopment/buildinginspection/Pages/residential.aspx' },

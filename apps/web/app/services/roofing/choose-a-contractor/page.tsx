@@ -1,13 +1,14 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_CONTRACTOR_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'How to choose a roofing contractor in Texas',
   description: 'A neutral Texas roofer checklist: company identity, insurance, references, written scope, materials, permits, warranties, deductible law, and claim boundaries.',
-  alternates: { canonical: '/services/roofing/choose-a-contractor/' },
-  openGraph: { title: 'How to choose a roofing contractor in Texas', description: 'Check the company, insurance, scope, materials, permits, references, warranties, and Texas insurance rules.', url: '/services/roofing/choose-a-contractor/' },
-}
+  canonical: '/services/roofing/choose-a-contractor/',
+  openGraphType: 'article',
+  socialDescription: 'Check the company, insurance, scope, materials, permits, references, warranties, and Texas insurance rules.',
+})
 
 const SOURCES = [
   { label: 'Selecting a roofing contractor', publisher: 'Roofing Contractors Association of Texas', href: 'https://www.rcat.net/selecting-a-roofing-contractor.html' },

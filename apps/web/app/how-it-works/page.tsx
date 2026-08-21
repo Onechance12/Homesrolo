@@ -1,14 +1,16 @@
 import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
 import { HOW_IT_WORKS_STEPS } from '../../lib/content/education.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'How it works',
   description:
     'How a Home Project Passport is made: work is recorded, the homeowner decides what to release, and the '
     + 'released record carries its own provenance.',
-}
+  canonical: '/how-it-works/',
+})
 
 export default function HowItWorksPage() {
   return (

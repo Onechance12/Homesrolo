@@ -3,13 +3,15 @@ import { PageHeader, Sections } from '../../components/Prose.tsx'
 import { VERIFY_PRINCIPLES } from '../../lib/content/education.ts'
 import { VERIFICATION_DIMENSIONS, NO_BLANKET_VERIFICATION_NOTICE } from '../../lib/directory/public-profile.v1.ts'
 import { DIMENSION_LABELS } from '../../lib/directory/projection.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'How we verify',
   description:
     'Homesrolo publishes no overall verified badge. Five dimensions are checked and displayed separately, each '
     + 'with its status, source, and the date it was checked.',
-}
+  canonical: '/how-we-verify/',
+})
 
 const DIMENSION_NOTES: Record<string, string> = {
   business_identity: 'Does a registered business entity matching this name exist?',

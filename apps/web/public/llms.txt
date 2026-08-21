@@ -13,6 +13,23 @@
 - [Dallas roofing](https://homesrolo.com/services/roofing/dallas/): Dallas roofing permits, bids, and closeout records.
 - [Fort Worth roofing](https://homesrolo.com/services/roofing/fort-worth/): Fort Worth permit triggers, wood repairs, and scope details.
 
+## Roof Watch
+
+- [Roof Watch](https://homesrolo.com/roof-watch/): Current program description, written limits, inspection scope, archival field photos, service area, and availability instructions.
+- [Roof Watch homeowner guides](https://homesrolo.com/roof-watch/guides/): Sourced guidance for hail response, roof reports, North Texas heat, and ventilation.
+- [The first 72 hours after hail](https://homesrolo.com/roof-watch/guides/hail-first-72-hours/): Safety, documentation, temporary protection, and prompt insurer notice, with Texas Department of Insurance sources.
+- [What belongs in a roof inspection report](https://homesrolo.com/roof-watch/guides/roof-inspection-report/): A practical checklist for locations, observations, photographs, limits, and next steps.
+- [What Texas heat does to a roof](https://homesrolo.com/roof-watch/guides/texas-heat-roof/): Heat, ventilation, attic, and roof-surface context with manufacturer and building-science sources.
+
+### Current Roof Watch service-area pages
+
+- [Keller](https://homesrolo.com/roof-watch/keller/)
+- [Roanoke](https://homesrolo.com/roof-watch/roanoke/)
+- [Grapevine](https://homesrolo.com/roof-watch/grapevine/)
+- [Southlake](https://homesrolo.com/roof-watch/southlake/)
+- [Flower Mound](https://homesrolo.com/roof-watch/flower-mound/)
+- [Fort Worth](https://homesrolo.com/roof-watch/fort-worth/)
+
 ## Trust and method
 
 - [About Homesrolo](https://homesrolo.com/about/)
@@ -22,7 +39,9 @@
 
 ## Important limits
 
-- Homesrolo does not inspect roofs, price individual jobs, select a contractor, or advise on an insurance claim.
+- Roof Watch is a Homesrolo-coordinated program. An identified roofing professional performs the visit; current address coverage, the assigned professional, and written program limits are confirmed before scheduling.
+- Roof Watch documents visible roof condition. It does not certify a roof, decide cause or insurance coverage, file or negotiate claims, or require the homeowner to award later work to the inspecting professional.
+- Field photos on the program page were selected from the operator's archival roof-photo library. They are documentation examples, not Roof Watch findings about a particular home.
 - Cost figures are dated market benchmarks, not quotes for a particular home.
 - Permit rules and laws can change. The current source is linked from each guide.
 - Homesrolo is built around the home and its project record, not a pay-to-rank contractor directory.

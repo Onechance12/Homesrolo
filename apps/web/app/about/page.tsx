@@ -1,14 +1,14 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../components/Prose.tsx'
 import { ABOUT_HOMESROLO } from '../../lib/content/education.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'About Homesrolo',
   description: 'Homesrolo gives a home an organized project history and gives homeowners clear, sourced information before they hire a professional.',
-  alternates: { canonical: '/about/' },
-}
+  canonical: '/about/',
+})
 
 export default function AboutPage() {
   const schema = {

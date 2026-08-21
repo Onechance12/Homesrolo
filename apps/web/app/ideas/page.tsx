@@ -1,13 +1,15 @@
 import { Illustration, type IllustrationKind } from '../../components/Illustration.tsx'
 import { PageHeader, Sections } from '../../components/Prose.tsx'
 import { IDEAS_INTRO } from '../../lib/content/education.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'Ideas',
   description:
     'Inspiration grounded in real work. Boards are not built yet; when they are, they will be assembled only '
     + 'from projects a homeowner chose to release.',
-}
+  canonical: '/ideas/',
+})
 
 const PLANNED_BOARDS: ReadonlyArray<{ kind: IllustrationKind; title: string; body: string }> = [
   {

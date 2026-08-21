@@ -1,18 +1,16 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_REPAIR_REPLACE_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Roof repair vs replacement: a Texas homeowner decision guide',
   description: 'Should a roof be repaired or replaced? Compare leaks, roof age, damage extent, material matching, repair history, cost, storm evidence, and written inspection findings.',
-  alternates: { canonical: '/services/roofing/repair-or-replace/' },
-  openGraph: {
-    title: 'Roof repair or replacement? A Texas homeowner guide',
-    description: 'Use condition, repairability, written scope, and cost evidence instead of a blanket age or percentage rule.',
-    url: '/services/roofing/repair-or-replace/',
-  },
-}
+  canonical: '/services/roofing/repair-or-replace/',
+  openGraphType: 'article',
+  socialTitle: 'Roof repair or replacement? A Texas homeowner guide',
+  socialDescription: 'Use condition, repairability, written scope, and cost evidence instead of a blanket age or percentage rule.',
+})
 
 const SOURCES = [
   { label: 'Understanding residential roof repairs', publisher: 'GAF', href: 'https://www.gaf.com/en-us/blog/your-home/understanding-residential-roof-repairs-how-do-i-know-if-my-roof-needs-to-be-replaced-734dcc7e-9074-4ef7-8ad4-e5297f93a8da' },

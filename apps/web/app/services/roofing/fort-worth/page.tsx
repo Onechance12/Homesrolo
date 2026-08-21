@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_FORT_WORTH_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Fort Worth roofing guide: permits, decking, scope, and records',
   description: 'Fort Worth homeowner roofing information: when permits apply, decking and structural work, underlayment, drip edge, contractor scope, costs, and closeout records.',
-  alternates: { canonical: '/services/roofing/fort-worth/' },
-  openGraph: { title: 'Fort Worth roofing guide for homeowners', description: 'Understand Fort Worth roof permit triggers, hidden assembly details, and project records.', url: '/services/roofing/fort-worth/' },
-}
+  canonical: '/services/roofing/fort-worth/',
+  openGraphType: 'article',
+  socialTitle: 'Fort Worth roofing guide for homeowners',
+  socialDescription: 'Understand Fort Worth roof permit triggers, hidden assembly details, and project records.',
+})
 
 const SOURCES = [
   { label: 'Residential permitting: roofing', publisher: 'City of Fort Worth', href: 'https://www.fortworthtexas.gov/departments/development-services/permits/residential-information' },
