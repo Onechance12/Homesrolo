@@ -13,7 +13,7 @@ export const SITE_DESCRIPTION =
 export const SITE_ORIGIN = 'https://homesrolo.com'
 
 /** The separate authenticated homeowner application. */
-export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
+export const HOMEOWNER_APP_ORIGIN = 'https://homesrolo-homeowner-v2.onrender.com'
 
 /** Public Roof Watch contact. Keep the SMS copy limited to service intent. */
 export const ROOF_WATCH_PHONE_DISPLAY = '(817) 886-2418'
