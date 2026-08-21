@@ -1,41 +1,68 @@
 # Homesrolo
 
-The homeowner side of the Jobrolo network: a durable record of a home and an
-education-first assistant that helps homeowners understand maintenance and
-work history without acting as a contractor CRM, public adjuster, insurer, or
-claim advocate.
+Homesrolo is the homeowner side of the Jobrolo network and the home’s private
+Rolodex: one durable record for the people, projects, photos, documents,
+equipment, care, and history connected to a home. Roofing is the first deep
+education and search vertical, not the product boundary. Homesrolo does not act
+as a contractor CRM, public adjuster, insurer, claim advocate, or seller of home
+services.
 
-**Status: Phase 1 foundation.** The separate homeowner app now has passwordless
-email authentication, opaque server sessions, a private Supabase persistence
-boundary, private home workspaces, the guided six-system intake, and a narrow
-roof-project request, a private roof-proposal scope comparison, and default-off
-private PDF/JPEG/PNG file storage. The
-public roofing path now routes homeowners into this private account flow rather
-than a contractor directory. Malware scanning, export/deletion workflows,
-controller verification, public sharing, a live assistant, payments, and
-analytics are still unavailable. A default-off signed Jobrolo handoff is now
-implemented; it becomes available only after both services are configured and
-their database migrations are applied.
+**Status: Phase 1 whole-home foundation.** The separate homeowner app has
+passwordless email authentication, opaque server sessions, a private Supabase
+persistence boundary, and private home workspaces. Its mobile-first setup now
+asks only for a familiar home name and general area before allowing the
+homeowner to finish; home type, approximate year, and the six-system snapshot
+are optional and may remain explicitly unknown. The authenticated UI presents a
+whole-home dashboard, a project center for planned, in-progress, and historical
+work, and a Home Library organized around photos and checkups, insurance,
+projects, inventory, warranties, taxes and sale records, maintenance, and
+service history. Those library areas describe the information architecture;
+only records actually returned by the private runtime are shown.
 
-The first homeowner workflow is: request a passwordless email link, create a
-private home workspace, and open a roof repair, replacement, inspection, or
-storm-damage project. Homesrolo saves that project inside its own account and
-database. Inside a roofing project, the homeowner can record multiple proposal
-labels, link an original proposal PDF when uploads are safely enabled, and mark
-what each document says about measurement, materials, valleys, flashing,
+The generic project route can create private records for roofing, exterior,
+interior/remodeling, electrical, plumbing, HVAC, landscaping, appliances, pest
+control, pools, new construction, and other home work. It supports work being
+considered, work underway, and completed history. It does not hire, schedule,
+approve, pay, rank, or recommend a professional. Migration `202608210002` must
+be applied before the generic project command is used in a configured runtime.
+The existing roofing-specific entry path remains available so public roofing
+guides can carry a homeowner’s stated intent into the broader project center.
+
+Inside a roofing project, a homeowner can record multiple proposal labels,
+link an original proposal PDF when uploads are safely enabled, and mark what
+each document says about measurement, materials, valleys, flashing,
 penetrations, ventilation, warranties, payment terms, and exclusions. Missing
 rows remain “not reviewed”; Homesrolo records no price score, ranking, or
-contractor recommendation.
-The proposal comparison has its own default-off
-`HOMESROLO_PROJECT_QUOTES_ENABLED` release gate so application code can deploy
-before migration `202608210001` is applied and verified.
+contractor recommendation. The proposal comparison has its own default-off
+`HOMESROLO_PROJECT_QUOTES_ENABLED` release gate, and migration `202608210001`
+must be applied and verified before that gate is enabled.
 
-With explicit consent, the homeowner may send one minimized roofing
-request to a private Jobrolo review item assigned only to Chance. Files stay in
-Homesrolo unless the separate, default-off attachment gate is enabled after the
-receiver's malware scanner is verified. It does not create a Jobrolo user, lead, customer, or project,
-and it does not send the request to a contractor. Chance decides whether and
-where to distribute it.
+A default-off OpenAI home-research foundation is implemented at
+`POST /api/v1/homes/{homeRef}/research` and is surfaced on the authenticated
+home dashboard only when its exact capability is enabled. With explicit consent, it can send one street address, a
+bounded question, and limited recent context to OpenAI, search public sources,
+and return cited answers and proposed facts. It never silently researches an
+address, never saves a proposed fact, and has no mutation path into the home
+record. It is not production-enabled by this branch: the session capability
+stays false unless the private homeowner runtime is configured and the server
+also has `HOMESROLO_AI_ENABLED=true` plus a server-only `OPENAI_API_KEY`. See
+`docs/HOME_RESEARCH.md` for the privacy, source, rate-limit, and deployment
+boundaries.
+
+Private PDF/JPEG/PNG storage remains separately gated and must stay off until
+malware quarantine/scanning, abuse controls, cleanup, deletion, and retention
+are implemented and verified. The Home Library shows an honest unavailable
+state when that capability is off; it does not simulate an upload. Controller
+verification, invitations, public sharing, payments, analytics, automatic
+professional routing, and production-ready assistant operations are also still
+unavailable.
+
+With explicit consent, a homeowner may send one minimized roofing request to a
+private Jobrolo review item assigned only to Chance. Files stay in Homesrolo
+unless the separate, default-off attachment gate is enabled after the
+receiver’s malware scanner is verified. It does not create a Jobrolo user,
+lead, customer, or project, and it does not send the request to a contractor.
+Chance decides whether and where to distribute it.
 
 ## Contents
 
@@ -49,6 +76,8 @@ where to distribute it.
 | docs/PUBLIC_DIRECTORY_RFC.md | Neutrality, fact-level provenance, corrections, and external-source limits |
 | docs/PLATFORM_STRATEGY.md | Endgame, aggregation constraints, revenue shape, sequence, risks |
 | docs/LEGAL_POSTURE.md | Seeding sources, unclaimed profiles, Section 230, and the AI-agent boundary |
+| docs/HOMEOWNER_PHASE1_RUNTIME.md | Implemented homeowner runtime, capability gates, migrations, and remaining launch work |
+| docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |

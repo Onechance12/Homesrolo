@@ -152,7 +152,7 @@ export const ROOF_WATCH_GUIDES: readonly RoofWatchGuide[] = [
       ]},
     ],
     sources: [
-      { label: 'Seller’s Disclosure Notice', href: 'https://www.trec.texas.gov/sites/default/files/pdf-forms/OP-H.pdf', publisher: 'Texas Real Estate Commission' },
+      { label: 'Seller’s Disclosure Notice (Form 55-1)', href: 'https://www.trec.texas.gov/forms/sellers-disclosure-notice', publisher: 'Texas Real Estate Commission' },
       { label: 'Property Inspection Report Form', href: 'https://www.trec.texas.gov/sites/default/files/pdf-forms/REI%207-6_0.pdf', publisher: 'Texas Real Estate Commission' },
     ],
   },

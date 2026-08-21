@@ -1,11 +1,10 @@
-import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
 import { publicPageMetadata } from '../../lib/public-metadata.ts'
-import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
+import { HOMEOWNER_ROOFING_SIGNIN_URL, HOMEOWNER_SIGNIN_URL } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
-  title: 'Start a roof project',
-  description: 'Create a private Homesrolo home record and start a roofing project without browsing contractor listings.',
+  title: 'Start a home project',
+  description: 'Create a private Homesrolo home record for past, current, or planned work anywhere on the property.',
   canonical: '/professionals/',
 })
 
@@ -15,15 +14,15 @@ export default function ProfessionalsPage() {
       <section className="section section--drafting">
         <div className="shell">
           <PageHeader
-            eyebrow="Roofing project"
+            eyebrow="Whole-home project record"
             title="Start with your home, not a contractor list"
-            lede="Create a private Homesrolo account, add the home, and tell us what the roof needs. Your home record becomes the starting point for the project and stays with the property."
+            lede="Create a private Homesrolo account, add the home, and record work that is planned, active, or already completed. Roofing has a deeper guided path, but it is one chapter in the home’s history."
           />
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '2rem' }}>
-            <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>
+            <a className="btn btn--primary" href={HOMEOWNER_SIGNIN_URL}>
               Create my home account <span className="btn__arrow" aria-hidden="true">&rarr;</span>
             </a>
-            <Link className="btn btn--quiet" href="/services/roofing/">Review the roofing guide</Link>
+            <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start with a roof need</a>
           </div>
         </div>
       </section>
@@ -42,18 +41,18 @@ export default function ProfessionalsPage() {
             </li>
             <li>
               <h3>Add the home</h3>
-              <p>Start the property record with the address and the basic facts you know.</p>
+              <p>Start the property record with a familiar name, a general area, and only the basic facts you know.</p>
               <span className="provenance">one home workspace</span>
             </li>
             <li>
-              <h3>Open the roof project</h3>
-              <p>Choose repair, replacement, inspection, or storm damage and tell us how soon you need help.</p>
-              <span className="provenance">roof-specific request</span>
+              <h3>Record the project</h3>
+              <p>Plan new work, track something underway, or backfill an older project across any part of the home.</p>
+              <span className="provenance">whole-home project record</span>
             </li>
             <li>
               <h3>Keep the record</h3>
-              <p>The project remains attached to the home so documents, photos, products, and warranties can follow it.</p>
-              <span className="provenance">built for the next owner too</span>
+              <p>The project remains attached to the home. Secure documents, photos, and sharing will follow only after those features open.</p>
+              <span className="provenance">files and sharing not live yet</span>
             </li>
           </ol>
         </div>
@@ -68,7 +67,7 @@ export default function ProfessionalsPage() {
               <p>Homesrolo is the homeowner side of the network. The project starts with the home and its needs. The professional side remains separate, so a homeowner account never becomes a contractor CRM account.</p>
             </div>
             <div className="note">
-              <strong>What happens next.</strong> Your first roofing request is saved privately in your home workspace. Network routing will be introduced as a narrow, reviewed handoff; it will not expose the rest of your home record or silently create a contractor identity.
+              <strong>What happens next.</strong> The project is saved privately in the home workspace. Nothing is routed to a professional today; any future handoff must be narrow, reviewed, and separate from the rest of the home record.
             </div>
           </div>
         </div>

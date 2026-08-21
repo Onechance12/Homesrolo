@@ -121,8 +121,8 @@ function SyntheticEntry() {
           {busy ? 'Opening the demo…' : 'Continue with a sample account'}
         </button>
         <button type="button" className="btn btn--quiet btn--block" disabled
-          title="Real accounts are not built yet">
-          Sign in with email — not built yet
+          title="This local demo uses only sample data">
+          Email sign-in is unavailable in the demo
         </button>
       </div>
       <p className="mono" style={{ marginTop: '1.1rem' }}>
@@ -157,8 +157,9 @@ export default function SignInPage({
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
             {isRoofInspectionEntry
               ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
-              : <>Start with the home and its roof projects. Documents, photos, and warranties
-                are planned for the same private file as Homesrolo grows.</>}
+              : <>Start one private Rolodex for the whole home. Record past or planned work now;
+                the Home Library shows where photos, warranties, maintenance, insurance, inventory,
+                and the rest of the home&rsquo;s history belong.</>}
           </p>
 
           {mode === 'synthetic' ? (

@@ -13,11 +13,12 @@ test('the port status names the real private foundation and no later sharing cap
   assert.equal(PORT_IMPLEMENTATION_STATUS.realAuthenticationImplemented, true)
   assert.equal(PORT_IMPLEMENTATION_STATUS.realPersistenceImplemented, true)
   assert.equal(PORT_IMPLEMENTATION_STATUS.uploadsImplemented, true)
-  for (const flag of ['sharingImplemented', 'aiAssistantImplemented', 'connectedToJobrolo'] as const) {
+  assert.equal(PORT_IMPLEMENTATION_STATUS.aiAssistantImplemented, true)
+  for (const flag of ['sharingImplemented', 'connectedToJobrolo'] as const) {
     assert.equal(PORT_IMPLEMENTATION_STATUS[flag], false, `${flag} remains outside the basic foundation`)
   }
   assert.match(SYNTHETIC_NOTICE, /synthetic/i)
-  assert.match(SYNTHETIC_NOTICE, /not built/i)
+  assert.match(SYNTHETIC_NOTICE, /stores nothing/i)
 })
 
 test('every read is session-gated and fails closed when signed out', async () => {
@@ -102,6 +103,28 @@ test('a created home and project exist in memory and feed the timeline', async (
   if (!project.ok) return
   assert.ok(project.value.contractor.includes('(synthetic)'),
     'even user-entered contractors are stamped synthetic in the demo')
+})
+
+test('the synthetic port supports all-home and new-construction records', async () => {
+  await syntheticPort.enterDemoSession('Project historian')
+  const created = await syntheticPort.createHome({
+    commandRef: `hcmd_${'n'.repeat(43)}`,
+    alias: 'Build file', locality: 'North Texas', homeType: 'house', yearBuilt: 2026,
+  })
+  assert.ok(created.ok)
+  if (!created.ok) return
+  const project = await syntheticPort.createProject(created.value.homeRef, {
+    commandRef: `hcmd_${'g'.repeat(43)}`,
+    title: 'Framing and decking documentation',
+    category: 'new_construction',
+    status: 'completed',
+    occurredOn: '2026-07-15',
+    summary: 'Homeowner-supplied construction record.',
+  })
+  assert.ok(project.ok)
+  if (!project.ok) return
+  assert.equal(project.value.trade, 'New construction')
+  assert.equal(project.value.status, 'completed')
 })
 
 test('the empty fixture home renders the empty states, not errors', async () => {

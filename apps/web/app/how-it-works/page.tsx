@@ -2,13 +2,12 @@ import Link from 'next/link'
 import { PageHeader } from '../../components/Prose.tsx'
 import { HOW_IT_WORKS_STEPS } from '../../lib/content/education.ts'
 import { publicPageMetadata } from '../../lib/public-metadata.ts'
-import { HOMEOWNER_ROOFING_SIGNIN_URL } from '../../lib/site.ts'
+import { HOMEOWNER_SIGNIN_URL } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
   title: 'How it works',
   description:
-    'How a Home Project Passport is made: work is recorded, the homeowner decides what to release, and the '
-    + 'released record carries its own provenance.',
+    'Start one private record for a home, add past, current, and planned projects, and see which storage and sharing features are still being built.',
   canonical: '/how-it-works/',
 })
 
@@ -19,9 +18,8 @@ export default function HowItWorksPage() {
         <div className="shell">
           <PageHeader
             eyebrow="How it works"
-            title="Work happens. The homeowner decides what becomes a record."
-            lede="Four steps, and the second one is the one that matters: nothing becomes public because work was
-              done. A release is a decision, made by the person whose home it is."
+            title="Start the home’s history with what you know."
+            lede="The private account and whole-home project record work today. Files, sharing, and public proof are separate capabilities that remain off until their controls are ready."
           />
         </div>
       </section>
@@ -47,11 +45,11 @@ export default function HowItWorksPage() {
             <h2>What works today, and what comes next</h2>
             <p>
               Private passwordless homeowner accounts, private home files, guided starting details, and private
-              roof-project requests work today. They live in a separate authenticated homeowner application; a
-              project started there is saved to that homeowner&rsquo;s home file.
+              whole-home project records work today. A homeowner can record work that is planned, underway, or
+              already completed across the property in a separate authenticated application.
             </p>
             <p>
-              File uploads, invitations, sharing, the homeowner assistant, and delivery of a project to the
+              File uploads, invitations, sharing, production home research, and delivery of a project to the
               Homesrolo professional network are not available yet. Starting a private project does not hire a
               contractor or send the request outside the homeowner account.
             </p>
@@ -60,7 +58,7 @@ export default function HowItWorksPage() {
               because an account or project was created.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-              <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a roof project</a>
+              <a className="btn btn--primary" href={HOMEOWNER_SIGNIN_URL}>Open my home Rolodex</a>
               <Link className="btn btn--quiet" href="/how-we-verify/">What a verified fact means</Link>
             </div>
           </div>

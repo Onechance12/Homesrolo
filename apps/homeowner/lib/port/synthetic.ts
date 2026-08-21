@@ -132,6 +132,11 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async researchHome() {
+    await wait()
+    return err('unavailable')
+  },
+
   async listProjects(homeRef) {
     await wait()
     const gate = requireSession<readonly ProjectSummary[]>()
@@ -182,6 +187,38 @@ export const syntheticPort: HomeownerDataPort = {
     return ok({ projectRef, homeRef, title, trade, performedOn, status, photoCount, documentCount, isSynthetic: true as const })
   },
 
+  async createProject(homeRef, input) {
+    await wait()
+    const gate = requireSession<ProjectSummary>()
+    if (gate) return gate
+    if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
+    const trade = {
+      roofing: 'Roofing', exterior: 'Exterior', interior: 'Interior',
+      electrical: 'Electrical', plumbing: 'Plumbing', hvac: 'HVAC',
+      landscaping: 'Landscaping', appliances: 'Appliances', pest: 'Pest control',
+      pool: 'Pool', new_construction: 'New construction', other: 'Other',
+    } as const
+    const project: Project = {
+      projectRef: mint('hprj'),
+      homeRef,
+      title: input.title.trim(),
+      trade: trade[input.category],
+      performedOn: input.occurredOn ?? null,
+      status: input.status,
+      photoCount: 0,
+      documentCount: 0,
+      summary: input.summary.trim(),
+      contractor: '',
+      materials: [],
+      photos: [],
+      documents: [],
+      warranty: null,
+      isSynthetic: true,
+    }
+    memory.createdProjects.push(project)
+    return ok(project)
+  },
+
   async startRoofingProject(homeRef, input) {
     await wait()
     const gate = requireSession<ProjectSummary>()
@@ -205,7 +242,7 @@ export const syntheticPort: HomeownerDataPort = {
       homeRef,
       title: titles[input.need],
       trade: 'Roofing',
-      performedOn: new Date().toISOString().slice(0, 10),
+      performedOn: null,
       status: 'planned',
       photoCount: 0,
       documentCount: 0,
@@ -276,6 +313,7 @@ export const syntheticPort: HomeownerDataPort = {
     if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
     const created = memory.createdProjects
       .filter(p => p.homeRef === homeRef)
+      .filter((p): p is typeof p & { performedOn: string } => p.performedOn !== null)
       .map(p => ({
         entryRef: `${p.projectRef}-entry`,
         homeRef,

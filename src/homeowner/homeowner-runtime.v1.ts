@@ -329,6 +329,10 @@ export const homeownerProjectSchema = z.object({
     'plumbing',
     'hvac',
     'landscaping',
+    'appliances',
+    'pest',
+    'pool',
+    'new_construction',
     'other',
   ]),
   status: z.enum(['planned', 'in_progress', 'completed', 'cancelled']),
@@ -485,6 +489,16 @@ export const recordHomeownerIntakeInputSchema = z.object({
 export type CreateHomeWorkspaceInput = z.infer<typeof createHomeWorkspaceInputSchema>
 export type CreateHomeownerProjectInput = z.infer<typeof createHomeownerProjectInputSchema>
 export type RecordHomeownerIntakeInput = z.infer<typeof recordHomeownerIntakeInputSchema>
+
+/**
+ * Stable user intent for receipt hashing. Server execution time is deliberately
+ * excluded so a lost-response retry can reuse the same commandRef safely.
+ */
+export function homeownerProjectCommandIntent(input: CreateHomeownerProjectInput) {
+  const command = createHomeownerProjectInputSchema.parse(input)
+  const { requestedAt: _requestedAt, ...intent } = command
+  return intent
+}
 
 export const storeHomeownerArtifactInputSchema = z.object({
   commandRef: opaqueRef('hcmd'),

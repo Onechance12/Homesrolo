@@ -9,23 +9,65 @@ import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconProjects } from '../../../../components/icons.tsx'
 import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
-import type { RoofingNeed, RoofingTiming } from '../../../../lib/port/types.ts'
+import type { ProjectCategory, ProjectStatus } from '../../../../lib/port/types.ts'
 import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
 
-const NEEDS: readonly { value: RoofingNeed; label: string }[] = [
-  { value: 'repair', label: 'Repair a leak or damage' },
-  { value: 'replacement', label: 'Replace the roof' },
-  { value: 'inspection', label: 'Get the roof checked' },
-  { value: 'storm_damage', label: 'Review storm damage' },
-  { value: 'not_sure', label: 'I am not sure yet' },
+type RecordMode = 'planned' | 'active' | 'past'
+
+const MODES: readonly {
+  value: RecordMode
+  eyebrow: string
+  title: string
+  body: string
+}[] = [
+  {
+    value: 'planned',
+    eyebrow: 'Plan',
+    title: 'Something you are considering',
+    body: 'Keep research, questions, and proposals together before you decide.',
+  },
+  {
+    value: 'active',
+    eyebrow: 'Track',
+    title: 'Work happening now',
+    body: 'Give an active repair, upgrade, or maintenance visit one clear home.',
+  },
+  {
+    value: 'past',
+    eyebrow: 'Remember',
+    title: 'Work already completed',
+    body: 'Backfill the history so the next owner—or future you—can find it.',
+  },
 ]
 
-const TIMING: readonly { value: RoofingTiming; label: string }[] = [
-  { value: 'urgent', label: 'As soon as possible' },
-  { value: 'within_30_days', label: 'Within 30 days' },
-  { value: 'researching', label: 'I am researching' },
-  { value: 'not_sure', label: 'I am not sure yet' },
+const CATEGORIES: readonly { value: ProjectCategory; label: string }[] = [
+  { value: 'roofing', label: 'Roof' },
+  { value: 'interior', label: 'Interior / remodel' },
+  { value: 'hvac', label: 'Heating & cooling' },
+  { value: 'plumbing', label: 'Plumbing' },
+  { value: 'electrical', label: 'Electrical' },
+  { value: 'exterior', label: 'Exterior / gutters' },
+  { value: 'landscaping', label: 'Yard / landscaping' },
+  { value: 'appliances', label: 'Appliances' },
+  { value: 'pest', label: 'Pest control' },
+  { value: 'pool', label: 'Pool' },
+  { value: 'new_construction', label: 'New construction' },
+  { value: 'other', label: 'Something else' },
 ]
+
+const ROOF_TITLE = {
+  repair: 'Roof repair',
+  replacement: 'Roof replacement',
+  inspection: 'Roof inspection',
+  storm_damage: 'Storm damage roof review',
+  not_sure: 'Roofing project',
+} as const
+
+const STATUS_FOR_MODE: Readonly<Record<RecordMode, ProjectStatus>> = {
+  planned: 'planned',
+  active: 'in_progress',
+  past: 'completed',
+}
 
 export default function ProjectsPage({
   params,
@@ -41,136 +83,209 @@ export default function ProjectsPage({
   const mode = usePortMode()
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
-  const [need, setNeed] = useState<RoofingNeed>(() => carriedIntent ?? 'not_sure')
-  const [timing, setTiming] = useState<RoofingTiming>('not_sure')
-  const [notes, setNotes] = useState('')
+  const [recordMode, setRecordMode] = useState<RecordMode | null>(() => carriedIntent ? 'planned' : null)
+  const [category, setCategory] = useState<ProjectCategory | null>(() => carriedIntent ? 'roofing' : null)
+  const [title, setTitle] = useState(() => carriedIntent ? ROOF_TITLE[carriedIntent] : '')
+  const [occurredOn, setOccurredOn] = useState('')
+  const [summary, setSummary] = useState('')
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const attemptRef = useRef<string | null>(null)
 
-  function changeNeed(value: RoofingNeed) {
+  function resetAttempt() {
     attemptRef.current = null
-    setNeed(value)
+    setFailed(null)
   }
 
-  function changeTiming(value: RoofingTiming) {
-    attemptRef.current = null
-    setTiming(value)
+  function chooseMode(value: RecordMode) {
+    resetAttempt()
+    setRecordMode(value)
+    if (value !== 'past') setOccurredOn('')
   }
 
-  function changeNotes(value: string) {
-    attemptRef.current = null
-    setNotes(value)
-  }
-
-  async function startProject(event: React.FormEvent) {
+  async function createProject(event: React.FormEvent) {
     event.preventDefault()
+    if (!recordMode || !category) return
     const commandRef = commandRefForAttempt(attemptRef.current)
     attemptRef.current = commandRef
     setBusy(true)
     setFailed(null)
-    const result = await port.startRoofingProject(homeId, { commandRef, need, timing, notes })
+    const result = await port.createProject(homeId, {
+      commandRef,
+      title,
+      category,
+      status: STATUS_FOR_MODE[recordMode],
+      ...(recordMode === 'past' && occurredOn ? { occurredOn } : {}),
+      summary,
+    })
     setBusy(false)
     if (!result.ok) {
       setFailed(result.error)
       return
     }
+    retry()
     router.push(`/home/${homeId}/projects/${result.value.projectRef}`)
   }
 
   return (
-    <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
+    <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
       <div className="pagehead">
-        <p className="mono">Your home · roofing</p>
-        <h1>Roof projects</h1>
-        <p>Start here, keep the decisions here, and build the permanent record as the work moves.</p>
+        <p className="mono">Your home Rolodex</p>
+        <h1>Projects, repairs, and upgrades</h1>
+        <p>
+          Record anything that changes or maintains the home—from a filter service to a remodel.
+          Roofing is one chapter, not the whole file.
+        </p>
       </div>
 
-      <section className="panel roof-start" aria-labelledby="start-roof-project">
+      <section aria-labelledby="project-record-actions">
         <div className="panel__head">
           <div>
-            <p className="mono">New request</p>
-            <h2 id="start-roof-project">What does the roof need?</h2>
+            <p className="mono">Add to the history</p>
+            <h2 id="project-record-actions">What are you recording?</h2>
           </div>
         </div>
-        <form onSubmit={startProject} className="roof-start__form">
-          {carriedIntent && carriedIntent !== 'not_sure' ? (
-            <div className="notice" role="status">
-              We carried over <strong>{ROOFING_INTENT_LABEL[carriedIntent]}</strong> from the roofing guide.
-              You can change it below before anything is saved.
-            </div>
-          ) : null}
-          <fieldset>
-            <legend>Choose the closest answer</legend>
-            <div className="choice-grid">
-              {NEEDS.map(option => (
-                <label className="choice-card" key={option.value}>
-                  <input
-                    type="radio"
-                    name="roof-need"
-                    value={option.value}
-                    checked={need === option.value}
-                    onChange={() => changeNeed(option.value)}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="field">
-            <label htmlFor="roof-timing">When do you want to move?</label>
-            <select
-              id="roof-timing"
-              value={timing}
-              onChange={event => changeTiming(event.target.value as RoofingTiming)}
+        <div className="project-action-grid">
+          {MODES.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              className="project-action"
+              aria-pressed={recordMode === option.value}
+              onClick={() => chooseMode(option.value)}
             >
-              {TIMING.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label htmlFor="roof-notes">Anything we should know?</label>
-            <textarea
-              id="roof-notes"
-              value={notes}
-              maxLength={1500}
-              onChange={event => changeNotes(event.target.value)}
-              placeholder="Leak location, storm date, roof age, access notes, or questions."
-            />
-            <span className="field__hint">Optional. This release saves these notes with the private roof project.</span>
-          </div>
-
-          {failed && (
-            <p role="alert" className="form-error">
-              {failed === 'not_signed_in'
-                ? 'Your sign-in expired. Sign in again before starting the project.'
-                : 'The project was not started. Check the form and try again.'}
-            </p>
-          )}
-
-          <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
-            {busy ? 'Starting your roof file…' : 'Start my roof project'}
-          </button>
-          <p className="form-note">
-            This creates a private project in your home file. It does not hire a contractor or approve work.
-          </p>
-          {mode === 'synthetic' ? (
-            <p className="mono">Demo only. A refresh clears the request.</p>
-          ) : null}
-        </form>
+              <span className="mono">{option.eyebrow}</span>
+              <strong>{option.title}</strong>
+              <span>{option.body}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
+      {recordMode ? (
+        <section className="panel project-form" aria-labelledby="project-details-title">
+          <div className="panel__head">
+            <div>
+              <p className="mono">Private home record</p>
+              <h2 id="project-details-title">
+                {recordMode === 'past' ? 'Add the work you remember' : 'Give this work a clear name'}
+              </h2>
+            </div>
+            <button type="button" className="btn btn--quiet" onClick={() => setRecordMode(null)}>
+              Close
+            </button>
+          </div>
+
+          {carriedIntent && category === 'roofing' ? (
+            <div className="notice" role="status">
+              We carried over <strong>{ROOFING_INTENT_LABEL[carriedIntent]}</strong> from the roofing guide.
+              Nothing is sent to a contractor unless you choose that later.
+            </div>
+          ) : null}
+
+          <form onSubmit={createProject} className="roof-start__form">
+            <fieldset>
+              <legend>Part of the home</legend>
+              <div className="project-category-grid">
+                {CATEGORIES.map(option => (
+                  <label className="choice-card" key={option.value}>
+                    <input
+                      type="radio"
+                      name="project-category"
+                      value={option.value}
+                      checked={category === option.value}
+                      onChange={() => {
+                        resetAttempt()
+                        setCategory(option.value)
+                      }}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="field">
+              <label htmlFor="project-title">Project name</label>
+              <input
+                id="project-title"
+                value={title}
+                maxLength={120}
+                required
+                onChange={event => {
+                  resetAttempt()
+                  setTitle(event.target.value)
+                }}
+                placeholder="Kitchen remodel, spring AC service, fence repair…"
+              />
+            </div>
+
+            {recordMode === 'past' ? (
+              <div className="field">
+                <label htmlFor="project-date">Exact completion date (optional)</label>
+                <input
+                  id="project-date"
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={occurredOn}
+                  onChange={event => {
+                    resetAttempt()
+                    setOccurredOn(event.target.value)
+                  }}
+                />
+                <span className="field__hint">Leave this blank unless you can support the exact day. Put a known month, season, or year in the notes instead.</span>
+              </div>
+            ) : null}
+
+            <div className="field">
+              <label htmlFor="project-summary">What do you know so far?</label>
+              <textarea
+                id="project-summary"
+                value={summary}
+                maxLength={2000}
+                onChange={event => {
+                  resetAttempt()
+                  setSummary(event.target.value)
+                }}
+                placeholder="Who did the work, what changed, questions, model numbers, or what to check next."
+              />
+              <span className="field__hint">Optional. Facts can be added as you find them.</span>
+            </div>
+
+            {failed ? (
+              <p role="alert" className="form-error">
+                {failed === 'not_signed_in'
+                  ? 'Your sign-in expired. Sign in again before saving.'
+                  : failed === 'conflict'
+                    ? 'This record changed during a retry. Review it and save again.'
+                    : 'The project was not saved. Check the details and try again.'}
+              </p>
+            ) : null}
+
+            <button type="submit" className="btn btn--primary btn--block" disabled={busy || !category || !title.trim()}>
+              {busy ? 'Saving to the home…' : recordMode === 'past' ? 'Add to home history' : 'Create project record'}
+            </button>
+            <p className="form-note">
+              This creates a private record. It does not hire, schedule, approve, or pay a professional.
+            </p>
+            {mode === 'synthetic' ? <p className="mono">Demo only. A refresh clears the record.</p> : null}
+          </form>
+        </section>
+      ) : null}
+
       <section aria-labelledby="saved-projects">
-        <div className="panel__head"><h2 id="saved-projects">Your project record</h2></div>
+        <div className="panel__head">
+          <div>
+            <p className="mono">One history</p>
+            <h2 id="saved-projects">Work on this home</h2>
+          </div>
+        </div>
         {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading projects" /></div>}
         {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
         {state.status === 'empty' && (
           <EmptyState
-            title="No roof project yet"
-            body="Use the short form above. Your first request becomes the start of this home's roofing record."
+            title="No work recorded yet"
+            body="Add something completed, underway, or still being considered. The home history can start anywhere."
           />
         )}
         {state.status === 'ready' && (
@@ -185,7 +300,7 @@ export default function ProjectsPage({
                   </span>
                   <span className="row__end">
                     <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>
-                    <span className="mono">{project.performedOn}</span>
+                    <span className="mono">{project.performedOn ?? 'Date not recorded'}</span>
                   </span>
                 </Link>
               </li>

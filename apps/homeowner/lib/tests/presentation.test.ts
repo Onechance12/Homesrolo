@@ -54,6 +54,27 @@ test('interactive controls carry a real minimum hit area', () => {
   assert.match(css, /min-height:\s*var\(--tabbar\)/, 'tab bar items fill the bar')
 })
 
+test('new-home setup is a mobile-first progressive form, not a chatbot transcript', () => {
+  const page = read('app/homes/new/page.tsx')
+  assert.match(page, /Set up your home/)
+  assert.match(page, /Step \{stage\.number\} of 4/,
+    'the current stage and total are always visible')
+  assert.match(page, /Skip optional details — add or research them later/,
+    'a homeowner can enter the product after only the required basics')
+  assert.match(page, /<ReviewCard[\s\S]*draft=\{draftFrom\(state\)\}[\s\S]*onEdit=\{editStep\}/,
+    'review answers have a direct edit path')
+  assert.doesNotMatch(page, /state\.transcript\.map/,
+    'the deterministic machine must not be presented as a fake AI conversation')
+
+  assert.match(css, /\.gate__card--setup\s*\{[^}]*max-width:\s*46rem/)
+  assert.match(css, /\.setup-field input\[type='text'\][\s\S]*min-height:\s*54px/,
+    'setup inputs are large enough to use on a phone')
+  assert.match(css, /\.setup-option\s*\{[^}]*min-height:\s*62px/,
+    'choice cards have generous touch targets')
+  assert.match(css, /@media \(max-width: 42rem\)[\s\S]*\.setup-options\s*\{\s*grid-template-columns:\s*1fr/,
+    'phone choices stack into one readable column')
+})
+
 test('the shell has a language, a skip link, and a main landmark', () => {
   const layout = read('app/layout.tsx')
   assert.match(layout, /<html lang="en">/)
@@ -79,11 +100,12 @@ test('the app never claims to be indexed', () => {
 test('browser and server-to-server network calls exist only in their sanctioned transports', () => {
   // Constructs, not words: a comment naming the fetch ban is not a fetch, and
   // a status flag honestly recording a missing connection is not a connection.
-  // Browser calls stay in the same-origin JSON transport. The one separate
-  // server integration is an authenticated, exact-endpoint Homesrolo-to-
-  // Jobrolo delivery adapter; it is never imported by browser code.
+  // Browser calls stay in the same-origin JSON transport. The separate server
+  // integrations are the authenticated Homesrolo-to-Jobrolo adapter and the
+  // default-off, stateless OpenAI home-research adapter.
   const BROWSER_TRANSPORT = 'lib/port/transport.ts'
   const SERVER_TRANSPORT = 'lib/server/jobrolo-intake-client.ts'
+  const AI_TRANSPORT = 'lib/server/home-research.ts'
   for (const rel of appSources) {
     const content = read(rel)
     if (rel === BROWSER_TRANSPORT) {
@@ -97,8 +119,18 @@ test('browser and server-to-server network calls exist only in their sanctioned 
         'the server transport pins one exact integration path')
       continue
     }
+    if (rel === AI_TRANSPORT) {
+      assert.match(content, /https:\/\/api\.openai\.com\/v1\/responses/,
+        'AI research pins the official Responses endpoint')
+      assert.match(content, /store:\s*false/, 'OpenAI response storage stays disabled')
+      assert.match(content, /authorization:\s*`Bearer \$\{this\.#configuration\.apiKey\}`/,
+        'the server adds the API key at the reviewed transport boundary')
+      assert.doesNotMatch(content, /process\.env/,
+        'the AI transport receives secrets from the one runtime seam')
+      continue
+    }
     assert.doesNotMatch(content, /\bfetch\s*\(/,
-      `${rel} must not call fetch; only the two reviewed transports may`)
+      `${rel} must not call fetch; only the reviewed transports may`)
     assert.doesNotMatch(content, /new\s+(XMLHttpRequest|WebSocket)\s*\(/, `${rel} must not open a connection`)
     assert.doesNotMatch(content, /process\.env\.(DATABASE|SECRET|API_KEY|TOKEN)/, `${rel} must not read secrets`)
   }
@@ -169,6 +201,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    'app/api/v1/homes/[homeRef]/research/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
@@ -208,6 +241,16 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
         `${rel} delegates to the isolated server integration seam`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
         `${rel} must not expose a read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/research/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves one consent-bound research request`)
+      assert.match(content, /handleHomeResearchRequest/,
+        `${rel} delegates to the isolated server research boundary`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose an address-bearing read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the project list`)
+      assert.match(content, /export async function POST/, `${rel} serves generic project creation`)
+      assert.match(content, /handleHomeownerRequest/, `${rel} delegates both methods to the adapter`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the private quote list`)
       assert.match(content, /export async function POST/, `${rel} serves strict quote creation`)
@@ -224,10 +267,12 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
@@ -235,7 +280,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       `${rel} must export no generic mutation method`)
     if (!rel.startsWith('app/api/v1/auth/')
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
       assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
     }
   }
@@ -374,11 +420,150 @@ test('a nameless server session renders a neutral label, never "as null"', () =>
 
 test('disabled affordances say why, instead of pretending', () => {
   const signin = read('app/signin/page.tsx')
-  assert.match(signin, /not built yet/i)
+  assert.match(signin, /Email sign-in is unavailable in the demo/i)
+  assert.match(signin, /This local demo uses only sample data/i)
   const settings = read('app/home/[homeId]/settings/page.tsx')
   assert.match(settings, /not built yet/i)
   const documents = read('app/home/[homeId]/documents/page.tsx')
   assert.match(documents, /Uploads are unavailable/i)
+})
+
+test('the authenticated home is a whole-home Rolodex, not a roofing dashboard', () => {
+  const shell = read('components/AppShell.tsx')
+  const dashboard = read('app/home/[homeId]/page.tsx')
+  const library = read('app/home/[homeId]/documents/page.tsx')
+
+  assert.match(shell, /label: 'Home library', tabLabel: 'Library'/,
+    'desktop and phone navigation name the library at the right size')
+  assert.match(shell, /label: 'Events & care', tabLabel: 'Care'/,
+    'routine home care is a first-class destination')
+  assert.match(dashboard, /Build the Rolodex for the whole home\./)
+  assert.match(dashboard, /roof, HVAC, plumbing, electrical, interior, exterior, yard, pest/,
+    'the dashboard opens on the whole property')
+  assert.doesNotMatch(dashboard, /Need roof work\?|Start a roof project|Open roof projects/,
+    'roofing is never presented as the dashboard default')
+
+  for (const area of [
+    'Photos & home checkups',
+    'Insurance',
+    'Projects & upgrades',
+    'Inventory & manuals',
+    'Warranties',
+    'Taxes, value & sale',
+    'Events & maintenance',
+    'People & service history',
+  ]) {
+    assert.match(library, new RegExp(area.replace('&', '\\&')),
+      `${area} has an honest place in the library map`)
+  }
+  assert.match(library, /state\.status === 'ready' \? state\.value : \[\]/,
+    'file and photo rows can come only from the private port response')
+  assert.match(library, /record\.kind === 'photo_set'/,
+    'returned photos have a dedicated condition-record surface')
+  assert.match(library, /session\.state\.capabilities\.uploads/,
+    'the add-file form remains fail-closed on the exact upload capability')
+  assert.match(library, /Uploads are unavailable right now/,
+    'the production capability-off state stays visible and specific')
+})
+
+test('whole-home project history never invents a category or work date', () => {
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  const detail = read('app/home/[homeId]/projects/[projectId]/page.tsx')
+  const wire = read('lib/port/wire.ts')
+
+  assert.match(projects, /useState<ProjectCategory \| null>\(\(\) => carriedIntent \? 'roofing' : null\)/,
+    'ordinary projects require the homeowner to choose a category')
+  assert.match(projects, /disabled=\{busy \|\| !category \|\| !title\.trim\(\)\}/,
+    'the form cannot submit without that category')
+  assert.match(projects, /Exact completion date \(optional\)/)
+  assert.match(projects, /Leave this blank unless you can support the exact day/)
+  assert.match(projects, /project\.performedOn \?\? 'Date not recorded'/)
+  assert.match(detail, /<dt>Work date<\/dt><dd>\{project\.performedOn \?\? 'Not recorded'\}<\/dd>/)
+  assert.match(wire, /performedOn: decoded\.occurredOn/)
+  assert.doesNotMatch(wire, /performedOn:[^\n]*createdAt/,
+    'record creation time is never relabeled as the work date')
+})
+
+test('capability-off library, care, and warranty surfaces are intentional states, not errors', () => {
+  const library = read('app/home/[homeId]/documents/page.tsx')
+  const care = read('app/home/[homeId]/timeline/page.tsx')
+  const warranties = read('app/home/[homeId]/warranties/page.tsx')
+
+  assert.match(library, /libraryReadable[\s\S]*\? port\.listDocuments\(homeId\)[\s\S]*Promise\.resolve/,
+    'the Library does not call the disabled private-file route')
+  assert.match(care, /Care scheduling is not connected yet/)
+  assert.match(care, /Project history is live now/)
+  assert.match(warranties, /Warranty storage is not open yet/)
+  assert.match(warranties, /Homesrolo is not holding a warranty file/)
+})
+
+test('home research is capability-gated, consent-bound, and never presented as a saved fact', () => {
+  const assistant = read('components/HomeResearchAssistant.tsx')
+
+  assert.match(
+    assistant,
+    /session\.state\.kind !== 'signed_in' \|\| !session\.state\.capabilities\.homeResearch/,
+    'the research controls fail closed unless the exact signed-in capability is live',
+  )
+  assert.match(assistant, /consentToResearchThisAddressOnline:\s*true/,
+    'every request carries the explicit consent literal required by the server')
+  assert.match(
+    assistant,
+    /I agree to send this street address,[\s\S]*OpenAI[\s\S]*generally kept up to 30 days[\s\S]*retained longer/,
+    'the checkbox names the processor, normal retention, and documented exceptions',
+  )
+  assert.match(assistant, /setMessage\(event\.target\.value\)[\s\S]*setConsent\(false\)/,
+    'changing the exact question invalidates earlier consent')
+  assert.match(assistant, /checked=\{consent\}[\s\S]*required/,
+    'consent is an actual required checkbox rather than passive disclosure copy')
+  assert.match(assistant, /Draft facts to check/)
+  assert.match(assistant, /These are not in your home record\./,
+    'model output stays visibly separate from the durable home record')
+  assert.doesNotMatch(assistant, /\b(?:save|saved|verified|verification)\b/i,
+    'the read-only assistant offers no save or verification language')
+})
+
+test('home research chat is accessible, link-safe, and frozen while one request is pending', () => {
+  const assistant = read('components/HomeResearchAssistant.tsx')
+
+  assert.match(
+    assistant,
+    /role="log"[\s\S]*aria-live="polite"[\s\S]*aria-relevant="additions"/,
+    'new research exchanges are announced as additions to a polite chat log',
+  )
+  assert.match(assistant, /aria-busy=\{pendingQuestion !== null\}/,
+    'the conversation exposes its in-flight state')
+  assert.match(
+    assistant,
+    /className="research-pending" role="status" aria-live="polite"/,
+    'the honest search progress message is announced without stealing focus',
+  )
+  assert.match(
+    assistant,
+    /<a href=\{url\} target="_blank" rel="noopener noreferrer">/,
+    'public citations cannot retain an opener or send a referrer to their destination',
+  )
+  assert.match(assistant, /\(opens in a new tab\)/,
+    'source-link behavior is also named for screen-reader users')
+  assert.doesNotMatch(assistant, /dangerouslySetInnerHTML/,
+    'model and source text is rendered as escaped React text only')
+  assert.equal(
+    (assistant.match(/disabled=\{pendingQuestion !== null\}/g) ?? []).length,
+    3,
+    'address, question, and consent controls are all frozen while a request is running',
+  )
+})
+
+test('the dashboard places the research assistant in the whole-home opening flow', () => {
+  const dashboard = read('app/home/[homeId]/page.tsx')
+
+  assert.match(dashboard, /import \{ HomeResearchAssistant \}/,
+    'the dashboard owns the homeowner-facing research surface')
+  assert.match(
+    dashboard,
+    /<section className="roof-callout"[\s\S]*<HomeResearchAssistant homeRef=\{homeId\}[\s\S]*<dl className="cardgrid/,
+    'research follows the whole-home introduction and precedes the record counts',
+  )
 })
 
 test('one bounded roofing intent continues through the existing homeowner flow', () => {
@@ -391,7 +576,7 @@ test('one bounded roofing intent continues through the existing homeowner flow',
     assert.match(content, /roofingIntent/)
   }
   assert.match(projects, /carriedIntent/)
-  assert.match(projects, /before anything is saved/)
+  assert.match(projects, /Nothing is sent to a contractor unless you choose that later\./)
   assert.doesNotMatch([signin, homes, newHome, projects].join('\n'), /insurance_claim/)
 })
 

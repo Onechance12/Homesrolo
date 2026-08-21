@@ -1,18 +1,24 @@
 # Homeowner Phase 1 Runtime Foundation
 
-Status: **configured private runtime foundation.** Passwordless email identity,
-opaque Homesrolo sessions, private Postgres persistence, home creation, the
-six-system intake, a private roof-project request, and private PDF/JPEG/PNG
-artifact storage, a private roof-proposal scope comparison, and the
-consent-bound Jobrolo review handoff are implemented.
-Invitations, public sharing, controller verification, and automatic
-professional distribution remain unavailable.
+Status: **implemented, capability-gated private whole-home runtime
+foundation.** Passwordless email identity, opaque Homesrolo sessions, private
+Postgres persistence, home creation, optional progressive onboarding, generic
+whole-home projects, the roofing-specific project path, a private roof-proposal
+scope comparison, default-off PDF/JPEG/PNG artifact storage, a default-off
+public-source home research assistant, and the consent-bound Jobrolo review
+handoff are implemented. “Implemented” does not mean every capability is
+production-enabled: database migrations, server configuration, release gates,
+and the security conditions below still control what a deployed session may
+use.
 
-The first HomesRolo homeowner application is a private workspace for a person
-to organize one home, its projects, photos, documents, warranties, and timeline.
-It does not establish legal ownership and it does not unlock contractor records.
+The Homesrolo homeowner application is the home’s private Rolodex: a workspace
+for a person to organize the people, planned and completed work, photos,
+documents, equipment, warranties, care, and history connected to one home.
+Roofing is the first deep content and workflow vertical, not the limit of the
+home record. Homesrolo does not establish legal ownership, unlock contractor
+records, hire a professional, or distribute work automatically.
 
-## First vertical slice
+## Core authorization boundary
 
 1. A server-side identity adapter resolves a signed-in, email-verified principal.
 2. A person privately creates a home workspace. Its relationship is explicitly
@@ -23,11 +29,12 @@ It does not establish legal ownership and it does not unlock contractor records.
 6. Third-party contributions remain behind the existing verified-controller or
    exact-active-share boundary. Home membership does not reveal their existence.
 
-The command boundary uses idempotency-friendly opaque command
-references for creating one private home workspace and one homeowner roof project.
-It defines semantic warranty and maintenance records separately from raw
-document bytes. Create-home and intake saves use transaction-bound command
-receipts; a changed payload cannot reuse an earlier command reference.
+The command boundary uses idempotency-friendly opaque command references for
+creating one private home workspace and private homeowner projects across the
+whole home. It defines semantic warranty and maintenance records separately
+from raw document bytes. Create-home, intake, and project saves use
+transaction-bound command receipts; a changed payload cannot reuse an earlier
+command reference.
 
 Private artifacts live in a non-public Supabase Storage bucket. Each upload is
 limited to 25 MiB, checked by file signature as PDF/JPEG/PNG, hashed with
@@ -40,23 +47,39 @@ gate and must not be enabled before migration `202608120003` is applied.
 It must also remain off until malware quarantine/scanning, abuse controls,
 cleanup, deletion, and retention are implemented and verified.
 
-The initial living record stores one source-labeled property-facts record and exactly one entry for
-each of the six supported home systems. Unknown stays unknown, approximate
-years keep their precision, and only a fresh workspace-controller grant may
-record the intake.
+The authenticated Home Library is now organized as a whole-home map: photos and
+seasonal checkups, insurance, projects and upgrades, inventory and manuals,
+warranties, taxes/value/sale records, events and maintenance, and people and
+service history. These are presentation categories and honest empty states, not
+a claim that every category has a dedicated persistence model. File and photo
+rows come only from the private artifact list. The browser renders the upload
+form only when the signed-in session reports `uploads: true`; otherwise it says
+that secure storage is unavailable.
+
+The onboarding presentation is a four-stage, mobile-first progressive setup,
+not a simulated assistant conversation. A familiar home name and general area
+are the only required answers. The homeowner can skip home type, year built,
+and the major-system questions and finish later. The saved initial record still
+contains one source-labeled property-facts record and exactly one entry for each
+of the six supported home systems. Unknown stays unknown, approximate years
+keep their precision, and only a fresh workspace-controller grant may record
+the intake.
 
 The Phase 2A server application boundary now defines strict session, home-list,
 and exact-home browser projections. It resolves identity from a server-owned
 session handle, fresh-checks each principal-to-home membership, and strips
 authority, provider, and object-storage fields before returning data. Its
-capability response stays false for each feature until its provider and
-explicit release gate are separately configured and verified.
+capability response reports each feature separately and stays false until that
+feature's required provider, configuration, migration, and release conditions
+are satisfied.
 
 The matching framework-neutral HTTP boundary serves `GET /api/v1/session`,
 `GET /api/v1/homes`, `GET /api/v1/homes/{opaque-home-ref}`, `POST /api/v1/homes`,
 `POST /api/v1/homes/{opaque-home-ref}/intake`, exact-home project list/detail
-reads, `POST /api/v1/homes/{opaque-home-ref}/roofing-projects`, exact-home
-artifact metadata listing/upload, and exact-artifact private download.
+reads, generic `POST /api/v1/homes/{opaque-home-ref}/projects`, the retained
+`POST /api/v1/homes/{opaque-home-ref}/roofing-projects`, exact-home artifact
+metadata listing/upload, exact-artifact private download, and default-off
+`POST /api/v1/homes/{opaque-home-ref}/research`.
 Roofing projects also expose an exact-project proposal list, strict create, and
 revision-backed full save. These quote routes store homeowner-entered company
 labels and partial scope classifications. An absent row means “not reviewed”;
@@ -71,21 +94,38 @@ home, project, disclosure digest, timestamps, and short-lived transfers.
 It requires a server-owned session handle, rejects query/body identity claims,
 returns a one-key `data` envelope, uses `no-store`, and maps failures to bounded
 problem codes without leaking provider or repository details. A framework
-adapter is present; real identity and persistence providers are still required.
+adapter and Supabase-backed identity/persistence provider are present; partial
+or malformed server configuration attaches neither and leaves the runtime
+fail-closed.
 
 The intake command is deliberately narrow. It records only homeowner-recalled
-home type, year built, and the six supported system answers. The browser sends
-no principal, membership, role, source, timestamp, provider identifier, or
+home type, year built, and the six supported system answers, including explicit
+unknowns produced when optional onboarding is skipped. The browser sends no
+principal, membership, role, source, timestamp, provider identifier, or
 verification claim. The server fresh-reads the exact membership, requires the
 workspace-controller role, derives the timestamp and source, and rejects
 incoherent adapter output before returning a minimized projection.
 
-The roofing command is equally narrow. The browser supplies only an opaque
-command reference, one roof-need enum, one timing enum, and bounded optional
-notes. The server fresh-checks the exact home membership and derives the trade,
-status, title, summary, principal scope, and timestamp. There is no generic
-browser project-create route and no contractor or Jobrolo authority in this
-command.
+The generic project command accepts only an opaque command reference, bounded
+title and optional summary, one category, one status, and an optional occurred
+date. Categories are `roofing`, `exterior`, `interior`, `electrical`,
+`plumbing`, `hvac`, `landscaping`, `appliances`, `pest`, `pool`,
+`new_construction`, and `other`. The runtime supports `planned`, `in_progress`,
+`completed`, and `cancelled`; the current project-center UI presents plan,
+track, and past-work flows, maps those to the first three statuses, and requires
+a non-future completion date for historical work. The server fresh-checks the
+exact home membership and derives principal scope and request time. Migration
+`202608210002` widens the category constraint and installs the receipt-backed
+generic project command; it must be applied before this route is used against a
+configured database. No project-create command carries contractor or Jobrolo
+authority.
+
+The retained roofing command remains narrow. The browser supplies only an
+opaque command reference, one roof-need enum, one timing enum, and bounded
+optional notes. The server fresh-checks the exact home membership and derives
+the category, status, title, summary, principal scope, and timestamp. It is a
+specialized entry path into the same private project model, not the definition
+of Homesrolo’s scope.
 
 The proposal command carries no address, authority, total, retail-material
 calculation, price score, ranking, or recommendation. A linked source must be
@@ -93,6 +133,32 @@ an available PDF document from the same exact private home and roofing project.
 The server fresh-checks the controller and uses command receipts for idempotent
 create/save operations. Saves include an expected revision so another session
 cannot be silently overwritten.
+
+## Public-source home research
+
+The assistant foundation is default-off. A deployed session reports
+`homeResearch: true` only when the core private homeowner runtime is configured
+and the server also has `HOMESROLO_AI_ENABLED=true` plus a valid server-only
+`OPENAI_API_KEY`. This branch does not create a key, configure a host secret,
+enable the release flag, or prove the feature ready for production traffic.
+
+The research route requires the existing session cookie, exact configured app
+origin, a fresh exact-home membership check, and explicit consent for the
+address being researched. Only the bounded street address, question, and up to
+four recent chat turns are sent to OpenAI for that request. The request uses the
+Responses API with `store: false`; that disables Responses application-state
+storage but is not a promise of zero provider abuse-monitoring retention.
+
+The server searches public sources, rejects private/local URLs and blocked real
+estate listing marketplaces, and returns cited answers plus source-backed
+`proposedFacts`. It does not estimate home value, repair cost, insurance
+coverage, or contractor pricing. The route has no persistence dependency or
+mutation port: neither the response nor the UI can silently add a fact to the
+home record. The authenticated UI shows sources, limitations, confidence, and
+an explicit per-request consent control; when the capability is false, it is
+not rendered. A separate homeowner confirmation and write design
+would be required before any proposed fact could be saved. Operational limits
+and remaining release work are documented in `docs/HOME_RESEARCH.md`.
 
 ## Separation from Jobrolo
 
@@ -132,9 +198,16 @@ receiver's malware-scanning gate is independently configured and verified.
 - malware scanning, export, deletion, and retention jobs;
 - invitations and co-owner/controller verification;
 - automatic matching, contractor routing, or professional distribution;
+- specialized structured workflows for every Home Library area shown in the
+  information architecture;
+- saving or automatically applying AI-proposed home facts;
+- production enablement, shared rate limiting, spend controls, monitoring, and
+  incident procedures for home research;
 - public links or public home records; and
-- production deployment, monitoring, and incident procedures.
+- production-ready monitoring and incident procedures for the gated private
+  runtime.
 
-The UI may depend on these types through a narrow local adapter, but it must
-show synthetic data as synthetic until each server port is implemented and the
-runtime is independently security-reviewed.
+The UI may map future record areas through a narrow local adapter, but it must
+show synthetic data as synthetic, render only records returned by implemented
+server ports, and keep gated actions unavailable until the corresponding
+runtime is independently migrated, configured, and security-reviewed.

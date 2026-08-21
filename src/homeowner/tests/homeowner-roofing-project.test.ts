@@ -91,6 +91,7 @@ function service(input: {
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
       projectQuotes: false,
+      homeResearch: false,
       uploads: false,
       projectReview: false,
       projectReviewAttachments: false,
@@ -129,6 +130,64 @@ test('roofing project creation derives scope, trade, status, title, summary, and
   assert.ok(homeownerApiProjectViewSchema.parse(result))
   const serialized = JSON.stringify(result)
   assert.doesNotMatch(serialized, /controllerPrincipalRef|membershipRef|principalRef|recordVersion/)
+})
+
+test('generic project creation records historical work across the home', async () => {
+  const historical: HomeownerProject = {
+    ...project,
+    title: 'Kitchen remodel',
+    category: 'interior',
+    status: 'completed',
+    occurredOn: '2024-06-15',
+    summary: 'Cabinets, counters, and lighting replaced.',
+  }
+  const capture: { commandInput?: Parameters<HomeownerCommandPort['createProject']>[0] } = {}
+  const commands: HomeownerCommandPort = {
+    async createPrivateHomeWorkspace() { throw new Error('not used') },
+    async createProject(input) { capture.commandInput = input; return historical },
+    async recordInitialIntake() { throw new Error('not used') },
+  }
+  const result = await service({ commands }).createProject(context, homeRef, {
+    commandRef: `hcmd_${body('g')}`,
+    title: 'Kitchen remodel',
+    category: 'interior',
+    status: 'completed',
+    occurredOn: '2024-06-15',
+    summary: 'Cabinets, counters, and lighting replaced.',
+  })
+  assert.deepEqual(capture.commandInput?.command, {
+    commandRef: `hcmd_${body('g')}`,
+    title: 'Kitchen remodel',
+    category: 'interior',
+    status: 'completed',
+    occurredOn: '2024-06-15',
+    summary: 'Cabinets, counters, and lighting replaced.',
+    requestedAt: now,
+  })
+  assert.equal(result.category, 'interior')
+  assert.equal(result.occurredOn, '2024-06-15')
+
+  const unknownDateProject: HomeownerProject = {
+    ...historical,
+    title: 'Unclear old project',
+    category: 'other',
+    summary: undefined,
+    occurredOn: undefined,
+  }
+  const unknownDate = await service({
+    commands: {
+      ...commands,
+      async createProject() { return unknownDateProject },
+    },
+  }).createProject(context, homeRef, {
+    commandRef: `hcmd_${body('x')}`,
+    title: 'Unclear old project',
+    category: 'other',
+    status: 'completed',
+    summary: '',
+  })
+  assert.equal(unknownDate.occurredOn, null)
+  assert.equal(unknownDate.summary, '')
 })
 
 test('roofing creation rejects browser authority, stale/revoked scope, disabled persistence, and incoherent output', async () => {
@@ -180,7 +239,7 @@ test('project list and exact-project reads fresh-check one home and expose no au
   )
 })
 
-test('HTTP exposes only exact project reads and the roof-specific create command', async () => {
+test('HTTP exposes exact reads plus bounded generic and roof-intent project commands', async () => {
   const handle = createHomeownerHttpHandler(service())
   const base = {
     search: '',
@@ -206,7 +265,14 @@ test('HTTP exposes only exact project reads and the roof-specific create command
 
   const genericCreate = await handle({
     ...base, method: 'POST', pathname: `/api/v1/homes/${homeRef}/projects`,
-    hasBody: true, jsonBody: {},
+    hasBody: true,
+    jsonBody: {
+      commandRef: `hcmd_${body('g')}`,
+      title: 'Roof repair',
+      category: 'roofing',
+      status: 'planned',
+      summary: 'Timing: As soon as possible\n\nLeak above the back room.',
+    },
   })
-  assert.equal(genericCreate.status, 405)
+  assert.equal(genericCreate.status, 201)
 })

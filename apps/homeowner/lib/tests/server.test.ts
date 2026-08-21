@@ -24,6 +24,7 @@ const ALL_FALSE = {
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
+  homeResearch: false,
   uploads: false,
   projectReview: false,
   projectReviewAttachments: false,
@@ -97,6 +98,7 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    '../../app/api/v1/homes/[homeRef]/research/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
@@ -281,6 +283,45 @@ test('the roofing-project adapter accepts only a bounded exact-home command and 
     const response = await handleHomeownerRequest(new Request(
       `${BASE}/api/v1/homes/${HOME}/roofing-projects`,
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bad) },
+    ))
+    assert.equal(response.status, 400)
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })
+  }
+})
+
+test('the all-home project adapter accepts bounded historical work and rejects authority fields', async () => {
+  const validBody = {
+    commandRef: `hcmd_${'g'.repeat(43)}`,
+    title: 'Kitchen remodel',
+    category: 'interior',
+    status: 'completed',
+    occurredOn: '2024-06-15',
+    summary: 'Cabinets and counters replaced.',
+  }
+  const valid = await handleHomeownerRequest(new Request(
+    `${BASE}/api/v1/homes/${HOME}/projects`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(validBody),
+    },
+  ))
+  assert.equal(valid.status, 401)
+  assert.deepEqual(await valid.json(), { error: { code: 'signed_out' } })
+
+  for (const bad of [
+    { ...validBody, principalRef: `hprn_${'p'.repeat(43)}` },
+    { ...validBody, category: 'insurance_claim' },
+    { ...validBody, status: 'paid' },
+    { ...validBody, title: '' },
+  ]) {
+    const response = await handleHomeownerRequest(new Request(
+      `${BASE}/api/v1/homes/${HOME}/projects`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(bad),
+      },
     ))
     assert.equal(response.status, 400)
     assert.deepEqual(await response.json(), { error: { code: 'invalid_request' } })

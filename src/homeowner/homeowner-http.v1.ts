@@ -119,6 +119,17 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const projectsMatch = HOME_PROJECTS_PATH.exec(request.pathname)
+        if (projectsMatch?.[1]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.createProject(
+            context,
+            projectsMatch[1],
+            request.jsonBody,
+          ), 201)
+        }
         const projectQuoteMatch = HOME_PROJECT_QUOTE_PATH.exec(request.pathname)
         if (projectQuoteMatch?.[1] && projectQuoteMatch[2] && projectQuoteMatch[3]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -188,4 +199,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines authenticated home, project, quote, and artifact-metadata reads plus exact home, intake, roofing-project, and private-quote commands. Multipart artifact upload and private content delivery remain separate server-only adapters; no generic write or Jobrolo delivery exists here.'
+  'This boundary defines authenticated home, project, quote, and artifact-metadata reads plus exact home, intake, bounded all-home project, roofing-intent, and private-quote commands. Multipart artifact upload and private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'

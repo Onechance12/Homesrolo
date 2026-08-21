@@ -19,54 +19,39 @@ function coverageRemaining(startsOn: string, endsOn: string): number {
 
 export default function WarrantiesPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
-  const port = usePort()
   const mode = usePortMode()
-  const warranties = usePortCall(() => port.listWarranties(homeId), value => value.length === 0)
-  const files = usePortCall(
-    () => port.listDocuments(homeId),
-    value => value.filter(document => document.kind === 'warranty').length === 0,
-  )
+  return mode === 'remote'
+    ? <RemoteWarrantiesPage homeId={homeId} />
+    : <SyntheticWarrantiesPage homeId={homeId} />
+}
 
-  if (mode === 'remote') {
-    const warrantyFiles = files.state.status === 'ready'
-      ? files.state.value.filter(document => document.kind === 'warranty')
-      : []
-    return (
-      <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
-        <div className="pagehead">
-          <h1>Warranty documents</h1>
-          <p>Keep the coverage papers that belong to this home.</p>
-        </div>
-        <div className="notice">
-          A saved warranty file records the document only. Homesrolo does not infer coverage dates or terms from it.
-        </div>
-        <Link className="btn btn--primary" href={`/home/${homeId}/documents`}>Add warranty document</Link>
-        {files.state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading warranty files" /></div>}
-        {files.state.status === 'error' && <ErrorState retry={files.retry} error={files.state.error} />}
-        {files.state.status === 'empty' && (
-          <EmptyState title="No warranty files yet" body="Add the PDF or photo you received when the work was completed." />
-        )}
-        {files.state.status === 'ready' && warrantyFiles.length > 0 ? (
-          <ul className="rows panel panel--flush" style={{ display: 'block' }}>
-            {warrantyFiles.map(file => (
-              <li key={file.documentRef}>
-                <span className="row">
-                  <span className="row__body">
-                    <span className="row__title">{file.title}</span>
-                    <span className="row__sub">Added {file.addedOn}</span>
-                  </span>
-                  <span className="row__end">
-                    {file.downloadHref ? <a href={file.downloadHref}>Download</a> : null}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+function RemoteWarrantiesPage({ homeId }: { homeId: string }) {
+  return (
+    <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
+      <div className="pagehead">
+        <p className="mono">Your home Rolodex</p>
+        <h1>Warranties</h1>
+        <p>Coverage records should stay attached to the work and equipment they belong to.</p>
       </div>
-    )
-  }
+      <div className="notice">
+        <strong>Warranty storage is not open yet.</strong> Homesrolo is not holding a warranty file or inferring
+        coverage dates, exclusions, or terms from this page.
+      </div>
+      <section className="panel" aria-labelledby="warranty-record-plan">
+        <div className="panel__head"><h2 id="warranty-record-plan">What will belong here</h2></div>
+        <EmptyState
+          title="No warranty records connected"
+          body="Manufacturer registration, workmanship coverage, equipment serials, start and end dates, and the project or appliance they cover will live together after secure storage opens."
+          action={<Link className="btn btn--quiet" href={`/home/${homeId}/documents`}>Open Home library</Link>}
+        />
+      </section>
+    </div>
+  )
+}
 
+function SyntheticWarrantiesPage({ homeId }: { homeId: string }) {
+  const port = usePort()
+  const warranties = usePortCall(() => port.listWarranties(homeId), value => value.length === 0)
   const state = warranties.state
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>

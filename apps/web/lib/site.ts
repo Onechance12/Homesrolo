@@ -3,8 +3,7 @@ export const SITE_NAME = 'Homesrolo'
 export const SITE_TAGLINE = 'The durable record of a home'
 
 export const SITE_DESCRIPTION =
-  'Homesrolo is the operating layer and trusted memory for a home. The Home Project Passport is a '
-  + 'homeowner-released record of real work: what was done, who did it, which materials, and what is warranted.'
+  'Homesrolo is a private home Rolodex for past, current, and planned projects. Secure files, sharing, and public proof are still being built.'
 
 /**
  * Used for canonical URLs and the sitemap. No network call is made with it at
@@ -14,14 +13,27 @@ export const SITE_ORIGIN = 'https://homesrolo.com'
 
 /** The separate authenticated homeowner application. */
 export const HOMEOWNER_APP_ORIGIN = 'https://homesrolo-homeowner-v2.onrender.com'
+export const HOMEOWNER_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin`
 
-/** Public Roof Watch contact. Keep the SMS copy limited to service intent. */
-export const ROOF_WATCH_PHONE_DISPLAY = '(817) 886-2418'
-export const ROOF_WATCH_SMS_URL = 'sms:+18178862418?&body=ROOF%20WATCH%20-%20Please%20check%20availability%20for%20my%20city%20and%20ZIP.'
+/**
+ * Public contact is text-only. Keep the number, SMS intents, and display copy
+ * here so a page cannot quietly introduce a second contact policy.
+ */
+export const HOMESROLO_TEXT_NUMBER_E164 = '+18178862418'
+export const HOMESROLO_TEXT_NUMBER_DISPLAY = '(817) 886-2418'
+
+function textMessageUrl(message: string): string {
+  return `sms:${HOMESROLO_TEXT_NUMBER_E164}?&body=${encodeURIComponent(message)}`
+}
+
+export const ROOF_WATCH_PHONE_DISPLAY = HOMESROLO_TEXT_NUMBER_DISPLAY
+export const ROOF_WATCH_SMS_URL = textMessageUrl('ROOF WATCH - Please check availability for my city and ZIP.')
+export const AGENT_PHONE_DISPLAY = HOMESROLO_TEXT_NUMBER_DISPLAY
+export const AGENT_SMS_URL = textMessageUrl("AGENT - I'm a real estate agent and I want the details.")
 
 export function roofWatchSmsUrl(city: string): string {
   const message = `ROOF WATCH ${city.toUpperCase()} - Please check availability for ZIP `
-  return `sms:+18178862418?&body=${encodeURIComponent(message)}`
+  return textMessageUrl(message)
 }
 
 /**

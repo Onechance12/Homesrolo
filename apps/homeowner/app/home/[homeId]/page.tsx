@@ -6,12 +6,13 @@ import { usePort, usePortMode } from '../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../components/states.tsx'
 import { RELATIONSHIP_COPY } from '../../../components/relationship.ts'
+import { HomeResearchAssistant } from '../../../components/HomeResearchAssistant.tsx'
 import { homeLabel, homeLocality } from '../../../lib/port/types.ts'
 
 /**
- * The home dashboard: the front page of the property's file. A masthead that
- * reads like a document header, the record so far, and the working counts —
- * deliberately not a metrics wall.
+ * The home dashboard: the front page of the property's Rolodex. A masthead
+ * that reads like a document header, the record so far, and a few useful
+ * destinations — deliberately not a metrics wall.
  */
 export default function DashboardPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
@@ -54,7 +55,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
       <header className="filehead">
         <p className="filehead__label">
-          <span>Home file</span>
+          <span>Home Rolodex</span>
           <span aria-hidden="true">{file.homeRef.slice(0, 14)}…</span>
         </p>
         <h1>{homeLabel(file)}</h1>
@@ -84,14 +85,19 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
         )}
       </header>
 
-      <section className="roof-callout" aria-labelledby="roof-callout-title">
+      <section className="roof-callout" aria-labelledby="home-rolo-callout-title">
         <div>
-          <p className="mono">Need roof work?</p>
-          <h2 id="roof-callout-title">Start the project from this home file.</h2>
-          <p>Tell Homesrolo what you need. The request and every next step stay attached to the home.</p>
+          <p className="mono">Everything about this home, connected</p>
+          <h2 id="home-rolo-callout-title">Build the Rolodex for the whole home.</h2>
+          <p>
+            Keep roof, HVAC, plumbing, electrical, interior, exterior, yard, pest,
+            appliance, and other work attached to one home—past, present, or planned.
+          </p>
         </div>
-        <Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Start a roof project</Link>
+        <Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Open project center</Link>
       </section>
+
+      <HomeResearchAssistant homeRef={homeId} suggestedAddress={homeLocality(file)} />
 
       <dl className="cardgrid cardgrid--2 cardgrid--4" style={{ margin: 0 }}>
         <Link className="stat" href={`/home/${homeId}/projects`}>
@@ -100,9 +106,9 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
           <span className="stat__note">Work recorded on this home</span>
         </Link>
         <Link className="stat" href={`/home/${homeId}/documents`}>
-          <dt>Documents</dt>
+          <dt>Home library</dt>
           <dd>{documentCount ?? '—'}</dd>
-          <span className="stat__note">Contracts, invoices, manuals</span>
+          <span className="stat__note">Photos, papers, manuals, and records</span>
         </Link>
         <Link className="stat" href={`/home/${homeId}/warranties`}>
           <dt>Warranties</dt>
@@ -124,8 +130,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
         {file.source === 'server' ? (
           <EmptyState
             title="The record view is not available yet"
-            body="Projects are live now. The full home timeline comes next."
-            action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>Open roof projects</Link>}
+            body="The project center is available now. The full home timeline comes next."
+            action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>Open projects</Link>}
           />
         ) : (
           <>
@@ -134,8 +140,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
         {timeline.state.status === 'empty' && (
           <EmptyState
             title="The record starts with you"
-            body="Nothing has been added to this home's file yet. Its first project entry becomes page one."
-            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Start a roof project</Link>}
+            body="Nothing has been added to this home's record yet. Its first past, current, or planned project becomes page one."
+            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Add a project</Link>}
           />
         )}
         {timeline.state.status === 'ready' && (

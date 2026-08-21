@@ -1,6 +1,7 @@
 import Link from 'next/link'
+import { DocumentaryImage } from '../components/DocumentaryImage.tsx'
 import { Illustration } from '../components/Illustration.tsx'
-import { HOMEOWNER_APP_ORIGIN, SITE_DESCRIPTION } from '../lib/site.ts'
+import { HOMEOWNER_SIGNIN_URL, ROOF_WATCH_SMS_URL, SITE_DESCRIPTION } from '../lib/site.ts'
 
 export const metadata = {
   description: SITE_DESCRIPTION,
@@ -10,45 +11,44 @@ export const metadata = {
 const PILLARS = [
   {
     kind: 'frame' as const,
-    title: 'A private home file',
-    body: 'One durable record for the property itself, separate from any company, any job, and any single owner. '
-      + 'Being in the file is not the same as being visible: every contribution has a controller, and everything '
-      + 'else is closed by default.',
+    title: 'Live now: the private Rolodex',
+    body: 'A homeowner can create a private account and record planned, active, or completed work across the home. '
+      + 'Secure file uploads, homeowner-controlled sharing, and public project proof are not live yet.',
   },
   {
     kind: 'roofline' as const,
-    title: 'The Home Project Passport',
-    body: 'A homeowner reviews what a company recorded and releases the parts they choose. A released project '
-      + 'carries materials, dates, warranty documents, approved photos, and who performed the work.',
+    title: 'Product model: the Passport',
+    body: 'The Home Project Passport is the model being built: work, materials, dates, warranties, and approved '
+      + 'photos organized around the home, with the homeowner deciding what may leave the private record.',
   },
   {
     kind: 'window' as const,
-    title: 'Proof that travels',
-    body: 'Because a release names its own provenance, it can later substantiate a company profile, ground a '
-      + 'review in a real project, and answer the questions a future owner or inspector will ask.',
+    title: 'Later: proof with provenance',
+    body: 'After a real release and verification flow exists, a homeowner-approved project could substantiate a '
+      + 'company profile or review. Homesrolo does not claim that public proof exists today.',
   },
 ]
 
 const CHAIN = [
   {
     title: 'Work is recorded',
-    body: 'A company writes down what it actually did: materials, dates, the crew, the warranty.',
-    provenance: 'recorded by the company',
+    body: 'The model starts with facts about the job: materials, dates, who performed it, and the warranty.',
+    provenance: 'designed source · project record',
   },
   {
     title: 'The homeowner reviews it',
-    body: 'The record is theirs to read. Nothing about their home moves anywhere without them.',
-    provenance: 'controlled by the homeowner',
+    body: 'The homeowner would review the exact record before anything could move outside the private account.',
+    provenance: 'designed control · homeowner',
   },
   {
     title: 'They release what they choose',
-    body: 'A release is a decision with a date and a name on it, and it can be narrowed or withdrawn.',
-    provenance: 'released · revocable',
+    body: 'The planned release would name the approved fields, recipient, purpose, date, and withdrawal state.',
+    provenance: 'planned capability · not live',
   },
   {
     title: 'The proof can travel',
-    body: 'A released project can substantiate a profile or ground a review — and it names its own source.',
-    provenance: 'source attached, always',
+    body: 'Only a verified, currently active release could later support a public project statement or review.',
+    provenance: 'future proof · verification required',
   },
 ]
 
@@ -76,7 +76,7 @@ function PassportCallouts() {
         <span><strong>what</strong> went on the roof</span>
       </span>
       <span className="callout-tag d3" style={{ top: '79%', right: 0 }}>
-        <span><strong>released</strong> by the owner</span>
+        <span><strong>owner-controlled</strong> by design</span>
       </span>
     </>
   )
@@ -92,12 +92,14 @@ export default function HomePage() {
               <p className="kicker">Sheet 01 · <strong>The record</strong></p>
               <h1>Your home should <em>remember</em> its own history.</h1>
               <p className="lede">
-                Roofs get replaced, gutters get rerun, and five years later the paperwork is in a drawer, an old
-                email, or a company that no longer exists. Homesrolo is the durable record of a home — and the
-                Home Project Passport is how real work becomes something a homeowner actually holds.
+                A roof gets replaced, a kitchen gets remodeled, an HVAC system changes hands—and five years later
+                the history is in a drawer, an old email, or a company that no longer exists. Homesrolo is the home
+                Rolodex: a durable history for the people who live in or work on a home. Today, a homeowner can open
+                a private account and record past, current, or planned work across the property. The complete Home
+                Project Passport shown here is the broader product model—not a live sharing or public-proof flow.
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.75rem' }}>
-                <a className="btn btn--primary" href={`${HOMEOWNER_APP_ORIGIN}/signin`}>
+                <a className="btn btn--primary" href={HOMEOWNER_SIGNIN_URL}>
                   Create my home account <span className="btn__arrow" aria-hidden="true">→</span>
                 </a>
                 <Link className="btn btn--quiet" href="/services/roofing/">Get roofing help</Link>
@@ -112,7 +114,7 @@ export default function HomePage() {
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                   <h2 id="passport-sample" style={{ fontSize: '1.25rem' }}>Roof replacement</h2>
-                  <span className="stamp">Released</span>
+                  <span className="stamp">Product model</span>
                 </div>
                 <Illustration kind="roofline" label="Simplified drawing of a pitched roof and wall elevation" />
                 <dl style={{ margin: '1.25rem 0 0' }}>
@@ -120,7 +122,7 @@ export default function HomePage() {
                   <div className="passport__row"><dt>Material</dt><dd>30-year architectural shingle</dd></div>
                   <div className="passport__row"><dt>Completed</dt><dd>May 2026</dd></div>
                   <div className="passport__row"><dt>Warranty</dt><dd>Workmanship and manufacturer</dd></div>
-                  <div className="passport__row"><dt>Released by</dt><dd>The homeowner</dd></div>
+                  <div className="passport__row"><dt>Release control</dt><dd>The homeowner</dd></div>
                 </dl>
                 <p className="provenance" style={{ marginTop: '1rem' }}>
                   Synthetic example. Nothing here describes a real home or a real company.
@@ -135,8 +137,12 @@ export default function HomePage() {
       <section className="section" aria-labelledby="chain-heading">
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2.5rem' }}>
-            <p className="kicker">Sheet 02 · <strong>The release chain</strong></p>
-            <h2 id="chain-heading">One line, four stations, no shortcuts.</h2>
+            <p className="kicker">Sheet 02 · <strong>The product model</strong></p>
+            <h2 id="chain-heading">The release chain Homesrolo is working toward.</h2>
+            <p>
+              These four stations describe the intended control model, not a feature claim. Public releases,
+              recipient sharing, and release-backed reviews are not live today.
+            </p>
           </div>
           <ol className="chain">
             {CHAIN.map(station => (
@@ -172,23 +178,64 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="section" aria-labelledby="home-roof-watch">
+        <div className="shell">
+          <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'start' }}>
+            <div className="prose">
+              <p className="kicker">Sheet 04 · <strong>First field program</strong></p>
+              <h2 id="home-roof-watch">Check the roof once a year. Keep the report.</h2>
+              <p>
+                Roof Watch is Homesrolo&rsquo;s first field program, not the boundary of the product. Roofing is the
+                first deep record because it is expensive, hard to see, and easy to lose track of; the broader home
+                Rolodex is designed for every system, room, upgrade, and project. Today, Roof Watch offers a free
+                annual roof visit at participating North Texas addresses, with written findings and available
+                photos when conditions allow. Current availability, the assigned professional, and the program
+                limits are sent before scheduling.
+              </p>
+              <p>
+                The report records visible conditions. It is not a roof certification, insurance decision, or
+                requirement to hire the inspecting professional for later work.
+              </p>
+              <p style={{ marginTop: '1.5rem' }}>
+                <Link className="btn btn--primary" href="/roof-watch/">See how Roof Watch works</Link>{' '}
+                <a className="btn btn--quiet" href={ROOF_WATCH_SMS_URL}>Text to check availability</a>
+              </p>
+            </div>
+            <figure className="article-field-photo" style={{ marginTop: 0 }}>
+              <DocumentaryImage
+                src="/images/roof-watch/roof-field-and-hip-ridge-detail.webp"
+                width={1200}
+                height={991}
+                sizes="(max-width: 48rem) 100vw, 50vw"
+                alt="Brown asphalt-shingle roof field with adjoining hip and ridge lines"
+              />
+              <figcaption>
+                An archival field photo from the operator&rsquo;s roof library. It shows the orientation detail a
+                useful report can preserve; it is not a Roof Watch finding about a particular home.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
       <section className="section section--night">
         <div className="shell">
           <div className="grid grid--2" style={{ gap: '3rem' }}>
             <div className="prose">
-              <p className="kicker">Sheet 04 · <strong>Start a project</strong></p>
+              <p className="kicker">Sheet 05 · <strong>Start a project</strong></p>
               <h2>The home comes before the <em>contractor.</em></h2>
               <p>
-                A roof project should begin with the house, the problem, and the records already attached to it.
+                A home project should begin with the property, the need, and the history already attached to it.
                 Homesrolo starts there instead of asking you to sort through a paid list of companies.
               </p>
               <p>
-                Create the home record, describe the roof need, and keep every later photo, product, invoice, and
-                warranty with that same property file.
+                Today, you can record planned, active, or completed work across roofing, interiors, HVAC, plumbing,
+                electrical, exterior work, appliances, landscaping, pest care, pools, and new construction. Secure
+                document and photo uploads are not live yet, so this page does not promise storage the product cannot provide.
               </p>
               <p style={{ marginTop: '1.5rem' }}>
                 <Link className="btn btn--quiet" href="/professionals/" style={{ borderColor: 'var(--night-rule)', color: 'var(--night-ink)' }}>
-                  Start a roof project <span className="btn__arrow" aria-hidden="true">→</span>
+                  Start a home project <span className="btn__arrow" aria-hidden="true">→</span>
                 </Link>
               </p>
             </div>

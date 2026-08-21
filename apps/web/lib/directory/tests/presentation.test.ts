@@ -146,8 +146,8 @@ test('the homeowner conversion path starts a project instead of publishing a con
 test('how it works states the live homeowner boundary without overclaiming', () => {
   assert.match(howItWorks, /Private passwordless homeowner accounts/)
   assert.match(howItWorks, /private home files/)
-  assert.match(howItWorks, /private\s+roof-project requests work today/)
-  for (const unavailable of ['File uploads', 'invitations', 'sharing', 'homeowner assistant', 'professional network']) {
+  assert.match(howItWorks, /private\s+whole-home project records work today/)
+  for (const unavailable of ['File uploads', 'invitations', 'sharing', 'production home research', 'professional network']) {
     assert.match(howItWorks, new RegExp(unavailable))
   }
   assert.match(howItWorks, /does not hire a\s+contractor or send the request outside the homeowner account/)

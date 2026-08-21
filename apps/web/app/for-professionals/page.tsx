@@ -6,8 +6,8 @@ import { publicPageMetadata } from '../../lib/public-metadata.ts'
 export const metadata = publicPageMetadata({
   title: 'For professionals',
   description:
-    'What a released project record means for a company: proof instead of adjectives, no paid placement, no '
-    + 'purchased verification, and no leads for sale.',
+    'The professional-side model Homesrolo is working toward: homeowner-controlled project proof, no paid '
+    + 'verification, and no leads for sale.',
   canonical: '/for-professionals/',
 })
 
@@ -26,8 +26,8 @@ export default function ForProfessionalsPage() {
           <PageHeader
             eyebrow="For professionals"
             title="Proof outlasts marketing."
-            lede="A released project names the materials, the dates, and the homeowner who chose to publish it.
-              That is a different kind of claim from a page of adjectives."
+            lede="Homesrolo is working toward homeowner-controlled project proof that can name materials, dates,
+              and who performed the work. That release and professional-facing flow is not live today."
           />
         </div>
       </section>
@@ -58,13 +58,13 @@ export default function ForProfessionalsPage() {
                 steering, and that lane needs its own review before it exists.
               </div>
               <div className="note">
-                <strong>Your work product stays yours.</strong> A homeowner releasing a project does not hand
-                over your files. The release names what was published and nothing else.
+                <strong>The control model is narrow by design.</strong> A future homeowner release would name
+                exactly what was shared; it would not silently transfer a professional&rsquo;s files.
               </div>
               <div className="note">
                 <strong>The professional side is not live.</strong> Professional sign-up, profile claiming,
-                and professional accounts are not available yet. Homeowner accounts and private roof projects
-                are a separate live system.
+                and professional accounts are not available yet. Homeowner accounts and private whole-home project
+                records are a separate live system.
               </div>
             </div>
           </div>

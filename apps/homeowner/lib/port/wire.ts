@@ -15,7 +15,7 @@
  */
 
 import {
-  type DocumentSummary, type HomeownerSession, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type DocumentSummary, type HomeownerSession, type HomeResearchFact, type HomeResearchResult, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -76,6 +76,15 @@ function array<T>(item: Decoder<T>): Decoder<readonly T[]> {
   }
 }
 
+function boundedArray<T>(item: Decoder<T>, minimum: number, maximum: number): Decoder<readonly T[]> {
+  return (value, at) => {
+    if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
+      return fail(at, `an array with ${minimum} through ${maximum} items`)
+    }
+    return value.map((entry, index) => item(entry, `${at}[${index}]`))
+  }
+}
+
 /** Mirrors z.string().trim().min(1).max(n): trimmed, nonempty, bounded. */
 function boundedLabel(max: number): Decoder<string> {
   return (value, at) => {
@@ -94,6 +103,15 @@ function trimmedText(max: number): Decoder<string> {
     if (value !== value.trim()) return fail(at, 'a trimmed string')
     if (value.length > max) return fail(at, `a string of at most ${max} characters`)
     return value
+  }
+}
+
+function boundedResearchText(max: number): Decoder<string> {
+  return (value, at) => {
+    const decoded = boundedLabel(max)(value, at)
+    return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(decoded)
+      ? fail(at, 'text without control characters')
+      : decoded
   }
 }
 
@@ -166,6 +184,48 @@ const calendarDate: Decoder<string> = (value, at) => {
   return value
 }
 
+/** Server-filtered browser-safe citation URL. The client repeats the public
+ * HTTPS/auth/port bounds so a malformed success response is never rendered. */
+const publicHttpsUrl: Decoder<string> = (value, at) => {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 2_048) {
+    return fail(at, 'a public HTTPS URL')
+  }
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '')
+    const bareHostname = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bareHostname)
+    const privateIpv4 = ipv4 ? (() => {
+      const octets = ipv4.slice(1).map(Number)
+      const [first = Number.NaN, second = Number.NaN] = octets
+      return octets.some(part => part > 255)
+        || first === 0 || first === 10 || first === 127
+        || (first === 169 && second === 254)
+        || (first === 172 && second >= 16 && second <= 31)
+        || (first === 192 && second === 168)
+    })() : false
+    const privateIpv6 = bareHostname === '::' || bareHostname === '::1'
+      || bareHostname.startsWith('fc') || bareHostname.startsWith('fd')
+      || /^fe[89ab]/.test(bareHostname) || bareHostname.startsWith('::ffff:')
+    const blockedMarketplace = [
+      'zillow.com', 'realtor.com', 'redfin.com', 'trulia.com',
+    ].some(domain => hostname === domain || hostname.endsWith(`.${domain}`))
+    if (url.protocol !== 'https:' || url.username || url.password
+      || (url.port && url.port !== '443') || url.href !== value
+      || url.hash
+      || [...url.searchParams.keys()].some(key => /^(?:utm_|fbclid$|gclid$)/i.test(key))
+      || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')
+      || privateIpv4 || privateIpv6 || blockedMarketplace) {
+      return fail(at, 'a canonical public HTTPS URL')
+    }
+    return value
+  } catch {
+    return fail(at, 'a public HTTPS URL')
+  }
+}
+
 const wholeYear: Decoder<number> = (value, at) =>
   typeof value === 'number' && Number.isInteger(value) && value >= 1800 && value <= 9999
     ? value
@@ -186,6 +246,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   magicLinkSignIn: boolean,
   persistence: boolean,
   projectQuotes: boolean,
+  homeResearch: boolean,
   uploads: boolean,
   projectReview: boolean,
   projectReviewAttachments: boolean,
@@ -300,7 +361,7 @@ type WireProject = {
   projectRef: string
   homeRef: string
   title: string
-  category: 'roofing' | 'exterior' | 'interior' | 'electrical' | 'plumbing' | 'hvac' | 'landscaping' | 'other'
+  category: 'roofing' | 'exterior' | 'interior' | 'electrical' | 'plumbing' | 'hvac' | 'landscaping' | 'appliances' | 'pest' | 'pool' | 'new_construction' | 'other'
   status: Project['status']
   occurredOn: string | null
   summary: string
@@ -309,7 +370,8 @@ type WireProject = {
 }
 
 const PROJECT_CATEGORIES = [
-  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac', 'landscaping', 'other',
+  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac', 'landscaping',
+  'appliances', 'pest', 'pool', 'new_construction', 'other',
 ] as const
 
 const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> = Object.freeze({
@@ -320,6 +382,10 @@ const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> 
   plumbing: 'Plumbing',
   hvac: 'HVAC',
   landscaping: 'Landscaping',
+  appliances: 'Appliances',
+  pest: 'Pest control',
+  pool: 'Pool',
+  new_construction: 'New construction',
   other: 'Other',
 })
 
@@ -343,7 +409,7 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     homeRef: decoded.homeRef,
     title: decoded.title,
     trade: PROJECT_CATEGORY_LABEL[decoded.category],
-    performedOn: decoded.occurredOn ?? decoded.createdAt.slice(0, 10),
+    performedOn: decoded.occurredOn,
     status: decoded.status,
     photoCount: 0,
     documentCount: 0,
@@ -480,6 +546,53 @@ export const decodeProjectReviewPreview: Decoder<ProjectReviewPreview> =
     })),
     consentText: boundedLabel(1000),
   })
+
+const HOME_RESEARCH_FIELDS = [
+  'year_built', 'property_type', 'square_footage', 'lot_size', 'roof',
+  'heating', 'cooling', 'water_heater', 'permit', 'tax_record',
+  'public_record', 'other',
+] as const
+
+const decodeHomeResearchFact = object<HomeResearchFact>({
+  field: oneOf(HOME_RESEARCH_FIELDS),
+  value: boundedResearchText(300),
+  confidence: oneOf(['low', 'medium', 'high'] as const),
+  sourceUrls: boundedArray(publicHttpsUrl, 1, 4),
+})
+
+/** Strict projection of HomeResearchResult. Citations must resolve to a source
+ * included in the same response; otherwise the whole answer is rejected. */
+export const decodeHomeResearchResult: Decoder<HomeResearchResult> = (value, at) => {
+  const decoded = object<HomeResearchResult>({
+    requestRef: matching(
+      /^hres_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      'a canonical lowercase hres_ UUIDv4 request ref',
+    ),
+    answer: boundedResearchText(1_200),
+    answerSourceUrls: boundedArray(publicHttpsUrl, 1, 6),
+    proposedFacts: boundedArray(decodeHomeResearchFact, 0, 12),
+    sources: boundedArray(object<HomeResearchResult['sources'][number]>({
+      title: boundedResearchText(160),
+      url: publicHttpsUrl,
+    }), 1, 12),
+    limitations: boundedArray(boundedResearchText(240), 0, 6),
+    followUpQuestions: boundedArray(boundedResearchText(240), 0, 4),
+    disclosure: literal('Research is a draft. Confirm proposed facts before adding them to your home record.'),
+  })(value, at)
+  const sourceUrls = new Set(decoded.sources.map(source => source.url))
+  if (sourceUrls.size !== decoded.sources.length
+    || new Set(decoded.answerSourceUrls).size !== decoded.answerSourceUrls.length
+    || decoded.proposedFacts.some(fact => new Set(fact.sourceUrls).size !== fact.sourceUrls.length)) {
+    return fail(at, 'unique source and citation URLs')
+  }
+  if (decoded.answerSourceUrls.some(url => !sourceUrls.has(url))) {
+    return fail(`${at}.answerSourceUrls`, 'URLs present in sources')
+  }
+  if (decoded.proposedFacts.some(fact => fact.sourceUrls.some(url => !sourceUrls.has(url)))) {
+    return fail(`${at}.proposedFacts`, 'fact citations present in sources')
+  }
+  return decoded
+}
 
 export const decodeList = array
 
