@@ -8,10 +8,10 @@ were reviewed, what was changed, and what the images are allowed to claim.
 
 - The operator supplied the source files from a private roof-photo library and
   explicitly asked Homesrolo to use selected roof photographs in this release.
-- Before merge, the operator must separately confirm that each selected source
-  was created by the operator or is covered by permission or a license allowing
-  public commercial publication. Possession in a photo library is not, by
-  itself, a copyright or model-release record.
+- On August 20, 2026, the operator confirmed that the selected roof photographs
+  are their own work ("Those are mine! I took them") and authorized publication
+  on the Homesrolo website. This confirmation clears the ownership/publication
+  gate for the reviewed publication set below.
 - The repository contains publication derivatives only. It does not contain
   source-library paths, GPS coordinates, addresses, homeowner names, or device
   identifiers.
