@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { DocumentaryImage } from '../../components/DocumentaryImage.tsx'
 import { Illustration } from '../../components/Illustration.tsx'
 import { PageHeader } from '../../components/Prose.tsx'
 import {
@@ -13,19 +14,20 @@ import { ROOF_WATCH_CITIES } from '../../lib/content/roof-watch-cities.ts'
 
 export const metadata: Metadata = {
   title: 'Free annual roof inspections in North Texas',
-  description: 'Check Roof Watch availability in North Texas. The free annual visit includes written findings, roof photos, and program limits shared before scheduling.',
+  description: 'Check Roof Watch availability in North Texas. The free annual visit provides written findings and available photos when conditions allow; limits come first.',
   alternates: { canonical: '/roof-watch/' },
   openGraph: {
+    type: 'website',
     title: 'Roof Watch — a free annual roof check in North Texas',
-    description: 'Written findings, roof photos, and clearly stated limits for participating addresses in the current North Texas service area.',
+    description: 'Written findings, available roof photos when conditions allow, and clearly stated limits for participating North Texas addresses.',
     url: '/roof-watch/',
-    images: [{ url: '/roof-watch-social-card.png', width: 1200, height: 630, alt: 'Homesrolo Roof Watch: a yearly roof check with the findings in writing' }],
+    images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', width: 1200, height: 630, alt: 'Close field photo of architectural asphalt shingles' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Roof Watch — a free annual roof check in North Texas',
-    description: 'Written findings, roof photos, and program limits shared before scheduling.',
-    images: ['/roof-watch-social-card.png'],
+    description: 'Written findings, available roof photos when conditions allow, and program limits shared before scheduling.',
+    images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', alt: 'Close field photo of architectural asphalt shingles' }],
   },
 }
 
@@ -56,6 +58,58 @@ const VISIT = [
   ['Weather-related changes', 'Visible changes documented without deciding cause, insurance coverage, or claim value'],
 ] as const
 
+const FIELD_PHOTOS = [
+  {
+    src: '/images/roof-watch/roof-ridge-cap-and-vent-detail.webp',
+    width: 1200,
+    height: 900,
+    alt: 'Close view of layered ridge-cap shingles and a vent-pipe penetration',
+    caption: 'Ridge, transition, and vent views help a later reader understand exactly which roof area the written note describes.',
+  },
+  {
+    src: '/images/roof-watch/round-attic-vent-and-shingle-field.webp',
+    width: 1200,
+    height: 900,
+    alt: 'Round attic vent in a field of dark asphalt shingles',
+    caption: 'Penetrations should be photographed with enough surrounding roof visible to make the location recognizable.',
+  },
+  {
+    src: '/images/roof-watch/roof-tear-off-hidden-assembly.webp',
+    width: 1200,
+    height: 700,
+    alt: 'Roof tear-off exposing spaced wood decking and remnants of old felt underlayment',
+    caption: 'A tear-off can expose assembly details that are hidden after the roof is closed. That is why progress records matter.',
+  },
+  {
+    src: '/images/roof-watch/roof-shingle-surface-detail.webp',
+    width: 1200,
+    height: 900,
+    alt: 'Close view of a gray asphalt-shingle roof field',
+    caption: 'A wider surface view records shingle pattern and orientation without pretending that one photo proves cause or coverage.',
+  },
+  {
+    src: '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
+    width: 1200,
+    height: 727,
+    alt: 'Finished gray architectural-shingle roof with ridge caps and pipe penetrations',
+    caption: 'A wide finished-roof view makes future changes easier to locate by ridge, slope, and penetration.',
+  },
+  {
+    src: '/images/roof-watch/laminated-shingle-ridge-detail.webp',
+    width: 1200,
+    height: 774,
+    alt: 'Close view of laminated asphalt shingles and a ridge-cap line',
+    caption: 'A close view can preserve course alignment and ridge-cap detail. It is a reference image, not a condition verdict.',
+  },
+  {
+    src: '/images/roof-watch/roof-field-and-hip-ridge-detail.webp',
+    width: 1200,
+    height: 991,
+    alt: 'Brown asphalt-shingle roof field with adjoining hip and ridge lines',
+    caption: 'A view across adjoining slopes helps a report explain orientation and the exact area observed.',
+  },
+] as const
+
 const FAQ = [
   { question: 'Is the Roof Watch visit free?', answer: 'The annual inspection is offered at no charge for participating addresses. Current availability and the written program limits are sent before scheduling. Some minor maintenance may be included within those limits; anything outside them requires separate authorization.' },
   { question: 'What do I receive after the visit?', answer: 'You receive written findings and the photos available from the completed inspection. Keep that copy with your home records and share it with any professional you choose. It is an observation report, not a roof certification, warranty, or insurance decision.' },
@@ -76,6 +130,7 @@ export default function RoofWatchPage() {
     provider: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
     areaServed: ROOF_WATCH_CITIES.map(city => ({ '@type': 'City', name: `${city.name}, TX` })),
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free annual inspection at participating addresses, with written program limits sent before scheduling.' },
+    image: `${SITE_ORIGIN}/images/roof-watch/roof-watch-field-photos-social.jpg`,
     url: `${SITE_ORIGIN}/roof-watch/`,
   }
   const faqSchema = {
@@ -105,6 +160,41 @@ export default function RoofWatchPage() {
               </p>
             </div>
           </div>
+          <figure className="roof-watch-hero-photo">
+            <DocumentaryImage
+              src="/images/roof-watch/architectural-shingle-roof-condition.webp"
+              width={1200}
+              height={894}
+              sizes="(max-width: 48rem) 100vw, 72rem"
+              priority
+              alt="Brown architectural asphalt shingles viewed across a roof slope"
+            />
+            <figcaption>Selected from the operator&rsquo;s archival roof-photo library. It shows the kind of detail a useful record can preserve; it is not a Roof Watch visit or a finding about your home.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section className="section" aria-labelledby="rw-field-photos">
+        <div className="shell">
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">From the field-photo archive</p>
+            <h2 id="rw-field-photos">What a roof record can actually show</h2>
+            <p>These field photos were selected from the operator&rsquo;s archival roof-photo library. They are not photographs from Roof Watch inspections. They show how a clear location, a wider roof view, and a close detail can make a report easier to understand later. A photograph records what was visible; it does not by itself diagnose cause, certify a roof, or decide an insurance claim.</p>
+          </div>
+          <div className="roof-photo-grid">
+            {FIELD_PHOTOS.map(photo => (
+              <figure key={photo.src} className="roof-photo">
+                <DocumentaryImage
+                  src={photo.src}
+                  width={photo.width}
+                  height={photo.height}
+                  sizes="(max-width: 40rem) 100vw, 50vw"
+                  alt={photo.alt}
+                />
+                <figcaption>{photo.caption}</figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -132,14 +222,14 @@ export default function RoofWatchPage() {
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">What the yearly visit covers</p>
             <h2 id="rw-visit">A roof-system check, with access limits stated</h2>
-            <p>The assigned roofing professional examines the areas that can be reached safely and documents any limits. The report names the date, observer, roof areas, findings, and photographs available from the visit.</p>
+            <p>The assigned roofing professional examines the areas that can be reached safely and documents any limits. The report lists the date, inspector, roof areas observed, and findings, and includes the photos available from the visit.</p>
           </div>
           <div className="table-scroll">
             <table className="compare">
-              <thead><tr><th>Inspected</th><th>What the report documents</th></tr></thead>
+              <thead><tr><th scope="col">Inspected</th><th scope="col">What the report documents</th></tr></thead>
               <tbody>
                 {VISIT.map(([area, detail]) => (
-                  <tr key={area}><th>{area}</th><td>{detail}</td></tr>
+                  <tr key={area}><th scope="row">{area}</th><td>{detail}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -166,7 +256,7 @@ export default function RoofWatchPage() {
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">Service area</p>
             <h2 id="rw-cities">Roof Watch across North Texas</h2>
-            <p>Six cities, their surrounding neighborhoods, and a local page for each one, because a Southlake roof and a Fairmount bungalow are not living the same life:</p>
+            <p>Homes across these six cities may qualify, subject to address confirmation. Each local page explains the roof conditions and questions the yearly record is designed to capture:</p>
           </div>
           <div className="grid grid--2">
             {ROOF_WATCH_CITIES.map(city => (
@@ -200,7 +290,7 @@ export default function RoofWatchPage() {
               <a className="btn btn--primary" href={ROOF_WATCH_SMS_URL}>Text to check availability</a>{' '}
               <a className="btn btn--quiet" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start a private roof project</a>
             </p>
-            <p style={{ marginTop: '1rem' }}>Not ready to contact anyone? Start with the <Link href="/roof-watch/guides/roof-inspection-report/">inspection-report checklist</Link>, the <Link href="/roof-watch/guides/">Roof Watch guides</Link>, or the <Link href="/services/roofing/">Texas roofing guide</Link>.</p>
+            <p style={{ marginTop: '1rem' }}>Not ready to contact anyone? Start with the <Link href="/roof-watch/guides/hail-first-72-hours/">sourced hail-response checklist</Link>, the <Link href="/roof-watch/guides/roof-inspection-report/">inspection-report checklist</Link>, or the <Link href="/services/roofing/">Texas roofing guide</Link>.</p>
           </div>
         </div>
       </section>

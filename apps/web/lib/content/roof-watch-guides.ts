@@ -43,7 +43,7 @@ export const ROOF_WATCH_GUIDES: readonly RoofWatchGuide[] = [
         'Storms bring both established local contractors and companies that are new to the area. Get business information and references, compare more than one written bid when conditions allow, and do not sign a document with blank spaces. Do not pay the full job price before the work is complete.',
         'Read any inspection authorization or contingency agreement before signing it. Confirm whether it is only permission to inspect or a contract that commits you to future work. A legitimate emergency can require quick action; the paperwork should still say exactly what you are authorizing.',
       ]},
-      { heading: 'Know the Texas insurance boundary', body: [
+      { heading: 'What a Texas roofer can—and cannot—do on your claim', body: [
         'Texas does not allow a roofer or contractor who may do the repair work to act as the homeowner’s public insurance adjuster on that claim. A contractor also cannot waive, rebate, or absorb the insurance deductible. Be cautious when someone offers to file or negotiate the claim for you, promises a particular insurance result, or says the deductible can disappear.',
         'Roof Watch documents visible roof condition. It does not file claims, negotiate coverage, or represent homeowners to insurers. Questions about a claim belong with the insurer, a licensed public adjuster, or an attorney as appropriate.',
       ]},

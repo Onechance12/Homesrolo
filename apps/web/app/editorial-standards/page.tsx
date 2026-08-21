@@ -1,14 +1,14 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../components/Prose.tsx'
 import { EDITORIAL_STANDARDS } from '../../lib/content/education.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Editorial standards',
   description: 'How Homesrolo researches, sources, updates, and separates homeowner education from commercial influence.',
-  alternates: { canonical: '/editorial-standards/' },
-}
+  canonical: '/editorial-standards/',
+})
 
 export default function EditorialStandardsPage() {
   const schema = {
@@ -16,7 +16,7 @@ export default function EditorialStandardsPage() {
     '@type': 'WebPage',
     name: 'Homesrolo editorial standards',
     url: `${SITE_ORIGIN}/editorial-standards/`,
-    dateModified: '2026-08-12',
+    dateModified: '2026-08-20',
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
   }
 

@@ -95,8 +95,12 @@ test('company profiles are noindex at the source, not just in the built output',
     'an unknown slug must 404 rather than render')
 })
 
-test('robots.txt disallows the company namespace and the sitemap omits it', () => {
-  assert.match(robots, /disallow:\s*\['\/companies\/'\]/)
+test('robots lets crawlers observe company noindex while the sitemap omits the namespace', () => {
+  assert.match(robots, /userAgent:\s*'Googlebot',\s*\.\.\.publicRules/)
+  assert.match(robots, /userAgent:\s*'Bingbot',\s*\.\.\.publicRules/)
+  assert.match(robots, /userAgent:\s*'OAI-SearchBot',\s*\.\.\.publicRules/)
+  assert.match(robots, /userAgent:\s*'GPTBot',\s*\.\.\.trainingRules/)
+  assert.match(robots, /trainingRules[\s\S]*disallow:\s*\['\/companies\/'\]/)
   assert.doesNotMatch(sitemap, /companies/,
     'a sitemap entry is an invitation to index a company that does not exist')
 })

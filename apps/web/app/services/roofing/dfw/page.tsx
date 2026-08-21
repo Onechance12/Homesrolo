@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_DFW_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'DFW roofing guide for Dallas Fort Worth homeowners',
   description: 'Dallas Fort Worth roofing information about North Texas hail, wind, heat, city permit differences, materials, contractor scopes, and roof records.',
-  alternates: { canonical: '/services/roofing/dfw/' },
-  openGraph: { title: 'Dallas Fort Worth roofing guide', description: 'North Texas roofing, permits, materials, contractor scopes, and project records.', url: '/services/roofing/dfw/' },
-}
+  canonical: '/services/roofing/dfw/',
+  openGraphType: 'article',
+  socialTitle: 'Dallas Fort Worth roofing guide',
+  socialDescription: 'North Texas roofing, permits, materials, contractor scopes, and project records.',
+})
 
 const SOURCES = [
   { label: 'Dallas/Fort Worth climate summary', publisher: 'NOAA National Centers for Environmental Information', href: 'https://www.ncei.noaa.gov/pub/access/cebrequests/2023lcdannual/01202313DFW.pdf' },

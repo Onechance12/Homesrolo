@@ -1,13 +1,15 @@
 import Link from 'next/link'
 import { PageHeader, Sections } from '../../components/Prose.tsx'
 import { FOR_PROFESSIONALS } from '../../lib/content/education.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'For professionals',
   description:
     'What a released project record means for a company: proof instead of adjectives, no paid placement, no '
     + 'purchased verification, and no leads for sale.',
-}
+  canonical: '/for-professionals/',
+})
 
 const NOT_FOR_SALE = [
   'Paid placement or a ranking boost. Listings are ordered by name, and the ordering reads nothing else.',

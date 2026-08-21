@@ -478,6 +478,13 @@ export const EDITORIAL_STANDARDS: readonly EducationalSection[] = Object.freeze(
     ]),
   },
   {
+    heading: 'Software can help with a draft; it cannot be the expert',
+    body: Object.freeze([
+      'Research and editing tools, including AI-assisted drafting, may help organize a page. Homesrolo remains responsible for what it publishes. Before publication, source-dependent claims are checked against current sources, prioritizing primary and issuing sources whenever they are available.',
+      'No tool is allowed to invent an inspection, photograph, author, reviewer, credential, local fact, or customer experience. Field photos must be real, owned or licensed, stripped of location metadata, and clearly labelled when they are archival examples.',
+    ]),
+  },
+  {
     heading: 'Commercial separation',
     body: Object.freeze([
       'No contractor, manufacturer, insurer, or advertiser paid to be cited in these guides. A citation identifies a source; it is not an endorsement.',

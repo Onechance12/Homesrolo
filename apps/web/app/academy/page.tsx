@@ -6,13 +6,15 @@ import {
   CREDENTIAL_LIMITS,
   HOW_A_CREDENTIAL_IS_EARNED,
 } from '../../lib/directory/credential.v1.ts'
+import { publicPageMetadata } from '../../lib/public-metadata.ts'
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: 'Homesrolo Academy',
   description:
     'A design for credentials contractors would earn through coursework and a passed assessment rather than '
     + 'accreditation they buy. Not built: no enrolment, assessment, or issuing authority exists.',
-}
+  canonical: '/academy/',
+})
 
 const CONTRAST = [
   {

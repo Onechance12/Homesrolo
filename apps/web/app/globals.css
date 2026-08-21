@@ -408,6 +408,50 @@ a:hover { color: var(--clay); }
 .card__title { margin-bottom: 0.5rem; }
 .card p { color: var(--ink-soft); }
 
+/* Documentary roof photos are evidence, not decoration. Keep each image and
+   its factual caption together at every breakpoint. */
+.roof-watch-hero-photo {
+  margin-top: 2.5rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-soft);
+}
+.roof-watch-hero-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: center 48%;
+}
+.roof-watch-hero-photo figcaption,
+.article-field-photo figcaption,
+.roof-photo figcaption {
+  padding: 0.85rem 1rem 1rem;
+  color: var(--ink-faint);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.roof-photo-grid { display: grid; gap: 1.25rem; align-items: start; }
+@media (min-width: 40rem) { .roof-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.article-field-photo,
+.roof-photo {
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-soft);
+}
+.article-field-photo { max-width: var(--measure); margin-top: 2rem; }
+.article-field-photo img,
+.roof-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .note {
   border-left: 3px solid var(--clay);
   background: var(--clay-wash);

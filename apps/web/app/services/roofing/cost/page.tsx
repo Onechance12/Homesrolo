@@ -1,13 +1,15 @@
-import type { Metadata } from 'next'
 import { RoofingArticle } from '../../../../components/RoofingArticle.tsx'
 import { ROOFING_COST_GUIDE } from '../../../../lib/content/education.ts'
+import { publicPageMetadata } from '../../../../lib/public-metadata.ts'
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Roof replacement cost in Texas and Dallas Fort Worth',
   description: 'A transparent Texas roof cost guide: roof squares, 2026 Dallas price context, materials, pitch, tear-off, decking, flashing, ventilation, permits, and bid comparison.',
-  alternates: { canonical: '/services/roofing/cost/' },
-  openGraph: { title: 'Roof replacement cost in Texas and DFW', description: 'Understand what changes a roof price and compare bids line by line.', url: '/services/roofing/cost/' },
-}
+  canonical: '/services/roofing/cost/',
+  openGraphType: 'article',
+  socialTitle: 'Roof replacement cost in Texas and DFW',
+  socialDescription: 'Understand what changes a roof price and compare bids line by line.',
+})
 
 const SOURCES = [
   { label: 'Dallas roof replacement cost data (updated August 2026)', publisher: 'Angi', href: 'https://www.angi.com/articles/how-much-does-roof-replacement-cost/tx/dallas' },

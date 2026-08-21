@@ -9,12 +9,19 @@ export const metadata: Metadata = {
   description: 'Practical, sourced guides to hail response, roof inspection reports, heat, ventilation, contractors, and annual roof maintenance in North Texas.',
   alternates: { canonical: '/roof-watch/guides/' },
   openGraph: {
+    type: 'website',
     title: 'Roof Watch guides for North Texas homeowners',
     description: 'Practical, sourced guidance on hail response, useful inspection reports, heat, ventilation, and roof maintenance.',
     url: '/roof-watch/guides/',
-    images: [{ url: '/roof-watch-social-card.png', width: 1200, height: 630, alt: 'Homesrolo Roof Watch homeowner guides' }],
+    images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', width: 1200, height: 630, alt: 'Close field photo of architectural asphalt shingles' }],
   },
-  twitter: { card: 'summary_large_image', title: 'Roof Watch guides for North Texas homeowners', description: 'Practical, sourced roof guidance for North Texas homeowners.', images: ['/roof-watch-social-card.png'] },
+  twitter: { card: 'summary_large_image', title: 'Roof Watch guides for North Texas homeowners', description: 'Practical, sourced roof guidance for North Texas homeowners.', images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', alt: 'Close field photo of architectural asphalt shingles' }] },
+}
+
+const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+
+function dateLabel(date: string): string {
+  return DATE_FORMATTER.format(new Date(`${date}T12:00:00Z`))
 }
 
 export default function RoofWatchGuidesPage() {
@@ -45,8 +52,8 @@ export default function RoofWatchGuidesPage() {
           </nav>
           <PageHeader
             eyebrow="Roof Watch guides"
-            title="Useful roof answers, with the sources attached"
-            lede="These guides are written for North Texas homeowners who need a clear next step, not a sales pitch. Safety, insurance, legal, and roof-performance claims link to the sources used, and each page shows when it was updated."
+            title="Roof questions usually arrive before the answers do"
+            lede="Start here after hail, when an inspection report feels vague, or when North Texas heat has you wondering what is happening overhead. Each guide gives you a practical next step and links the safety, insurance, legal, and roof-performance sources behind it."
           />
           <div className="grid grid--2" style={{ marginTop: '2rem' }}>
             {ROOF_WATCH_GUIDES.map(guide => (
@@ -54,7 +61,7 @@ export default function RoofWatchGuidesPage() {
                 <p className="eyebrow">{guide.eyebrow}</p>
                 <h2 className="card__title"><Link href={`/roof-watch/guides/${guide.slug}/`}>{guide.title}</Link></h2>
                 <p>{guide.description}</p>
-                <p className="article-meta">Updated <time dateTime={guide.dateModified}>August 20, 2026</time></p>
+                <p className="article-meta">Updated <time dateTime={guide.dateModified}>{dateLabel(guide.dateModified)}</time></p>
               </div>
             ))}
           </div>
