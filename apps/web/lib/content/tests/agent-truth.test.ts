@@ -19,4 +19,3 @@ test('agent page distinguishes today from future account and sharing features', 
     assert.doesNotMatch(agentPage, unsupported)
   }
 })
-
