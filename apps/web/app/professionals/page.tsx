@@ -15,7 +15,7 @@ export default function ProfessionalsPage() {
         <div className="shell">
           <PageHeader
             eyebrow="Whole-home project record"
-            title="Start with the home, not a contractor list"
+            title="Start with your home, not a contractor list"
             lede="Create a private Homesrolo account, add the home, and record work that is planned, active, or already completed. Roofing has a deeper guided path, but it is one chapter in the home’s history."
           />
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '2rem' }}>
