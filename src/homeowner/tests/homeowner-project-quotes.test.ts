@@ -204,6 +204,30 @@ test('database quote invariants reject null statuses and tie project and artifac
   )
 })
 
+test('Supabase quote receipts hash stable intent while older commands keep their own digest', () => {
+  const provider = readFileSync('apps/homeowner/lib/server/supabase-provider.ts', 'utf8')
+  const homeCreate = provider.slice(
+    provider.indexOf('async createPrivateHomeWorkspace'),
+    provider.indexOf('async createProject('),
+  )
+  const projectCreate = provider.slice(
+    provider.indexOf('async createProject('),
+    provider.indexOf('async createProjectQuote'),
+  )
+  const quoteCreate = provider.slice(
+    provider.indexOf('async createProjectQuote'),
+    provider.indexOf('async saveProjectQuote'),
+  )
+  const quoteSave = provider.slice(
+    provider.indexOf('async saveProjectQuote'),
+    provider.indexOf('async recordInitialIntake'),
+  )
+  assert.match(homeCreate, /p_command_digest: digest\(input\.command\)/)
+  assert.match(projectCreate, /p_command_digest: digest\(input\.command\)/)
+  assert.match(quoteCreate, /digest\(homeownerProjectQuoteCommandIntent\(input\.command\)\)/)
+  assert.match(quoteSave, /digest\(homeownerProjectQuoteCommandIntent\(input\.command\)\)/)
+})
+
 test('create and list are exact-home private projections with no authority or ranking fields', async () => {
   const captured: unknown[] = []
   const quotes = quotePort({
