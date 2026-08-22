@@ -1,9 +1,11 @@
 export const SITE_NAME = 'Homesrolo'
 
-export const SITE_TAGLINE = 'The durable record of a home'
+export const SITE_TAGLINE = 'The private Rolodex for your home'
 
 export const SITE_DESCRIPTION =
-  'Homesrolo is a private home Rolodex for past, current, and planned projects. Secure files, sharing, and public proof are still being built.'
+  'Keep one private home record for maintenance, repairs, remodels, seasonal photo checkups (private beta), and roof proposal notes (private beta).'
+
+export const SOCIAL_CARD_ALT = 'Homesrolo — the private Rolodex for your home'
 
 /**
  * Used for canonical URLs and the sitemap. No network call is made with it at
@@ -52,12 +54,11 @@ export const HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?i
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
-  { href: '/how-it-works/', label: 'Home record' },
-  { href: '/services/roofing/', label: 'Roofing' },
+  { href: '/how-it-works/', label: 'How it works' },
+  { href: '/academy/', label: 'Home care' },
   { href: '/roof-watch/', label: 'Roof Watch' },
-  { href: '/professionals/', label: 'Start a project' },
-  { href: '/how-we-verify/', label: 'How we verify' },
   { href: '/for-professionals/', label: 'For pros' },
+  { href: '/for-agents/', label: 'For agents' },
   { href: '/about/', label: 'About' },
 ])
 

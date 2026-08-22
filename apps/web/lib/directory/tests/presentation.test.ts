@@ -62,8 +62,9 @@ test('a visible focus ring exists and is never removed without replacement', () 
 })
 
 test('colour is defined once as tokens, so contrast is tunable in one place', () => {
-  assert.match(css, /--ink:\s*oklch\(/)
-  assert.match(css, /--paper:\s*oklch\(/)
+  assert.match(css, /--canvas:\s*#f4f7f6/)
+  assert.match(css, /--ink:\s*#0b1f2a/)
+  assert.match(css, /--signal:\s*#c8ef4d/)
   // Body text must use the darkest ink, not a faint tone.
   assert.match(css, /body\s*\{[^}]*color:\s*var\(--ink\)/)
 })
@@ -133,7 +134,8 @@ test('the homeowner conversion path starts a project instead of publishing a con
   assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/homesrolo-homeowner-v2\.onrender\.com'/)
   assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
   assert.match(site, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=inspection`/)
-  assert.match(site, /label: 'Start a project'/)
+  assert.match(site, /label: 'Home care'/)
+  assert.doesNotMatch(site, /label: 'Roofing'/)
   assert.match(professionals, /Create my home account/)
   assert.match(professionals, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
   assert.match(professionals, /Start with your home, not a contractor list/)
@@ -145,11 +147,13 @@ test('the homeowner conversion path starts a project instead of publishing a con
 
 test('how it works states the live homeowner boundary without overclaiming', () => {
   assert.match(howItWorks, /Private passwordless homeowner accounts/)
-  assert.match(howItWorks, /private home files/)
-  assert.match(howItWorks, /private\s+whole-home project records work today/)
-  for (const unavailable of ['File uploads', 'invitations', 'sharing', 'production home research', 'professional network']) {
+  assert.match(howItWorks, /private home workspaces/)
+  assert.match(howItWorks, /whole-home project records work today/)
+  assert.match(howItWorks, /Private-beta seasonal photo checkups/)
+  assert.match(howItWorks, /homeowner-entered notes/)
+  for (const unavailable of ['General document uploads', 'invitations', 'sharing', 'online home research', 'professional network']) {
     assert.match(howItWorks, new RegExp(unavailable))
   }
-  assert.match(howItWorks, /does not hire a\s+contractor or send the request outside the homeowner account/)
+  assert.match(howItWorks, /does not hire a\s+contractor or send the request\s+outside the homeowner account/)
   assert.doesNotMatch(howItWorks, /There are no accounts|no home\s+files/)
 })

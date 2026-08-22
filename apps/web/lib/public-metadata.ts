@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SOCIAL_CARD_ALT } from './site.ts'
 
 type PublicPageMetadata = {
   readonly title: string
@@ -27,13 +28,13 @@ export function publicPageMetadata({
       title: socialTitle,
       description: socialDescription,
       url: canonical,
-      images: [{ url: '/homesrolo-social-card.png', width: 1200, height: 630, alt: 'Homesrolo — a better memory for every home' }],
+      images: [{ url: '/homesrolo-social-card.png', width: 1200, height: 630, alt: SOCIAL_CARD_ALT }],
     },
     twitter: {
       card: 'summary_large_image',
       title: socialTitle,
       description: socialDescription,
-      images: [{ url: '/homesrolo-social-card.png', alt: 'Homesrolo — a better memory for every home' }],
+      images: [{ url: '/homesrolo-social-card.png', alt: SOCIAL_CARD_ALT }],
     },
   }
 }

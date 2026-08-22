@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { SiteHeader } from '../components/SiteHeader.tsx'
 import { SiteFooter } from '../components/SiteFooter.tsx'
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TAGLINE } from '../lib/site.ts'
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TAGLINE, SOCIAL_CARD_ALT } from '../lib/site.ts'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
@@ -18,13 +18,13 @@ export const metadata: Metadata = {
     title: `${SITE_NAME} — ${SITE_TAGLINE}`,
     description: SITE_DESCRIPTION,
     url: '/',
-    images: [{ url: '/homesrolo-social-card.png', width: 1200, height: 630, alt: 'Homesrolo — a better memory for every home' }],
+    images: [{ url: '/homesrolo-social-card.png', width: 1200, height: 630, alt: SOCIAL_CARD_ALT }],
   },
   twitter: {
     card: 'summary_large_image',
     title: `${SITE_NAME} — ${SITE_TAGLINE}`,
     description: SITE_DESCRIPTION,
-    images: [{ url: '/homesrolo-social-card.png', alt: 'Homesrolo — a better memory for every home' }],
+    images: [{ url: '/homesrolo-social-card.png', alt: SOCIAL_CARD_ALT }],
   },
   robots: {
     index: true,
