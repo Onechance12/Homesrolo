@@ -18,6 +18,12 @@ import {
   type HomeownerPrivateObjectPort,
   type HomeownerRepositoryPort,
 } from '../homeowner-runtime.v1.ts'
+import {
+  HOMEOWNER_CHECKUP_PHOTO_VERSION,
+  createHomeownerCheckupPhotoInputSchema,
+  homeownerCheckupPhotoCommandIntent,
+  type HomeownerCheckupPhotoPort,
+} from '../homeowner-checkup-photos.v1.ts'
 
 const body = (character: string) => character.repeat(43).slice(0, 43)
 const principalRef = `hprn_${body('p')}`
@@ -99,6 +105,45 @@ const artifact = {
   createdAt: now,
 }
 
+const checkupPhoto = {
+  recordVersion: HOMEOWNER_CHECKUP_PHOTO_VERSION,
+  photoRef: `hpho_${body('v')}`,
+  homeRef,
+  controllerPrincipalRef: principalRef,
+  observedOn: '2026-08-09',
+  area: 'front_exterior' as const,
+  viewLabel: 'Front door from the walkway',
+  caption: 'South-facing siding and windows',
+  mediaType: 'image/jpeg' as const,
+  fullStorageObjectRef: `hobj_${body('u')}`,
+  fullByteLength: 1200,
+  fullPayloadSha256: 'a'.repeat(64),
+  thumbnailStorageObjectRef: `hobj_${body('t')}`,
+  thumbnailByteLength: 240,
+  thumbnailPayloadSha256: 'b'.repeat(64),
+  width: 1600,
+  height: 900,
+  createdAt: now,
+}
+
+function checkupPhotoPort(
+  overrides: Partial<HomeownerCheckupPhotoPort> = {},
+): HomeownerCheckupPhotoPort {
+  return {
+    async listCheckupPhotos() { return [checkupPhoto] },
+    async reserveCheckupPhotoUpload() { return { state: 'available', photo: checkupPhoto } },
+    async completeCheckupPhotoUpload() { return checkupPhoto },
+    async rejectCheckupPhotoUpload() {},
+    async readCheckupPhotoVariant() {
+      return { photo: checkupPhoto, bytes: new Uint8Array(checkupPhoto.fullByteLength) }
+    },
+    async deleteCheckupPhoto() {
+      return { photoRef: checkupPhoto.photoRef, state: 'deleted' }
+    },
+    ...overrides,
+  }
+}
+
 const intakeInput = {
   commandRef: `hcmd_${body('i')}`,
   homeType: 'house' as const,
@@ -135,6 +180,7 @@ const capabilities = {
   projectQuotes: false,
   homeResearch: false,
   uploads: false,
+  photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
   invitations: false,
@@ -151,6 +197,8 @@ function service(input: {
   projectReview?: boolean
   projectReviewAttachments?: boolean
   privateObjects?: HomeownerPrivateObjectPort
+  photoCheckups?: boolean
+  checkupPhotos?: HomeownerCheckupPhotoPort
 } = {}) {
   return new HomeownerApiService({
     identity: {
@@ -166,6 +214,7 @@ function service(input: {
       async recordInitialIntake() { throw new Error('not used') },
     },
     ...(input.privateObjects ? { privateObjects: input.privateObjects } : {}),
+    ...(input.checkupPhotos ? { checkupPhotos: input.checkupPhotos } : {}),
     now: () => now,
     capabilities: {
       ...capabilities,
@@ -173,6 +222,7 @@ function service(input: {
       projectQuotes: input.projectQuotes ?? false,
       homeResearch: false,
       uploads: input.uploads ?? false,
+      photoCheckups: input.photoCheckups ?? false,
       projectReview: input.projectReview ?? false,
       projectReviewAttachments: input.projectReviewAttachments ?? false,
     },
@@ -206,6 +256,81 @@ test('session reports project review independently from generic sharing', async 
   assert.equal(signedIn.capabilities.projectReview, true)
   assert.equal(signedIn.capabilities.projectReviewAttachments, true)
   assert.equal(signedIn.capabilities.sharing, false)
+})
+
+test('seasonal photo capability is separate and projects no storage or integrity fields', async () => {
+  const api = service({ photoCheckups: true, checkupPhotos: checkupPhotoPort() })
+  const session = await api.readSession(context)
+  assert.equal(session.capabilities.photoCheckups, true)
+  assert.equal(session.capabilities.uploads, false)
+  const result = await api.listCheckupPhotos(context, homeRef)
+  assert.deepEqual(result, [{
+    photoRef: checkupPhoto.photoRef,
+    homeRef,
+    observedOn: checkupPhoto.observedOn,
+    area: checkupPhoto.area,
+    viewLabel: checkupPhoto.viewLabel,
+    caption: checkupPhoto.caption,
+    fullUrl: `/api/v1/homes/${homeRef}/photo-checkups/${checkupPhoto.photoRef}/full`,
+    thumbnailUrl: `/api/v1/homes/${homeRef}/photo-checkups/${checkupPhoto.photoRef}/thumbnail`,
+    width: 1600,
+    height: 900,
+    createdAt: now,
+  }])
+  assert.equal('fullStorageObjectRef' in result[0]!, false)
+  assert.equal('fullPayloadSha256' in result[0]!, false)
+})
+
+test('photo upload preauthorization requires the exact-home controller before bytes', async () => {
+  const api = service({
+    photoCheckups: true,
+    checkupPhotos: checkupPhotoPort(),
+    repository: repository({
+      async readMembership() { return { ...membership, role: 'member' } },
+    }),
+  })
+  await assert.rejects(
+    api.preauthorizeCheckupPhotoUpload(context, homeRef),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+})
+
+test('photo intent digest material excludes execution time and future observations fail', async () => {
+  const command = {
+    commandRef: `hcmd_${body('z')}`,
+    observedOn: '2026-08-09',
+    area: 'front_exterior' as const,
+    viewLabel: 'Front door from the walkway',
+    caption: '',
+    inputMediaType: 'image/jpeg' as const,
+    inputByteLength: 3,
+    inputPayloadSha256: 'd'.repeat(64),
+    requestedAt: now,
+  }
+  assert.deepEqual(
+    homeownerCheckupPhotoCommandIntent(command),
+    homeownerCheckupPhotoCommandIntent({
+      ...command,
+      requestedAt: '2026-08-10T12:01:00.000Z',
+    }),
+  )
+  assert.equal(createHomeownerCheckupPhotoInputSchema.safeParse({
+    ...command,
+    viewLabel: 'Hall\u0001ceiling',
+  }).success, false)
+  assert.equal(createHomeownerCheckupPhotoInputSchema.safeParse({
+    ...command,
+    caption: 'Leak\u007fmark',
+  }).success, false)
+  await assert.rejects(
+    service({ photoCheckups: true, checkupPhotos: checkupPhotoPort() })
+      .reserveCheckupPhotoUpload(context, homeRef, {
+        ...command,
+        observedOn: '2026-08-11',
+        requestedAt: undefined,
+      }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
 })
 
 test('inactive or unverified principals receive the signed-out projection', async () => {

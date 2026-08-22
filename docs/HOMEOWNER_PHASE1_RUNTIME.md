@@ -5,11 +5,11 @@ foundation.** Passwordless email identity, opaque Homesrolo sessions, private
 Postgres persistence, home creation, optional progressive onboarding, generic
 whole-home projects, the roofing-specific project path, a private roof-proposal
 scope comparison, default-off PDF/JPEG/PNG artifact storage, a default-off
-public-source home research assistant, and the consent-bound Jobrolo review
-handoff are implemented. “Implemented” does not mean every capability is
-production-enabled: database migrations, server configuration, release gates,
-and the security conditions below still control what a deployed session may
-use.
+sanitized seasonal-photo beta, a default-off public-source home research
+assistant, and the consent-bound Jobrolo review handoff are implemented.
+“Implemented” does not mean every capability is production-enabled: database
+migrations, server configuration, release gates, and the security conditions
+below still control what a deployed session may use.
 
 The Homesrolo homeowner application is the home’s private Rolodex: a workspace
 for a person to organize the people, planned and completed work, photos,
@@ -51,10 +51,12 @@ The authenticated Home Library is now organized as a whole-home map: photos and
 seasonal checkups, insurance, projects and upgrades, inventory and manuals,
 warranties, taxes/value/sale records, events and maintenance, and people and
 service history. These are presentation categories and honest empty states, not
-a claim that every category has a dedicated persistence model. File and photo
-rows come only from the private artifact list. The browser renders the upload
-form only when the signed-in session reports `uploads: true`; otherwise it says
-that secure storage is unavailable.
+a claim that every category has a dedicated persistence model. General file
+rows come only from the private artifact list, and that upload form renders only
+when the signed-in session reports `uploads: true`. Sanitized seasonal photos
+come only from the separate photo-checkup port and render only when the session
+reports `photoCheckups: true`. Neither capability silently substitutes for the
+other.
 
 The onboarding presentation is a four-stage, mobile-first progressive setup,
 not a simulated assistant conversation. A familiar home name and general area
@@ -80,6 +82,9 @@ reads, generic `POST /api/v1/homes/{opaque-home-ref}/projects`, the retained
 `POST /api/v1/homes/{opaque-home-ref}/roofing-projects`, exact-home artifact
 metadata listing/upload, exact-artifact private download, and default-off
 `POST /api/v1/homes/{opaque-home-ref}/research`.
+The separate image-only boundary exposes an exact-home photo-checkup list and
+raw JPEG/PNG upload plus exact-photo thumbnail, full-image, and delete routes.
+The raw input route is not multipart and carries no original filename.
 Roofing projects also expose an exact-project proposal list, strict create, and
 revision-backed full save. These quote routes store homeowner-entered company
 labels and partial scope classifications. An absent row means “not reviewed”;
@@ -133,6 +138,39 @@ an available PDF document from the same exact private home and roofing project.
 The server fresh-checks the controller and uses command receipts for idempotent
 create/save operations. Saves include an expected revision so another session
 cannot be silently overwritten.
+
+## Seasonal photo checkups
+
+The photo-checkup capability is independent of generic document uploads. It
+remains false unless the configured private runtime also has
+`HOMESROLO_PHOTO_CHECKUPS_ENABLED=true`, and migration `202608210003` has been
+applied. Enabling it does not enable PDFs, general photo artifacts, Jobrolo
+attachments, public links, or the research assistant.
+
+One controller-selected JPEG or PNG of at most 10 MiB is authorized before the
+body is buffered. The server admits one transform at a time, fully decodes the
+input under bounded pixel and time limits, auto-orients it, and writes fresh
+JPEG derivatives. The raw bytes and submitted filename are never stored.
+Embedded EXIF, GPS, XMP, IPTC, ICC, and comments are not copied into the stored
+derivatives. The full derivative is at most 2,048 pixels and 1.5 MiB; the lazy
+thumbnail is at most 480 pixels and 100 KiB.
+
+Each record requires an observation date, a fixed home area, and a bounded
+homeowner-authored spot name. Chronological comparison is available only within
+the same area and spot. It is a visual record, not an inspection, damage
+diagnosis, causation finding, or proof of when a condition began.
+
+The database applies atomic active-photo count and byte caps for each home,
+principal, and the entire pilot, plus daily/monthly request and egress limits.
+Downloads remain same-origin, membership-checked, integrity-checked, and
+`no-store`. Deletion hides the row before removing both exact private objects,
+then strips the photo context, hashes, dimensions, and storage keys. A minimal
+opaque tombstone is retained for retry handling and becomes eligible for later
+housekeeping; this beta has no timed cleanup job.
+Interrupted upload/delete objects are quarantined, continue consuming quota,
+and are reconciled opportunistically by later photo requests. The environment
+flag is the immediate kill switch. The exact caps, limitations, and deployment
+checks are in `docs/HOMEOWNER_PHOTO_CHECKUPS.md`.
 
 ## Public-source home research
 
@@ -195,7 +233,8 @@ receiver's malware-scanning gate is independently configured and verified.
 ## Not yet implemented
 
 - account recovery beyond requesting a fresh email link;
-- malware scanning, export, deletion, and retention jobs;
+- malware scanning plus export, account/home deletion, and retention jobs for
+  generic files and the broader private record;
 - invitations and co-owner/controller verification;
 - automatic matching, contractor routing, or professional distribution;
 - specialized structured workflows for every Home Library area shown in the

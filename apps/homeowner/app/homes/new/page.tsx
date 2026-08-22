@@ -95,7 +95,7 @@ function questionFor(step: StepId): { title: string; helper: string } {
     case 'system_present':
       return {
         title: `Does it have ${SYSTEM_LABEL[step.system]}?`,
-        helper: 'This only adds the item to your starting home snapshot. You can correct it later.',
+        helper: 'This only adds the item to your starting home snapshot. Review your answer before opening the file; editing saved system details is not available yet.',
       }
     case 'system_year':
       return {
@@ -105,7 +105,7 @@ function questionFor(step: StepId): { title: string; helper: string } {
     case 'review':
       return {
         title: 'Review your starting home file',
-        helper: 'Nothing below is treated as verified. Edit anything now or update it after the file opens.',
+        helper: 'Nothing below is treated as verified. Edit anything now; editing saved details after the file opens is not available yet.',
       }
   }
 }
@@ -207,7 +207,8 @@ function ReviewCard({
         ))}
       </dl>
       <p className="mono" style={{ marginTop: '0.8rem' }}>
-        Source: what you told us. Update it anytime; professional records can confirm details later.
+        Source: what you told us. Professional records may confirm details later;
+        editing these saved details is not available yet.
       </p>
     </div>
   )
@@ -389,7 +390,7 @@ export default function NewHomePage({
                 <h1>Set up your home</h1>
                 <p>
                   Start with a name and general area. That is enough to open the
-                  file; details can be added or researched with your approval later.
+                  file; optional details are best entered now only when you know them.
                 </p>
                 <div className="setup-head__notes" aria-label="Setup details">
                   <span>About 1 minute</span>
@@ -500,7 +501,7 @@ export default function NewHomePage({
                   </div>
                   {canFinishOptional && !state.editingFromReview ? (
                     <button type="button" className="setup-skip" onClick={finishLater}>
-                      Skip optional details — add or research them later
+                      Skip optional details — leave them unrecorded
                     </button>
                   ) : null}
                   </div>

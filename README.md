@@ -57,6 +57,18 @@ verification, invitations, public sharing, payments, analytics, automatic
 professional routing, and production-ready assistant operations are also still
 unavailable.
 
+A separate seasonal-photo beta is implemented without opening that generic
+uploader. A homeowner records the date, a home area, and a repeatable spot name
+such as “hall ceiling by vent,” then adds one JPEG or PNG. The server decodes
+the image and stores only fresh, resized private JPEG derivatives; it never
+stores the submitted filename or raw input and strips embedded location and
+device metadata. Saved views can be compared by the same area and spot, but
+Homesrolo does not diagnose damage or claim that a condition changed. The beta
+has its own default-off `HOMESROLO_PHOTO_CHECKUPS_ENABLED` gate and requires
+migration `202608210003`. It has hard storage, request, and egress ceilings for
+the existing free infrastructure, per-photo deletion, and no path to Jobrolo.
+See `docs/HOMEOWNER_PHOTO_CHECKUPS.md` before enabling it.
+
 With explicit consent, a homeowner may send one minimized roofing request to a
 private Jobrolo review item assigned only to Chance. Files stay in Homesrolo
 unless the separate, default-off attachment gate is enabled after the
@@ -77,12 +89,14 @@ Chance decides whether and where to distribute it.
 | docs/PLATFORM_STRATEGY.md | Endgame, aggregation constraints, revenue shape, sequence, risks |
 | docs/LEGAL_POSTURE.md | Seeding sources, unclaimed profiles, Section 230, and the AI-agent boundary |
 | docs/HOMEOWNER_PHASE1_RUNTIME.md | Implemented homeowner runtime, capability gates, migrations, and remaining launch work |
+| docs/HOMEOWNER_PHOTO_CHECKUPS.md | Default-off private seasonal-photo beta, privacy boundary, hard caps, and release checklist |
 | docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |
 | src/contracts/company-link.v1.ts | Draft Jobrolo-to-Homesrolo company claim binding (proposal for Codex) |
 | src/homeowner/homeowner-project-quotes.v1.ts | Private, revision-safe roof-proposal scope records; no price judgment or Jobrolo authority |
+| src/homeowner/homeowner-checkup-photos.v1.ts | Private, sanitized, repeatable home-checkup photo contract; no diagnosis or generic-file authority |
 | src/constitution/ | Pure request and response boundary checks |
 | apps/web/lib/directory/ | Public profile contract, draft project-linked reviews, draft Academy credentials, draft claiming, draft corrections and disputes, projection allowlist, neutral ordering, synthetic fixtures |
 | apps/web/app/ | Statically exported public site |

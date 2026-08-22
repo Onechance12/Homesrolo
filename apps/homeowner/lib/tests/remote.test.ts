@@ -7,7 +7,7 @@ import {
   EXPECTED_API_VERSION, WireError, decodeSession, portErrorForStatus, unwrapEnvelope,
 } from '../port/wire.ts'
 import type {
-  ArtifactUploadTransportRequest, JsonTransport, TransportRequest,
+  ArtifactUploadTransportRequest, JsonTransport, PhotoCheckupUploadTransportRequest, TransportRequest,
 } from '../port/transport.ts'
 
 /**
@@ -42,6 +42,7 @@ const CAPABILITIES = {
   projectQuotes: false,
   homeResearch: false,
   uploads: false,
+  photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
   invitations: false,
@@ -198,9 +199,9 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
   assert.throws(() => decodeSession({ ...SIGNED_OUT, apiVersion: 'homeowner-api.v2' }, 'data'),
     WireError, 'a different version is not silently accepted')
 
-  const { homeResearch: _homeResearch, ...eightCaps } = CAPABILITIES
-  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: eightCaps }, 'data'),
-    WireError, 'all nine capability booleans are required')
+  const { photoCheckups: _photoCheckups, ...nineCaps } = CAPABILITIES
+  assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: nineCaps }, 'data'),
+    WireError, 'all ten capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
@@ -928,6 +929,142 @@ test('artifact client rejects malformed refs, oversized files, and leaked server
     }] },
   }))
   assert.deepEqual(await leaked.listDocuments(HOME), { ok: false, error: 'invalid' })
+})
+
+test('seasonal photos use exact-home image-only routes and strict safe projections', async () => {
+  const photoRef = REF('hpho', 'f')
+  const photo = {
+    photoRef,
+    homeRef: HOME,
+    observedOn: '2026-08-20',
+    area: 'front_exterior',
+    viewLabel: 'Driveway overview',
+    caption: 'After the storm; viewed from the driveway.',
+    fullUrl: `/api/v1/homes/${HOME}/photo-checkups/${photoRef}/full`,
+    thumbnailUrl: `/api/v1/homes/${HOME}/photo-checkups/${photoRef}/thumbnail`,
+    width: 1600,
+    height: 1200,
+    createdAt: '2026-08-21T15:00:00.000Z',
+  }
+  const requests: TransportRequest[] = []
+  const transport: JsonTransport = async request => {
+    requests.push(request)
+    if (request.method === 'DELETE') {
+      return { kind: 'reply', status: 200, body: { data: { photoRef, state: 'deleted' } } }
+    }
+    return { kind: 'reply', status: 200, body: { data: [photo] } }
+  }
+  const uploads: PhotoCheckupUploadTransportRequest[] = []
+  const port = createRemotePort(
+    transport,
+    async () => ({ kind: 'reply', status: 503, body: undefined }),
+    async request => {
+      uploads.push(request)
+      return { kind: 'reply', status: 201, body: { data: photo } }
+    },
+  )
+
+  const listed = await port.listPhotoCheckups(HOME)
+  assert.ok(listed.ok)
+  if (!listed.ok) return
+  assert.deepEqual(listed.value, [photo])
+  assert.ok(listed.value[0]?.thumbnailUrl.startsWith('/api/v1/'),
+    'private thumbnails are exact same-origin routes')
+
+  const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'local-name-is-not-a-field.jpg', {
+    type: 'image/jpeg',
+  })
+  const uploaded = await port.uploadPhotoCheckup(HOME, {
+    commandRef: REF('hcmd', 'c'),
+    observedOn: '2026-08-20',
+    area: 'front_exterior',
+    viewLabel: '  Driveway overview  ',
+    caption: '  After the storm; viewed from the driveway.  ',
+    file,
+  })
+  assert.ok(uploaded.ok)
+  assert.deepEqual(uploads, [{
+    path: `/api/v1/homes/${HOME}/photo-checkups`,
+    commandRef: REF('hcmd', 'c'),
+    observedOn: '2026-08-20',
+    area: 'front_exterior',
+    encodedViewLabel: 'Driveway%20overview',
+    encodedCaption: 'After%20the%20storm%3B%20viewed%20from%20the%20driveway.',
+    file,
+  }])
+  assert.equal('kind' in uploads[0]!, false, 'generic artifact kinds never enter this route')
+  assert.equal('projectRef' in uploads[0]!, false, 'checkup photos are home-scoped, not project uploads')
+
+  const deleted = await port.deletePhotoCheckup(HOME, photoRef)
+  assert.deepEqual(deleted, { ok: true, value: { photoRef, state: 'deleted' } })
+  assert.deepEqual(requests, [
+    { method: 'GET', path: `/api/v1/homes/${HOME}/photo-checkups` },
+    { method: 'DELETE', path: `/api/v1/homes/${HOME}/photo-checkups/${photoRef}` },
+  ])
+})
+
+test('seasonal photo client rejects unsafe inputs, projections, and cross-home URLs', async () => {
+  let uploadCalls = 0
+  const baseFile = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'photo.jpg', {
+    type: 'image/jpeg',
+  })
+  const port = createRemotePort(
+    async () => ({ kind: 'reply', status: 200, body: { data: [] } }),
+    async () => ({ kind: 'reply', status: 503, body: undefined }),
+    async () => {
+      uploadCalls += 1
+      return { kind: 'reply', status: 503, body: undefined }
+    },
+  )
+  const valid = {
+    commandRef: REF('hcmd', 'c'), observedOn: '2026-08-20',
+    area: 'front_exterior' as const, viewLabel: 'Driveway overview', caption: '', file: baseFile,
+  }
+  for (const input of [
+    { ...valid, commandRef: REF('hprn', 'p') },
+    { ...valid, observedOn: '9999-12-31' },
+    { ...valid, observedOn: '2026-02-30' },
+    { ...valid, area: 'roof' },
+    { ...valid, viewLabel: '' },
+    { ...valid, viewLabel: 'x'.repeat(81) },
+    { ...valid, viewLabel: '😀'.repeat(40) },
+    { ...valid, viewLabel: 'Hall\tceiling' },
+    { ...valid, caption: 'x'.repeat(241) },
+    { ...valid, caption: '😀'.repeat(84) },
+    { ...valid, caption: 'Line one\nLine two' },
+    { ...valid, file: new File([new Uint8Array([1])], 'photo.webp', { type: 'image/webp' }) },
+  ]) {
+    assert.deepEqual(await port.uploadPhotoCheckup(HOME, input as never),
+      { ok: false, error: 'invalid' })
+  }
+  assert.equal(uploadCalls, 0, 'invalid photo input never reaches the upload transport')
+  assert.deepEqual(await port.deletePhotoCheckup(HOME, REF('hart', 'x')),
+    { ok: false, error: 'not_found' })
+
+  const photoRef = REF('hpho', 'f')
+  const safe = {
+    photoRef, homeRef: HOME, observedOn: '2026-08-20', area: 'front_exterior',
+    viewLabel: 'Driveway overview', caption: '',
+    fullUrl: `/api/v1/homes/${HOME}/photo-checkups/${photoRef}/full`,
+    thumbnailUrl: `/api/v1/homes/${HOME}/photo-checkups/${photoRef}/thumbnail`,
+    width: 1600, height: 1200, createdAt: '2026-08-21T15:00:00.000Z',
+  }
+  const malformed: readonly unknown[] = [
+    { ...safe, width: 2049 },
+    { ...safe, photoRef: REF('hart', 'f') },
+    { ...safe, caption: 'unsafe\u0000caption' },
+    { ...safe, viewLabel: 'unsafe\u0000view' },
+    { ...safe, fullUrl: 'https://files.example.com/photo.jpg' },
+    { ...safe, fullUrl: `/api/v1/homes/${REF('hhom', 'x')}/photo-checkups/${photoRef}/full` },
+    { ...safe, thumbnailUrl: `/api/v1/homes/${HOME}/photo-checkups/${REF('hpho', 'x')}/thumbnail` },
+    { ...safe, storageObjectRef: 'private/provider/path' },
+  ]
+  for (const value of malformed) {
+    const bad = createRemotePort(async () => ({
+      kind: 'reply', status: 200, body: { data: [value] },
+    }))
+    assert.deepEqual(await bad.listPhotoCheckups(HOME), { ok: false, error: 'invalid' })
+  }
 })
 
 test('project review uses a server preview and submits only its exact reviewed digest', async () => {

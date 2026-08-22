@@ -36,6 +36,22 @@ export type ArtifactUploadTransport = (
   request: ArtifactUploadTransportRequest,
 ) => Promise<TransportReply>
 
+export interface PhotoCheckupUploadTransportRequest {
+  readonly path: string
+  readonly commandRef: string
+  readonly observedOn: string
+  readonly area: string
+  /** Required repeatable spot label, URI-encoded by the strict adapter. */
+  readonly encodedViewLabel: string
+  /** Already trimmed and URI-encoded by the strict remote adapter. */
+  readonly encodedCaption?: string
+  readonly file: File
+}
+
+export type PhotoCheckupUploadTransport = (
+  request: PhotoCheckupUploadTransportRequest,
+) => Promise<TransportReply>
+
 export const fetchJsonTransport: JsonTransport = async request => {
   try {
     /* eslint-disable no-restricted-globals -- the one sanctioned call site */
@@ -73,6 +89,39 @@ export const fetchArtifactUploadTransport: ArtifactUploadTransport = async reque
       credentials: 'same-origin',
       headers: { accept: 'application/json' },
       body: form,
+    })
+    /* eslint-enable no-restricted-globals */
+    let body: unknown = undefined
+    try { body = await response.json() } catch { body = undefined }
+    return { kind: 'reply', status: response.status, body }
+  } catch {
+    return { kind: 'network_failure' }
+  }
+}
+
+/**
+ * Image-only beta transport. The bytes are the request body: no multipart
+ * wrapper, original filename, principal identity, or storage detail crosses
+ * the browser boundary.
+ */
+export const fetchPhotoCheckupUploadTransport: PhotoCheckupUploadTransport = async request => {
+  try {
+    /* eslint-disable no-restricted-globals -- sanctioned transport seam */
+    const response = await fetch(request.path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        accept: 'application/json',
+        'content-type': request.file.type,
+        'x-homesrolo-command-ref': request.commandRef,
+        'x-homesrolo-observed-on': request.observedOn,
+        'x-homesrolo-photo-area': request.area,
+        'x-homesrolo-view-label': request.encodedViewLabel,
+        ...(request.encodedCaption
+          ? { 'x-homesrolo-caption': request.encodedCaption }
+          : {}),
+      },
+      body: request.file,
     })
     /* eslint-enable no-restricted-globals */
     let body: unknown = undefined

@@ -150,6 +150,7 @@ function service(input: {
       projectQuotes: input.projectQuotes ?? true,
       homeResearch: false,
       uploads: false,
+      photoCheckups: false,
       projectReview: false,
       projectReviewAttachments: false,
       invitations: false,

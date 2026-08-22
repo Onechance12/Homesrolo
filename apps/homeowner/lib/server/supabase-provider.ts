@@ -36,6 +36,14 @@ import {
   type HomeownerProjectQuote,
   type HomeownerProjectQuotePort,
 } from '../../../../src/homeowner/homeowner-project-quotes.v1.ts'
+import {
+  HOMEOWNER_CHECKUP_PHOTO_VERSION,
+  homeownerCheckupPhotoCommandIntent,
+  homeownerCheckupPhotoMetadataSchema,
+  homeownerCheckupPhotoReservationSchema,
+  type HomeownerCheckupPhotoMetadata,
+  type HomeownerCheckupPhotoPort,
+} from '../../../../src/homeowner/homeowner-checkup-photos.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -50,6 +58,22 @@ function requiredString(row: JsonRecord, key: string): string {
   const value = row[key]
   if (typeof value !== 'string') throw new HomeownerApiError('unavailable')
   return value
+}
+
+function throwCheckupPhotoReserveError(error: { readonly message: string }): never {
+  if (error.message.includes('photo_rate_limited')
+    || error.message.includes('photo_concurrency_limited')
+    || error.message.includes('upload_in_progress')) {
+    throw new HomeownerApiError('rate_limited')
+  }
+  if (error.message.includes('photo_quota_exceeded')
+    || error.message.includes('photo_output_limited')
+    || error.message.includes('command_digest_mismatch')
+    || error.message.includes('command_scope_mismatch')
+    || error.message.includes('photo_deleted')) {
+    throw new HomeownerApiError('conflict')
+  }
+  throw new HomeownerApiError('unavailable')
 }
 
 function nullableString(row: JsonRecord, key: string): string | null {
@@ -194,6 +218,30 @@ function artifactFromRow(input: unknown) {
   })
 }
 
+function checkupPhotoFromRow(input: unknown): HomeownerCheckupPhotoMetadata {
+  const row = record(input)
+  return homeownerCheckupPhotoMetadataSchema.parse({
+    recordVersion: HOMEOWNER_CHECKUP_PHOTO_VERSION,
+    photoRef: requiredString(row, 'photo_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
+    observedOn: requiredString(row, 'observed_on'),
+    area: requiredString(row, 'area'),
+    viewLabel: requiredString(row, 'view_label'),
+    caption: requiredString(row, 'caption'),
+    mediaType: requiredString(row, 'media_type'),
+    fullStorageObjectRef: requiredString(row, 'full_storage_object_ref'),
+    fullByteLength: requiredNumber(row, 'full_byte_length'),
+    fullPayloadSha256: requiredString(row, 'full_payload_sha256'),
+    thumbnailStorageObjectRef: requiredString(row, 'thumbnail_storage_object_ref'),
+    thumbnailByteLength: requiredNumber(row, 'thumbnail_byte_length'),
+    thumbnailPayloadSha256: requiredString(row, 'thumbnail_payload_sha256'),
+    width: requiredNumber(row, 'width'),
+    height: requiredNumber(row, 'height'),
+    createdAt: canonicalInstant(row, 'created_at'),
+  })
+}
+
 function quoteFromRow(input: unknown): HomeownerProjectQuote {
   const row = record(input)
   return homeownerProjectQuoteSchema.parse({
@@ -247,7 +295,7 @@ export function createSupabaseClients(configuration: HomeownerRuntimeConfigurati
 export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
   HomeownerPrivateObjectPort, HomeownerProjectQuotePort,
-  HomeownerProjectReviewPersistencePort {
+  HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort {
   readonly #client: SupabaseClient
   readonly #now: () => string
   readonly #supabaseOrigin: string | null
@@ -352,6 +400,347 @@ export class SupabaseHomeownerProvider implements
       .order('created_at', { ascending: false })
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(artifactFromRow)
+  }
+  async listCheckupPhotos(grant: AuthorizedHomeownerWorkspace) {
+    await this.#reconcileCheckupPhotoObjects()
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_checkup_photos')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .eq('state', 'available')
+      .order('observed_on', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(101)
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(checkupPhotoFromRow)
+  }
+
+  async #removeCheckupPhotoObjects(row: JsonRecord): Promise<void> {
+    const keys = [
+      requiredString(row, 'full_storage_key'),
+      requiredString(row, 'thumbnail_storage_key'),
+    ]
+    const { error } = await this.#client.storage
+      .from('homesrolo-homeowner-private')
+      .remove(keys)
+    if (error) throw new HomeownerApiError('unavailable')
+  }
+
+  /**
+   * No paid scheduler is required for the capped beta. Every photo write cleans
+   * exact server-selected opaque keys left by a rejected/stale upload or an
+   * interrupted delete, even if the old membership was later revoked. The
+   * environment capability remains the immediate kill switch.
+   */
+  async #reconcileCheckupPhotoObjects(requiredPhotoRef?: string): Promise<void> {
+    // List requests must be able to expose expired leases to the same bounded
+    // cleanup scan even when no later upload reservation is ever attempted.
+    // This global maintenance step is best effort for unrelated work.
+    try {
+      await this.#client.rpc('homesrolo_service_expire_stale_checkup_photo_uploads', {
+        p_requested_at: this.#now(),
+      })
+    } catch {
+      // Existing failed/deleting rows can still be scanned. A transient global
+      // maintenance error must not brick an unrelated homeowner request.
+    }
+    const reconcileRow = async (input: unknown) => {
+      const row = record(input)
+      await this.#removeCheckupPhotoObjects(row)
+      const state = requiredString(row, 'state')
+      const { error: cleanupError } = await this.#client.rpc(
+        'homesrolo_service_reconcile_checkup_photo_objects',
+        {
+          p_photo_ref: requiredString(row, 'photo_ref'),
+          p_expected_state: state,
+          p_cleaned_at: this.#now(),
+        },
+      )
+      if (cleanupError) throw new HomeownerApiError('unavailable')
+    }
+
+    if (requiredPhotoRef) {
+      const { data: required, error: requiredError } = await this.#client
+        .from('homesrolo_homeowner_checkup_photos')
+        .select('*')
+        .eq('photo_ref', requiredPhotoRef)
+        .in('state', ['failed', 'deleting'])
+        .is('objects_cleaned_at', null)
+        .maybeSingle()
+      if (requiredError || !required) throw new HomeownerApiError('unavailable')
+      await reconcileRow(required)
+    }
+
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_checkup_photos')
+      .select('*')
+      .in('state', ['failed', 'deleting'])
+      .is('objects_cleaned_at', null)
+      .order('state_changed_at', { ascending: true })
+      .limit(20)
+    if (error || !Array.isArray(data)) return
+    for (const input of data) {
+      try {
+        await reconcileRow(input)
+      } catch {
+        // This row remains quarantined and counted. An unrelated corrupt row
+        // must not brick every homeowner request.
+      }
+    }
+  }
+
+  async reserveCheckupPhotoUpload(
+    input: Parameters<HomeownerCheckupPhotoPort['reserveCheckupPhotoUpload']>[0],
+  ) {
+    await this.#reconcileCheckupPhotoObjects()
+    const commandDigest = digest(homeownerCheckupPhotoCommandIntent(input.command))
+    const photoRef = mintOpaqueRef('hpho')
+    const fullStorageObjectRef = mintOpaqueRef('hobj')
+    const thumbnailStorageObjectRef = mintOpaqueRef('hobj')
+    const leaseToken = mintOpaqueRef('hles')
+    const rpcInput = {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: commandDigest,
+      p_photo_ref: photoRef,
+      p_observed_on: input.command.observedOn,
+      p_area: input.command.area,
+      p_view_label: input.command.viewLabel,
+      p_caption: input.command.caption,
+      p_input_media_type: input.command.inputMediaType,
+      p_input_byte_length: input.command.inputByteLength,
+      p_input_payload_sha256: input.command.inputPayloadSha256,
+      p_full_storage_object_ref: fullStorageObjectRef,
+      p_full_storage_key: `${input.grant.homeRef}/checkup-photos/${fullStorageObjectRef}`,
+      p_thumbnail_storage_object_ref: thumbnailStorageObjectRef,
+      p_thumbnail_storage_key: `${input.grant.homeRef}/checkup-photos/${thumbnailStorageObjectRef}`,
+      p_lease_token: leaseToken,
+      p_requested_at: input.command.requestedAt,
+    }
+    let { data, error } = await this.#client.rpc(
+      'homesrolo_reserve_checkup_photo_upload',
+      rpcInput,
+    )
+    if (error) {
+      throwCheckupPhotoReserveError(error)
+    }
+    const row = record(data)
+    let state = requiredString(row, 'state')
+    if (state === 'failed') {
+      // The reservation RPC commits expired-lease transition before returning
+      // it. Clean the old exact keys, then make one bounded retry.
+      await this.#reconcileCheckupPhotoObjects(requiredString(row, 'photo_ref'))
+      ;({ data, error } = await this.#client.rpc('homesrolo_reserve_checkup_photo_upload', rpcInput))
+      if (error) throwCheckupPhotoReserveError(error)
+      const retriedRow = record(data)
+      state = requiredString(retriedRow, 'state')
+      if (state === 'available') {
+        return { state: 'available' as const, photo: checkupPhotoFromRow(retriedRow) }
+      }
+      if (state !== 'processing') throw new HomeownerApiError('unavailable')
+      Object.assign(row, retriedRow)
+    }
+    if (state === 'available') return { state: 'available' as const, photo: checkupPhotoFromRow(row) }
+    if (state !== 'processing') throw new HomeownerApiError('unavailable')
+    const reservation = homeownerCheckupPhotoReservationSchema.parse({
+      photoRef: requiredString(row, 'photo_ref'),
+      homeRef: requiredString(row, 'home_ref'),
+      controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
+      commandRef: requiredString(row, 'command_ref'),
+      commandDigest: requiredString(row, 'command_digest'),
+      leaseToken: requiredString(row, 'lease_token'),
+      fullStorageObjectRef: requiredString(row, 'full_storage_object_ref'),
+      thumbnailStorageObjectRef: requiredString(row, 'thumbnail_storage_object_ref'),
+    })
+    // Clean stale objects made visible by the reservation RPC without touching
+    // this still-processing reservation.
+    await this.#reconcileCheckupPhotoObjects()
+    return { state: 'reserved' as const, reservation }
+  }
+
+  async completeCheckupPhotoUpload(
+    input: Parameters<HomeownerCheckupPhotoPort['completeCheckupPhotoUpload']>[0],
+  ) {
+    if (digest(homeownerCheckupPhotoCommandIntent(input.command))
+      !== input.reservation.commandDigest) {
+      throw new HomeownerApiError('conflict')
+    }
+    const fullHash = createHash('sha256').update(input.photo.fullBytes).digest('hex')
+    const thumbnailHash = createHash('sha256').update(input.photo.thumbnailBytes).digest('hex')
+    if (fullHash !== input.photo.fullPayloadSha256
+      || thumbnailHash !== input.photo.thumbnailPayloadSha256
+      || input.photo.fullBytes[0] !== 0xff || input.photo.fullBytes[1] !== 0xd8
+      || input.photo.thumbnailBytes[0] !== 0xff || input.photo.thumbnailBytes[1] !== 0xd8) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const { data: reservationData, error: reservationError } = await this.#client
+      .from('homesrolo_homeowner_checkup_photos')
+      .select('*')
+      .eq('photo_ref', input.reservation.photoRef)
+      .eq('home_ref', input.grant.homeRef)
+      .eq('controller_principal_ref', input.grant.principalRef)
+      .eq('command_ref', input.command.commandRef)
+      .eq('command_digest', input.reservation.commandDigest)
+      .eq('lease_token', input.reservation.leaseToken)
+      .eq('state', 'processing')
+      .maybeSingle()
+    if (reservationError || !reservationData) throw new HomeownerApiError('unavailable')
+    const row = record(reservationData)
+    const fullKey = requiredString(row, 'full_storage_key')
+    const thumbnailKey = requiredString(row, 'thumbnail_storage_key')
+    if (requiredString(row, 'full_storage_object_ref')
+        !== input.reservation.fullStorageObjectRef
+      || requiredString(row, 'thumbnail_storage_object_ref')
+        !== input.reservation.thumbnailStorageObjectRef) {
+      throw new HomeownerApiError('unavailable')
+    }
+
+    const bucket = this.#client.storage.from('homesrolo-homeowner-private')
+    for (const [key, bytes] of [
+      [fullKey, input.photo.fullBytes],
+      [thumbnailKey, input.photo.thumbnailBytes],
+    ] as const) {
+      const { error: uploadError } = await bucket.upload(key, bytes, {
+        contentType: 'image/jpeg',
+        cacheControl: '0',
+        upsert: false,
+      })
+      // An error may be an ambiguous remote success. Never spend unmetered
+      // egress to probe it: fail closed and let exact-key cleanup reconcile.
+      if (uploadError) throw new HomeownerApiError('unavailable')
+    }
+
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_finalize_checkup_photo_upload',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.reservation.commandDigest,
+        p_photo_ref: input.reservation.photoRef,
+        p_lease_token: input.reservation.leaseToken,
+        p_full_storage_object_ref: input.reservation.fullStorageObjectRef,
+        p_full_byte_length: input.photo.fullBytes.byteLength,
+        p_full_payload_sha256: input.photo.fullPayloadSha256,
+        p_thumbnail_storage_object_ref: input.reservation.thumbnailStorageObjectRef,
+        p_thumbnail_byte_length: input.photo.thumbnailBytes.byteLength,
+        p_thumbnail_payload_sha256: input.photo.thumbnailPayloadSha256,
+        p_width: input.photo.width,
+        p_height: input.photo.height,
+        p_completed_at: this.#now(),
+      },
+    )
+    if (error) throw new HomeownerApiError('unavailable')
+    return checkupPhotoFromRow(data)
+  }
+
+  async rejectCheckupPhotoUpload(
+    input: Parameters<HomeownerCheckupPhotoPort['rejectCheckupPhotoUpload']>[0],
+  ) {
+    const { error } = await this.#client.rpc('homesrolo_reject_checkup_photo_upload', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_photo_ref: input.reservation.photoRef,
+      p_lease_token: input.reservation.leaseToken,
+      p_rejected_at: input.rejectedAt,
+    })
+    if (error) throw new HomeownerApiError('unavailable')
+    await this.#reconcileCheckupPhotoObjects()
+  }
+
+  async readCheckupPhotoVariant(
+    input: Parameters<HomeownerCheckupPhotoPort['readCheckupPhotoVariant']>[0],
+  ) {
+    // The transactional egress ledger runs before Storage download. The RPC
+    // derives byte length from the available row, never from browser input.
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_reserve_checkup_photo_egress',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_photo_ref: input.photoRef,
+        p_variant: input.variant,
+        p_egress_ref: mintOpaqueRef('hegr'),
+        p_requested_at: this.#now(),
+      },
+    )
+    if (error) {
+      if (error.message.includes('photo_egress_rate_limited')
+        || error.message.includes('photo_egress_limited')) {
+        throw new HomeownerApiError('rate_limited')
+      }
+      if (error.message.includes('photo_not_found')) throw new HomeownerApiError('not_found')
+      throw new HomeownerApiError('unavailable')
+    }
+    const row = record(data)
+    const photo = checkupPhotoFromRow(row)
+    const storageKey = input.variant === 'full'
+      ? requiredString(row, 'full_storage_key')
+      : requiredString(row, 'thumbnail_storage_key')
+    const expectedLength = input.variant === 'full'
+      ? photo.fullByteLength
+      : photo.thumbnailByteLength
+    const expectedHash = input.variant === 'full'
+      ? photo.fullPayloadSha256
+      : photo.thumbnailPayloadSha256
+    const download = await this.#client.storage
+      .from('homesrolo-homeowner-private')
+      .download(storageKey)
+    if (download.error || !download.data) throw new HomeownerApiError('unavailable')
+    const bytes = new Uint8Array(await download.data.arrayBuffer())
+    if (bytes.byteLength !== expectedLength
+      || createHash('sha256').update(bytes).digest('hex') !== expectedHash) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return { photo, bytes }
+  }
+
+  async deleteCheckupPhoto(
+    input: Parameters<HomeownerCheckupPhotoPort['deleteCheckupPhoto']>[0],
+  ) {
+    await this.#reconcileCheckupPhotoObjects()
+    const { data, error } = await this.#client.rpc('homesrolo_begin_checkup_photo_delete', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_photo_ref: input.photoRef,
+      p_deleted_at: input.deletedAt,
+    })
+    if (error) {
+      if (error.message.includes('photo_not_found')) throw new HomeownerApiError('not_found')
+      if (error.message.includes('photo_not_available')) throw new HomeownerApiError('conflict')
+      throw new HomeownerApiError('unavailable')
+    }
+    const row = record(data)
+    if (requiredString(row, 'state') === 'deleted') {
+      return { photoRef: input.photoRef, state: 'deleted' as const }
+    }
+    await this.#removeCheckupPhotoObjects(row)
+    const { data: finalized, error: finalizeError } = await this.#client.rpc(
+      'homesrolo_finalize_checkup_photo_delete',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_photo_ref: input.photoRef,
+        p_deleted_at: input.deletedAt,
+      },
+    )
+    if (finalizeError || requiredString(record(finalized), 'state') !== 'deleted') {
+      throw new HomeownerApiError('unavailable')
+    }
+    return { photoRef: input.photoRef, state: 'deleted' as const }
   }
   async listWarranties() { return [] }
   async listMaintenance() { return [] }

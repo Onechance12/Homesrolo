@@ -15,7 +15,7 @@
  */
 
 import {
-  type DocumentSummary, type HomeownerSession, type HomeResearchFact, type HomeResearchResult, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -248,6 +248,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   projectQuotes: boolean,
   homeResearch: boolean,
   uploads: boolean,
+  photoCheckups: boolean,
   projectReview: boolean,
   projectReviewAttachments: boolean,
   invitations: boolean,
@@ -462,6 +463,65 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     isSynthetic: false,
   }
 }
+
+const PHOTO_CHECKUP_AREAS = [
+  'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
+  'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+] as const satisfies readonly PhotoCheckup['area'][]
+
+type WirePhotoCheckup = PhotoCheckup
+
+/**
+ * An image view can point only to its own exact-home, same-origin routes. The
+ * response never gets to choose an arbitrary URL, even a same-origin one.
+ */
+export const decodePhotoCheckup: Decoder<PhotoCheckup> = (value, at) => {
+  const decoded = object<WirePhotoCheckup>({
+    photoRef: opaqueRef('hpho'),
+    homeRef: opaqueRef('hhom'),
+    observedOn: calendarDate,
+    area: oneOf(PHOTO_CHECKUP_AREAS),
+    viewLabel: boundedLabel(80),
+    caption: trimmedText(240),
+    fullUrl: matching(
+      /^\/api\/v1\/homes\/hhom_[A-Za-z0-9_-]{43}\/photo-checkups\/hpho_[A-Za-z0-9_-]{43}\/full$/,
+      'an exact same-origin full-photo route',
+    ),
+    thumbnailUrl: matching(
+      /^\/api\/v1\/homes\/hhom_[A-Za-z0-9_-]{43}\/photo-checkups\/hpho_[A-Za-z0-9_-]{43}\/thumbnail$/,
+      'an exact same-origin thumbnail route',
+    ),
+    width: countInt,
+    height: countInt,
+    createdAt: utcInstant,
+  })(value, at)
+  if (/[\u0000-\u001f\u007f]/.test(decoded.viewLabel)
+    || /[\u0000-\u001f\u007f]/.test(decoded.caption)
+    || decoded.width < 1 || decoded.width > 2048
+    || decoded.height < 1 || decoded.height > 2048) {
+    return fail(at, 'safe caption text and dimensions from 1 through 2048')
+  }
+  const base = `/api/v1/homes/${decoded.homeRef}/photo-checkups/${decoded.photoRef}`
+  if (decoded.fullUrl !== `${base}/full` || decoded.thumbnailUrl !== `${base}/thumbnail`) {
+    return fail(at, 'photo URLs matching their own homeRef and photoRef')
+  }
+  return decoded
+}
+
+/** The per-home quota makes any larger success response off-contract. */
+export const decodePhotoCheckupList: Decoder<readonly PhotoCheckup[]> = (value, at) => {
+  const decoded = boundedArray(decodePhotoCheckup, 0, 100)(value, at)
+  if (new Set(decoded.map(photo => photo.photoRef)).size !== decoded.length) {
+    return fail(at, 'photos with unique opaque refs')
+  }
+  return decoded
+}
+
+export const decodeDeletedPhotoCheckup: Decoder<DeletedPhotoCheckup> =
+  object<DeletedPhotoCheckup>({
+    photoRef: opaqueRef('hpho'),
+    state: literal('deleted'),
+  })
 
 const QUOTE_SCOPE_KEYS = [
   'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
