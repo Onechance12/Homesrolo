@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.
 import { IconDocs } from '../../../../components/icons.tsx'
 import { mintCommandRef } from '../../../../lib/port/command-ref.ts'
 import type { DocumentKind, DocumentSummary } from '../../../../lib/port/types.ts'
+import { PhotoCheckups } from '../../../../components/PhotoCheckups.tsx'
 
 const KIND_LABEL: Record<DocumentKind, string> = {
   document: 'Home record',
@@ -78,6 +79,9 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
   const session = useSession()
   const uploadsEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.uploads
+  const photoCheckupsEnabled = mode === 'remote'
+    && session.state.kind === 'signed_in'
+    && session.state.capabilities.photoCheckups
   const libraryReadable = mode === 'synthetic' || uploadsEnabled
   const { state, retry } = usePortCall(
     () => libraryReadable
@@ -189,6 +193,8 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
           <><strong>Demo library.</strong> Every listed item is synthetic and disappears on refresh.</>
         ) : uploadsEnabled ? (
           <><strong>Private home library.</strong> Upload a PDF, JPEG, or PNG up to 25 MB. Nothing is sent to a professional unless you choose that in a later project step.</>
+        ) : photoCheckupsEnabled ? (
+          <><strong>Seasonal photo checkups are ready.</strong> Add private JPEG or PNG photos below. Documents and warranty files aren&rsquo;t available yet.</>
         ) : (
           <><strong>Uploads are unavailable right now.</strong> Homesrolo has not opened secure photo and document storage for this home. Any existing files will appear only when the private service returns them.</>
         )}
@@ -243,33 +249,30 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
         </form>
       ) : null}
 
+      <PhotoCheckups
+        key={`${homeId}:${photoCheckupsEnabled ? 'enabled' : 'disabled'}`}
+        homeRef={homeId}
+        enabled={photoCheckupsEnabled}
+        port={port}
+      />
+
       {state.status === 'loading' && <div className="panel"><Skeleton lines={5} label="Loading the home library" /></div>}
       {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
 
       {state.status !== 'loading' && state.status !== 'error' ? (
         <>
-          <section id="photo-checkups" className="panel" aria-labelledby="photo-checkups-title">
-            <div className="panel__head">
-              <div>
-                <h2 id="photo-checkups-title">Photos & seasonal home checkups</h2>
-                <p className="form-note">
-                  Photograph the same exterior, attic, ceilings, mechanical equipment,
-                  and trouble spots a few times a year so changes are easier to notice.
-                </p>
+          {photos.length > 0 ? (
+            <section className="panel" aria-labelledby="legacy-photo-records-title">
+              <div className="panel__head">
+                <div>
+                  <h2 id="legacy-photo-records-title">Filed photo records</h2>
+                  <p className="form-note">Older photos saved with other home records appear here.</p>
+                </div>
+                <span className="mono">{photos.length} saved</span>
               </div>
-              {state.status === 'ready' ? <span className="mono">{photos.length} saved</span> : null}
-            </div>
-            {photos.length > 0 ? (
               <FiledRows records={photos} />
-            ) : (
-              <EmptyState
-                title="No saved home-checkup photos yet"
-                body={uploadsEnabled
-                  ? 'Choose Photo in Add to the library when you are ready to start a dated condition record.'
-                  : 'This is where dated condition photos will appear after secure photo storage is opened.'}
-              />
-            )}
-          </section>
+            </section>
+          ) : null}
 
           <section id="filed-records" className="panel" aria-labelledby="filed-records-title">
             <div className="panel__head">

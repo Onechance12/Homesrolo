@@ -32,6 +32,7 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     appOrigin: 'https://app.homesrolo.com',
     projectQuotesEnabled: false,
     privateUploadsEnabled: false,
+    photoCheckupsEnabled: false,
     jobroloAttachmentsEnabled: false,
   })
   assert.equal(readHomeownerRuntimeConfiguration({
@@ -42,6 +43,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     ...CONFIG,
     HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'true',
   })?.privateUploadsEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PHOTO_CHECKUPS_ENABLED: 'true',
+  })?.photoCheckupsEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'true',
@@ -57,6 +62,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PRIVATE_UPLOADS_ENABLED: 'yes',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PHOTO_CHECKUPS_ENABLED: 'yes',
   }), null)
 })
 

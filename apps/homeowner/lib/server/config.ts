@@ -14,6 +14,7 @@ const configurationSchema = z.object({
   appOrigin: httpsUrl,
   projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
+  photoCheckupsEnabled: z.enum(['true', 'false']).optional().default('false'),
   jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict()
 
@@ -24,6 +25,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly appOrigin: string
   readonly projectQuotesEnabled: boolean
   readonly privateUploadsEnabled: boolean
+  readonly photoCheckupsEnabled: boolean
   readonly jobroloAttachmentsEnabled: boolean
 }
 
@@ -42,6 +44,7 @@ export function readHomeownerRuntimeConfiguration(
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
     projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
+    photoCheckupsEnabled: environment.HOMESROLO_PHOTO_CHECKUPS_ENABLED,
     jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
   })
   if (!parsed.success) return null
@@ -52,6 +55,7 @@ export function readHomeownerRuntimeConfiguration(
     appOrigin: parsed.data.appOrigin.origin,
     projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
+    photoCheckupsEnabled: parsed.data.photoCheckupsEnabled === 'true',
     jobroloAttachmentsEnabled: parsed.data.jobroloAttachmentsEnabled === 'true',
   })
 }

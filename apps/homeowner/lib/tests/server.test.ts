@@ -26,6 +26,7 @@ const ALL_FALSE = {
   projectQuotes: false,
   homeResearch: false,
   uploads: false,
+  photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
   invitations: false,

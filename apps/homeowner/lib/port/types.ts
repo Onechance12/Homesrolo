@@ -37,7 +37,7 @@ export const SYNTHETIC_NOTICE =
 
 /**
  * What the server actually offers, reported by GET /api/v1/session — exactly
- * the nine booleans homeowner-api.v1 defines. The synthetic adapter reports
+ * the booleans homeowner-api.v1 defines. The synthetic adapter reports
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
@@ -46,6 +46,8 @@ export interface SignInCapabilities {
   readonly projectQuotes: boolean
   readonly homeResearch: boolean
   readonly uploads: boolean
+  /** Image-only, sanitized seasonal checkups; never enables generic files. */
+  readonly photoCheckups: boolean
   readonly projectReview: boolean
   readonly projectReviewAttachments: boolean
   readonly invitations: boolean
@@ -58,6 +60,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   projectQuotes: false,
   homeResearch: false,
   uploads: false,
+  photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
   invitations: false,
@@ -415,6 +418,51 @@ export interface UploadPrivateArtifactInput {
   readonly projectRef?: string
 }
 
+/** Fixed, repeatable views make like-for-like seasonal comparison possible. */
+export type PhotoCheckupArea =
+  | 'front_exterior'
+  | 'rear_exterior'
+  | 'roofline'
+  | 'attic'
+  | 'ceilings'
+  | 'hvac'
+  | 'water_heater'
+  | 'foundation'
+  | 'gutters'
+  | 'other'
+
+export interface PhotoCheckup {
+  readonly photoRef: string
+  readonly homeRef: string
+  readonly observedOn: string
+  readonly area: PhotoCheckupArea
+  /** Homeowner-named repeatable spot within an area, such as Hall ceiling by vent. */
+  readonly viewLabel: string
+  /** Homeowner-written factual context; an empty string means none recorded. */
+  readonly caption: string
+  /** Same-origin, exact-home routes derived and verified by the client decoder. */
+  readonly fullUrl: string
+  readonly thumbnailUrl: string
+  readonly width: number
+  readonly height: number
+  readonly createdAt: string
+}
+
+export interface UploadPhotoCheckupInput {
+  readonly commandRef: string
+  readonly observedOn: string
+  readonly area: PhotoCheckupArea
+  readonly viewLabel: string
+  readonly caption: string
+  /** The same File object is retained across retries of one attempt group. */
+  readonly file: File
+}
+
+export interface DeletedPhotoCheckup {
+  readonly photoRef: string
+  readonly state: 'deleted'
+}
+
 export interface SubmitProjectForReviewInput {
   readonly commandRef: string
   readonly reviewedDisclosureDigest: string
@@ -585,6 +633,17 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: UploadPrivateArtifactInput,
   ): Promise<PortResult<DocumentSummary>>
+  listPhotoCheckups(
+    homeRef: string,
+  ): Promise<PortResult<readonly PhotoCheckup[]>>
+  uploadPhotoCheckup(
+    homeRef: string,
+    input: UploadPhotoCheckupInput,
+  ): Promise<PortResult<PhotoCheckup>>
+  deletePhotoCheckup(
+    homeRef: string,
+    photoRef: string,
+  ): Promise<PortResult<DeletedPhotoCheckup>>
   previewProjectForReview(
     homeRef: string,
     projectRef: string,

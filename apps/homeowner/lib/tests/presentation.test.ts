@@ -59,8 +59,12 @@ test('new-home setup is a mobile-first progressive form, not a chatbot transcrip
   assert.match(page, /Set up your home/)
   assert.match(page, /Step \{stage\.number\} of 4/,
     'the current stage and total are always visible')
-  assert.match(page, /Skip optional details — add or research them later/,
+  assert.match(page, /Skip optional details — leave them unrecorded/,
     'a homeowner can enter the product after only the required basics')
+  assert.doesNotMatch(page, /Update it anytime|update it after the file opens|correct it later/,
+    'setup never promises editing that the saved home file does not offer yet')
+  assert.match(page, /editing saved details after the file opens is not available yet/,
+    'the review step states the current saved-detail limitation')
   assert.match(page, /<ReviewCard[\s\S]*draft=\{draftFrom\(state\)\}[\s\S]*onEdit=\{editStep\}/,
     'review answers have a direct edit path')
   assert.doesNotMatch(page, /state\.transcript\.map/,
@@ -201,6 +205,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    'app/api/v1/homes/[homeRef]/photo-checkups/route.ts',
+    'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
+    'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts',
     'app/api/v1/homes/[homeRef]/research/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
@@ -235,6 +243,22 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves one private download`)
       assert.match(content, /handleArtifactDownload/, `${rel} delegates download policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the bounded photo list`)
+      assert.match(content, /export async function POST/, `${rel} serves one raw image upload`)
+      assert.match(content, /handleCheckupPhotoUpload/,
+        `${rel} delegates image policy to the isolated photo boundary`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts') {
+      assert.match(content, /export async function DELETE/, `${rel} deletes one exact private photo`)
+      assert.match(content, /handleCheckupPhotoDelete/,
+        `${rel} delegates deletion to the isolated photo boundary`)
+      assert.doesNotMatch(content, /export (async function|const) (GET|POST)/,
+        `${rel} has no duplicate read or write surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
+      || rel === 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves one private derivative`)
+      assert.match(content, /handleCheckupPhotoContent/,
+        `${rel} delegates content authorization to the isolated photo boundary`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves one consent-bound review submission`)
       assert.match(content, /submitProjectForHomesroloReview/,
@@ -269,6 +293,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
@@ -276,10 +301,18 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
-    assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE|HEAD|OPTIONS)/,
-      `${rel} must export no generic mutation method`)
+    if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts') {
+      assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|HEAD|OPTIONS)/,
+        `${rel} exports only its exact delete mutation`)
+    } else {
+      assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE|HEAD|OPTIONS)/,
+        `${rel} must export no generic mutation method`)
+    }
     if (!rel.startsWith('app/api/v1/auth/')
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
       assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
@@ -428,6 +461,18 @@ test('disabled affordances say why, instead of pretending', () => {
   assert.match(documents, /Uploads are unavailable/i)
 })
 
+test('settings reports session capabilities, not internal implementation flags', () => {
+  const settings = read('app/home/[homeId]/settings/page.tsx')
+  assert.match(settings, /session\.capabilities/,
+    'availability is derived from the exact capabilities returned for this session')
+  assert.doesNotMatch(settings, /PORT_IMPLEMENTATION_STATUS/,
+    'foundation implementation status cannot be presented as runtime availability')
+  assert.match(settings, /Home research assistant/)
+  assert.match(settings, /Private file uploads/)
+  assert.match(settings, /available \? 'Available' : 'Off'/,
+    'each runtime capability has a plain-language availability state')
+})
+
 test('the authenticated home is a whole-home Rolodex, not a roofing dashboard', () => {
   const shell = read('components/AppShell.tsx')
   const dashboard = read('app/home/[homeId]/page.tsx')
@@ -464,6 +509,86 @@ test('the authenticated home is a whole-home Rolodex, not a roofing dashboard', 
     'the add-file form remains fail-closed on the exact upload capability')
   assert.match(library, /Uploads are unavailable right now/,
     'the production capability-off state stays visible and specific')
+})
+
+test('seasonal photo checkups are mobile-first, exact-view, and independently gated', () => {
+  const library = read('app/home/[homeId]/documents/page.tsx')
+  const checkups = read('components/PhotoCheckups.tsx')
+  const remote = read('lib/port/remote.ts')
+  const wire = read('lib/port/wire.ts')
+  const transport = read('lib/port/transport.ts')
+
+  assert.match(library, /session\.state\.capabilities\.photoCheckups/,
+    'the image-only beta has its own server-reported capability')
+  assert.match(library, /session\.state\.capabilities\.uploads/,
+    'generic documents remain behind their separate capability')
+  assert.match(checkups, /enabled\s*\n\s*\? port\.listPhotoCheckups\(homeRef\)\s*\n\s*:\s*Promise\.resolve/,
+    'capability false makes no photo-list port call')
+  assert.match(library, /key=\{`\$\{homeId\}:\$\{photoCheckupsEnabled \? 'enabled' : 'disabled'\}`\}/,
+    'home, session, or capability changes remount the private photo surface before its first real read')
+
+  for (const value of [
+    'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
+    'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+  ]) {
+    assert.match(checkups, new RegExp(`value: '${value}'`), `${value} is one repeatable view`)
+  }
+  assert.match(checkups, /type="date"[\s\S]*max=\{today\}/,
+    'observation date defaults locally and cannot select a future day')
+  assert.match(checkups, /accept="image\/jpeg,image\/png"/,
+    'the picker offers only the two accepted image formats')
+  assert.doesNotMatch(checkups, /capture="environment"/,
+    'mobile homeowners can choose existing photos instead of being forced into the camera')
+  assert.match(checkups, /HEIC is not accepted[\s\S]*JPEG copy/,
+    'unsupported iPhone photos have honest conversion guidance')
+  assert.match(checkups, /commandRef\.current \?\?= mintCommandRef\(\)/,
+    'one upload attempt keeps its idempotency ref across a retry')
+  assert.match(checkups, /Try the same upload again/,
+    'the retry affordance is explicit and preserves the selected File')
+  assert.match(checkups, /Repeatable view name[\s\S]*maxLength=\{80\}/,
+    'each photo has a required homeowner-named repeatable spot')
+  assert.match(checkups, /aria-busy=\{uploadPending\}/,
+    'the form exposes its frozen upload state')
+  assert.ok((checkups.match(/disabled=\{uploadPending\}/g) ?? []).length >= 6,
+    'date, area, view, note, file, form toggle, and compare toggle freeze while uploading')
+  assert.match(checkups, /uploadGeneration\.current !== generation/,
+    'a late upload completion cannot overwrite a newer attempt')
+  assert.match(checkups, /failure\.action !== 'same_retry'[\s\S]*commandRef\.current = null/,
+    'only retryable provider outcomes retain the exact command reference')
+
+  assert.match(checkups, /`\$\{photo\.area\}\\u0000\$\{photo\.viewLabel\}`/,
+    'gallery grouping and comparison require the exact area plus repeatable view name')
+  assert.match(checkups, /const latest = group\.photos\[0\][\s\S]*const previous = group\.photos\[1\]/,
+    'comparison is pinned to the latest two photos in one view')
+  assert.match(checkups, /loading="lazy"/,
+    'private thumbnails load lazily')
+  assert.match(checkups, /href=\{photo\.fullUrl\}[\s\S]*Open full image/,
+    'a full derivative opens only after an explicit homeowner action')
+  assert.match(checkups, /aria-label=\{`Delete \$\{group\.viewLabel\}, \$\{group\.areaLabel\} photo from/,
+    'every repeated delete control names the photo date, area, and repeatable view')
+  assert.match(checkups, /We could not confirm whether this photo was deleted[\s\S]*safe to try deleting it again/,
+    'an uncertain delete never claims success and explains safe retry')
+  assert.match(checkups, /ref=\{keepPhotoRef\}/,
+    'delete confirmation receives keyboard focus')
+  assert.match(checkups, /does not inspect or diagnose the home/,
+    'the record never poses as an AI or professional inspection')
+
+  const photoTransport = transport.slice(transport.indexOf('export const fetchPhotoCheckupUploadTransport'))
+  assert.match(photoTransport, /body:\s*request\.file/,
+    'the photo itself is the raw request body')
+  assert.doesNotMatch(photoTransport, /new FormData\(/,
+    'the photo route never transmits a multipart filename')
+  for (const header of [
+    'x-homesrolo-command-ref', 'x-homesrolo-observed-on',
+    'x-homesrolo-photo-area', 'x-homesrolo-view-label', 'x-homesrolo-caption',
+  ]) {
+    assert.match(photoTransport, new RegExp(`'${header}'`), `${header} is explicit`)
+  }
+  assert.match(remote, /MAX_PHOTO_INPUT_BYTES = 10 \* 1024 \* 1024/)
+  assert.match(wire, /decoded\.fullUrl !== `\$\{base\}\/full`[\s\S]*decoded\.thumbnailUrl !== `\$\{base\}\/thumbnail`/,
+    'server-supplied image URLs must match their own exact home and photo refs')
+  assert.match(wire, /boundedArray\(decodePhotoCheckup, 0, 100\)/,
+    'the response list cannot exceed the per-home quota')
 })
 
 test('whole-home project history never invents a category or work date', () => {

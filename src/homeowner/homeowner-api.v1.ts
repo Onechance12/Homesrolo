@@ -32,6 +32,19 @@ import {
   validateHomeownerArtifactPayload,
 } from './homeowner-artifacts.v1.ts'
 import {
+  HOMEOWNER_CHECKUP_PHOTO_FULL_MAX_BYTES,
+  HOMEOWNER_CHECKUP_PHOTO_MAX_PER_HOME,
+  HOMEOWNER_CHECKUP_PHOTO_THUMBNAIL_MAX_BYTES,
+  createHomeownerCheckupPhotoInputSchema,
+  homeownerCheckupPhotoMetadataSchema,
+  homeownerCheckupPhotoReservationSchema,
+  type HomeownerCheckupPhotoMetadata,
+  type HomeownerCheckupPhotoPort,
+  type HomeownerCheckupPhotoReservation,
+  type HomeownerCheckupPhotoVariant,
+  type SanitizedHomeownerCheckupPhoto,
+} from './homeowner-checkup-photos.v1.ts'
+import {
   createHomeownerProjectQuoteInputSchema,
   homeownerProjectQuoteSchema,
   homeownerQuoteScopeSchema,
@@ -59,6 +72,7 @@ export const homeownerApiCapabilitiesSchema = z.object({
   projectQuotes: z.boolean(),
   homeResearch: z.boolean(),
   uploads: z.boolean(),
+  photoCheckups: z.boolean(),
   projectReview: z.boolean(),
   projectReviewAttachments: z.boolean(),
   invitations: z.boolean(),
@@ -198,6 +212,60 @@ export const homeownerApiArtifactViewSchema = z.object({
 
 export type HomeownerApiArtifactView = z.infer<typeof homeownerApiArtifactViewSchema>
 
+export const homeownerApiCreateCheckupPhotoInputSchema =
+  createHomeownerCheckupPhotoInputSchema.omit({ requestedAt: true })
+
+export const homeownerApiCheckupPhotoViewSchema = z.object({
+  photoRef: opaqueRef('hpho'),
+  homeRef: opaqueRef('hhom'),
+  observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  area: homeownerCheckupPhotoMetadataSchema.shape.area,
+  viewLabel: homeownerCheckupPhotoMetadataSchema.shape.viewLabel,
+  caption: homeownerCheckupPhotoMetadataSchema.shape.caption,
+  fullUrl: z.string().startsWith('/api/v1/homes/').max(256),
+  thumbnailUrl: z.string().startsWith('/api/v1/homes/').max(256),
+  width: z.number().int().min(1).max(2048),
+  height: z.number().int().min(1).max(2048),
+  createdAt: homeownerUtcInstantSchema,
+}).strict()
+
+export type HomeownerApiCreateCheckupPhotoInput = z.infer<
+  typeof homeownerApiCreateCheckupPhotoInputSchema
+>
+export type HomeownerApiCheckupPhotoView = z.infer<
+  typeof homeownerApiCheckupPhotoViewSchema
+>
+
+const homeownerApiSanitizedCheckupPhotoSchema = z.object({
+  fullBytes: z.instanceof(Uint8Array),
+  fullPayloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  thumbnailBytes: z.instanceof(Uint8Array),
+  thumbnailPayloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  width: z.number().int().min(1).max(2048),
+  height: z.number().int().min(1).max(2048),
+}).strict().superRefine((photo, context) => {
+  if (photo.fullBytes.byteLength < 1
+    || photo.fullBytes.byteLength > HOMEOWNER_CHECKUP_PHOTO_FULL_MAX_BYTES) {
+    context.addIssue({ code: 'custom', path: ['fullBytes'], message: 'invalid full derivative size' })
+  }
+  if (photo.thumbnailBytes.byteLength < 1
+    || photo.thumbnailBytes.byteLength > HOMEOWNER_CHECKUP_PHOTO_THUMBNAIL_MAX_BYTES) {
+    context.addIssue({
+      code: 'custom',
+      path: ['thumbnailBytes'],
+      message: 'invalid thumbnail derivative size',
+    })
+  }
+})
+
+export type HomeownerApiCheckupPhotoUploadReservation =
+  | { readonly state: 'available'; readonly photo: HomeownerApiCheckupPhotoView }
+  | {
+      readonly state: 'reserved'
+      readonly command: z.infer<typeof createHomeownerCheckupPhotoInputSchema>
+      readonly reservation: HomeownerCheckupPhotoReservation
+    }
+
 export const homeownerApiCreateProjectQuoteInputSchema =
   createHomeownerProjectQuoteInputSchema.omit({ projectRef: true, requestedAt: true })
 
@@ -244,6 +312,7 @@ export type HomeownerApiProblemCode =
   | 'forbidden'
   | 'invalid_request'
   | 'conflict'
+  | 'rate_limited'
   | 'unavailable'
 
 export class HomeownerApiError extends Error {
@@ -267,6 +336,7 @@ export interface HomeownerApiServiceOptions {
   readonly commands: HomeownerCommandPort
   readonly privateObjects?: HomeownerPrivateObjectPort
   readonly projectQuotes?: HomeownerProjectQuotePort
+  readonly checkupPhotos?: HomeownerCheckupPhotoPort
   readonly now: () => string
   /**
    * These values must come from verified server configuration. A route must not
@@ -312,6 +382,24 @@ function safeArtifact(input: unknown): HomeownerApiArtifactView {
     mediaType: artifact.mediaType,
     byteLength: artifact.byteLength,
     createdAt: artifact.createdAt,
+  })
+}
+
+function safeCheckupPhoto(input: HomeownerCheckupPhotoMetadata): HomeownerApiCheckupPhotoView {
+  const photo = homeownerCheckupPhotoMetadataSchema.parse(input)
+  const base = `/api/v1/homes/${photo.homeRef}/photo-checkups/${photo.photoRef}`
+  return homeownerApiCheckupPhotoViewSchema.parse({
+    photoRef: photo.photoRef,
+    homeRef: photo.homeRef,
+    observedOn: photo.observedOn,
+    area: photo.area,
+    viewLabel: photo.viewLabel,
+    caption: photo.caption,
+    fullUrl: `${base}/full`,
+    thumbnailUrl: `${base}/thumbnail`,
+    width: photo.width,
+    height: photo.height,
+    createdAt: photo.createdAt,
   })
 }
 
@@ -372,6 +460,7 @@ export class HomeownerApiService {
   readonly #commands: HomeownerCommandPort
   readonly #privateObjects: HomeownerPrivateObjectPort | null
   readonly #projectQuotes: HomeownerProjectQuotePort | null
+  readonly #checkupPhotos: HomeownerCheckupPhotoPort | null
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
 
@@ -381,6 +470,7 @@ export class HomeownerApiService {
     this.#commands = options.commands
     this.#privateObjects = options.privateObjects ?? null
     this.#projectQuotes = options.projectQuotes ?? null
+    this.#checkupPhotos = options.checkupPhotos ?? null
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
   }
@@ -655,6 +745,221 @@ export class HomeownerApiService {
     if (!this.#capabilities.uploads) throw new HomeownerApiError('unavailable')
     const artifacts = await this.#repository.listArtifactMetadata(grant)
     return artifacts.map(safeArtifact)
+  }
+
+  /**
+   * Cheap authorization gate for the raw-image adapter. It must run before the
+   * request body is buffered; reserveCheckupPhotoUpload rechecks the same grant.
+   */
+  async preauthorizeCheckupPhotoUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<void> {
+    await this.#workspaceGrant(context, requestedHomeRef, 'workspace.update')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+  }
+
+  async preauthorizeCheckupPhotoRead(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<void> {
+    await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+  }
+
+  async listCheckupPhotos(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<readonly HomeownerApiCheckupPhotoView[]> {
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const photos = await this.#checkupPhotos.listCheckupPhotos(grant)
+    if (photos.length > HOMEOWNER_CHECKUP_PHOTO_MAX_PER_HOME) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return photos.map(input => {
+      const photo = homeownerCheckupPhotoMetadataSchema.parse(input)
+      if (photo.homeRef !== grant.homeRef) throw new HomeownerApiError('unavailable')
+      return safeCheckupPhoto(photo)
+    })
+  }
+
+  async reserveCheckupPhotoUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiCheckupPhotoUploadReservation> {
+    const parsed = homeownerApiCreateCheckupPhotoInputSchema.safeParse(input)
+    if (!parsed.success) throw new HomeownerApiError('invalid_request')
+    const requestedAt = this.#now()
+    if (parsed.data.observedOn > requestedAt.slice(0, 10)) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.update')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const command = createHomeownerCheckupPhotoInputSchema.parse({
+      ...parsed.data,
+      requestedAt,
+    })
+    const result = await this.#checkupPhotos.reserveCheckupPhotoUpload({ grant, command })
+    if (result.state === 'available') {
+      const photo = homeownerCheckupPhotoMetadataSchema.parse(result.photo)
+      if (photo.homeRef !== grant.homeRef
+        || photo.controllerPrincipalRef !== grant.principalRef
+        || photo.observedOn !== command.observedOn
+        || photo.area !== command.area
+        || photo.viewLabel !== command.viewLabel
+        || photo.caption !== command.caption) {
+        throw new HomeownerApiError('unavailable')
+      }
+      return { state: 'available', photo: safeCheckupPhoto(photo) }
+    }
+    const reservation = homeownerCheckupPhotoReservationSchema.parse(result.reservation)
+    if (reservation.homeRef !== grant.homeRef
+      || reservation.controllerPrincipalRef !== grant.principalRef
+      || reservation.commandRef !== command.commandRef) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return { state: 'reserved', command, reservation }
+  }
+
+  async completeCheckupPhotoUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    commandInput: unknown,
+    reservationInput: unknown,
+    photoInput: SanitizedHomeownerCheckupPhoto,
+  ): Promise<HomeownerApiCheckupPhotoView> {
+    const command = createHomeownerCheckupPhotoInputSchema.safeParse(commandInput)
+    const reservation = homeownerCheckupPhotoReservationSchema.safeParse(reservationInput)
+    const photo = homeownerApiSanitizedCheckupPhotoSchema.safeParse(photoInput)
+    if (!command.success || !reservation.success || !photo.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.update')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+    if (reservation.data.homeRef !== grant.homeRef
+      || reservation.data.controllerPrincipalRef !== grant.principalRef
+      || reservation.data.commandRef !== command.data.commandRef) {
+      throw new HomeownerApiError('not_found')
+    }
+    const stored = homeownerCheckupPhotoMetadataSchema.parse(
+      await this.#checkupPhotos.completeCheckupPhotoUpload({
+        grant,
+        command: command.data,
+        reservation: reservation.data,
+        photo: photo.data,
+      }),
+    )
+    if (stored.photoRef !== reservation.data.photoRef
+      || stored.homeRef !== grant.homeRef
+      || stored.controllerPrincipalRef !== grant.principalRef
+      || stored.observedOn !== command.data.observedOn
+      || stored.area !== command.data.area
+      || stored.viewLabel !== command.data.viewLabel
+      || stored.caption !== command.data.caption
+      || stored.fullStorageObjectRef !== reservation.data.fullStorageObjectRef
+      || stored.thumbnailStorageObjectRef !== reservation.data.thumbnailStorageObjectRef
+      || stored.fullByteLength !== photo.data.fullBytes.byteLength
+      || stored.thumbnailByteLength !== photo.data.thumbnailBytes.byteLength
+      || stored.fullPayloadSha256 !== photo.data.fullPayloadSha256
+      || stored.thumbnailPayloadSha256 !== photo.data.thumbnailPayloadSha256
+      || stored.width !== photo.data.width
+      || stored.height !== photo.data.height) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return safeCheckupPhoto(stored)
+  }
+
+  async rejectCheckupPhotoUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    reservationInput: unknown,
+  ): Promise<void> {
+    const reservation = homeownerCheckupPhotoReservationSchema.safeParse(reservationInput)
+    if (!reservation.success) return
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.update')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) return
+    if (reservation.data.homeRef !== grant.homeRef
+      || reservation.data.controllerPrincipalRef !== grant.principalRef) return
+    await this.#checkupPhotos.rejectCheckupPhotoUpload({
+      grant,
+      reservation: reservation.data,
+      rejectedAt: this.#now(),
+    })
+  }
+
+  async readCheckupPhotoContent(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedPhotoRef: string,
+    variant: HomeownerCheckupPhotoVariant,
+  ): Promise<{ readonly photo: HomeownerApiCheckupPhotoView; readonly bytes: Uint8Array }> {
+    const photoRef = opaqueRef('hpho').safeParse(requestedPhotoRef)
+    if (!photoRef.success || !['full', 'thumbnail'].includes(variant)) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const result = await this.#checkupPhotos.readCheckupPhotoVariant({
+      grant,
+      photoRef: photoRef.data,
+      variant,
+    })
+    const metadata = homeownerCheckupPhotoMetadataSchema.parse(result.photo)
+    const maximum = variant === 'full'
+      ? HOMEOWNER_CHECKUP_PHOTO_FULL_MAX_BYTES
+      : HOMEOWNER_CHECKUP_PHOTO_THUMBNAIL_MAX_BYTES
+    const expected = variant === 'full'
+      ? metadata.fullByteLength
+      : metadata.thumbnailByteLength
+    if (metadata.homeRef !== grant.homeRef
+      || result.bytes.byteLength !== expected
+      || result.bytes.byteLength > maximum) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const finalGrant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (finalGrant.principalRef !== grant.principalRef
+      || finalGrant.homeRef !== grant.homeRef
+      || finalGrant.membershipRef !== grant.membershipRef
+      || finalGrant.membershipRevision !== grant.membershipRevision) {
+      throw new HomeownerApiError('not_found')
+    }
+    return { photo: safeCheckupPhoto(metadata), bytes: result.bytes }
+  }
+
+  async deleteCheckupPhoto(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedPhotoRef: string,
+  ): Promise<{ readonly photoRef: string; readonly state: 'deleted' }> {
+    const photoRef = opaqueRef('hpho').safeParse(requestedPhotoRef)
+    if (!photoRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.update')
+    if (!this.#capabilities.photoCheckups || !this.#checkupPhotos) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const result = await this.#checkupPhotos.deleteCheckupPhoto({
+      grant,
+      photoRef: photoRef.data,
+      deletedAt: this.#now(),
+    })
+    if (result.photoRef !== photoRef.data || result.state !== 'deleted') {
+      throw new HomeownerApiError('unavailable')
+    }
+    return result
   }
 
   async uploadArtifact(

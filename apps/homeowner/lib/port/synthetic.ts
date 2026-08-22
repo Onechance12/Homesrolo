@@ -288,6 +288,21 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async listPhotoCheckups() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async uploadPhotoCheckup() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async deletePhotoCheckup() {
+    await wait()
+    return err('unavailable')
+  },
+
   async submitProjectForReview() {
     await wait()
     return err('unavailable')

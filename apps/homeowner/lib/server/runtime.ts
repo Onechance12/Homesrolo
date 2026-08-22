@@ -52,6 +52,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   projectQuotes: false,
   homeResearch: false,
   uploads: false,
+  photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
   invitations: false,
@@ -105,6 +106,9 @@ export function homeownerApiService(): HomeownerApiService {
       ...(provider && configuration?.projectQuotesEnabled === true
         ? { projectQuotes: provider }
         : {}),
+      ...(provider && configuration?.photoCheckupsEnabled === true
+        ? { checkupPhotos: provider }
+        : {}),
       now: () => new Date().toISOString(),
       capabilities: provider ? Object.freeze({
         magicLinkSignIn: true,
@@ -112,6 +116,7 @@ export function homeownerApiService(): HomeownerApiService {
         projectQuotes: configuration?.projectQuotesEnabled === true,
         homeResearch: homeResearchClient !== null,
         uploads: configuration?.privateUploadsEnabled === true,
+        photoCheckups: configuration?.photoCheckupsEnabled === true,
         projectReview: projectReviewCapabilityEnabled(
           provider !== null,
           jobroloIntakeClient !== null,

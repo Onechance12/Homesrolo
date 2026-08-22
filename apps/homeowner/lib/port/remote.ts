@@ -39,12 +39,14 @@ import {
 } from './types.ts'
 import {
   fetchArtifactUploadTransport,
+  fetchPhotoCheckupUploadTransport,
   type ArtifactUploadTransport,
+  type PhotoCheckupUploadTransport,
   type JsonTransport, type TransportReply, type TransportRequest,
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeHomeResearchResult, decodeList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -58,6 +60,7 @@ const API = '/api/v1'
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
+const PHOTO_REF = /^hpho_[A-Za-z0-9_-]{43}$/
 const QUOTE_REF = /^hquo_[A-Za-z0-9_-]{43}$/
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
 const QUOTE_SCOPE_KEYS = new Set([
@@ -66,6 +69,11 @@ const QUOTE_SCOPE_KEYS = new Set([
   'flashing_transitions', 'penetrations', 'ventilation', 'permits', 'cleanup',
   'workmanship_warranty', 'manufacturer_warranty', 'payment_terms', 'exclusions',
 ])
+const PHOTO_CHECKUP_AREAS = new Set([
+  'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
+  'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+])
+const MAX_PHOTO_INPUT_BYTES = 10 * 1024 * 1024
 
 function validCalendarDate(value: string): boolean {
   if (!CALENDAR_DATE.test(value)) return false
@@ -151,6 +159,7 @@ const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
 export function createRemotePort(
   transport: JsonTransport,
   artifactTransport: ArtifactUploadTransport = fetchArtifactUploadTransport,
+  photoTransport: PhotoCheckupUploadTransport = fetchPhotoCheckupUploadTransport,
 ): HomeownerDataPort {
   async function call<T>(
     request: TransportRequest,
@@ -542,6 +551,89 @@ export function createRemotePort(
       } catch {
         return { ok: false, error: 'invalid' }
       }
+    },
+
+    async listPhotoCheckups(homeRef) {
+      const home = homeRefSegment(homeRef)
+      if (!home) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/photo-checkups` },
+        decodePhotoCheckupList,
+      )
+      if (result.ok && result.value.some(photo => photo.homeRef !== home)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async uploadPhotoCheckup(homeRef, input) {
+      const home = homeRefSegment(homeRef)
+      const caption = input.caption.trim()
+      const viewLabel = input.viewLabel.trim()
+      const today = new Date().toISOString().slice(0, 10)
+      let encodedCaption: string
+      let encodedViewLabel: string
+      try {
+        encodedCaption = caption ? encodeURIComponent(caption) : ''
+        encodedViewLabel = encodeURIComponent(viewLabel)
+      } catch {
+        return { ok: false, error: 'invalid' }
+      }
+      if (!home
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !validCalendarDate(input.observedOn)
+        || input.observedOn > today
+        || !PHOTO_CHECKUP_AREAS.has(input.area)
+        || viewLabel.length < 1
+        || viewLabel.length > 80
+        || /[\u0000-\u001f\u007f]/.test(viewLabel)
+        || encodedViewLabel.length > 400
+        || caption.length > 240
+        || /[\u0000-\u001f\u007f]/.test(caption)
+        || encodedCaption.length > 1_000
+        || !input.file
+        || typeof input.file.arrayBuffer !== 'function'
+        || !['image/jpeg', 'image/png'].includes(input.file.type)
+        || input.file.size < 1
+        || input.file.size > MAX_PHOTO_INPUT_BYTES) {
+        return { ok: false, error: 'invalid' }
+      }
+      let reply: TransportReply
+      try {
+        reply = await photoTransport({
+          path: `${API}/homes/${home}/photo-checkups`,
+          commandRef: input.commandRef,
+          observedOn: input.observedOn,
+          area: input.area,
+          encodedViewLabel,
+          ...(encodedCaption ? { encodedCaption } : {}),
+          file: input.file,
+        })
+      } catch {
+        return { ok: false, error: 'unavailable' }
+      }
+      if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
+      if (reply.status !== 201) return { ok: false, error: portErrorForStatus(reply.status) }
+      try {
+        const photo = decodePhotoCheckup(unwrapEnvelope(reply.body), 'data')
+        if (photo.homeRef !== home) return { ok: false, error: 'invalid' }
+        return { ok: true, value: photo }
+      } catch {
+        return { ok: false, error: 'invalid' }
+      }
+    },
+
+    async deletePhotoCheckup(homeRef, photoRef) {
+      const home = homeRefSegment(homeRef)
+      if (!home || !PHOTO_REF.test(photoRef)) return { ok: false, error: 'not_found' }
+      const result = await call({
+        method: 'DELETE',
+        path: `${API}/homes/${home}/photo-checkups/${photoRef}`,
+      }, decodeDeletedPhotoCheckup)
+      if (result.ok && result.value.photoRef !== photoRef) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
     },
 
     async previewProjectForReview(homeRef, projectRef, input) {
