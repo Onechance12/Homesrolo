@@ -508,17 +508,25 @@ export const HOW_IT_WORKS_STEPS: readonly EducationalSection[] = Object.freeze([
     ]),
   },
   {
-    heading: 'Add supporting records when secure storage opens',
+    heading: 'Repeat the same photo when it helps',
     body: Object.freeze([
-      'Photos, contracts, invoices, manuals, warranties, insurance papers, and seasonal condition checks belong '
-        + 'with the home. Secure upload storage is not live yet, so the current product does not pretend those files were saved.',
+      'On accounts in the private beta, a homeowner can save a JPEG or PNG with an area, a repeatable view name, '
+        + 'and the day it was observed. Homesrolo can place the latest two photos together; it does not diagnose what changed.',
+      'Storing other documents, invoices, manuals, warranties, and insurance files is not available yet.',
     ]),
   },
   {
-    heading: 'Choose what may leave the private account',
+    heading: 'Compare the words in a roof proposal',
     body: Object.freeze([
-      'The planned Passport model adds explicit homeowner review and release controls before any record can support '
-        + 'sharing or public proof. Those release capabilities are not live today.',
+      'A private roof project can record what written proposals include, exclude, leave as an allowance, or do not state. '
+        + 'Homesrolo does not rank a contractor, score a price, or tell a homeowner what a roof should cost.',
+    ]),
+  },
+  {
+    heading: 'Homeowner-controlled sharing comes later',
+    body: Object.freeze([
+      'Project Rooms, invitations for professionals, sharing, arrival information, and saved homeowner approvals '
+        + 'are not available today.',
     ]),
   },
 ])

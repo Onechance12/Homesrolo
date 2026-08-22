@@ -43,15 +43,22 @@ test('seller guide uses the current TREC form landing page and truthful sitemap 
   assert.equal(guide.sources.some(source => source.href.includes('OP-H.pdf')), false)
 })
 
-test('homepage separates the live product from the future release model', () => {
-  assert.match(SITE_DESCRIPTION, /home Rolodex/)
+test('homepage separates live, private-beta, and future homeowner controls', () => {
+  assert.match(SITE_DESCRIPTION, /private home record/)
   assert.ok(SITE_DESCRIPTION.length <= 160)
-  assert.match(SITE_DESCRIPTION, /being built/)
-  assert.match(homepage, /The complete Home\s*Project Passport shown here is the\s*broader product model—not a live sharing or public-proof flow/)
-  assert.match(homepage, /Public releases,\s*recipient sharing, and release-backed reviews are not live today/)
-  assert.match(homepage, /Roof Watch is Homesrolo&rsquo;s first field program, not the boundary of the product/)
+  assert.match(SITE_DESCRIPTION, /maintenance, repairs, remodels/)
+  assert.match(homepage, /Live now<\/strong> Private homes and whole-home project records/)
+  assert.match(homepage, /Private beta<\/strong> Photo checkups and roof proposal notes/)
+  assert.match(homepage, /In development<\/strong> Project Rooms, controlled sharing, and arrival details/)
+  assert.match(homepage, /Project Rooms, professional invitations, sharing, visitor identity, and saved approval records are not\s*available today/)
+  assert.match(homepage, /Address is not published/)
+  assert.match(homepage, /Project is not sent to a pro/)
+  assert.match(homepage, /homeowner-entered scope records/)
+  assert.match(homepage, /Roofing is one chapter\. It is the first one we went deep on/)
 
   for (const stalePromise of [
+    /Sheet 01/,
+    /Product model: the Passport/,
     /The Home Project Passport is how real work becomes/,
     /Because a release names its own provenance, it can later substantiate/,
     /keep every later photo, product, invoice, and warranty/,

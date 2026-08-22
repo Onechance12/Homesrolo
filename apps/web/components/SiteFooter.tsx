@@ -1,56 +1,48 @@
 import Link from 'next/link'
-import { HOMEOWNER_APP_ORIGIN, ROOF_WATCH_PHONE_DISPLAY, ROOF_WATCH_SMS_URL } from '../lib/site.ts'
+import { HOMEOWNER_SIGNIN_URL, ROOF_WATCH_PHONE_DISPLAY, ROOF_WATCH_SMS_URL } from '../lib/site.ts'
 
-/**
- * The colophon keeps the visual character of a drawing-sheet title block while
- * presenting a conventional public-site footer and concise legal boundary.
- */
 export function SiteFooter() {
   return (
     <footer className="colophon">
       <div className="shell">
-        <div className="titleblock">
-          <div className="titleblock__grid">
-            <div className="titleblock__cell">
-              <h2>Homesrolo</h2>
-              <p style={{ color: 'var(--ink-faint)', fontSize: '0.94rem', marginTop: '0.5rem', maxWidth: '32ch' }}>
-                One organized history for the work, documents, and decisions that shape a home.
-              </p>
-            </div>
-            <div className="titleblock__cell">
-              <h2>Learn</h2>
-              <Link href="/how-it-works/">How it works</Link>
-              <Link href="/how-we-verify/">How we verify</Link>
-              <Link href="/services/roofing/">Roofing guide</Link>
-              <Link href="/roof-watch/">Roof Watch</Link>
-              <Link href="/roof-watch/guides/">Roof Watch guides</Link>
-              <Link href="/services/roofing/repair-or-replace/">Repair or replace</Link>
-              <Link href="/services/roofing/cost/">Roof cost</Link>
-              <Link href="/services/roofing/materials/">Roof materials</Link>
-              <Link href="/services/roofing/choose-a-contractor/">Contractor checklist</Link>
-              <Link href="/services/roofing/dfw/">DFW roofing</Link>
-            </div>
-            <div className="titleblock__cell">
-              <h2>Homesrolo</h2>
-              <Link href="/professionals/">Start a home project</Link>
-              <a href={`${HOMEOWNER_APP_ORIGIN}/signin`}>Homeowner sign in</a>
-              <Link href="/for-professionals/">For professionals</Link>
-              <Link href="/for-agents/">For agents</Link>
-              <Link href="/about/">About</Link>
-              <Link href="/editorial-standards/">Editorial standards</Link>
-              <a href={ROOF_WATCH_SMS_URL}>Text Roof Watch: {ROOF_WATCH_PHONE_DISPLAY}</a>
-            </div>
+        <div className="footer-grid">
+          <div className="footer-brand">
+            <p className="footer-brand__name">homesrolo</p>
+            <p>
+              The private Rolodex for home projects and decisions, with seasonal photo checkups and roof proposal
+              notes in private beta.
+            </p>
+            <a className="footer-home-link" href={HOMEOWNER_SIGNIN_URL}>
+              Open my home <span aria-hidden="true">→</span>
+            </a>
           </div>
-          <div className="titleblock__meta" aria-hidden="true">
-            <span>Homeowner education</span>
-            <span>Private home account</span>
-            <span>Project records</span>
-            <span>Sources shown</span>
+          <div>
+            <h2>Product</h2>
+            <Link href="/how-it-works/">How it works</Link>
+            <Link href="/professionals/">Start a home project</Link>
+            <Link href="/how-we-verify/">How we verify</Link>
+            <Link href="/academy/">Home care</Link>
+          </div>
+          <div>
+            <h2>People</h2>
+            <Link href="/for-professionals/">For professionals</Link>
+            <Link href="/for-agents/">For agents</Link>
+            <Link href="/about/">About Homesrolo</Link>
+            <Link href="/editorial-standards/">Editorial standards</Link>
+          </div>
+          <div>
+            <h2>Roofing</h2>
+            <Link href="/roof-watch/">Roof Watch</Link>
+            <Link href="/roof-watch/guides/">Roof Watch guides</Link>
+            <Link href="/services/roofing/">Roofing center</Link>
+            <a href={ROOF_WATCH_SMS_URL}>Text Roof Watch: {ROOF_WATCH_PHONE_DISPLAY}</a>
           </div>
         </div>
 
         <p className="footer-legal">
-          Homesrolo provides general homeowner education, not legal, insurance, public adjusting, engineering, or contracting advice. Requirements and project conditions vary. Check current local rules and consult an appropriately licensed professional about your situation.
+          Homesrolo provides general homeowner education, not legal, insurance, public adjusting, engineering, or
+          contracting advice. Requirements and project conditions vary. Check current local rules and consult an
+          appropriately licensed professional about your situation.
         </p>
       </div>
     </footer>
