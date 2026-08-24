@@ -6,11 +6,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 }
 
-/**
- * A 404 that helps rather than apologises. Reached both by a bad URL and by any
- * company slug that does not exist, since the directory builds only known
- * slugs and refuses to invent a page for anything else.
- */
+/** A 404 that returns people to the working whole-home product. */
 export default function NotFound() {
   return (
     <section className="section">
@@ -19,8 +15,8 @@ export default function NotFound() {
           <p className="eyebrow">404</p>
           <h1>That page isn&rsquo;t here.</h1>
           <p className="lede">
-            The link may be old, or the address may have a typo. If you were looking for a company listing, only
-            sample listings exist in this preview — there are no real company profiles yet.
+            The link may be old, or the address may have a typo. Start again with your Home Record, a home-care
+            question, or the project in front of you.
           </p>
         </div>
 

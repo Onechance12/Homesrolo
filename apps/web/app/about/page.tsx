@@ -6,7 +6,7 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
   title: 'About Homesrolo',
-  description: 'Homesrolo gives a home an organized project history and gives homeowners clear, sourced information before they hire a professional.',
+  description: 'Homesrolo gives a home one organized record for its care, projects, people, decisions, files, and repeatable photo checkups.',
   canonical: '/about/',
 })
 
@@ -25,7 +25,7 @@ export default function AboutPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       <section className="section section--drafting">
         <div className="shell">
-          <PageHeader eyebrow="About Homesrolo" title="A better memory for every home" lede="Homesrolo helps homeowners understand major projects, organize the records, and keep the history attached to the property." />
+          <PageHeader eyebrow="About Homesrolo" title="A better memory for every home" lede="Homesrolo gives the homeowner one private Home Record: a practical place to understand the house, organize its projects, and remember who did what." />
         </div>
       </section>
       <section className="section section--sunken">
@@ -34,9 +34,9 @@ export default function AboutPage() {
       <section className="section">
         <div className="shell">
           <div className="prose">
-            <h2>Start with the roofing center</h2>
-            <p>The first public guides cover roof cost, materials, contractor checks, and Dallas Fort Worth permit rules.</p>
-            <p><Link className="btn btn--primary" href="/services/roofing/">Read the roofing guides</Link> <Link className="btn btn--quiet" href="/editorial-standards/">Read the editorial standards</Link></p>
+            <h2>Start where your home needs you</h2>
+            <p>Use the home-care map for routine checks, the project guide for bigger work, or open your home record and start with something you already know.</p>
+            <p><Link className="btn btn--primary" href="/home-care/">Explore home care</Link> <Link className="btn btn--quiet" href="/home-record/">Build a better home record</Link></p>
           </div>
         </div>
       </section>

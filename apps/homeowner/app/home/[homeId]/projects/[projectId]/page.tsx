@@ -185,7 +185,7 @@ export default function ProjectPage({
       {project.isSynthetic ? <section className="panel" aria-labelledby="project-photos">
         <div className="panel__head"><h2 id="project-photos">Photos</h2></div>
         {project.photos.length === 0 ? (
-          <EmptyState title="No photos yet" body="Photos will live with this project as the file grows." />
+          <EmptyState title="No photos in this sample" body="This sample project has no saved photo records." />
         ) : (
           <div className="plates">
             {project.photos.map(photo => <PhotoPlate key={photo.photoRef} photo={photo} />)}
@@ -253,22 +253,6 @@ export default function ProjectPage({
         </section>
       ) : null}
 
-      {!project.isSynthetic && sessionReady && !uploadsEnabled ? (
-        <section className="panel stack" aria-labelledby="project-files-unavailable"
-          style={{ ['--stack-gap' as never]: '0.65rem' }}>
-          <div className="panel__head">
-            <div>
-              <h2 id="project-files-unavailable">Project files</h2>
-              <p>Original proposals, photos, warranties, and project papers.</p>
-            </div>
-          </div>
-          <div className="notice">
-            <strong>Private uploads are unavailable right now.</strong>{' '}
-            Homesrolo will not pretend a file was stored, scanned, or attached when it was not.
-          </div>
-        </section>
-      ) : null}
-
       {!project.isSynthetic && project.trade === 'Roofing' && projectQuotesEnabled ? (
         <RoofQuoteVault
           homeRef={homeId}
@@ -276,23 +260,6 @@ export default function ProjectPage({
           projectFiles={projectFiles}
           uploadsEnabled={uploadsEnabled}
         />
-      ) : null}
-
-      {!project.isSynthetic && project.trade === 'Roofing'
-        && sessionReady && !projectQuotesEnabled ? (
-        <section className="panel stack" aria-labelledby="roof-quotes-unavailable"
-          style={{ ['--stack-gap' as never]: '0.65rem' }}>
-          <div className="panel__head">
-            <div>
-              <h2 id="roof-quotes-unavailable">Roof proposals</h2>
-              <p>Private line-by-line proposal records.</p>
-            </div>
-          </div>
-          <div className="notice">
-            <strong>Proposal comparison is unavailable right now.</strong>{' '}
-            Homesrolo will not pretend a proposal was saved when the private record is not ready.
-          </div>
-        </section>
       ) : null}
 
       {!project.isSynthetic && !sessionReady ? (
@@ -445,7 +412,7 @@ export default function ProjectPage({
             </p>
           </div>
         ) : (
-          <EmptyState title="No warranty recorded" body="If this work carries coverage, it would be recorded here with its dates." />
+          <EmptyState title="No warranty recorded" body="This sample project has no warranty record." />
         )}
       </section> : null}
 

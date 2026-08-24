@@ -2,60 +2,62 @@
 
 import Link from 'next/link'
 import { use } from 'react'
-import { usePort, usePortMode } from '../../../lib/port/provider.tsx'
+import { usePort, usePortMode, useSession } from '../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../components/states.tsx'
 import { RELATIONSHIP_COPY } from '../../../components/relationship.ts'
-import { HomeResearchAssistant } from '../../../components/HomeResearchAssistant.tsx'
+import { STATUS_LABEL, STATUS_PILL } from '../../../components/projectStatus.ts'
 import { homeLabel, homeLocality } from '../../../lib/port/types.ts'
 
-/**
- * The home dashboard: the front page of the property's Rolodex. A masthead
- * that reads like a document header, the record so far, and a few useful
- * destinations — deliberately not a metrics wall.
- */
+const HOME_AREAS = [
+  'Interior & remodel',
+  'Heating & cooling',
+  'Plumbing',
+  'Electrical',
+  'Appliances',
+  'Exterior & gutters',
+  'Roof',
+  'Yard & landscaping',
+  'Pest control',
+  'Pool',
+  'New construction',
+  'Something else',
+] as const
+
+/** The useful front door to one private home record. */
 export default function DashboardPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const mode = usePortMode()
   const port = usePort()
+  const session = useSession()
   const home = usePortCall(() => port.getHome(homeId))
-  const timeline = usePortCall(() => port.listTimeline(homeId), value => value.length === 0)
-  const projects = usePortCall(() => port.listProjects(homeId))
-  const documents = usePortCall(() => port.listDocuments(homeId))
-  const warranties = usePortCall(() => port.listWarranties(homeId))
-  const maintenance = usePortCall(() => port.listMaintenance(homeId))
+  const projects = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
+  const checkupsEnabled = mode === 'remote'
+    && session.state.kind === 'signed_in'
+    && session.state.capabilities.photoCheckups
 
   if (home.state.status === 'loading') {
-    return <div className="panel"><Skeleton lines={5} label="Opening the home file" /></div>
+    return <div className="panel"><Skeleton lines={5} label="Opening the home record" /></div>
   }
   if (home.state.status === 'error') {
     return home.state.error === 'not_found'
-      ? <EmptyState title="No such home" body="This file does not exist in the demo. Pick a home from your list."
+      ? <EmptyState title="No such home" body="This home record could not be found. Pick another home from your list."
           action={<Link className="btn btn--quiet" href="/homes">Your homes</Link>} />
-      : <ErrorState retry={home.retry} error={home.state.status === 'error' ? home.state.error : undefined} />
+      : <ErrorState retry={home.retry} error={home.state.error} />
   }
   if (home.state.status !== 'ready') return null
   const file = home.state.value
-
-  const count = (s: { status: string; value?: unknown }) =>
-    s.status === 'ready' && Array.isArray(s.value) ? s.value.length : null
-
-  // Synthetic counts come from listing the demo records; server counts come
-  // from the home view itself, because the list routes do not exist yet.
-  const projectCount = file.source === 'server' ? file.projectCount : count(projects.state)
-  const documentCount = file.source === 'server' ? file.documentCount : count(documents.state)
-  const warrantyCount = file.source === 'server' ? file.warrantyCount : count(warranties.state)
-  const upcoming = file.source === 'server'
-    ? file.maintenanceCount
-    : maintenance.state.status === 'ready'
-      ? maintenance.state.value.filter(item => item.state === 'upcoming').length
-      : null
+  const projectCount = file.source === 'server'
+    ? file.projectCount
+    : projects.state.status === 'ready'
+      ? projects.state.value.length
+      : file.projectCount
 
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
       <header className="filehead">
         <p className="filehead__label">
-          <span>Home Rolodex</span>
+          <span>Private home record</span>
           <span aria-hidden="true">{file.homeRef.slice(0, 14)}…</span>
         </p>
         <h1>{homeLabel(file)}</h1>
@@ -70,8 +72,6 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
             ))}
           </dl>
         ) : (
-          // The server view supplies exactly these facts and no others; nothing
-          // here is invented to fill the row out.
           <dl className="filehead__facts">
             <div>
               <dt>Relationship</dt>
@@ -87,84 +87,91 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
 
       <section className="roof-callout" aria-labelledby="home-rolo-callout-title">
         <div>
-          <p className="mono">Everything about this home, connected</p>
-          <h2 id="home-rolo-callout-title">Build the Rolodex for the whole home.</h2>
+          <p className="mono">Plan it · Track it · Remember it</p>
+          <h2 id="home-rolo-callout-title">One record for work across the whole home.</h2>
           <p>
-            Keep roof, HVAC, plumbing, electrical, interior, exterior, yard, pest,
-            appliance, and other work attached to one home—past, present, or planned.
+            Start a new project, keep up with work in progress, or add something completed years ago.
+            Exact dates are optional when you do not know them.
           </p>
         </div>
-        <Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Open project center</Link>
+        <Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Add a project</Link>
       </section>
-
-      <HomeResearchAssistant homeRef={homeId} suggestedAddress={homeLocality(file)} />
 
       <dl className="cardgrid cardgrid--2 cardgrid--4" style={{ margin: 0 }}>
         <Link className="stat" href={`/home/${homeId}/projects`}>
           <dt>Projects</dt>
-          <dd>{projectCount ?? '—'}</dd>
-          <span className="stat__note">Work recorded on this home</span>
+          <dd>{projectCount}</dd>
+          <span className="stat__note">Planned, active, and completed work</span>
         </Link>
+        <Link className="stat" href={`/home/${homeId}/projects`}>
+          <dt>Past work</dt>
+          <dd>Add history</dd>
+          <span className="stat__note">Record an old repair, service, or remodel</span>
+        </Link>
+        {checkupsEnabled ? (
+          <Link className="stat" href={`/home/${homeId}/checkups`}>
+            <dt>Checkups</dt>
+            <dd>Photos</dd>
+            <span className="stat__note">Repeat and compare the same home views</span>
+          </Link>
+        ) : null}
         <Link className="stat" href={`/home/${homeId}/documents`}>
-          <dt>Home library</dt>
-          <dd>{documentCount ?? '—'}</dd>
-          <span className="stat__note">Photos, papers, manuals, and records</span>
-        </Link>
-        <Link className="stat" href={`/home/${homeId}/warranties`}>
-          <dt>Warranties</dt>
-          <dd>{warrantyCount ?? '—'}</dd>
-          <span className="stat__note">Coverage on past work</span>
-        </Link>
-        <Link className="stat" href={`/home/${homeId}/timeline`}>
-          <dt>Upcoming care</dt>
-          <dd>{upcoming ?? '—'}</dd>
-          <span className="stat__note">Maintenance on the calendar</span>
+          <dt>Home record</dt>
+          <dd>Open</dd>
+          <span className="stat__note">Find this home&rsquo;s connected records</span>
         </Link>
       </dl>
 
-      <section className="panel" aria-labelledby="record-so-far">
+      <section className="panel" aria-labelledby="whole-home-areas">
         <div className="panel__head">
-          <h2 id="record-so-far">The record so far</h2>
-          <Link className="panel__more" href={`/home/${homeId}/timeline`}>Full timeline →</Link>
+          <div>
+            <p className="mono">Twelve starting points</p>
+            <h2 id="whole-home-areas">Every part of the home belongs here.</h2>
+          </div>
+          <Link className="panel__more" href={`/home/${homeId}/projects`}>Choose a category →</Link>
         </div>
-        {file.source === 'server' ? (
+        <ul className="home-area-list">
+          {HOME_AREAS.map((area, index) => (
+            <li key={area}><span>{String(index + 1).padStart(2, '0')}</span>{area}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="panel" aria-labelledby="recent-projects">
+        <div className="panel__head">
+          <h2 id="recent-projects">Project history</h2>
+          <Link className="panel__more" href={`/home/${homeId}/projects`}>All projects →</Link>
+        </div>
+        {projects.state.status === 'loading' && <Skeleton lines={4} label="Loading project history" />}
+        {projects.state.status === 'error' && <ErrorState retry={projects.retry} error={projects.state.error} />}
+        {projects.state.status === 'empty' && (
           <EmptyState
-            title="The record view is not available yet"
-            body="The project center is available now. The full home timeline comes next."
-            action={<Link className="btn btn--quiet" href={`/home/${homeId}/projects`}>Open projects</Link>}
-          />
-        ) : (
-          <>
-        {timeline.state.status === 'loading' && <Skeleton lines={4} label="Loading the record" />}
-        {timeline.state.status === 'error' && <ErrorState retry={timeline.retry} error={timeline.state.status === 'error' ? timeline.state.error : undefined} />}
-        {timeline.state.status === 'empty' && (
-          <EmptyState
-            title="The record starts with you"
-            body="Nothing has been added to this home's record yet. Its first past, current, or planned project becomes page one."
-            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Add a project</Link>}
+            title="Start anywhere in the home&rsquo;s history"
+            body="Add something being considered, work happening now, or a project completed in the past."
+            action={<Link className="btn btn--primary" href={`/home/${homeId}/projects`}>Add the first project</Link>}
           />
         )}
-        {timeline.state.status === 'ready' && (
-          <ol className="thread">
-            {timeline.state.value.slice(0, 4).map(entry => (
-              <li key={entry.entryRef}>
-                <span className="mono thread__on">{entry.on}</span>
-                {entry.href
-                  ? <Link className="thread__title" href={entry.href}>{entry.title}</Link>
-                  : <span className="thread__title">{entry.title}</span>}
-                <p className="thread__detail">{entry.detail}</p>
+        {projects.state.status === 'ready' && (
+          <ul className="rows">
+            {projects.state.value.slice(0, 4).map(project => (
+              <li key={project.projectRef}>
+                <Link className="row" href={`/home/${homeId}/projects/${project.projectRef}`}>
+                  <span className="row__body">
+                    <span className="row__title">{project.title}</span>
+                    <span className="row__sub">{project.trade} · {project.performedOn ?? 'Date not recorded'}</span>
+                  </span>
+                  <span className="row__end">
+                    <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>
+                  </span>
+                </Link>
               </li>
             ))}
-          </ol>
-        )}
-          </>
+          </ul>
         )}
       </section>
 
       {mode === 'synthetic' ? (
-        <p className="mono">
-          Every entry above is synthetic demo data. This shell saves nothing.
-        </p>
+        <p className="mono">Every entry above is synthetic demo data. This shell saves nothing.</p>
       ) : null}
     </div>
   )

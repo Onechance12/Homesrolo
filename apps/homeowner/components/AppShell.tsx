@@ -13,21 +13,19 @@ import { usePort, usePortMode, useSession } from '../lib/port/provider.tsx'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { Skeleton, UnauthorizedState } from './states.tsx'
 import {
-  HouseMark, IconDocs, IconGear, IconHome, IconProjects, IconShield, IconThread,
+  HouseMark, IconCamera, IconDocs, IconGear, IconHome, IconProjects,
 } from './icons.tsx'
 import { SignOutButton } from './SignOutButton.tsx'
 
 const NAV = [
   { segment: '', label: 'Home', tabLabel: 'Home', icon: IconHome },
   { segment: 'projects', label: 'Projects', tabLabel: 'Projects', icon: IconProjects },
-  { segment: 'documents', label: 'Home library', tabLabel: 'Library', icon: IconDocs },
-  { segment: 'timeline', label: 'Events & care', tabLabel: 'Care', icon: IconThread },
-  { segment: 'warranties', label: 'Warranties', tabLabel: 'Warranties', icon: IconShield },
-  { segment: 'settings', label: 'Settings', tabLabel: 'Settings', icon: IconGear },
+  { segment: 'documents', label: 'Home record', tabLabel: 'Record', icon: IconDocs },
+  {
+    segment: 'checkups', label: 'Checkups', tabLabel: 'Checkups', icon: IconCamera,
+    requiresPhotoCheckups: true,
+  },
 ] as const
-
-/** The five that fit a thumb; settings lives in the rail and the Home screen. */
-const TAB_SEGMENTS = ['', 'projects', 'documents', 'timeline', 'warranties'] as const
 
 function navHref(homeId: string, segment: string) {
   return segment ? `/home/${homeId}/${segment}` : `/home/${homeId}`
@@ -67,6 +65,8 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
   }
 
   const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
+  const checkupsEnabled = mode === 'remote' && session.capabilities.photoCheckups
+  const visibleNav = NAV.filter(item => !('requiresPhotoCheckups' in item) || checkupsEnabled)
 
   return (
     <div className="shell">
@@ -79,20 +79,22 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
         </Link>
         <span className="topbar__home">{alias}</span>
-        <SignOutButton compact />
+        <Link className="topbar__account" href={`/home/${homeId}/settings`}>
+          <IconGear size={19} /> <span>Account</span>
+        </Link>
       </header>
 
-      <nav className="rail" aria-label="Home Rolodex">
+      <nav className="rail" aria-label="Home Record">
         <Link href="/homes" className="rail__brand">
           <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
         </Link>
         <div className="rail__home">
-          <span className="mono">Home Rolodex</span>
+          <span className="mono">Home Record</span>
           <strong>{alias}</strong>
           <Link href="/homes" style={{ fontSize: '0.8rem' }}>Switch home</Link>
         </div>
         <div className="rail__nav">
-          {NAV.map(({ segment, label, icon: Icon }) => (
+          {visibleNav.map(({ segment, label, icon: Icon }) => (
             <Link
               key={segment}
               href={navHref(homeId, segment)}
@@ -111,6 +113,9 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           {mode === 'synthetic'
             ? <span className="mono">Demo session — memory only</span>
             : null}
+          <Link className="rail__account" href={`/home/${homeId}/settings`}>
+            <IconGear size={18} /> Account &amp; settings
+          </Link>
           <SignOutButton compact />
         </div>
       </nav>
@@ -119,17 +124,16 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         {children}
       </main>
 
-      <nav className="tabbar" aria-label="Home Rolodex sections">
-        {NAV.filter(item => (TAB_SEGMENTS as readonly string[]).includes(item.segment))
-          .map(({ segment, tabLabel, icon: Icon }) => (
-            <Link
-              key={segment}
-              href={navHref(homeId, segment)}
-              aria-current={isCurrent(pathname, homeId, segment) ? 'page' : undefined}
-            >
-              <Icon size={22} /> {tabLabel}
-            </Link>
-          ))}
+      <nav className="tabbar" aria-label="Home Record sections">
+        {visibleNav.map(({ segment, tabLabel, icon: Icon }) => (
+          <Link
+            key={segment}
+            href={navHref(homeId, segment)}
+            aria-current={isCurrent(pathname, homeId, segment) ? 'page' : undefined}
+          >
+            <Icon size={22} /> {tabLabel}
+          </Link>
+        ))}
       </nav>
     </div>
   )

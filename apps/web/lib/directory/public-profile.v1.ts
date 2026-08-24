@@ -12,7 +12,7 @@
  *     Ordering is computed from stable identity alone (see ordering.ts), so
  *     placement cannot be bought.
  *
- * The wedge this exists to serve is the Home Project Passport: a homeowner
+ * The wedge this exists to serve is the Home Record: a homeowner
  * explicitly releases a record of real work, and that release is what can later
  * substantiate a company's project proof. Until a release exists, a claim about
  * a company is self-reported and must say so.

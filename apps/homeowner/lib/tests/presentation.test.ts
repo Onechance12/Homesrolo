@@ -57,26 +57,30 @@ test('interactive controls carry a real minimum hit area', () => {
 test('new-home setup is a mobile-first progressive form, not a chatbot transcript', () => {
   const page = read('app/homes/new/page.tsx')
   assert.match(page, /Set up your home/)
-  assert.match(page, /Step \{stage\.number\} of 4/,
-    'the current stage and total are always visible')
-  assert.match(page, /Skip optional details — leave them unrecorded/,
-    'a homeowner can enter the product after only the required basics')
+  assert.match(page, /Step \{reviewing \? 2 : 1\} of 2/,
+    'the short setup and review stages are always visible')
+  assert.match(page, /Home name \(required\)[\s\S]*City, town, or neighborhood \(required\)/,
+    'the form asks for only a familiar name and general area up front')
+  assert.match(page, /showOptional[\s\S]*Add optional details/,
+    'home type, age, and systems stay behind an optional disclosure')
+  assert.match(page, /finishOptionalLater\(next\)/,
+    'omitting optional answers produces a complete, explicit intake')
+  assert.match(page, /Not recorded/,
+    'omitted facts are shown honestly instead of being guessed')
   assert.doesNotMatch(page, /Update it anytime|update it after the file opens|correct it later/,
     'setup never promises editing that the saved home file does not offer yet')
-  assert.match(page, /editing saved details after the file opens is not available yet/,
-    'the review step states the current saved-detail limitation')
-  assert.match(page, /<ReviewCard[\s\S]*draft=\{draftFrom\(state\)\}[\s\S]*onEdit=\{editStep\}/,
-    'review answers have a direct edit path')
+  assert.match(page, /<ReviewCard draft=\{draftFrom\(state\)\} \/>/,
+    'the saved intake draft is rendered for review before creation')
+  assert.match(page, /← Edit details/,
+    'the review step has one clear route back to the editable form')
   assert.doesNotMatch(page, /state\.transcript\.map/,
     'the deterministic machine must not be presented as a fake AI conversation')
+  assert.doesNotMatch(page, /stageFor|questionFor|choicesFor/,
+    'the page no longer renders the intake machine as a question-by-question chat')
 
   assert.match(css, /\.gate__card--setup\s*\{[^}]*max-width:\s*46rem/)
-  assert.match(css, /\.setup-field input\[type='text'\][\s\S]*min-height:\s*54px/,
-    'setup inputs are large enough to use on a phone')
-  assert.match(css, /\.setup-option\s*\{[^}]*min-height:\s*62px/,
-    'choice cards have generous touch targets')
-  assert.match(css, /@media \(max-width: 42rem\)[\s\S]*\.setup-options\s*\{\s*grid-template-columns:\s*1fr/,
-    'phone choices stack into one readable column')
+  assert.match(css, /@media \(max-width: 42rem\)[\s\S]*\.gate__card--setup\s*\{/,
+    'the setup card has an explicit phone layout')
 })
 
 test('the shell has a language, a skip link, and a main landmark', () => {
@@ -410,10 +414,8 @@ test('roof proposal comparison is private, neutral, editable, and separate from 
     'the disabled upload capability makes zero artifact-list requests')
   assert.match(project, /session\.state\.capabilities\.projectQuotes/,
     'the proposal vault is gated independently from general persistence')
-  assert.match(project, /sessionReady\s*&&\s*!projectQuotesEnabled/,
-    'the page does not flash an unavailable quote state while session capabilities load')
-  assert.match(project, /Private uploads are unavailable right now/,
-    'the capability-off state is visible and truthful')
+  assert.doesNotMatch(project, /project-files-unavailable|roof-quotes-unavailable|Private uploads are unavailable/,
+    'capability-off tools are omitted instead of appearing as dead product surfaces')
   assert.match(vault, /Scope only—not a price score/)
   assert.match(vault, /Homesrolo does not estimate this roof, rank proposals/)
   assert.match(vault, /Not reviewed/)
@@ -451,81 +453,98 @@ test('a nameless server session renders a neutral label, never "as null"', () =>
     'the shell has the same neutral fallback')
 })
 
-test('disabled affordances say why, instead of pretending', () => {
+test('the finished portal omits fake disabled and roadmap affordances', () => {
   const signin = read('app/signin/page.tsx')
-  assert.match(signin, /Email sign-in is unavailable in the demo/i)
-  assert.match(signin, /This local demo uses only sample data/i)
+  assert.match(signin, /SYNTHETIC_NOTICE/)
   const settings = read('app/home/[homeId]/settings/page.tsx')
-  assert.match(settings, /not built yet/i)
   const documents = read('app/home/[homeId]/documents/page.tsx')
-  assert.match(documents, /Uploads are unavailable/i)
+  assert.doesNotMatch(signin, /Email sign-in is unavailable in the demo/i)
+  assert.doesNotMatch(settings, /not built yet|coming soon|disabled/i)
+  assert.doesNotMatch(documents, /Uploads are unavailable|not open yet|coming soon/i)
 })
 
-test('settings reports session capabilities, not internal implementation flags', () => {
+test('settings exposes account actions, not an internal capability matrix', () => {
   const settings = read('app/home/[homeId]/settings/page.tsx')
-  assert.match(settings, /session\.capabilities/,
-    'availability is derived from the exact capabilities returned for this session')
-  assert.doesNotMatch(settings, /PORT_IMPLEMENTATION_STATUS/,
-    'foundation implementation status cannot be presented as runtime availability')
-  assert.match(settings, /Home research assistant/)
-  assert.match(settings, /Private file uploads/)
-  assert.match(settings, /available \? 'Available' : 'Off'/,
-    'each runtime capability has a plain-language availability state')
+  assert.match(settings, /Account &amp; settings/)
+  assert.match(settings, /Switch home/)
+  assert.match(settings, /Sign out/)
+  assert.match(settings, /href=\{`\/home\/\$\{homeId\}`\}/,
+    'the dashboard is available from account settings')
+  for (const route of ['projects', 'documents', 'checkups']) {
+    assert.match(settings, new RegExp(`href=\\{\`/home/\\$\\{homeId\\}/${route}\`\\}`),
+      `${route} is available from account settings`)
+  }
+  assert.match(settings, /checkupsEnabled[\s\S]*session\.capabilities\.photoCheckups/,
+    'the only capability read fail-closes a real destination link')
+  assert.doesNotMatch(settings, /CAPABILITY_LABELS|Available for this session|Save changes|disabled/,
+    'runtime flags and fake edit controls are not homeowner-facing')
 })
 
-test('the authenticated home is a whole-home Rolodex, not a roofing dashboard', () => {
+test('the authenticated home is a whole-home record, not a roofing dashboard', () => {
   const shell = read('components/AppShell.tsx')
   const dashboard = read('app/home/[homeId]/page.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
 
-  assert.match(shell, /label: 'Home library', tabLabel: 'Library'/,
-    'desktop and phone navigation name the library at the right size')
-  assert.match(shell, /label: 'Events & care', tabLabel: 'Care'/,
-    'routine home care is a first-class destination')
-  assert.match(dashboard, /Build the Rolodex for the whole home\./)
-  assert.match(dashboard, /roof, HVAC, plumbing, electrical, interior, exterior, yard, pest/,
-    'the dashboard opens on the whole property')
+  assert.match(shell, /label: 'Home record', tabLabel: 'Record'/)
+  assert.match(shell, /label: 'Checkups', tabLabel: 'Checkups'/)
+  assert.match(shell, /visibleNav = NAV\.filter\(item => !\('requiresPhotoCheckups' in item\) \|\| checkupsEnabled\)/,
+    'the photo destination disappears unless the exact capability is working')
+  assert.match(shell, /Account &amp; settings/,
+    'account settings remain available without occupying primary navigation')
+  assert.doesNotMatch(shell, /label: 'Warranties'|label: 'Events & care'|label: 'Settings'/,
+    'primary navigation contains only destinations that work today')
+  assert.match(dashboard, /One record for work across the whole home\./)
+  assert.match(dashboard, /Every part of the home belongs here\./)
+  for (const area of [
+    'Roof', 'Interior & remodel', 'Heating & cooling', 'Plumbing', 'Electrical',
+    'Exterior & gutters', 'Yard & landscaping', 'Appliances', 'Pest control',
+    'Pool', 'New construction', 'Something else',
+  ]) {
+    assert.match(dashboard, new RegExp(area.replace('&', '\\&')),
+      `${area} is one of the twelve whole-home starting points`)
+  }
+  assert.match(dashboard, /const HOME_AREAS = \[\s*'Interior & remodel'/,
+    'the whole-home inventory must not default to roofing')
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  assert.match(projects, /const CATEGORIES:[^=]+?= \[\s*\{ value: 'interior'/,
+    'the project category picker must not default to roofing')
   assert.doesNotMatch(dashboard, /Need roof work\?|Start a roof project|Open roof projects/,
     'roofing is never presented as the dashboard default')
-
-  for (const area of [
-    'Photos & home checkups',
-    'Insurance',
-    'Projects & upgrades',
-    'Inventory & manuals',
-    'Warranties',
-    'Taxes, value & sale',
-    'Events & maintenance',
-    'People & service history',
-  ]) {
-    assert.match(library, new RegExp(area.replace('&', '\\&')),
-      `${area} has an honest place in the library map`)
-  }
-  assert.match(library, /state\.status === 'ready' \? state\.value : \[\]/,
-    'file and photo rows can come only from the private port response')
-  assert.match(library, /record\.kind === 'photo_set'/,
-    'returned photos have a dedicated condition-record surface')
+  assert.match(dashboard, /Past work[\s\S]*Add history/,
+    'historical projects are a first-class dashboard action')
+  assert.match(dashboard, /Project history/)
+  assert.match(dashboard, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
+  assert.match(dashboard, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
+    'the dashboard never links to a disabled photo workspace')
+  assert.match(library, /Your working records/)
+  assert.match(library, /Project history/)
+  assert.match(library, /Condition record/)
   assert.match(library, /session\.state\.capabilities\.uploads/,
     'the add-file form remains fail-closed on the exact upload capability')
-  assert.match(library, /Uploads are unavailable right now/,
-    'the production capability-off state stays visible and specific')
+  assert.match(library, /photoCheckupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
+    'the Home record never links to a disabled photo workspace')
+  assert.doesNotMatch(library, /Insurance|Inventory|Taxes|Events & maintenance|People & service history/,
+    'the record index does not advertise unbuilt sections')
 })
 
 test('seasonal photo checkups are mobile-first, exact-view, and independently gated', () => {
+  const checkupPage = read('app/home/[homeId]/checkups/page.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
   const checkups = read('components/PhotoCheckups.tsx')
   const remote = read('lib/port/remote.ts')
   const wire = read('lib/port/wire.ts')
   const transport = read('lib/port/transport.ts')
 
-  assert.match(library, /session\.state\.capabilities\.photoCheckups/,
-    'the image-only beta has its own server-reported capability')
+  assert.match(checkupPage, /session\.state\.capabilities\.photoCheckups/,
+    'the checkup workspace has its own server-reported capability')
   assert.match(library, /session\.state\.capabilities\.uploads/,
     'generic documents remain behind their separate capability')
+  assert.match(checkupPage, /<PhotoCheckups homeRef=\{homeId\} enabled port=\{port\}/,
+    'the working capability opens the first-class photo workspace')
+  assert.match(checkupPage, /router\.replace\(`\/home\/\$\{homeId\}\/documents`\)/,
+    'a session without that capability returns to a working record destination')
   assert.match(checkups, /enabled\s*\n\s*\? port\.listPhotoCheckups\(homeRef\)\s*\n\s*:\s*Promise\.resolve/,
     'capability false makes no photo-list port call')
-  assert.match(library, /key=\{`\$\{homeId\}:\$\{photoCheckupsEnabled \? 'enabled' : 'disabled'\}`\}/,
-    'home, session, or capability changes remount the private photo surface before its first real read')
 
   for (const value of [
     'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
@@ -539,7 +558,7 @@ test('seasonal photo checkups are mobile-first, exact-view, and independently ga
     'the picker offers only the two accepted image formats')
   assert.doesNotMatch(checkups, /capture="environment"/,
     'mobile homeowners can choose existing photos instead of being forced into the camera')
-  assert.match(checkups, /HEIC is not accepted[\s\S]*JPEG copy/,
+  assert.match(checkups, /For an HEIC image[\s\S]*JPEG copy/,
     'unsupported iPhone photos have honest conversion guidance')
   assert.match(checkups, /commandRef\.current \?\?= mintCommandRef\(\)/,
     'one upload attempt keeps its idempotency ref across a retry')
@@ -572,6 +591,8 @@ test('seasonal photo checkups are mobile-first, exact-view, and independently ga
     'delete confirmation receives keyboard focus')
   assert.match(checkups, /does not inspect or diagnose the home/,
     'the record never poses as an AI or professional inspection')
+  assert.doesNotMatch(checkups, /\bbeta\b|not open yet/i,
+    'the live checkup workspace contains no roadmap language')
 
   const photoTransport = transport.slice(transport.indexOf('export const fetchPhotoCheckupUploadTransport'))
   assert.match(photoTransport, /body:\s*request\.file/,
@@ -609,17 +630,18 @@ test('whole-home project history never invents a category or work date', () => {
     'record creation time is never relabeled as the work date')
 })
 
-test('capability-off library, care, and warranty surfaces are intentional states, not errors', () => {
+test('the home record avoids disabled routes and old paths remain compatible', () => {
   const library = read('app/home/[homeId]/documents/page.tsx')
   const care = read('app/home/[homeId]/timeline/page.tsx')
   const warranties = read('app/home/[homeId]/warranties/page.tsx')
 
-  assert.match(library, /libraryReadable[\s\S]*\? port\.listDocuments\(homeId\)[\s\S]*Promise\.resolve/,
-    'the Library does not call the disabled private-file route')
-  assert.match(care, /Care scheduling is not connected yet/)
-  assert.match(care, /Project history is live now/)
-  assert.match(warranties, /Warranty storage is not open yet/)
-  assert.match(warranties, /Homesrolo is not holding a warranty file/)
+  assert.match(library, /recordsReadable[\s\S]*\? port\.listDocuments\(homeId\)[\s\S]*Promise\.resolve/,
+    'the Home record does not call the disabled private-file route')
+  assert.doesNotMatch(library, /unavailable|not open yet|coming soon/i)
+  assert.match(care, /redirect\(`\/home\/\$\{homeId\}`\)/,
+    'the former care path resolves to the working home dashboard')
+  assert.match(warranties, /redirect\(`\/home\/\$\{homeId\}\/documents`\)/,
+    'the former warranties path resolves to the working Home record')
 })
 
 test('home research is capability-gated, consent-bound, and never presented as a saved fact', () => {
@@ -679,16 +701,13 @@ test('home research chat is accessible, link-safe, and frozen while one request 
   )
 })
 
-test('the dashboard places the research assistant in the whole-home opening flow', () => {
+test('the dashboard uses real project history and contains no AI surface', () => {
   const dashboard = read('app/home/[homeId]/page.tsx')
 
-  assert.match(dashboard, /import \{ HomeResearchAssistant \}/,
-    'the dashboard owns the homeowner-facing research surface')
-  assert.match(
-    dashboard,
-    /<section className="roof-callout"[\s\S]*<HomeResearchAssistant homeRef=\{homeId\}[\s\S]*<dl className="cardgrid/,
-    'research follows the whole-home introduction and precedes the record counts',
-  )
+  assert.match(dashboard, /port\.listProjects\(homeId\)/)
+  assert.match(dashboard, /Project history/)
+  assert.doesNotMatch(dashboard, /HomeResearchAssistant|homeResearch|\bAI\b/,
+    'no research or chatbot feature is exposed in the authenticated opening flow')
 })
 
 test('one bounded roofing intent continues through the existing homeowner flow', () => {
@@ -726,6 +745,7 @@ test('every home-scoped screen exists', () => {
     'app/home/[homeId]/projects/page.tsx',
     'app/home/[homeId]/projects/[projectId]/page.tsx',
     'app/home/[homeId]/documents/page.tsx',
+    'app/home/[homeId]/checkups/page.tsx',
     'app/home/[homeId]/warranties/page.tsx',
     'app/home/[homeId]/timeline/page.tsx',
     'app/home/[homeId]/settings/page.tsx',

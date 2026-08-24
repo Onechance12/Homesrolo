@@ -5,17 +5,20 @@ import { test } from 'node:test'
 const agentPage = readFileSync('apps/web/app/for-agents/page.tsx', 'utf8')
 
 test('agent page distinguishes today from future account and sharing features', () => {
-  assert.match(agentPage, /Secure uploads, homeowner-controlled sharing, an agent view, and listing-ready exports are not live yet/)
-  assert.match(agentPage, /does not automatically receive reports, project details, or account access/)
+  assert.match(agentPage, /does not receive reports, project details, photo checkups, or account access/)
+  assert.match(agentPage, /does not replace your CRM/i)
+  assert.match(agentPage, /past, current, or planned work across the property/)
+  assert.match(agentPage, /AGENT_PHONE_DISPLAY/)
+  assert.match(agentPage, /AGENT_SMS_URL/)
   assert.match(agentPage, /publicPageMetadata/)
 
-  for (const unsupported of [
-    /reports build in their own account/i,
-    /homeowners can release records they choose to share/i,
-    /every enrollment traces back to you/i,
-    /small stuff gets fixed free/i,
-    /a documented home is an easier sale/i,
+  for (const roadmapOrUnsupported of [
+    /coming soon/i,
+    /not live yet/i,
+    /still being built/i,
+    /listing-ready export/i,
+    /automatically receive/i,
   ]) {
-    assert.doesNotMatch(agentPage, unsupported)
+    assert.doesNotMatch(agentPage, roadmapOrUnsupported)
   }
 })

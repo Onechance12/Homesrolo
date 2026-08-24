@@ -2,22 +2,23 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { use, useRef, useState } from 'react'
+import { use, useRef, useState, type FormEvent } from 'react'
 import { usePort, usePortMode, useSession } from '../../../lib/port/provider.tsx'
 import { HouseMark } from '../../../components/icons.tsx'
 import { UnauthorizedState } from '../../../components/states.tsx'
 import {
-  answer, back, choicesFor, draftFrom, editFromReview, finishOptionalLater,
-  initialIntake, isComplete, skip, skippable, type IntakeState, type StepId,
+  answer, draftFrom, editFromReview, finishOptionalLater,
+  initialIntake, isComplete, skip, type IntakeState,
 } from '../../../lib/intake/machine.ts'
 import {
-  SYSTEM_LABEL, SYSTEM_ORDER, type IntakeDraft, type SystemKind,
+  EARLIEST_YEAR, SYSTEM_LABEL, SYSTEM_ORDER, validateLabel, validateYear,
+  type HomeTypeAnswer, type IntakeDraft, type SystemKind,
 } from '../../../lib/intake/script.ts'
 import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
 import { roofingIntent, withRoofingIntent } from '../../../lib/roofing-intent.ts'
 
 /**
- * Opening a home's file is a short, progressive setup. The underlying script
+ * Opening a home's file is a short setup form. The underlying intake machine
  * remains deterministic (lib/intake) — no model, no invented defaults — and
  * everything it records is marked as the homeowner's own recollection.
  *
@@ -37,7 +38,22 @@ type SubmitState =
   | { kind: 'partial'; homeRef: string; error: string }
   | { kind: 'created'; homeRef: string }
 
-type EditableStep = Exclude<StepId, { kind: 'review' }>
+type SystemFormValue = {
+  present: 'yes' | 'no' | 'unknown'
+  year: string
+  approximate: boolean
+}
+
+type SetupForm = {
+  displayLabel: string
+  privateLocationLabel: string
+  homeType: HomeTypeAnswer | 'unknown'
+  yearBuilt: string
+  yearBuiltApproximate: boolean
+  systems: Record<SystemKind, SystemFormValue>
+}
+
+type SetupErrors = Record<string, string>
 
 const HOME_TYPE_LABEL: Record<IntakeDraft['profile']['homeType'], string> = {
   house: 'House',
@@ -49,85 +65,95 @@ const HOME_TYPE_LABEL: Record<IntakeDraft['profile']['homeType'], string> = {
 
 function systemDisplayName(system: SystemKind): string {
   const label = SYSTEM_LABEL[system]
-  return label.startsWith('the ') ? label.slice(4) : label
+  const display = label.startsWith('the ') ? label.slice(4) : label
+  return `${display.charAt(0).toUpperCase()}${display.slice(1)}`
 }
 
-function stageFor(step: StepId): { number: number; label: string; detail: string } {
-  switch (step.kind) {
-    case 'display_label': return { number: 1, label: 'Home basics', detail: '1 of 2' }
-    case 'location_label': return { number: 1, label: 'Home basics', detail: '2 of 2' }
-    case 'home_type': return { number: 2, label: 'Home details', detail: 'Optional' }
-    case 'year_built': return { number: 2, label: 'Home details', detail: 'Optional' }
-    case 'system_present': {
-      const number = SYSTEM_ORDER.indexOf(step.system) + 1
-      return { number: 3, label: 'Major systems', detail: `${number} of ${SYSTEM_ORDER.length}` }
+function emptySetupForm(): SetupForm {
+  return {
+    displayLabel: '',
+    privateLocationLabel: '',
+    homeType: 'unknown',
+    yearBuilt: '',
+    yearBuiltApproximate: false,
+    systems: Object.fromEntries(SYSTEM_ORDER.map(kind => [kind, {
+      present: 'unknown',
+      year: '',
+      approximate: false,
+    }])) as Record<SystemKind, SystemFormValue>,
+  }
+}
+
+function validateSetupForm(form: SetupForm, currentYear: number): SetupErrors {
+  const errors: SetupErrors = {}
+  const name = validateLabel(form.displayLabel, 80)
+  const location = validateLabel(form.privateLocationLabel, 200)
+  if (!name.ok) errors.displayLabel = name.error ?? 'Add a short name for this home.'
+  if (!location.ok) errors.privateLocationLabel = location.error ?? 'Add a general area for this home.'
+
+  if (form.yearBuilt.trim()) {
+    const result = validateYear(Number(form.yearBuilt), currentYear)
+    if (!result.ok) errors.yearBuilt = result.error ?? 'Check the year built.'
+  }
+  for (const kind of SYSTEM_ORDER) {
+    const system = form.systems[kind]
+    if (system.present === 'yes' && system.year.trim()) {
+      const result = validateYear(Number(system.year), currentYear)
+      if (!result.ok) errors[`system-${kind}-year`] = result.error ?? 'Check this year.'
     }
-    case 'system_year': {
-      const number = SYSTEM_ORDER.indexOf(step.system) + 1
-      return { number: 3, label: 'Major systems', detail: `${number} of ${SYSTEM_ORDER.length}` }
+  }
+  return errors
+}
+
+function accepted(state: IntakeState): IntakeState {
+  if (state.error) throw new Error(state.error)
+  return state
+}
+
+/** Build the same canonical intake draft as the former question-by-question UI. */
+function intakeStateFromForm(form: SetupForm, currentYear: number): IntakeState {
+  let next = initialIntake(currentYear)
+  next = accepted(answer(next, { kind: 'text', value: form.displayLabel }))
+  next = accepted(answer(next, { kind: 'text', value: form.privateLocationLabel }))
+  next = accepted(finishOptionalLater(next))
+
+  if (form.homeType !== 'unknown') {
+    next = accepted(editFromReview(next, { kind: 'home_type' }))
+    next = accepted(answer(next, { kind: 'choice', value: form.homeType }))
+  }
+  if (form.yearBuilt.trim()) {
+    next = accepted(editFromReview(next, { kind: 'year_built' }))
+    next = accepted(answer(next, {
+      kind: 'year',
+      value: Number(form.yearBuilt),
+      approximate: form.yearBuiltApproximate,
+    }))
+  }
+  for (const kind of SYSTEM_ORDER) {
+    const system = form.systems[kind]
+    if (system.present === 'unknown') continue
+    next = accepted(editFromReview(next, { kind: 'system_present', system: kind }))
+    next = accepted(answer(next, { kind: 'choice', value: system.present }))
+    if (system.present === 'yes') {
+      next = system.year.trim()
+        ? accepted(answer(next, {
+            kind: 'year',
+            value: Number(system.year),
+            approximate: system.approximate,
+          }))
+        : accepted(skip(next))
     }
-    case 'review': return { number: 4, label: 'Review', detail: 'Ready to open' }
   }
-}
-
-function questionFor(step: StepId): { title: string; helper: string } {
-  switch (step.kind) {
-    case 'display_label':
-      return {
-        title: 'What should we call this home?',
-        helper: 'Use whatever you call it: Oak Street, Mom’s house, the lake place—anything familiar.',
-      }
-    case 'location_label':
-      return {
-        title: 'Where is the home?',
-        helper: 'A city, town, or neighborhood is enough for now. Keep it general if you prefer.',
-      }
-    case 'home_type':
-      return {
-        title: 'What kind of home is it?',
-        helper: 'This helps organize the file. Choose Other if none of these fit.',
-      }
-    case 'year_built':
-      return {
-        title: 'About when was it built?',
-        helper: 'An estimate is useful. It is also completely fine not to know yet.',
-      }
-    case 'system_present':
-      return {
-        title: `Does it have ${SYSTEM_LABEL[step.system]}?`,
-        helper: 'This only adds the item to your starting home snapshot. Review your answer before opening the file; editing saved system details is not available yet.',
-      }
-    case 'system_year':
-      return {
-        title: `When was ${SYSTEM_LABEL[step.system]} installed or replaced?`,
-        helper: 'Use the last replacement year if you know it. An estimate is fine.',
-      }
-    case 'review':
-      return {
-        title: 'Review your starting home file',
-        helper: 'Nothing below is treated as verified. Edit anything now; editing saved details after the file opens is not available yet.',
-      }
-  }
-}
-
-function choiceHint(step: StepId, value: string): string | null {
-  if (step.kind === 'system_present') {
-    if (value === 'yes') return 'Track it in this home file'
-    if (value === 'no') return 'Record that it is not present'
-    return 'Leave it unconfirmed for now'
-  }
-  return null
+  if (!isComplete(next)) throw new Error('Review the home details and try again.')
+  return next
 }
 
 function ReviewCard({
   draft,
-  onEdit,
-  editable,
 }: {
   draft: IntakeDraft
-  onEdit: (step: EditableStep) => void
-  editable: boolean
 }) {
+  const recordedSystems = draft.systems.filter(system => system.present !== 'unknown')
   return (
     <div className="jobdoc setup-review">
       <p className="jobdoc__serial">
@@ -139,33 +165,18 @@ function ReviewCard({
           <dt>Name</dt>
           <dd>
             <span>{draft.home.displayLabel}</span>
-            {editable ? (
-              <button type="button" onClick={() => onEdit({ kind: 'display_label' })}>
-                Edit<span className="sr-only"> home name</span>
-              </button>
-            ) : null}
           </dd>
         </div>
         <div>
           <dt>Area</dt>
           <dd>
             <span>{draft.home.privateLocationLabel}</span>
-            {editable ? (
-              <button type="button" onClick={() => onEdit({ kind: 'location_label' })}>
-                Edit<span className="sr-only"> area</span>
-              </button>
-            ) : null}
           </dd>
         </div>
         <div>
           <dt>Type</dt>
           <dd>
             <span>{HOME_TYPE_LABEL[draft.profile.homeType]}</span>
-            {editable ? (
-              <button type="button" onClick={() => onEdit({ kind: 'home_type' })}>
-                Edit<span className="sr-only"> home type</span>
-              </button>
-            ) : null}
           </dd>
         </div>
         <div>
@@ -176,14 +187,14 @@ function ReviewCard({
                 ? `${draft.profile.yearBuilt.precision === 'approximate' ? '~' : ''}${draft.profile.yearBuilt.value}`
                 : 'Not recorded'}
             </span>
-            {editable ? (
-              <button type="button" onClick={() => onEdit({ kind: 'year_built' })}>
-                Edit<span className="sr-only"> year built</span>
-              </button>
-            ) : null}
           </dd>
         </div>
-        {draft.systems.map(system => (
+        {recordedSystems.length === 0 ? (
+          <div>
+            <dt>Systems</dt>
+            <dd><span>Not recorded</span></dd>
+          </div>
+        ) : recordedSystems.map(system => (
           <div key={system.kind}>
             <dt>{systemDisplayName(system.kind)}</dt>
             <dd>
@@ -194,21 +205,12 @@ function ReviewCard({
                   ? `${system.year.precision === 'approximate' ? '~' : ''}${system.year.value}`
                   : 'Yes — year not recorded')}
               </span>
-              {editable ? (
-                <button
-                  type="button"
-                  onClick={() => onEdit({ kind: 'system_present', system: system.kind })}
-                >
-                  Edit<span className="sr-only"> {systemDisplayName(system.kind)}</span>
-                </button>
-              ) : null}
             </dd>
           </div>
         ))}
       </dl>
       <p className="mono" style={{ marginTop: '0.8rem' }}>
-        Source: what you told us. Professional records may confirm details later;
-        editing these saved details is not available yet.
+        Source: what you told us. Review these details before saving the starting snapshot.
       </p>
     </div>
   )
@@ -228,89 +230,79 @@ export default function NewHomePage({
 
   // The current year bounds year answers; injected so the machine stays pure.
   const [state, setState] = useState<IntakeState>(() => initialIntake(new Date().getFullYear()))
-  const [text, setText] = useState('')
-  const [yearText, setYearText] = useState('')
-  const [approximate, setApproximate] = useState(false)
+  const [form, setForm] = useState<SetupForm>(emptySetupForm)
+  const [formErrors, setFormErrors] = useState<SetupErrors>({})
+  const [showOptional, setShowOptional] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
   const [submit, setSubmit] = useState<SubmitState>({ kind: 'idle' })
   // One commandRef per submission attempt group: retries of the SAME draft
   // reuse it (idempotency-stable), an edited draft mints a fresh one.
   const createAttemptRef = useRef<string | null>(null)
   const intakeAttemptRef = useRef<string | null>(null)
 
-  const step = state.step
-  const choices = choicesFor(step)
   const complete = isComplete(state)
-  const stage = stageFor(step)
-  const question = questionFor(step)
-  const canFinishOptional = state.displayLabel !== null
-    && state.privateLocationLabel !== null
-    && !complete
   const reviewEditable = submit.kind !== 'created'
     && submit.kind !== 'sending'
     && submit.kind !== 'saving_intake'
     && submit.kind !== 'partial'
 
-  function give(input: Parameters<typeof answer>[1]) {
-    const currentStep = state.step
-    const editedSystem = state.editingFromReview && currentStep.kind === 'system_present'
-      ? state.systems.find(system => system.kind === currentStep.system)
-      : null
-    setState(current => answer(current, input))
-    setText('')
-    if (editedSystem?.year && input.kind === 'choice' && input.value === 'yes') {
-      setYearText(String(editedSystem.year.value))
-      setApproximate(editedSystem.year.precision === 'approximate')
-    } else {
-      setYearText('')
-      setApproximate(false)
+  function resetSubmissionAttempt() {
+    createAttemptRef.current = null
+    intakeAttemptRef.current = null
+  }
+
+  function updateSystem(kind: SystemKind, patch: Partial<SystemFormValue>) {
+    setForm(current => ({
+      ...current,
+      systems: {
+        ...current.systems,
+        [kind]: { ...current.systems[kind], ...patch },
+      },
+    }))
+  }
+
+  function clearFormError(key: string) {
+    setFormErrors(current => {
+      if (!current[key] && !current.form) return current
+      const next = { ...current }
+      delete next[key]
+      delete next.form
+      return next
+    })
+  }
+
+  function reviewSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const errors = validateSetupForm(form, state.currentYear)
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      const first = errors.displayLabel
+        ? 'home-display-label'
+        : errors.privateLocationLabel
+          ? 'home-location-label'
+          : errors.yearBuilt
+            ? 'home-year-built'
+            : Object.keys(errors)[0]?.replace(/^system-/, 'home-system-')
+      if (first) requestAnimationFrame(() => document.getElementById(first)?.focus())
+      return
     }
-    // An edited draft is a new submission attempt, even when it is identical.
-    createAttemptRef.current = null
-    intakeAttemptRef.current = null
-  }
-
-  function goBack() {
-    setState(current => back(current))
-    setText('')
-    setYearText('')
-    setApproximate(false)
-    createAttemptRef.current = null
-    intakeAttemptRef.current = null
-  }
-
-  function finishLater() {
-    setState(current => finishOptionalLater(current))
-    setText('')
-    setYearText('')
-    setApproximate(false)
-    createAttemptRef.current = null
-    intakeAttemptRef.current = null
-  }
-
-  function skipOne() {
-    setState(current => skip(current))
-    setYearText('')
-    setApproximate(false)
-    createAttemptRef.current = null
-    intakeAttemptRef.current = null
-  }
-
-  function editStep(target: EditableStep) {
-    const draft = draftFrom(state)
-    if (target.kind === 'display_label') setText(draft.home.displayLabel)
-    else if (target.kind === 'location_label') setText(draft.home.privateLocationLabel)
-    else setText('')
-
-    if (target.kind === 'year_built' && draft.profile.yearBuilt) {
-      setYearText(String(draft.profile.yearBuilt.value))
-      setApproximate(draft.profile.yearBuilt.precision === 'approximate')
-    } else {
-      setYearText('')
-      setApproximate(false)
+    try {
+      setState(intakeStateFromForm(form, state.currentYear))
+      setReviewing(true)
+      setSubmit({ kind: 'idle' })
+      resetSubmissionAttempt()
+      requestAnimationFrame(() => document.getElementById('setup-review-title')?.focus())
+    } catch (error) {
+      setFormErrors({ form: error instanceof Error ? error.message : 'Review the home details and try again.' })
     }
-    setState(current => editFromReview(current, target))
-    createAttemptRef.current = null
-    intakeAttemptRef.current = null
+  }
+
+  function editSetup() {
+    if (!reviewEditable) return
+    setReviewing(false)
+    setSubmit({ kind: 'idle' })
+    resetSubmissionAttempt()
+    requestAnimationFrame(() => document.getElementById('home-display-label')?.focus())
   }
 
   async function saveIntake(homeRef: string, draft: IntakeDraft) {
@@ -400,127 +392,263 @@ export default function NewHomePage({
 
               <div className="setup-progress">
                 <div className="setup-progress__label">
-                  <span>Step {stage.number} of 4 · {stage.label}</span>
-                  <span>{stage.detail}</span>
+                  <span>Step {reviewing ? 2 : 1} of 2</span>
+                  <span>{reviewing ? 'Review and open' : 'Home setup'}</span>
                 </div>
-                <progress max="4" value={stage.number} aria-label={`Step ${stage.number} of 4`} />
+                <progress
+                  max="2"
+                  value={reviewing ? 2 : 1}
+                  aria-label={`Step ${reviewing ? 2 : 1} of 2`}
+                />
               </div>
 
-              {!complete && (
-                <section className="setup-panel" aria-labelledby="setup-question">
-                  <div className="setup-panel__question" aria-live="polite">
-                    <p className="setup-panel__status">
-                      {stage.number === 1 ? 'Required to open the file' : 'Optional — skip any time'}
-                    </p>
-                    <h2 id="setup-question">{question.title}</h2>
-                    <p>{question.helper}</p>
-                  </div>
+              {!reviewing ? (
+                <form onSubmit={reviewSetup} noValidate>
+                  <section className="setup-panel" aria-labelledby="setup-basics-title">
+                    <div className="setup-panel__question">
+                      <p className="setup-panel__status">Required</p>
+                      <h2 id="setup-basics-title">Home basics</h2>
+                      <p>A familiar name and general area are all you need to open the file.</p>
+                    </div>
+                    <div className="cardgrid cardgrid--2">
+                      <div className="field">
+                        <label htmlFor="home-display-label">Home name (required)</label>
+                        <input
+                          id="home-display-label"
+                          type="text"
+                          value={form.displayLabel}
+                          onChange={event => {
+                            setForm(current => ({ ...current, displayLabel: event.target.value }))
+                            clearFormError('displayLabel')
+                          }}
+                          placeholder="Oak Street or Mom’s house"
+                          maxLength={80}
+                          autoComplete="off"
+                          aria-invalid={Boolean(formErrors.displayLabel)}
+                          aria-describedby={formErrors.displayLabel ? 'home-display-label-error' : undefined}
+                          required
+                        />
+                        <span className="field__hint">Use whatever you actually call the place.</span>
+                        {formErrors.displayLabel ? (
+                          <span id="home-display-label-error" className="form-error" role="alert">
+                            {formErrors.displayLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="field">
+                        <label htmlFor="home-location-label">City, town, or neighborhood (required)</label>
+                        <input
+                          id="home-location-label"
+                          type="text"
+                          value={form.privateLocationLabel}
+                          onChange={event => {
+                            setForm(current => ({ ...current, privateLocationLabel: event.target.value }))
+                            clearFormError('privateLocationLabel')
+                          }}
+                          placeholder="Frisco, Texas"
+                          maxLength={200}
+                          autoComplete="address-level2"
+                          aria-invalid={Boolean(formErrors.privateLocationLabel)}
+                          aria-describedby={formErrors.privateLocationLabel ? 'home-location-label-error' : undefined}
+                          required
+                        />
+                        <span className="field__hint">Keep it general if you prefer.</span>
+                        {formErrors.privateLocationLabel ? (
+                          <span id="home-location-label-error" className="form-error" role="alert">
+                            {formErrors.privateLocationLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </section>
 
-                  {state.error && (
-                    <p role="alert" className="intake__error">{state.error}</p>
+                  {showOptional ? (
+                  <section className="setup-panel" aria-labelledby="setup-optional-title">
+                    <div className="setup-panel__question">
+                      <p className="setup-panel__status">Optional</p>
+                      <h2 id="setup-optional-title">Details you already know</h2>
+                      <p>
+                        Leave anything as not sure. Projects and home checkups still work without these answers.
+                      </p>
+                    </div>
+                    <div className="setup-controls">
+                      <div className="cardgrid cardgrid--2">
+                        <div className="field">
+                          <label htmlFor="home-type">Home type</label>
+                          <select
+                            id="home-type"
+                            value={form.homeType}
+                            onChange={event => setForm(current => ({
+                              ...current,
+                              homeType: event.target.value as SetupForm['homeType'],
+                            }))}
+                          >
+                            <option value="unknown">Not sure</option>
+                            <option value="house">House</option>
+                            <option value="townhouse">Townhouse</option>
+                            <option value="condo">Condo</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor="home-year-built">Year built</label>
+                          <input
+                            id="home-year-built"
+                            type="number"
+                            inputMode="numeric"
+                            min={EARLIEST_YEAR}
+                            max={state.currentYear}
+                            value={form.yearBuilt}
+                            onChange={event => {
+                              const yearBuilt = event.target.value
+                              setForm(current => ({
+                                ...current,
+                                yearBuilt,
+                                yearBuiltApproximate: yearBuilt ? current.yearBuiltApproximate : false,
+                              }))
+                              clearFormError('yearBuilt')
+                            }}
+                            placeholder="Leave blank if unknown"
+                            aria-invalid={Boolean(formErrors.yearBuilt)}
+                            aria-describedby={formErrors.yearBuilt ? 'home-year-built-error' : undefined}
+                          />
+                          {form.yearBuilt ? (
+                            <label className="setup-check">
+                              <input
+                                type="checkbox"
+                                checked={form.yearBuiltApproximate}
+                                onChange={event => setForm(current => ({
+                                  ...current,
+                                  yearBuiltApproximate: event.target.checked,
+                                }))}
+                              />
+                              This is an estimate
+                            </label>
+                          ) : null}
+                          {formErrors.yearBuilt ? (
+                            <span id="home-year-built-error" className="form-error" role="alert">
+                              {formErrors.yearBuilt}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="setup-panel__question">
+                        <h3>Major systems</h3>
+                        <p>Only record what you know today. “Not sure” is a complete answer.</p>
+                      </div>
+                      <div className="cardgrid cardgrid--2">
+                        {SYSTEM_ORDER.map(kind => {
+                          const system = form.systems[kind]
+                          const errorKey = `system-${kind}-year`
+                          const yearId = `home-system-${kind}-year`
+                          return (
+                            <div className="panel" key={kind}>
+                              <div className="panel__head">
+                                <h4>{systemDisplayName(kind)}</h4>
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`home-system-${kind}-status`}>Status</label>
+                                <select
+                                  id={`home-system-${kind}-status`}
+                                  value={system.present}
+                                  onChange={event => {
+                                    const present = event.target.value as SystemFormValue['present']
+                                    updateSystem(kind, present === 'yes'
+                                      ? { present }
+                                      : { present, year: '', approximate: false })
+                                    clearFormError(errorKey)
+                                  }}
+                                >
+                                  <option value="unknown">Not sure</option>
+                                  <option value="yes">Present</option>
+                                  <option value="no">Not present</option>
+                                </select>
+                              </div>
+                              {system.present === 'yes' ? (
+                                <div className="field">
+                                  <label htmlFor={yearId}>Installed or replaced year</label>
+                                  <input
+                                    id={yearId}
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={EARLIEST_YEAR}
+                                    max={state.currentYear}
+                                    value={system.year}
+                                    onChange={event => {
+                                      const year = event.target.value
+                                      updateSystem(kind, {
+                                        year,
+                                        approximate: year ? system.approximate : false,
+                                      })
+                                      clearFormError(errorKey)
+                                    }}
+                                    placeholder="Optional"
+                                    aria-invalid={Boolean(formErrors[errorKey])}
+                                    aria-describedby={formErrors[errorKey] ? `${yearId}-error` : undefined}
+                                  />
+                                  {system.year ? (
+                                    <label className="setup-check">
+                                      <input
+                                        type="checkbox"
+                                        checked={system.approximate}
+                                        onChange={event => updateSystem(kind, { approximate: event.target.checked })}
+                                      />
+                                      This is an estimate
+                                    </label>
+                                  ) : null}
+                                  {formErrors[errorKey] ? (
+                                    <span id={`${yearId}-error`} className="form-error" role="alert">
+                                      {formErrors[errorKey]}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </section>
+                  ) : (
+                    <section className="setup-panel" aria-labelledby="setup-optional-summary-title">
+                      <div className="setup-panel__question">
+                        <p className="setup-panel__status">Optional</p>
+                        <h2 id="setup-optional-summary-title">Know a few home details?</h2>
+                        <p>
+                          You can record the home type, build year, or major systems now.
+                          Leave them out if you are not sure.
+                        </p>
+                      </div>
+                      <div className="setup-controls">
+                        <button
+                          type="button"
+                          className="btn btn--quiet"
+                          onClick={() => setShowOptional(true)}
+                        >
+                          Add optional details
+                        </button>
+                      </div>
+                    </section>
                   )}
 
-                  <div className="setup-controls">
-                  {step.kind === 'display_label' || step.kind === 'location_label' ? (
-                    <form
-                      className="setup-field"
-                      onSubmit={event => { event.preventDefault(); give({ kind: 'text', value: text }) }}
-                    >
-                      <label htmlFor="intake-text">
-                        {step.kind === 'display_label' ? 'Home name' : 'City, town, or neighborhood'}
-                      </label>
-                      <input
-                        id="intake-text"
-                        type="text"
-                        value={text}
-                        onChange={event => setText(event.target.value)}
-                        placeholder={step.kind === 'display_label' ? 'e.g. Oak Street' : 'e.g. Frisco, Texas'}
-                        autoComplete="off"
-                      />
-                      <button type="submit" className="btn btn--primary btn--block">Continue</button>
-                    </form>
+                  {formErrors.form ? (
+                    <p role="alert" className="intake__error">{formErrors.form}</p>
                   ) : null}
-
-                  {choices.length > 0 ? (
-                    <div className="setup-options" role="group" aria-label="Answer options">
-                      {choices.map(choice => (
-                        <button
-                          key={choice.value}
-                          type="button"
-                          className="setup-option"
-                          onClick={() => give({ kind: 'choice', value: choice.value })}
-                        >
-                          <span>{choice.label}</span>
-                          {choiceHint(step, choice.value) ? <small>{choiceHint(step, choice.value)}</small> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {(step.kind === 'year_built' || step.kind === 'system_year') ? (
-                    <form
-                      className="setup-field"
-                      onSubmit={event => {
-                        event.preventDefault()
-                        const value = Number(yearText)
-                        give({ kind: 'year', value, approximate })
-                      }}
-                    >
-                      <label htmlFor="intake-year">Year</label>
-                      <input
-                        id="intake-year"
-                        type="number"
-                        inputMode="numeric"
-                        value={yearText}
-                        onChange={event => setYearText(event.target.value)}
-                        placeholder="e.g. 2019"
-                      />
-                      <label className="setup-check">
-                        <input
-                          type="checkbox"
-                          checked={approximate}
-                          onChange={event => setApproximate(event.target.checked)}
-                        />
-                        This is an estimate
-                      </label>
-                      <button type="submit" className="btn btn--primary btn--block">Save year</button>
-                    </form>
-                  ) : null}
-
-                  <div className="setup-actions">
-                    {step.kind !== 'display_label' && (
-                      <button type="button" className="btn btn--quiet" onClick={goBack}>
-                        {state.editingFromReview ? 'Cancel edit' : '← Back'}
-                      </button>
-                    )}
-                    {skippable(step) && (
-                      <button type="button" className="btn btn--quiet" onClick={skipOne}>
-                        I don’t know
-                      </button>
-                    )}
+                  <div className="setup-submit">
+                    <button type="submit" className="btn btn--primary">Review home file</button>
+                    <Link href={withRoofingIntent('/homes', intent)} className="btn btn--quiet">Cancel</Link>
                   </div>
-                  {canFinishOptional && !state.editingFromReview ? (
-                    <button type="button" className="setup-skip" onClick={finishLater}>
-                      Skip optional details — leave them unrecorded
-                    </button>
-                  ) : null}
-                  </div>
-                </section>
-              )}
-
-              {complete && (
+                </form>
+              ) : complete ? (
                 <>
                   <section className="setup-panel setup-panel--review" aria-labelledby="setup-review-title">
                     <div className="setup-panel__question">
                       <p className="setup-panel__status">Your starting snapshot</p>
-                      <h2 id="setup-review-title">{question.title}</h2>
-                      <p>{question.helper}</p>
+                      <h2 id="setup-review-title" tabIndex={-1}>Review your home file</h2>
+                      <p>Nothing below is treated as verified. Check it before opening the file.</p>
                     </div>
-                    <ReviewCard
-                      draft={draftFrom(state)}
-                      onEdit={editStep}
-                      editable={reviewEditable}
-                    />
+                    <ReviewCard draft={draftFrom(state)} />
                   </section>
                   {submit.kind === 'created' ? (
                     <div className="state setup-result" role="status">
@@ -572,11 +700,10 @@ export default function NewHomePage({
                     <>
                       {submit.kind === 'unavailable' && (
                         <div className="state setup-result" role="alert">
-                          <h3>Saving is not available yet</h3>
+                          <h3>The home could not be saved</h3>
                           <p>
-                            The server cannot store a home yet, so nothing was saved. Your
-                            draft is shown above and stays on this screen — try again once
-                            saving is live, or start over later. It was not stored anywhere.
+                            Nothing was saved. Your draft is still shown above, so you can
+                            try again without re-entering it. It was not stored anywhere.
                           </p>
                           <button type="button" className="btn btn--quiet" onClick={create}>Try again</button>
                         </div>
@@ -599,9 +726,11 @@ export default function NewHomePage({
                               ? 'Saving the starting details…'
                               : 'Open this home’s file'}
                         </button>
-                        <button type="button" className="btn btn--quiet" onClick={goBack}>
-                          ← Change an answer
-                        </button>
+                        {reviewEditable ? (
+                          <button type="button" className="btn btn--quiet" onClick={editSetup}>
+                            ← Edit details
+                          </button>
+                        ) : null}
                       </div>
                       {mode === 'synthetic' ? (
                         <p className="mono" style={{ marginTop: '0.8rem' }}>
@@ -616,7 +745,7 @@ export default function NewHomePage({
                     </>
                   )}
                 </>
-              )}
+              ) : null}
               <p className="setup-privacy mono">
                 Nothing is guessed. Until you open the file, this draft stays only
                 on this screen; a refresh starts over.

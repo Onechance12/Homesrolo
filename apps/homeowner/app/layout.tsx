@@ -4,10 +4,10 @@ import { PortProvider } from '../lib/port/provider.tsx'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Homesrolo — your home file',
+    default: 'Homesrolo — your Home Record',
     template: '%s — Homesrolo',
   },
-  description: 'Start a private home record and keep roof projects connected to the property. Documents, photos, warranties, and maintenance history are planned for the same file.',
+  description: 'Keep private whole-home projects, past work, and seasonal photo checkups connected to one home record.',
   // Private account pages should never appear in search results.
   robots: { index: false, follow: false },
 }

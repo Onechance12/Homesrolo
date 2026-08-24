@@ -1,14 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { use, useEffect, useRef, useState, type FormEvent } from 'react'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconDocs } from '../../../../components/icons.tsx'
 import { mintCommandRef } from '../../../../lib/port/command-ref.ts'
 import type { DocumentKind, DocumentSummary } from '../../../../lib/port/types.ts'
-import { PhotoCheckups } from '../../../../components/PhotoCheckups.tsx'
 
 const KIND_LABEL: Record<DocumentKind, string> = {
   document: 'Home record',
@@ -18,25 +17,6 @@ const KIND_LABEL: Record<DocumentKind, string> = {
   photo_set: 'Photo',
   permit: 'Permit',
   manual: 'Manual',
-}
-
-function LibraryCard({ eyebrow, title, body, href }: {
-  eyebrow: string
-  title: string
-  body: string
-  href?: string
-}) {
-  const contents: ReactNode = (
-    <>
-      <span className="mono">{eyebrow}</span>
-      <strong>{title}</strong>
-      <span className="stat__note">{body}</span>
-    </>
-  )
-
-  return href
-    ? <Link className="stat" href={href}>{contents}</Link>
-    : <article className="stat">{contents}</article>
 }
 
 function FiledRows({ records }: { records: readonly DocumentSummary[] }) {
@@ -67,12 +47,8 @@ function FiledRows({ records }: { records: readonly DocumentSummary[] }) {
   )
 }
 
-/**
- * The home's library, not merely a document bucket. The backed list remains
- * the sole source of real file/photo rows; the map describes where the wider
- * home record is going without inventing files or enabled storage.
- */
-export default function DocumentsPage({ params }: { params: Promise<{ homeId: string }> }) {
+/** The working index to every record Homesrolo can actually open for this home. */
+export default function HomeRecordPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
   const mode = usePortMode()
@@ -82,14 +58,14 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
   const photoCheckupsEnabled = mode === 'remote'
     && session.state.kind === 'signed_in'
     && session.state.capabilities.photoCheckups
-  const libraryReadable = mode === 'synthetic' || uploadsEnabled
+  const recordsReadable = mode === 'synthetic' || uploadsEnabled
   const { state, retry } = usePortCall(
-    () => libraryReadable
+    () => recordsReadable
       ? port.listDocuments(homeId)
       : Promise.resolve({ ok: true as const, value: [] as readonly DocumentSummary[] }),
     value => value.length === 0,
   )
-  const previousLibraryReadable = useRef(libraryReadable)
+  const previousRecordsReadable = useRef(recordsReadable)
   const [kind, setKind] = useState<'document' | 'photo' | 'warranty'>('document')
   const [file, setFile] = useState<File | null>(null)
   const [uploadState, setUploadState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -97,65 +73,14 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
   const fileInput = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
-    if (previousLibraryReadable.current === libraryReadable) return
-    previousLibraryReadable.current = libraryReadable
+    if (previousRecordsReadable.current === recordsReadable) return
+    previousRecordsReadable.current = recordsReadable
     retry()
-  }, [libraryReadable, retry])
+  }, [recordsReadable, retry])
 
   const returnedRecords = state.status === 'ready' ? state.value : []
   const photos = returnedRecords.filter(record => record.kind === 'photo_set')
   const filedRecords = returnedRecords.filter(record => record.kind !== 'photo_set')
-
-  const libraryAreas = [
-    {
-      eyebrow: 'Condition record',
-      title: 'Photos & home checkups',
-      body: 'Repeat the same views seasonally and after major weather or work.',
-      href: '#photo-checkups',
-    },
-    {
-      eyebrow: 'Protection',
-      title: 'Insurance',
-      body: 'Policies, declarations, inspection reports, and claim papers.',
-      href: '#filed-records',
-    },
-    {
-      eyebrow: 'Work history',
-      title: 'Projects & upgrades',
-      body: 'Past, current, and planned work across every part of the property.',
-      href: `/home/${homeId}/projects`,
-    },
-    {
-      eyebrow: 'What the home owns',
-      title: 'Inventory & manuals',
-      body: 'Appliances, equipment, model details, receipts, and manuals.',
-      href: '#filed-records',
-    },
-    {
-      eyebrow: 'Coverage',
-      title: 'Warranties',
-      body: 'Coverage papers and the work or equipment they belong to.',
-      href: `/home/${homeId}/warranties`,
-    },
-    {
-      eyebrow: 'Property record',
-      title: 'Taxes, value & sale',
-      body: 'Tax notices, appraisals, valuations, disclosures, and closing records.',
-      href: '#filed-records',
-    },
-    {
-      eyebrow: 'Ongoing care',
-      title: 'Events & maintenance',
-      body: 'Service dates, recurring care, inspections, and what happened when.',
-      href: `/home/${homeId}/timeline`,
-    },
-    {
-      eyebrow: 'The Rolodex',
-      title: 'People & service history',
-      body: 'The companies and people connected to work recorded for this home.',
-      href: `/home/${homeId}/projects`,
-    },
-  ] as const
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -182,39 +107,42 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
       <div className="pagehead">
         <div>
-          <p className="mono">Your home Rolodex</p>
-          <h1>Home library</h1>
+          <p className="mono">Your private Home Record</p>
+          <h1>Home record</h1>
         </div>
-        <p>One private place for the proof, history, and care of this home.</p>
+        <p>Open the project history, checkup views, and files that are actually saved for this home.</p>
       </div>
 
-      <div className="notice">
-        {mode === 'synthetic' ? (
-          <><strong>Demo library.</strong> Every listed item is synthetic and disappears on refresh.</>
-        ) : uploadsEnabled ? (
-          <><strong>Private home library.</strong> Upload a PDF, JPEG, or PNG up to 25 MB. Nothing is sent to a professional unless you choose that in a later project step.</>
-        ) : photoCheckupsEnabled ? (
-          <><strong>Seasonal photo checkups are ready.</strong> Add private JPEG or PNG photos below. Documents and warranty files aren&rsquo;t available yet.</>
-        ) : (
-          <><strong>Uploads are unavailable right now.</strong> Homesrolo has not opened secure photo and document storage for this home. Any existing files will appear only when the private service returns them.</>
-        )}
-      </div>
+      {mode === 'synthetic' ? (
+        <div className="notice"><strong>Sample record.</strong> Listed items are synthetic and disappear on refresh.</div>
+      ) : null}
 
-      <section aria-labelledby="library-map-title">
+      <section aria-labelledby="record-sections-title">
         <div className="panel__head">
           <div>
-            <h2 id="library-map-title">The whole-home record</h2>
-            <p className="form-note">A library for everything around the home—not a roofing folder.</p>
+            <p className="mono">Connected to this home</p>
+            <h2 id="record-sections-title">Your working records</h2>
           </div>
         </div>
         <div className="cardgrid cardgrid--2">
-          {libraryAreas.map(area => <LibraryCard key={area.title} {...area} />)}
+          <Link className="stat" href={`/home/${homeId}/projects`}>
+            <dt>Project history</dt>
+            <dd>Projects</dd>
+            <span className="stat__note">Planned work, active jobs, repairs, remodels, and completed history</span>
+          </Link>
+          {photoCheckupsEnabled ? (
+            <Link className="stat" href={`/home/${homeId}/checkups`}>
+              <dt>Condition record</dt>
+              <dd>Checkups</dd>
+              <span className="stat__note">Private photos organized by area, repeatable view, and date</span>
+            </Link>
+          ) : null}
         </div>
       </section>
 
       {mode === 'remote' && uploadsEnabled ? (
         <form className="panel stack" style={{ ['--stack-gap' as never]: '0.75rem' }} onSubmit={upload}>
-          <div className="panel__head"><h2>Add to the library</h2></div>
+          <div className="panel__head"><h2>Add a file to the home record</h2></div>
           <label className="field" style={{ marginTop: 0 }}>
             <span>What are you adding?</span>
             <select value={kind} onChange={event => {
@@ -242,54 +170,45 @@ export default function DocumentsPage({ params }: { params: Promise<{ homeId: st
             />
           </label>
           <button className="btn btn--primary" type="submit" disabled={!file || uploadState === 'saving'}>
-            {uploadState === 'saving' ? 'Uploading…' : 'Add to home library'}
+            {uploadState === 'saving' ? 'Uploading…' : 'Add to home record'}
           </button>
-          {uploadState === 'saved' ? <p role="status">File added to this private home library.</p> : null}
+          {uploadState === 'saved' ? <p role="status">File added to this private home record.</p> : null}
           {uploadState === 'error' ? <p role="alert">The file could not be added. Check the type and size, then try again.</p> : null}
         </form>
       ) : null}
 
-      <PhotoCheckups
-        key={`${homeId}:${photoCheckupsEnabled ? 'enabled' : 'disabled'}`}
-        homeRef={homeId}
-        enabled={photoCheckupsEnabled}
-        port={port}
-      />
+      {recordsReadable && state.status === 'loading'
+        ? <div className="panel"><Skeleton lines={5} label="Loading saved home files" /></div>
+        : null}
+      {recordsReadable && state.status === 'error'
+        ? <ErrorState retry={retry} error={state.error} />
+        : null}
 
-      {state.status === 'loading' && <div className="panel"><Skeleton lines={5} label="Loading the home library" /></div>}
-      {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
-
-      {state.status !== 'loading' && state.status !== 'error' ? (
+      {recordsReadable && state.status !== 'loading' && state.status !== 'error' ? (
         <>
           {photos.length > 0 ? (
-            <section className="panel" aria-labelledby="legacy-photo-records-title">
+            <section className="panel" aria-labelledby="saved-photo-records-title">
               <div className="panel__head">
-                <div>
-                  <h2 id="legacy-photo-records-title">Filed photo records</h2>
-                  <p className="form-note">Older photos saved with other home records appear here.</p>
-                </div>
+                <h2 id="saved-photo-records-title">Saved photo files</h2>
                 <span className="mono">{photos.length} saved</span>
               </div>
               <FiledRows records={photos} />
             </section>
           ) : null}
 
-          <section id="filed-records" className="panel" aria-labelledby="filed-records-title">
+          <section className="panel" aria-labelledby="saved-home-files-title">
             <div className="panel__head">
-              <div>
-                <h2 id="filed-records-title">Filed home records</h2>
-                <p className="form-note">Only records returned by this home&rsquo;s private library are shown.</p>
-              </div>
+              <h2 id="saved-home-files-title">Saved home files</h2>
               {state.status === 'ready' ? <span className="mono">{filedRecords.length} saved</span> : null}
             </div>
             {filedRecords.length > 0 ? (
               <FiledRows records={filedRecords} />
             ) : (
               <EmptyState
-                title="No filed records yet"
-                body={uploadsEnabled
-                  ? 'Add a policy, contract, invoice, permit, manual, warranty paper, tax notice, valuation, or sale record when you are ready.'
-                  : 'No private papers were returned for this home. Secure uploads are not open right now.'}
+                title={mode === 'synthetic' ? 'No sample files' : 'No files saved yet'}
+                body={mode === 'synthetic'
+                  ? 'This sample home does not include file records.'
+                  : 'Use the form above when you have a home paper or image to keep.'}
               />
             )}
           </section>

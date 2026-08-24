@@ -1,75 +1,78 @@
 import Link from 'next/link'
-import { PageHeader, Sections } from '../../components/Prose.tsx'
-import { FOR_PROFESSIONALS } from '../../lib/content/education.ts'
+import { PageHeader } from '../../components/Prose.tsx'
 import { publicPageMetadata } from '../../lib/public-metadata.ts'
 
 export const metadata = publicPageMetadata({
-  title: 'For professionals',
-  description:
-    'The professional-side model Homesrolo is working toward: homeowner-controlled project proof, no paid '
-    + 'verification, and no leads for sale.',
+  title: 'For home service professionals',
+  description: 'A practical record checklist for contractors and home service professionals working with a Homesrolo homeowner.',
   canonical: '/for-professionals/',
 })
 
-const NOT_FOR_SALE = [
-  'Paid placement or a ranking boost. Listings are ordered by name, and the ordering reads nothing else.',
-  'Purchased verification. No payment can create, upgrade, or accelerate a fact.',
-  'Leads or referrals. Homesrolo does not sell introductions and does not take a fee for routing work.',
-  'Review manipulation. Homesrolo publishes no reviews yet, and when it does they will be tied to released projects.',
-]
+const HANDOFF = [
+  {
+    title: 'Before work starts',
+    body: 'Put the business name, primary contact, written scope, exclusions, allowances, schedule, payment terms, and insurance information where the homeowner can review them.',
+  },
+  {
+    title: 'When the scope changes',
+    body: 'Describe the change, the reason, the price or allowance, and the schedule effect before doing the added work. A text message is better than silence; a clear written change is better than a scattered text thread.',
+  },
+  {
+    title: 'While the work is open',
+    body: 'Take useful progress photos, name products precisely, flag concealed conditions, and identify who approved each decision. Do not make the homeowner reconstruct the job from memory.',
+  },
+  {
+    title: 'At closeout',
+    body: 'Leave the final invoice, proof of payment, permit or inspection result when applicable, product details, care instructions, and both manufacturer and workmanship warranty terms.',
+  },
+] as const
 
 export default function ForProfessionalsPage() {
   return (
     <>
-      <section className="section">
+      <section className="section section--drafting">
         <div className="shell">
           <PageHeader
-            eyebrow="For professionals"
-            title="Proof outlasts marketing."
-            lede="Homesrolo is working toward homeowner-controlled project proof that can name materials, dates,
-              and who performed the work. That release and professional-facing flow is not live today."
+            eyebrow="For home service professionals"
+            title="Make your work easy for a homeowner to understand."
+            lede="Homesrolo is not a contractor CRM and it does not sell leads. It gives the homeowner one place to remember the work. A clean handoff makes that record useful long after the crew leaves."
           />
         </div>
       </section>
 
-      <section className="section section--sunken" style={{ paddingBlockStart: '3rem' }}>
+      <section className="section section--sunken">
         <div className="shell">
-          <Sections sections={FOR_PROFESSIONALS} />
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">The homeowner-ready handoff</p>
+            <h2>Four moments that prevent most record problems</h2>
+          </div>
+          <div className="grid grid--2">
+            {HANDOFF.map(item => (
+              <article className="card" key={item.title}>
+                <h3 className="card__title">{item.title}</h3>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="section">
         <div className="shell">
-          <div className="grid grid--2" style={{ gap: '3rem' }}>
+          <div className="grid grid--2" style={{ gap: '3rem', alignItems: 'start' }}>
             <div className="prose">
-              <h2>What is not for sale</h2>
-              <ul style={{ color: 'var(--ink-soft)', paddingLeft: '1.15rem' }}>
-                {NOT_FOR_SALE.map(line => <li key={line} style={{ marginBottom: '0.6rem' }}>{line}</li>)}
-              </ul>
-              <p>
-                If sponsored placement ever exists, it will be labelled as such and kept out of neutral ordering.
-                That is a commitment about structure, not a promise about intentions.
-              </p>
+              <p className="eyebrow">A simple standard</p>
+              <h2>Good work deserves a good record.</h2>
+              <p>A homeowner should be able to answer what was done, by whom, when, with which product, under what warranty, and what changed along the way. That applies to a roof, an air conditioner, a bathroom, a fence, or a two-hour service visit.</p>
+              <p>Homesrolo keeps that history on the homeowner side. Professionals can continue using their own estimating, scheduling, and CRM systems.</p>
             </div>
-            <div className="stack" style={{ '--stack-gap': '1rem' } as React.CSSProperties}>
-              <div className="note">
-                <strong>Regulated professionals are a separate lane.</strong> Public adjusters and other licensed
-                claim professionals cannot be mixed into ordinary contractor listings or into any compensated
-                steering, and that lane needs its own review before it exists.
-              </div>
-              <div className="note">
-                <strong>The control model is narrow by design.</strong> A future homeowner release would name
-                exactly what was shared; it would not silently transfer a professional&rsquo;s files.
-              </div>
-              <div className="note">
-                <strong>The professional side is not live.</strong> Professional sign-up, profile claiming,
-                and professional accounts are not available yet. Homeowner accounts and private whole-home project
-                records are a separate live system.
-              </div>
+            <div className="note">
+              <strong>Keep the boundary clear.</strong> Never ask for a homeowner’s sign-in link or password. Creating a project inside Homesrolo does not send the project to a contractor or grant access to the home record.
             </div>
           </div>
           <p style={{ marginTop: '2.5rem' }}>
-            <Link className="btn btn--quiet" href="/how-we-verify/">How verification works</Link>
+            <Link className="btn btn--primary" href="/home-projects/">See the homeowner project guide</Link>{' '}
+            <Link className="btn btn--quiet" href="/guides/">Browse homeowner guides</Link>
           </p>
         </div>
       </section>

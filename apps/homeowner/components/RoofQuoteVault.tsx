@@ -191,9 +191,7 @@ export function RoofQuoteVault({
       <div className="notice">
         <strong>Scope only—not a price score.</strong>{' '}
         Homesrolo does not estimate this roof, rank proposals, verify the company label, or recommend a contractor.
-        These classifications and notes stay in Homesrolo. A proposal PDF can leave only through the
-        separate “Get help with this roof” review, when file handoff is available and you explicitly
-        select it before consenting.
+        These classifications and notes stay in Homesrolo.
       </div>
 
       {quotes.state.status === 'loading' ? <Skeleton lines={3} label="Loading roof proposals" /> : null}
@@ -307,9 +305,7 @@ export function RoofQuoteVault({
             </select>
             <span className="field__hint">Upload the PDF to Project files first, then link it here.</span>
           </label>
-        ) : (
-          <p className="mono">Private uploads are off right now. You can record the written scope without attaching a file.</p>
-        )}
+        ) : null}
         <div className="quote-form__scope">
           {SCOPE_ROWS.map(([key, label]) => (
             <fieldset key={key}>

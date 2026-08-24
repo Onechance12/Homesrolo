@@ -245,7 +245,7 @@ export default function RoofWatchPage() {
           <div className="prose">
             <p className="eyebrow">Why it costs nothing</p>
             <h2 id="rw-why">Why Homesrolo is testing a free annual program</h2>
-            <p>{SITE_NAME} is being built around durable home records. Roof Watch applies that idea to a part of the house that is difficult to see and easy to forget between storms. A consistent inspection format also gives homeowners and roofing professionals a clearer starting point for future maintenance.</p>
+            <p>{SITE_NAME} gives a home a durable project history. Roof Watch applies that idea to a part of the house that is difficult to see and easy to forget between storms. A consistent inspection format also gives homeowners and roofing professionals a clearer starting point for later maintenance.</p>
             <p>The annual visit is offered without a membership fee at participating addresses. Availability, who performs the visit, any included maintenance, and the service limits are provided in writing before scheduling. You are not required to hire that professional for later work.</p>
           </div>
         </div>

@@ -78,7 +78,7 @@ function uploadFailure(error: PortError): Extract<UploadState, { status: 'error'
   }
   if (error === 'conflict') return {
     status: 'error', error, action: 'fresh_attempt',
-    message: 'This upload conflicts with an earlier attempt or a private beta limit was reached. Monthly safety limits do not reset when photos are deleted or a new attempt is started; try again after the limit window resets.',
+    message: 'This upload conflicts with an earlier attempt or a monthly photo limit was reached. Monthly safety limits do not reset when photos are deleted or a new attempt is started; try again after the limit window resets.',
   }
   if (error === 'not_signed_in') return {
     status: 'error', error, action: 'sign_in',
@@ -266,9 +266,8 @@ function CheckupGallery({
                         </p>
                         <p className="form-note">
                           This removes the photo files and redacts their details from active records.
-                          A minimal retry-safety receipt may remain until later housekeeping;
-                          this beta has no timed cleanup job. Provider backups follow the
-                          provider&rsquo;s retention schedule.
+                          A minimal retry-safety receipt may remain for safe retries.
+                          Provider backups follow the provider&rsquo;s retention schedule.
                         </p>
                         <div>
                           <button
@@ -498,28 +497,15 @@ export function PhotoCheckups({
       : 'Save checkup photo'
 
   if (!enabled) {
-    return (
-      <section id="photo-checkups" className="panel checkups" aria-labelledby="photo-checkups-title">
-        <div className="panel__head">
-          <div>
-            <p className="mono">Private condition record</p>
-            <h2 id="photo-checkups-title">Photos & seasonal home checkups</h2>
-          </div>
-        </div>
-        <EmptyState
-          title="Seasonal photo checkups are not open yet"
-          body="Seasonal photos are not available for this home yet. Nothing is uploaded or stored from this page while the feature is off."
-        />
-      </section>
-    )
+    return null
   }
 
   return (
     <section id="photo-checkups" className="panel checkups" aria-labelledby="photo-checkups-title">
       <div className="checkups__head">
         <div>
-          <p className="mono">Private condition record · beta</p>
-          <h2 id="photo-checkups-title">Photos & seasonal home checkups</h2>
+          <p className="mono">Private condition record</p>
+          <h2 id="photo-checkups-title">Photos &amp; seasonal home checkups</h2>
           <p>
             Repeat the same views a few times a year and after major weather or work.
             Homesrolo records what you photograph and write; it does not inspect or diagnose the home.
@@ -594,7 +580,7 @@ export function PhotoCheckups({
               required
             />
             <span className="field__hint">
-              Up to 10 MB. HEIC is not accepted in this beta; export or share a JPEG copy first.
+              Up to 10 MB. For an HEIC image, export or share a JPEG copy first.
             </span>
             {file ? <span className="checkup-file" role="status">Selected: {file.name}</span> : null}
             {fileError ? <span className="form-error" role="alert">{fileError}</span> : null}

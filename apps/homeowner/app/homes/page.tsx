@@ -65,7 +65,6 @@ export default function HomesPage({
                             {home.source === 'synthetic' ? (
                               <>
                                 <span className="mono">{home.projectCount} projects</span>
-                                <span className="mono">{home.openMaintenanceCount} upcoming tasks</span>
                               </>
                             ) : (
                               <span className="mono">{RELATIONSHIP_COPY[home.relationshipLabel]}</span>

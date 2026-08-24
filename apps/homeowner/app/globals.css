@@ -160,7 +160,7 @@ a:hover { color: var(--clay); }
   overflow: hidden;
 }
 .gate__card--wide { max-width: 34rem; }
-/* Filing-margin rule, carried over from the passport document. */
+/* Filing-margin rule for the private home record. */
 .gate__card::before {
   content: '';
   position: absolute;
@@ -527,6 +527,16 @@ a:hover { color: var(--clay); }
 }
 .rail__nav svg { flex: none; }
 .rail__foot { margin-top: auto; display: grid; gap: 0.35rem; }
+.rail__account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
 
 .topbar {
   display: flex;
@@ -554,6 +564,16 @@ a:hover { color: var(--clay); }
 }
 .topbar__brand .accent { color: var(--clay); }
 .topbar__home { font-size: 0.8rem; color: var(--ink-faint); text-align: right; }
+.topbar__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+}
 
 .main {
   padding: 1.15rem 1rem calc(var(--tabbar) + 1.5rem);
@@ -570,7 +590,7 @@ a:hover { color: var(--clay); }
   bottom: 0; left: 0; right: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   background: color-mix(in oklch, var(--paper-raised) 94%, transparent);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--rule-strong);
@@ -585,7 +605,7 @@ a:hover { color: var(--clay); }
   min-height: var(--tabbar);
   text-decoration: none;
   color: var(--ink-faint);
-  font-size: 0.66rem;
+  font-size: 0.74rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -692,6 +712,38 @@ a.stat:hover { border-color: var(--rule-strong); transform: translateY(-2px); bo
 }
 .stat dd { margin: 0; font-family: var(--font-display); font-size: 1.45rem; font-variant-numeric: tabular-nums; }
 .stat__note { font-size: 0.78rem; color: var(--ink-faint); }
+
+.home-area-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.home-area-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.home-area-list li:nth-child(odd) { border-right: 1px solid var(--rule); }
+.home-area-list li:nth-last-child(-n + 2) { border-bottom: 0; }
+.home-area-list span { color: var(--ink-faint); font-family: var(--font-mono); font-size: 0.68rem; }
+
+@media (min-width: 48rem) {
+  .home-area-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-area-list li { border-right: 1px solid var(--rule); }
+  .home-area-list li:nth-child(3n) { border-right: 0; }
+  .home-area-list li:nth-last-child(-n + 3) { border-bottom: 0; }
+}
 
 /* Row lists: projects, documents. */
 .rows { list-style: none; margin: 0; padding: 0; }
@@ -1156,6 +1208,7 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
 .stack > * + * { margin-top: var(--stack-gap, 1rem); }
 .pagehead { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .pagehead p { color: var(--ink-faint); font-size: 0.9rem; }
+.settings-shortcuts { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 1rem; }
 
 .backlink {
   display: inline-flex;

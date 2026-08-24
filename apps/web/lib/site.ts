@@ -1,11 +1,11 @@
 export const SITE_NAME = 'Homesrolo'
 
-export const SITE_TAGLINE = 'The private Rolodex for your home'
+export const SITE_TAGLINE = 'Every home has a history. Keep yours.'
 
 export const SITE_DESCRIPTION =
-  'Keep one private home record for maintenance, repairs, remodels, seasonal photo checkups (private beta), and roof proposal notes (private beta).'
+  'Keep one private home workspace for whole-home project records, historical projects, JPEG and PNG photo checkups, and homeowner-entered roof proposal notes.'
 
-export const SOCIAL_CARD_ALT = 'Homesrolo — the private Rolodex for your home'
+export const SOCIAL_CARD_ALT = 'Homesrolo — one private record for your home'
 
 /**
  * Used for canonical URLs and the sitemap. No network call is made with it at
@@ -54,21 +54,24 @@ export const HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?i
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
+  { href: '/home-care/', label: 'Home care' },
+  { href: '/home-projects/', label: 'Home projects' },
+  { href: '/home-record/', label: 'Home record' },
+  { href: '/guides/', label: 'Guides' },
   { href: '/how-it-works/', label: 'How it works' },
-  { href: '/academy/', label: 'Home care' },
-  { href: '/roof-watch/', label: 'Roof Watch' },
-  { href: '/for-professionals/', label: 'For pros' },
-  { href: '/for-agents/', label: 'For agents' },
   { href: '/about/', label: 'About' },
 ])
 
 /** Routes that belong in the sitemap. Synthetic profiles are excluded. */
 export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/',
+  '/home-care/',
+  '/home-projects/',
+  '/home-record/',
+  '/guides/',
   '/how-it-works/',
-  '/how-we-verify/',
-  '/professionals/',
-  '/academy/',
+  '/privacy/',
+  '/security/',
   '/services/roofing/',
   '/roof-watch/',
   '/roof-watch/guides/',
@@ -89,7 +92,6 @@ export const INDEXABLE_ROUTES: readonly string[] = Object.freeze([
   '/services/roofing/dfw/',
   '/services/roofing/dallas/',
   '/services/roofing/fort-worth/',
-  '/ideas/',
   '/for-professionals/',
   '/for-agents/',
   '/about/',

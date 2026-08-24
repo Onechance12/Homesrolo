@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">Homesrolo — the private Rolodex for your home</title>
+  <title id="title">Homesrolo — every home has a history</title>
   <desc id="desc">A dark Homesrolo sharing card with a private whole-home activity record.</desc>
   <rect width="1200" height="630" fill="#071c27"/>
   <circle cx="1100" cy="70" r="250" fill="#0b4f6c" opacity=".35"/>
@@ -9,10 +9,10 @@
     <path d="m21 30 15-13 15 13M26 28v18h20V28" fill="none" stroke="#c8ef4d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="94" y="46" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.5">homesrolo</text>
   </g>
-  <text x="72" y="238" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="3">THE PRIVATE ROLODEX FOR YOUR HOME</text>
-  <text x="72" y="320" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="-2.5">Your home has a lot</text>
-  <text x="72" y="390" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="-2.5">to remember.</text>
-  <text x="72" y="470" fill="#b7cbd0" font-family="Arial, Helvetica, sans-serif" font-size="23">Project records · photo checkups (beta) · roof proposal notes (beta)</text>
+  <text x="72" y="238" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="3">ONE PRIVATE HOME RECORD</text>
+  <text x="72" y="320" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="-2.5">Every home has</text>
+  <text x="72" y="390" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="-2.5">a history. Keep yours.</text>
+  <text x="72" y="470" fill="#b7cbd0" font-family="Arial, Helvetica, sans-serif" font-size="23">Projects · service · photos · files · decisions</text>
   <text x="72" y="552" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">homesrolo.com</text>
   <g transform="translate(790 160)">
     <rect x="22" y="22" width="310" height="330" rx="20" fill="#0a2836" stroke="#28505f" stroke-width="3"/>
@@ -32,14 +32,14 @@
       <circle cx="22" cy="29" r="6" fill="#c8ef4d"/>
       <text x="42" y="26" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Seasonal checkup</text>
       <text x="42" y="44" fill="#b7cbd0" font-family="Arial, Helvetica, sans-serif" font-size="11">Two repeatable views</text>
-      <text x="242" y="34" text-anchor="end" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700">BETA</text>
+      <text x="242" y="34" text-anchor="end" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700">DATED</text>
     </g>
     <g transform="translate(24 208)">
       <rect width="262" height="58" rx="10" fill="#071c27" opacity=".72" stroke="#315564"/>
       <circle cx="22" cy="29" r="6" fill="#c8ef4d"/>
       <text x="42" y="26" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Roof proposals</text>
       <text x="42" y="44" fill="#b7cbd0" font-family="Arial, Helvetica, sans-serif" font-size="11">Homeowner-entered scope notes</text>
-      <text x="242" y="34" text-anchor="end" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700">BETA</text>
+      <text x="242" y="34" text-anchor="end" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700">NOTES</text>
     </g>
     <text x="155" y="304" text-anchor="middle" fill="#8ca9b0" font-family="Arial, Helvetica, sans-serif" font-size="11">ILLUSTRATIVE PRIVATE RECORD</text>
   </g>

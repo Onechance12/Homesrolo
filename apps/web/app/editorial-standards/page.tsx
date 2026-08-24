@@ -5,8 +5,8 @@ import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { SITE_NAME, SITE_ORIGIN } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
-  title: 'How Homesrolo checks its public guides',
-  description: 'Homesrolo keeps private home records and publishes sourced homeowner guides. See how the public guides are researched, limited, and updated.',
+  title: 'How Homesrolo researches homeowner guides',
+  description: 'See how Homesrolo checks sources, dates practical guidance, explains limits, and corrects material facts in its homeowner guides.',
   canonical: '/editorial-standards/',
 })
 
@@ -14,9 +14,9 @@ export default function EditorialStandardsPage() {
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
-    name: 'How Homesrolo builds guides homeowners can check',
+    name: 'How Homesrolo researches homeowner guides',
     url: `${SITE_ORIGIN}/editorial-standards/`,
-    dateModified: '2026-08-21',
+    dateModified: '2026-08-23',
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
   }
 
@@ -26,9 +26,9 @@ export default function EditorialStandardsPage() {
       <section className="section section--drafting">
         <div className="shell">
           <PageHeader
-            eyebrow="Editorial standards"
-            title="How Homesrolo builds guides homeowners can check"
-            lede="Homesrolo helps homeowners understand major home projects, organize the records, and keep the history attached to the property. These standards cover the public roofing and Roof Watch guides—the pages about costs, materials, repairs, contractors, storms, inspections, and local permit rules."
+            eyebrow="How we research"
+            title="Useful guidance should show its work."
+            lede="Homesrolo is a home-care and home-record tool. When a public guide relies on a law, permit rule, technical standard, market benchmark, or manufacturer document, the source and the limits belong on the page too."
           />
         </div>
       </section>
@@ -39,8 +39,8 @@ export default function EditorialStandardsPage() {
         <div className="shell">
           <div className="prose">
             <h2>Want the bigger picture?</h2>
-            <p>The About page explains Homesrolo as a whole. The roofing center shows these standards in practice.</p>
-            <p><Link className="btn btn--primary" href="/about/">About Homesrolo</Link> <Link className="btn btn--quiet" href="/services/roofing/">Read the roofing guides</Link></p>
+            <p>The About page explains the product. The guide library puts this research method to work across the home.</p>
+            <p><Link className="btn btn--primary" href="/about/">About Homesrolo</Link> <Link className="btn btn--quiet" href="/guides/">Browse homeowner guides</Link></p>
           </div>
         </div>
       </section>

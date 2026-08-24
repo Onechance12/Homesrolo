@@ -13,9 +13,8 @@ import { Skeleton } from '../../components/states.tsx'
 /**
  * Sign in.
  *
- * Synthetic mode (the default): the honest demo button and a disabled real
- * sign-in affordance, exactly as before — no account exists and the screen
- * says so.
+ * Synthetic mode (the default): an honest sample-account doorway. No account
+ * exists, and the screen says so.
  *
  * Remote mode: the email magic-link form renders ONLY when the server's own
  * session capabilities report it live. Acceptance shows a generic message that
@@ -120,10 +119,6 @@ function SyntheticEntry() {
         <button type="button" className="btn btn--primary btn--block" onClick={enterDemo} disabled={busy}>
           {busy ? 'Opening the demo…' : 'Continue with a sample account'}
         </button>
-        <button type="button" className="btn btn--quiet btn--block" disabled
-          title="This local demo uses only sample data">
-          Email sign-in is unavailable in the demo
-        </button>
       </div>
       <p className="mono" style={{ marginTop: '1.1rem' }}>
         No account is created and nothing is stored.
@@ -157,9 +152,8 @@ export default function SignInPage({
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
             {isRoofInspectionEntry
               ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
-              : <>Start one private Rolodex for the whole home. Record past or planned work now;
-                the Home Library shows where photos, warranties, maintenance, insurance, inventory,
-                and the rest of the home&rsquo;s history belong.</>}
+              : <>Start one private Home Record for the whole home. Record planned work, active projects,
+                completed history, and repeatable photo checkups around the property.</>}
           </p>
 
           {mode === 'synthetic' ? (
@@ -187,7 +181,7 @@ export default function SignInPage({
             </div>
           ) : (
             <div className="state" style={{ marginTop: '1.25rem' }}>
-              <h2 style={{ fontSize: '1.1rem' }}>Sign-in is not available yet</h2>
+              <h2 style={{ fontSize: '1.1rem' }}>Sign-in is temporarily unavailable</h2>
               <p>
                 The server is reachable but reports no sign-in method. Nothing to
                 do here for now.
