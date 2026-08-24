@@ -9,6 +9,7 @@ import { IconDocs } from '../../../../components/icons.tsx'
 import { HomeRecordHandoffs } from '../../../../components/HomeRecordHandoffs.tsx'
 import { mintCommandRef } from '../../../../lib/port/command-ref.ts'
 import type { DocumentKind, DocumentSummary } from '../../../../lib/port/types.ts'
+import { handoffShareRef } from '../../../../lib/entry-context.ts'
 
 const KIND_LABEL: Record<DocumentKind, string> = {
   document: 'Home record',
@@ -49,8 +50,16 @@ function FiledRows({ records }: { records: readonly DocumentSummary[] }) {
 }
 
 /** The working index to every record Homesrolo can actually open for this home. */
-export default function HomeRecordPage({ params }: { params: Promise<{ homeId: string }> }) {
+export default function HomeRecordPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ homeId: string }>
+  searchParams: Promise<{ handoff?: string | string[] }>
+}) {
   const { homeId } = use(params)
+  const query = use(searchParams)
+  const entryShareId = handoffShareRef(query.handoff)
   const port = usePort()
   const mode = usePortMode()
   const session = useSession()
@@ -121,7 +130,9 @@ export default function HomeRecordPage({ params }: { params: Promise<{ homeId: s
         <div className="notice"><strong>Sample record.</strong> Listed items are synthetic and disappear on refresh.</div>
       ) : null}
 
-      {handoffsEnabled ? <HomeRecordHandoffs homeId={homeId} /> : null}
+      {handoffsEnabled ? (
+        <HomeRecordHandoffs homeId={homeId} entryShareId={entryShareId} />
+      ) : null}
 
       <section aria-labelledby="record-sections-title">
         <div className="panel__head">

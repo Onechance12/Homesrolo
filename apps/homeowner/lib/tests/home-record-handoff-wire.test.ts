@@ -56,6 +56,7 @@ test('remote handoff methods build only exact-home same-origin JSON requests', a
   const requests: TransportRequest[] = []
   const replies: Record<string, unknown> = {
     [`GET /api/v1/homes/${homeRef}/handoffs`]: [preview],
+    [`POST /api/v1/homes/${homeRef}/handoffs/${shareId}/claim`]: preview,
     [`GET /api/v1/homes/${homeRef}/handoffs/${shareId}`]: preview,
     [`POST /api/v1/homes/${homeRef}/handoffs/${shareId}/accept`]: {
       ...preview,
@@ -81,6 +82,7 @@ test('remote handoff methods build only exact-home same-origin JSON requests', a
   }
   const port = createRemotePort(transport)
   assert.ok((await port.listHomeRecordHandoffs(homeRef)).ok)
+  assert.ok((await port.claimHomeRecordHandoff(homeRef, shareId)).ok)
   assert.ok((await port.previewHomeRecordHandoff(homeRef, shareId)).ok)
   assert.ok((await port.acceptHomeRecordHandoff(homeRef, shareId, {
     commandRef,
@@ -94,6 +96,11 @@ test('remote handoff methods build only exact-home same-origin JSON requests', a
   })).ok)
   assert.deepEqual(requests, [
     { method: 'GET', path: `/api/v1/homes/${homeRef}/handoffs` },
+    {
+      method: 'POST',
+      path: `/api/v1/homes/${homeRef}/handoffs/${shareId}/claim`,
+      body: {},
+    },
     { method: 'GET', path: `/api/v1/homes/${homeRef}/handoffs/${shareId}` },
     {
       method: 'POST',
@@ -113,6 +120,20 @@ test('remote handoff methods build only exact-home same-origin JSON requests', a
   ])
   assert.equal(JSON.stringify(requests).includes('recipientRef'), false)
   assert.equal(JSON.stringify(requests).includes('principalRef'), false)
+  assert.equal(JSON.stringify(requests).includes('address'), false)
+  assert.equal(JSON.stringify(requests).includes('email'), false)
+})
+
+test('a claim response cannot swap the exact share selected by the homeowner', async () => {
+  const port = createRemotePort(async () => ({
+    kind: 'reply',
+    status: 200,
+    body: { data: { ...preview, shareId: ref('hshr', 'x') } },
+  }))
+  assert.deepEqual(
+    await port.claimHomeRecordHandoff(homeRef, shareId),
+    { ok: false, error: 'invalid' },
+  )
 })
 
 test('malformed handoff refs and consent never become network requests', async () => {
@@ -121,6 +142,10 @@ test('malformed handoff refs and consent never become network requests', async (
     calls += 1
     return { kind: 'network_failure' as const }
   })
+  assert.deepEqual(
+    await port.claimHomeRecordHandoff(homeRef, 'hshr_short'),
+    { ok: false, error: 'not_found' },
+  )
   assert.deepEqual(
     await port.previewHomeRecordHandoff(homeRef, 'hshr_short'),
     { ok: false, error: 'not_found' },

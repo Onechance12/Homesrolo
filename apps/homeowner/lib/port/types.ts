@@ -643,6 +643,7 @@ export interface HomeownerDataPort {
   requestMagicLink(
     email: string,
     intent?: RoofingNeed | null,
+    handoff?: string | null,
   ): Promise<PortResult<{ readonly accepted: true }>>
   signOut(): Promise<void>
 
@@ -693,6 +694,10 @@ export interface HomeownerDataPort {
   listHomeRecordHandoffs(
     homeRef: string,
   ): Promise<PortResult<readonly HomeRecordHandoffPreview[]>>
+  claimHomeRecordHandoff(
+    homeRef: string,
+    shareId: string,
+  ): Promise<PortResult<HomeRecordHandoffPreview>>
   previewHomeRecordHandoff(
     homeRef: string,
     shareId: string,

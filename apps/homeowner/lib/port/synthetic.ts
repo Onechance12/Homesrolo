@@ -293,6 +293,11 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async claimHomeRecordHandoff() {
+    await wait()
+    return err('unavailable')
+  },
+
   async previewHomeRecordHandoff() {
     await wait()
     return err('unavailable')

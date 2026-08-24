@@ -69,18 +69,27 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   }), null)
 })
 
-test('magic-link callback query permits one bounded intent and rejects ambiguity', () => {
+test('magic-link callback query preserves only bounded entry context and rejects ambiguity', () => {
+  const handoff = `hshr_${'s'.repeat(43)}`
   assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
     token_hash: 't'.repeat(43), type: 'email',
   })), true)
   assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
     token_hash: 't'.repeat(43), type: 'email', intent: 'repair',
   })), true)
+  assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
+    token_hash: 't'.repeat(43), type: 'email', handoff,
+  })), true)
+  assert.equal(validMagicLinkCallbackQuery(new URLSearchParams({
+    token_hash: 't'.repeat(43), type: 'email', intent: 'repair', handoff,
+  })), true)
   for (const query of [
     'token_hash=x&type=email&intent=insurance_claim',
     'token_hash=x&type=email&next=https://evil.test',
     'token_hash=x&token_hash=y&type=email',
     'token_hash=x&type=email&intent=repair&intent=replacement',
+    'token_hash=x&type=email&handoff=hshr_short',
+    `token_hash=x&type=email&handoff=${handoff}&handoff=${handoff}`,
   ]) {
     assert.equal(validMagicLinkCallbackQuery(new URLSearchParams(query)), false, query)
   }
@@ -131,7 +140,8 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
     now: () => new Date('2026-08-12T10:00:00.000Z'),
   })
 
-  assert.equal(await service.requestMagicLink(' Person@Example.com ', 'storm_damage'), 'accepted')
+  const handoff = `hshr_${'s'.repeat(43)}`
+  assert.equal(await service.requestMagicLink(' Person@Example.com ', 'storm_damage', handoff), 'accepted')
   const handle = await service.completeMagicLink('t'.repeat(43))
   assert.ok(handle)
   assert.match(handle, /^[A-Za-z0-9_-]{43}$/)
@@ -139,7 +149,7 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
     email: 'person@example.com',
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: 'https://app.homesrolo.com/auth/complete?intent=storm_damage',
+      emailRedirectTo: `https://app.homesrolo.com/auth/complete?intent=storm_damage&handoff=${handoff}`,
     },
   })
   assert.deepEqual(authCalls[1], { token_hash: 't'.repeat(43), type: 'email' })

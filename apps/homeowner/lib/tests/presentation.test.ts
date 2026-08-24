@@ -103,6 +103,8 @@ test('the demo banner is part of the shell whenever the mode is synthetic', () =
 test('the app never claims to be indexed', () => {
   const layout = read('app/layout.tsx')
   assert.match(layout, /robots:\s*\{\s*index:\s*false/)
+  assert.match(layout, /referrer:\s*'no-referrer'/,
+    'opaque entry context is never sent as a referrer')
 })
 
 test('browser and server-to-server network calls exist only in their sanctioned transports', () => {
@@ -160,7 +162,16 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   const boundary = read('lib/server/home-record-handoff-http.ts')
   const runtime = read('lib/server/runtime.ts')
   assert.match(page, /session\.state\.capabilities\.homeRecordHandoffs/)
-  assert.match(page, /handoffsEnabled \? <HomeRecordHandoffs homeId=\{homeId\} \/> : null/)
+  assert.match(page, /handoffsEnabled[\s\S]*<HomeRecordHandoffs homeId=\{homeId\} entryShareId=\{entryShareId\} \/>/)
+  assert.equal((component.match(/claimHomeRecordHandoff/g) ?? []).length, 1,
+    'one explicit handler owns the only claim call')
+  assert.match(component, /async function claimEntryHandoff\(\)[\s\S]*port\.claimHomeRecordHandoff/)
+  assert.match(component, /onClick=\{\(\) => void claimEntryHandoff\(\)\}/,
+    'a deliberate button click is the only claim trigger')
+  for (const effect of component.matchAll(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[[^\]]*\]\)/g)) {
+    assert.doesNotMatch(effect[1] ?? '', /claimHomeRecordHandoff/,
+      'render effects may list received handoffs but never claim a link')
+  }
   assert.match(component, /active\.acceptanceText/,
     'the signed acceptance statement is shown beside the consent control')
   assert.match(component, /selectedArtifactRefs:[\s\S]*selected\.has/,
@@ -168,6 +179,21 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   assert.match(component, /Unselected files stay out/)
   assert.match(component, /Download accepted pro files/,
     'the handoff-only ZIP is not mislabeled as the complete Home Record')
+  assert.match(component, /Check whether this one-job link belongs with this Home Record/,
+    'the pre-claim prompt does not claim the link matches a home')
+  const claimHandler = component.slice(
+    component.indexOf('async function claimEntryHandoff'),
+    component.indexOf('async function openHandoff'),
+  )
+  const failedClaim = claimHandler.slice(
+    claimHandler.indexOf('if (!result.ok)'),
+    claimHandler.indexOf('claimedEntry.current'),
+  )
+  assert.doesNotMatch(failedClaim, /clearHandoffFromAddressBar/,
+    'a wrong-home or transient result cannot destroy a valid link')
+  assert.match(claimHandler, /showPreview\(result\.value\)[\s\S]*clearHandoffFromAddressBar\(\)/,
+    'the opaque query is cleared only after the exact preview succeeds')
+  assert.match(component, /Choose a different home/)
   assert.doesNotMatch(component, /coming soon|\bmeasurement/i)
   assert.match(boundary, /claimExactShare/,
     'the HTTP boundary may activate only one explicit share through its injected controller')
@@ -783,12 +809,35 @@ test('one bounded roofing intent continues through the existing homeowner flow',
   const newHome = read('app/homes/new/page.tsx')
   const projects = read('app/home/[homeId]/projects/page.tsx')
   for (const content of [signin, homes, newHome]) {
-    assert.match(content, /withRoofingIntent/)
-    assert.match(content, /roofingIntent/)
+    assert.match(content, /homeownerEntryContext/)
+    assert.match(content, /withHomeownerEntryContext|homeownerEntryDestination/)
   }
   assert.match(projects, /carriedIntent/)
   assert.match(projects, /Nothing is sent to a contractor unless you choose that later\./)
   assert.doesNotMatch([signin, homes, newHome, projects].join('\n'), /insurance_claim/)
+})
+
+test('one opaque handoff context survives auth and home selection without auto-claiming', () => {
+  const signin = read('app/signin/page.tsx')
+  const authComplete = read('app/auth/complete/page.tsx')
+  const homes = read('app/homes/page.tsx')
+  const newHome = read('app/homes/new/page.tsx')
+  const documents = read('app/home/[homeId]/documents/page.tsx')
+  const helper = read('lib/entry-context.ts')
+  const authHttp = read('lib/server/auth-http.ts')
+
+  assert.match(helper, /\^hshr_\[A-Za-z0-9_-\]\{43\}\$/,
+    'only one opaque share reference is accepted')
+  assert.match(signin, /port\.requestMagicLink\(email\.trim\(\), context\.intent, context\.handoff\)/)
+  assert.match(authComplete, /withHomeownerEntryContext\('\/homes', context\)/)
+  assert.match(authHttp, /signInPathForEntryContext\(rawIntent, rawHandoff\)/,
+    'a valid handoff survives an expired provider token so the homeowner can sign in again')
+  assert.match(homes, /homeownerEntryDestination\(home\.homeRef, context\)/)
+  assert.equal((newHome.match(/homeownerEntryDestination\(submit\.homeRef, context\)/g) ?? []).length, 2,
+    'created and partially-created homes both retain the exact entry destination')
+  assert.match(documents, /handoffShareRef\(query\.handoff\)/)
+  assert.match(css, /@media \(max-width: 38rem\)[\s\S]*\.handoff-entry/,
+    'the entry prompt has a phone-safe layout')
 })
 
 test('the inspection entry explains the private boundary before sign in', () => {

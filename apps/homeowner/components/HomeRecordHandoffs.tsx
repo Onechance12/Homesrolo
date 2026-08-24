@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { withHomeownerEntryContext } from '../lib/entry-context.ts'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePort } from '../lib/port/provider.tsx'
 import type {
@@ -11,6 +13,14 @@ import type {
 
 interface HomeRecordHandoffsProps {
   readonly homeId: string
+  readonly entryShareId: string | null
+}
+
+type EntryAttempt = {
+  readonly homeId: string
+  readonly shareId: string | null
+  readonly state: 'absent' | 'ready' | 'claiming' | 'claimed' | 'unavailable'
+  readonly error: string | null
 }
 
 const STATE_LABEL: Readonly<Record<HomeRecordHandoffState, string>> = Object.freeze({
@@ -28,6 +38,11 @@ const TYPE_LABEL = Object.freeze({
   'image/jpeg': 'JPEG',
   'image/png': 'PNG',
 })
+
+const ENTRY_WRONG_HOME_COPY =
+  'This file handoff is not available for this home. Nothing was added. You can choose a different home.'
+const ENTRY_RETRY_COPY =
+  'We could not open this file handoff right now. Nothing was added. Try again in a moment.'
 
 function friendlySize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -51,11 +66,17 @@ function errorMessage(error: PortError): string {
   return 'The handoff could not be opened right now. Try again in a moment.'
 }
 
+function clearHandoffFromAddressBar() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('handoff')
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
 /**
  * Homeowner-controlled contractor file intake. It is mounted only when the
  * signed session reports the independently configured handoff capability.
  */
-export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
+export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsProps) {
   const port = usePort()
   const [handoffs, setHandoffs] = useState<readonly HomeRecordHandoffPreview[]>([])
   const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -63,10 +84,34 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [consent, setConsent] = useState(false)
   const [confirmReject, setConfirmReject] = useState(false)
-  const [action, setAction] = useState<'idle' | 'opening' | 'accepting' | 'rejecting'>('idle')
+  const [action, setAction] = useState<'idle' | 'claiming' | 'opening' | 'accepting' | 'rejecting'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [entryAttempt, setEntryAttempt] = useState<EntryAttempt>({
+    homeId,
+    shareId: entryShareId,
+    state: entryShareId ? 'ready' : 'absent',
+    error: null,
+  })
   const acceptanceCommand = useRef<string | null>(null)
   const rejectionCommand = useRef<string | null>(null)
+  const claimedEntry = useRef<{
+    readonly homeId: string
+    readonly preview: HomeRecordHandoffPreview
+  } | null>(null)
+
+  const entryMatches = entryAttempt.homeId === homeId && entryAttempt.shareId === entryShareId
+  const entryState = entryMatches
+    ? entryAttempt.state
+    : entryShareId ? 'ready' : 'absent'
+  const entryError = entryMatches ? entryAttempt.error : null
+
+  const mergeClaimedEntry = useCallback((next: readonly HomeRecordHandoffPreview[]) => {
+    const claimed = claimedEntry.current
+    return claimed?.homeId === homeId
+      && !next.some(handoff => handoff.shareId === claimed.preview.shareId)
+      ? [claimed.preview, ...next]
+      : next
+  }, [homeId])
 
   const load = useCallback(async () => {
     setListState('loading')
@@ -76,10 +121,10 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
       setError(errorMessage(result.error))
       return
     }
-    setHandoffs(result.value)
+    setHandoffs(mergeClaimedEntry(result.value))
     setListState('ready')
     setError(null)
-  }, [homeId, port])
+  }, [homeId, mergeClaimedEntry, port])
 
   useEffect(() => {
     let live = true
@@ -90,17 +135,55 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
         setError(errorMessage(result.error))
         return
       }
-      setHandoffs(result.value)
+      setHandoffs(mergeClaimedEntry(result.value))
       setListState('ready')
       setError(null)
     })
     return () => { live = false }
-  }, [homeId, port])
+  }, [homeId, mergeClaimedEntry, port])
 
   function replaceHandoff(next: HomeRecordHandoffPreview) {
-    setHandoffs(current => current.map(handoff =>
-      handoff.shareId === next.shareId ? next : handoff))
+    setHandoffs(current => current.some(handoff => handoff.shareId === next.shareId)
+      ? current.map(handoff => handoff.shareId === next.shareId ? next : handoff)
+      : [next, ...current])
     setActive(next)
+  }
+
+  function showPreview(next: HomeRecordHandoffPreview) {
+    setActive(next)
+    setSelected(new Set(next.items
+      .filter(item => item.decision === 'pending')
+      .map(item => item.artifactRef)))
+    setConsent(false)
+    setConfirmReject(false)
+    acceptanceCommand.current = null
+    rejectionCommand.current = null
+  }
+
+  async function claimEntryHandoff() {
+    if (!entryShareId || entryState !== 'ready' || action !== 'idle') return
+    setEntryAttempt({ homeId, shareId: entryShareId, state: 'claiming', error: null })
+    setAction('claiming')
+    const result = await port.claimHomeRecordHandoff(homeId, entryShareId)
+    setAction('idle')
+    if (!result.ok) {
+      const terminal = ['not_found', 'forbidden', 'invalid', 'conflict'].includes(result.error)
+      setEntryAttempt({
+        homeId,
+        shareId: entryShareId,
+        state: terminal ? 'unavailable' : 'ready',
+        error: terminal ? ENTRY_WRONG_HOME_COPY : ENTRY_RETRY_COPY,
+      })
+      return
+    }
+    claimedEntry.current = { homeId, preview: result.value }
+    setEntryAttempt({ homeId, shareId: entryShareId, state: 'claimed', error: null })
+    setListState('ready')
+    setError(null)
+    replaceHandoff(result.value)
+    showPreview(result.value)
+    clearHandoffFromAddressBar()
+    requestAnimationFrame(() => document.getElementById('handoff-review-title')?.focus())
   }
 
   async function openHandoff(shareId: string) {
@@ -113,14 +196,7 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
       setError(errorMessage(result.error))
       return
     }
-    setActive(result.value)
-    setSelected(new Set(result.value.items
-      .filter(item => item.decision === 'pending')
-      .map(item => item.artifactRef)))
-    setConsent(false)
-    setConfirmReject(false)
-    acceptanceCommand.current = null
-    rejectionCommand.current = null
+    showPreview(result.value)
   }
 
   function toggleItem(artifactRef: string) {
@@ -177,7 +253,8 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
     setConfirmReject(false)
   }
 
-  if (listState === 'ready' && handoffs.length === 0) return null
+  const showEntryPrompt = entryShareId !== null && entryState !== 'claimed'
+  if (listState === 'ready' && handoffs.length === 0 && !showEntryPrompt) return null
 
   const acceptedCount = handoffs.filter(handoff => handoff.state === 'accepted').length
   const reviewableCount = handoffs.filter(handoff => handoff.state === 'received').length
@@ -185,6 +262,38 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
 
   return (
     <section className="handoff-vault" aria-labelledby="handoff-vault-title">
+      {showEntryPrompt ? (
+        <div className="handoff-entry" aria-labelledby="handoff-entry-title">
+          <div className="handoff-entry__mark" aria-hidden="true">→</div>
+          <div>
+            <p className="mono">Private delivery</p>
+            <h2 id="handoff-entry-title">Review a professional file handoff</h2>
+            <p>
+              Check whether this one-job link belongs with this Home Record. Nothing is added until you review and accept.
+            </p>
+          </div>
+          {entryError ? (
+            <p className="handoff-entry__error" role="alert">{entryError}</p>
+          ) : null}
+          {entryState === 'unavailable' ? (
+            <Link
+              className="btn btn--secondary"
+              href={withHomeownerEntryContext('/homes', { intent: null, handoff: entryShareId })}
+            >
+              Choose a different home
+            </Link>
+          ) : (
+            <button
+              className="btn btn--primary"
+              type="button"
+              disabled={entryState !== 'ready' || action !== 'idle'}
+              onClick={() => void claimEntryHandoff()}
+            >
+              {entryState === 'claiming' ? 'Opening secure preview…' : 'Review these files'}
+            </button>
+          )}
+        </div>
+      ) : null}
       <div className="handoff-vault__head">
         <div>
           <p className="mono">Sent by a home service pro</p>
@@ -258,7 +367,7 @@ export function HomeRecordHandoffs({ homeId }: HomeRecordHandoffsProps) {
           <div className="handoff-review__head">
             <div>
               <p className="mono">Exact file preview</p>
-              <h3 id="handoff-review-title">
+              <h3 id="handoff-review-title" tabIndex={-1}>
                 {activeIsReviewable ? 'Choose what belongs in your record' : STATE_LABEL[active.state]}
               </h3>
               <p>

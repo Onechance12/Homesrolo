@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation'
 import { use, useState } from 'react'
 import { usePort, usePortMode, useSession } from '../../lib/port/provider.tsx'
 import { SYNTHETIC_NOTICE } from '../../lib/port/types.ts'
-import { roofingIntent, withRoofingIntent } from '../../lib/roofing-intent.ts'
-import type { RoofingNeed } from '../../lib/port/types.ts'
+import {
+  homeownerEntryContext,
+  withHomeownerEntryContext,
+  type HomeownerEntryContext,
+} from '../../lib/entry-context.ts'
 import { HouseMark } from '../../components/icons.tsx'
 import { Skeleton } from '../../components/states.tsx'
 
@@ -30,7 +33,7 @@ type MagicLinkState =
   | { kind: 'invalid' }
   | { kind: 'failed' }
 
-function MagicLinkForm({ intent }: { intent: RoofingNeed | null }) {
+function MagicLinkForm({ context }: { context: HomeownerEntryContext }) {
   const port = usePort()
   const [email, setEmail] = useState('')
   const [state, setState] = useState<MagicLinkState>({ kind: 'idle' })
@@ -38,7 +41,7 @@ function MagicLinkForm({ intent }: { intent: RoofingNeed | null }) {
   async function request(event: React.FormEvent) {
     event.preventDefault()
     setState({ kind: 'sending' })
-    const result = await port.requestMagicLink(email.trim(), intent)
+    const result = await port.requestMagicLink(email.trim(), context.intent, context.handoff)
     if (result.ok) { setState({ kind: 'accepted' }); return }
     if (result.error === 'rate_limited') { setState({ kind: 'rate_limited' }); return }
     if (result.error === 'invalid') { setState({ kind: 'invalid' }); return }
@@ -130,11 +133,13 @@ function SyntheticEntry() {
 export default function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ intent?: string | string[] }>
+  searchParams: Promise<{ intent?: string | string[]; handoff?: string | string[] }>
 }) {
   const query = use(searchParams)
-  const intent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
+  const context = homeownerEntryContext({ intent: query.intent, handoff: query.handoff })
+  const { intent, handoff } = context
   const isRoofInspectionEntry = intent === 'inspection'
+  const isHandoffEntry = handoff !== null
   const mode = usePortMode()
   const { state: session } = useSession()
 
@@ -144,13 +149,19 @@ export default function SignInPage({
       <main id="main" tabIndex={-1} className="gate__main">
         <div className="gate__card">
           <p className="mono" style={{ marginBottom: '0.4rem' }}>
-            {isRoofInspectionEntry ? 'Roof inspection · homeowner sign in' : 'Homeowner sign in'}
+            {isHandoffEntry
+              ? 'Private file handoff · homeowner sign in'
+              : isRoofInspectionEntry ? 'Roof inspection · homeowner sign in' : 'Homeowner sign in'}
           </p>
           <h1 style={{ fontSize: '1.5rem' }}>
-            {isRoofInspectionEntry ? 'Start your private roof record.' : <>Open your home&rsquo;s file.</>}
+            {isHandoffEntry
+              ? 'Choose where these files belong.'
+              : isRoofInspectionEntry ? 'Start your private roof record.' : <>Open your home&rsquo;s file.</>}
           </h1>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
-            {isRoofInspectionEntry
+            {isHandoffEntry
+              ? 'Sign in, choose the right home, and review the exact files before anything can be copied into its private Home Record.'
+              : isRoofInspectionEntry
               ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
               : <>Start one private Home Record for the whole home. Record planned work, active projects,
                 completed history, and repeatable photo checkups around the property.</>}
@@ -169,15 +180,17 @@ export default function SignInPage({
                   ? `You are already signed in as ${session.session.displayName}.`
                   : 'You are already signed in.'}
               </p>
-              <Link className="btn btn--primary btn--block" href={withRoofingIntent('/homes', intent)}>
-                {isRoofInspectionEntry
+              <Link className="btn btn--primary btn--block" href={withHomeownerEntryContext('/homes', context)}>
+                {isHandoffEntry
+                  ? 'Choose the home for these files'
+                  : isRoofInspectionEntry
                   ? 'Continue to my roof record'
                   : intent ? 'Continue my roof project' : 'Go to your homes'}
               </Link>
             </div>
           ) : session.capabilities.magicLinkSignIn ? (
             <div style={{ marginTop: '1.25rem' }}>
-              <MagicLinkForm intent={intent} />
+              <MagicLinkForm context={context} />
             </div>
           ) : (
             <div className="state" style={{ marginTop: '1.25rem' }}>

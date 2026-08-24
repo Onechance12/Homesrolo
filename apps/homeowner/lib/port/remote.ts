@@ -328,7 +328,7 @@ export function createRemotePort(
       }, decodeHomeResearchResult)
     },
 
-    async requestMagicLink(email, requestedIntent = null) {
+    async requestMagicLink(email, requestedIntent = null, requestedHandoff = null) {
       const normalized = email.trim().toLowerCase()
       if (normalized.length < 3 || normalized.length > 254
         || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
@@ -336,10 +336,18 @@ export function createRemotePort(
       }
       const intent = requestedIntent === null ? null : roofingIntent(requestedIntent)
       if (requestedIntent !== null && intent === null) return { ok: false, error: 'invalid' }
+      const handoff = requestedHandoff === null || SHARE_REF.test(requestedHandoff)
+        ? requestedHandoff
+        : null
+      if (requestedHandoff !== null && handoff === null) return { ok: false, error: 'invalid' }
       return call({
         method: 'POST',
         path: `${API}/auth/magic-link`,
-        body: intent ? { email: normalized, intent } : { email: normalized },
+        body: {
+          email: normalized,
+          ...(intent ? { intent } : {}),
+          ...(handoff ? { handoff } : {}),
+        },
       }, value => {
         if (!value || typeof value !== 'object' || Array.isArray(value)
           || (value as { accepted?: unknown }).accepted !== true
@@ -563,6 +571,23 @@ export function createRemotePort(
         { method: 'GET', path: `${API}/homes/${home}/handoffs` },
         decodeHomeRecordHandoffList,
       )
+    },
+
+    async claimHomeRecordHandoff(homeRef, shareId) {
+      const home = homeRefSegment(homeRef)
+      if (!home || !SHARE_REF.test(shareId)) return { ok: false, error: 'not_found' }
+      const result = await call(
+        {
+          method: 'POST',
+          path: `${API}/homes/${home}/handoffs/${shareId}/claim`,
+          body: {},
+        },
+        decodeHomeRecordHandoffPreview,
+      )
+      if (result.ok && result.value.shareId !== shareId) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
     },
 
     async previewHomeRecordHandoff(homeRef, shareId) {

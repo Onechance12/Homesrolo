@@ -15,7 +15,11 @@ import {
   type HomeTypeAnswer, type IntakeDraft, type SystemKind,
 } from '../../../lib/intake/script.ts'
 import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
-import { roofingIntent, withRoofingIntent } from '../../../lib/roofing-intent.ts'
+import {
+  homeownerEntryContext,
+  homeownerEntryDestination,
+  withHomeownerEntryContext,
+} from '../../../lib/entry-context.ts'
 
 /**
  * Opening a home's file is a short setup form. The underlying intake machine
@@ -219,10 +223,11 @@ function ReviewCard({
 export default function NewHomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ intent?: string | string[] }>
+  searchParams: Promise<{ intent?: string | string[]; handoff?: string | string[] }>
 }) {
   const query = use(searchParams)
-  const intent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
+  const context = homeownerEntryContext({ intent: query.intent, handoff: query.handoff })
+  const { intent, handoff } = context
   const port = usePort()
   const mode = usePortMode()
   const { state: session } = useSession()
@@ -360,9 +365,7 @@ export default function NewHomePage({
       await saveIntake(result.value.homeRef, draft)
       return
     }
-    router.push(intent
-      ? withRoofingIntent(`/home/${result.value.homeRef}/projects`, intent)
-      : `/home/${result.value.homeRef}`)
+    router.push(homeownerEntryDestination(result.value.homeRef, context))
   }
 
   return (
@@ -371,18 +374,19 @@ export default function NewHomePage({
       <main id="main" tabIndex={-1} className="gate__main gate__main--setup">
         <div className="gate__card gate__card--setup">
           {session.kind === 'signed_out' ? (
-            <UnauthorizedState signInHref={withRoofingIntent('/signin', intent)} />
+            <UnauthorizedState signInHref={withHomeownerEntryContext('/signin', context)} />
           ) : (
             <>
-              <Link href={withRoofingIntent('/homes', intent)} className="backlink">
+              <Link href={withHomeownerEntryContext('/homes', context)} className="backlink">
                 ← Your homes
               </Link>
               <header className="setup-head">
                 <p className="setup-head__eyebrow">Private home file</p>
                 <h1>Set up your home</h1>
                 <p>
-                  Start with a name and general area. That is enough to open the
-                  file; optional details are best entered now only when you know them.
+                  {handoff
+                    ? 'Start with a name and general area. Once the Home Record is open, you can check the file handoff against it.'
+                    : 'Start with a name and general area. That is enough to open the file; optional details are best entered now only when you know them.'}
                 </p>
                 <div className="setup-head__notes" aria-label="Setup details">
                   <span>About 1 minute</span>
@@ -637,7 +641,7 @@ export default function NewHomePage({
                   ) : null}
                   <div className="setup-submit">
                     <button type="submit" className="btn btn--primary">Review home file</button>
-                    <Link href={withRoofingIntent('/homes', intent)} className="btn btn--quiet">Cancel</Link>
+                    <Link href={withHomeownerEntryContext('/homes', context)} className="btn btn--quiet">Cancel</Link>
                   </div>
                 </form>
               ) : complete ? (
@@ -660,11 +664,11 @@ export default function NewHomePage({
                       </p>
                       <Link
                         className="btn btn--primary"
-                        href={intent
-                          ? withRoofingIntent(`/home/${submit.homeRef}/projects`, intent)
-                          : `/home/${submit.homeRef}`}
+                        href={homeownerEntryDestination(submit.homeRef, context)}
                       >
-                        {intent ? 'Continue to the roof project' : 'Open this home’s file'}
+                        {handoff
+                          ? 'Check the file handoff'
+                          : intent ? 'Continue to the roof project' : 'Open this home’s file'}
                       </Link>
                     </div>
                   ) : submit.kind === 'partial' ? (
@@ -683,7 +687,7 @@ export default function NewHomePage({
                         >
                           Retry the starting details
                         </button>
-                        <Link className="btn btn--quiet" href={`/home/${submit.homeRef}`}>
+                        <Link className="btn btn--quiet" href={homeownerEntryDestination(submit.homeRef, context)}>
                           Open the saved home
                         </Link>
                       </div>
@@ -694,7 +698,7 @@ export default function NewHomePage({
                         The server says you are signed out, so nothing was saved.
                         Your draft stays on this screen.
                       </p>
-                      <UnauthorizedState signInHref={withRoofingIntent('/signin', intent)} />
+                      <UnauthorizedState signInHref={withHomeownerEntryContext('/signin', context)} />
                     </div>
                   ) : (
                     <>
