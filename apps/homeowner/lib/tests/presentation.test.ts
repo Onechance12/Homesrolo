@@ -492,7 +492,7 @@ test('settings exposes account actions, not an internal capability matrix', () =
 
 test('the authenticated home is a whole-home record, not a roofing dashboard', () => {
   const shell = read('components/AppShell.tsx')
-  const dashboard = read('app/home/[homeId]/page.tsx')
+  const experience = read('components/HomeRecordExperience.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
 
   assert.match(shell, /label: 'Home record', tabLabel: 'Record'/)
@@ -503,28 +503,28 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'account settings remain available without occupying primary navigation')
   assert.doesNotMatch(shell, /label: 'Warranties'|label: 'Events & care'|label: 'Settings'/,
     'primary navigation contains only destinations that work today')
-  assert.match(dashboard, /One record for work across the whole home\./)
-  assert.match(dashboard, /Every part of the home belongs here\./)
+  assert.match(experience, /Every home has a history/)
+  assert.match(experience, /The whole home belongs here\./)
   for (const area of [
     'Roof', 'Interior & remodel', 'Heating & cooling', 'Plumbing', 'Electrical',
     'Exterior & gutters', 'Yard & landscaping', 'Appliances', 'Pest control',
     'Pool', 'New construction', 'Something else',
   ]) {
-    assert.match(dashboard, new RegExp(area.replace('&', '\\&')),
+    assert.match(experience, new RegExp(area.replace('&', '\\&')),
       `${area} is one of the twelve whole-home starting points`)
   }
-  assert.match(dashboard, /const HOME_AREAS = \[\s*'Interior & remodel'/,
+  assert.match(experience, /const HOME_AREAS = \[\s*'Interior & remodel'/,
     'the whole-home inventory must not default to roofing')
   const projects = read('app/home/[homeId]/projects/page.tsx')
   assert.match(projects, /const CATEGORIES:[^=]+?= \[\s*\{ value: 'interior'/,
     'the project category picker must not default to roofing')
-  assert.doesNotMatch(dashboard, /Need roof work\?|Start a roof project|Open roof projects/,
+  assert.doesNotMatch(experience, /Need roof work\?|Start a roof project|Open roof projects/,
     'roofing is never presented as the dashboard default')
-  assert.match(dashboard, /Past work[\s\S]*Add history/,
+  assert.match(experience, /first chapter can be from any year[\s\S]*past work/i,
     'historical projects are a first-class dashboard action')
-  assert.match(dashboard, /Project history/)
-  assert.match(dashboard, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
-  assert.match(dashboard, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
+  assert.match(experience, /Project history/)
+  assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
+  assert.match(experience, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
     'the dashboard never links to a disabled photo workspace')
   assert.match(library, /Your working records/)
   assert.match(library, /Project history/)
@@ -713,11 +713,17 @@ test('home research chat is accessible, link-safe, and frozen while one request 
 
 test('the dashboard uses real project history and contains no AI surface', () => {
   const dashboard = read('app/home/[homeId]/page.tsx')
+  const experience = read('components/HomeRecordExperience.tsx')
+  const progress = read('lib/home-record-progress.ts')
 
   assert.match(dashboard, /port\.listProjects\(homeId\)/)
-  assert.match(dashboard, /Project history/)
-  assert.doesNotMatch(dashboard, /HomeResearchAssistant|homeResearch|\bAI\b/,
+  assert.match(experience, /Project history/)
+  assert.match(progress, /never scores the home's condition, safety, value, or insurability/)
+  assert.match(experience, /record progress—not a score of condition, safety, value, or insurability/i)
+  assert.doesNotMatch(`${dashboard}\n${experience}`, /HomeResearchAssistant|homeResearch|\bAI\b/,
     'no research or chatbot feature is exposed in the authenticated opening flow')
+  assert.doesNotMatch(`${dashboard}\n${experience}\n${progress}`, /measurement/i,
+    'measurements are intentionally outside this release')
 })
 
 test('one bounded roofing intent continues through the existing homeowner flow', () => {
