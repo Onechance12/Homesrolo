@@ -154,11 +154,14 @@ export function verifyHomeRecordHandoffAuthorizationSignature(
 ): boolean {
   try {
     if (publicKey.type !== 'public' || publicKey.asymmetricKeyType !== 'ed25519') return false
+    const signature = Buffer.from(authorization.signing.signature, 'base64url')
+    if (signature.byteLength !== 64
+      || signature.toString('base64url') !== authorization.signing.signature) return false
     return verifySignature(
       null,
       Buffer.from(homeownerShareAuthorizationSigningPayload(authorization), 'utf8'),
       publicKey,
-      Buffer.from(authorization.signing.signature, 'base64url'),
+      signature,
     )
   } catch {
     return false
@@ -844,11 +847,12 @@ export class HomeRecordHandoffService {
       throw new HomeownerApiError('not_found')
     }
 
-    // A retry for an already-persisted exact share is satisfied locally. This
-    // neither consumes admission capacity nor contacts Jobrolo again.
+    // A retry for an already-persisted exact share does not consume admission
+    // capacity or claim again. A still-received offer is nevertheless checked
+    // against current Jobrolo authority before it can remain reviewable.
     const existingInput = await this.#persistence.readHandoff(grant, requestedShareId)
     if (existingInput) {
-      const existing = parseHomeRecordHandoffRecord(existingInput)
+      let existing = parseHomeRecordHandoffRecord(existingInput)
       if (existing.homeRef !== binding.homeRef
         || existing.controllerPrincipalRef !== binding.controllerPrincipalRef
         || existing.recipientBindingRevision !== binding.revision
@@ -856,6 +860,7 @@ export class HomeRecordHandoffService {
         || existing.manifest.recipientRef !== binding.recipientRef) {
         throw new HomeownerApiError('not_found')
       }
+      existing = await this.#freshReviewableRecord(grant, existing)
       const retryGrant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
       if (!sameGrant(grant, retryGrant)) throw new HomeownerApiError('not_found')
       return safePreview(existing)
@@ -898,14 +903,25 @@ export class HomeRecordHandoffService {
     this.#requireEnabled()
     const grant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
     const records = await this.#persistence.listHandoffs(grant)
-    return records.map(record => {
+    const previews = await Promise.all(records.map(async record => {
       const parsed = parseHomeRecordHandoffRecord(record)
       if (parsed.homeRef !== grant.homeRef
         || parsed.controllerPrincipalRef !== grant.principalRef) {
         throw new HomeownerApiError('unavailable')
       }
-      return safePreview(parsed)
-    })
+      try {
+        return safePreview(await this.#freshReviewableRecord(grant, parsed))
+      } catch {
+        // A pending offer whose source cannot be freshly established is not
+        // reviewable, but it cannot hide unrelated terminal receipts. Exact-
+        // link claim/preview remain strict and surface their failure.
+        if (parsed.state === 'received') return null
+        throw new HomeownerApiError('unavailable')
+      }
+    }))
+    const finalGrant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
+    if (!sameGrant(grant, finalGrant)) throw new HomeownerApiError('not_found')
+    return previews.filter((preview): preview is HomeRecordHandoffPreview => preview !== null)
   }
 
   async preview(
@@ -918,23 +934,12 @@ export class HomeRecordHandoffService {
       throw new HomeownerApiError('invalid_request')
     }
     const grant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
-    let record = await this.#readExact(grant, requestedShareId)
-    if (record.state === 'received') {
-      if (Date.parse(this.#now()) >= Date.parse(record.expiresAt)) {
-        record = parseHomeRecordHandoffRecord(await this.#persistence.expireHandoff({
-          grant,
-          handoffRef: record.handoffRef,
-          expiredAt: this.#now(),
-        }))
-      } else {
-        const current = await this.#currentOffer(record)
-        if (!current) {
-          // Source revocation before the stated expiry removes import authority
-          // but is not rewritten as a false time-based expiry in the ledger.
-          throw new HomeownerApiError('conflict')
-        }
-      }
-    }
+    const record = await this.#freshReviewableRecord(
+      grant,
+      await this.#readExact(grant, requestedShareId),
+    )
+    const finalGrant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
+    if (!sameGrant(grant, finalGrant)) throw new HomeownerApiError('not_found')
     return safePreview(record)
   }
 
@@ -991,22 +996,13 @@ export class HomeRecordHandoffService {
     if (parsed.data.reviewedPreviewDigest !== acceptancePreviewDigest(record)) {
       throw new HomeownerApiError('conflict')
     }
-    if (record.state === 'accepted') return safePreview(record)
-    if (record.state !== 'received' && record.state !== 'accepting') {
-      throw new HomeownerApiError('conflict')
+    let selectedArtifactRefs: readonly string[]
+    try {
+      selectedArtifactRefs = stableSelected(record, parsed.data.selectedArtifactRefs)
+    } catch {
+      if (record.state !== 'received') throw new HomeownerApiError('conflict')
+      throw new HomeownerApiError('invalid_request')
     }
-    const requestedAt = this.#now()
-    if (Date.parse(requestedAt) >= Date.parse(record.expiresAt)) {
-      const expired = await this.#persistence.expireHandoff({
-        grant: previewGrant,
-        handoffRef: record.handoffRef,
-        expiredAt: requestedAt,
-      })
-      return safePreview(expired)
-    }
-    if (!await this.#currentOffer(record)) throw new HomeownerApiError('conflict')
-
-    const selectedArtifactRefs = stableSelected(record, parsed.data.selectedArtifactRefs)
     const selectionDigest = homeownerShareSha256({
       version: HOME_RECORD_HANDOFF_ACCEPTANCE_VERSION,
       manifestDigest: record.manifestDigest,
@@ -1025,6 +1021,32 @@ export class HomeRecordHandoffService {
       selectionDigest,
       acceptanceStatementDigest,
     })
+    if (record.state === 'accepted') {
+      if (!record.consent || !acceptanceReservationMatches({
+        record,
+        commandRef: parsed.data.commandRef,
+        commandDigest,
+        selectionDigest,
+        acceptanceStatementDigest,
+        selectedArtifactRefs,
+        consent: record.consent,
+      })) throw new HomeownerApiError('conflict')
+      return safePreview(record)
+    }
+    if (record.state !== 'received' && record.state !== 'accepting') {
+      throw new HomeownerApiError('conflict')
+    }
+    const requestedAt = this.#now()
+    if (Date.parse(requestedAt) >= Date.parse(record.expiresAt)) {
+      const expired = await this.#persistence.expireHandoff({
+        grant: previewGrant,
+        handoffRef: record.handoffRef,
+        expiredAt: requestedAt,
+      })
+      return safePreview(expired)
+    }
+    if (!await this.#currentOffer(record)) throw new HomeownerApiError('conflict')
+
     let consent: HomeownerShareConsentReceipt
     if (record.state === 'accepting') {
       if (!record.consent || !acceptanceReservationMatches({
@@ -1362,11 +1384,14 @@ export class HomeRecordHandoffService {
       },
     )
     const bytes = createStoredZip(entries)
+    const payloadSha256 = createHash('sha256').update(bytes).digest('hex')
+    const finalGrant = await this.#grant(context, requestedHomeRef, 'home_record.export')
+    if (!sameGrant(grant, finalGrant)) throw new HomeownerApiError('not_found')
     return Object.freeze({
       fileName: 'homesrolo-home-record.zip' as const,
       mediaType: 'application/zip' as const,
       byteLength: bytes.byteLength,
-      payloadSha256: createHash('sha256').update(bytes).digest('hex'),
+      payloadSha256,
       bytes,
     })
   }
@@ -1403,6 +1428,29 @@ export class HomeRecordHandoffService {
       throw new HomeownerApiError('unavailable')
     }
     return offer
+  }
+
+  async #freshReviewableRecord(
+    grant: AuthorizedHomeownerAction<'handoff.preview'>,
+    record: HomeRecordHandoffRecord,
+  ) {
+    if (record.state !== 'received') return record
+    const checkedAt = this.#now()
+    if (Date.parse(checkedAt) >= Date.parse(record.expiresAt)) {
+      const expired = parseHomeRecordHandoffRecord(await this.#persistence.expireHandoff({
+        grant,
+        handoffRef: record.handoffRef,
+        expiredAt: checkedAt,
+      }))
+      if (expired.state !== 'expired') throw new HomeownerApiError('unavailable')
+      return expired
+    }
+    if (!await this.#currentOffer(record)) {
+      // Source revocation before the stated expiry removes import authority
+      // but is not rewritten as a false time-based expiry in the ledger.
+      throw new HomeownerApiError('conflict')
+    }
+    return record
   }
 
   async #readExact(

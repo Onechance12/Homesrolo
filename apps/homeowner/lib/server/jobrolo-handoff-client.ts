@@ -23,13 +23,13 @@ const CLIENT_ID = /^[A-Za-z0-9._-]{3,64}$/
 const SHA256 = /^[a-f0-9]{64}$/
 const HMAC_SIGNATURE = /^[A-Za-z0-9_-]{43}$/
 const MAX_OFFER_BYTES = HOMEOWNER_SHARE_MAX_MANIFEST_BYTES + 16 * 1024
+const JOBROLO_PRODUCTION_ORIGIN = 'https://jobrolo.com'
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 const configurationSchema = z.object({
   enabled: z.literal('true'),
   origin: z.string().url().transform(value => new URL(value)).refine(
-    value => value.protocol === 'https:'
-      || value.hostname === 'localhost'
-      || value.hostname === '127.0.0.1',
+    value => value.protocol === 'https:' || LOOPBACK_HOSTS.has(value.hostname),
     'must use HTTPS outside local development',
   ),
   clientId: z.string().regex(CLIENT_ID),
@@ -42,9 +42,22 @@ export interface JobroloHandoffClientConfiguration {
   readonly sharedSecret: string
 }
 
+function jobroloOriginAllowed(origin: URL, nodeEnvironment: string | undefined) {
+  if (origin.origin === JOBROLO_PRODUCTION_ORIGIN) return true
+  if (nodeEnvironment === 'production') return false
+  const loopback = LOOPBACK_HOSTS.has(origin.hostname)
+  if (nodeEnvironment === 'development') return loopback
+  if (nodeEnvironment === 'test') {
+    return loopback || (origin.protocol === 'https:' && origin.hostname.endsWith('.test'))
+  }
+  return false
+}
+
 export function readJobroloHandoffClientConfiguration(
   environment: Readonly<Record<string, string | undefined>>,
 ): JobroloHandoffClientConfiguration | null {
+  if (environment.NODE_ENV === 'production'
+    && environment.HOMESROLO_JOBROLO_HANDOFF_ORIGIN !== JOBROLO_PRODUCTION_ORIGIN) return null
   const parsed = configurationSchema.safeParse({
     enabled: environment.HOMESROLO_JOBROLO_HANDOFF_ENABLED,
     origin: environment.HOMESROLO_JOBROLO_HANDOFF_ORIGIN,
@@ -55,6 +68,7 @@ export function readJobroloHandoffClientConfiguration(
   const origin = parsed.data.origin
   if (origin.username || origin.password || origin.search || origin.hash
     || (origin.pathname !== '/' && origin.pathname !== '')) return null
+  if (!jobroloOriginAllowed(origin, environment.NODE_ENV)) return null
   return Object.freeze({
     origin: origin.origin,
     clientId: parsed.data.clientId,
@@ -132,6 +146,9 @@ function equalHmac(left: string, right: string) {
   if (!HMAC_SIGNATURE.test(left) || !HMAC_SIGNATURE.test(right)) return false
   const leftBytes = Buffer.from(left, 'base64url')
   const rightBytes = Buffer.from(right, 'base64url')
+  if (leftBytes.byteLength !== 32 || rightBytes.byteLength !== 32
+    || leftBytes.toString('base64url') !== left
+    || rightBytes.toString('base64url') !== right) return false
   return leftBytes.byteLength === rightBytes.byteLength
     && timingSafeEqual(leftBytes, rightBytes)
 }
@@ -309,6 +326,7 @@ export class SignedJobroloHandoffClient implements HomeRecordHandoffSourcePort {
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
           accept,
+          'accept-encoding': 'identity',
           authorization: `Homesrolo-Handoff-HMAC ${this.#configuration.clientId}`,
           'content-type': 'application/json; charset=utf-8',
           'x-homesrolo-body-sha256': bodySha256,

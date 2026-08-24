@@ -248,9 +248,9 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
           <div className="handoff-entry__mark" aria-hidden="true">→</div>
           <div>
             <p className="mono">Private delivery</p>
-            <h2 id="handoff-entry-title">Review a project completion record</h2>
+            <h2 id="handoff-entry-title">Open Completion record details</h2>
             <p>
-              Check whether this one-job record belongs with this Home Record. Nothing is added until you review and accept.
+              Check whether this one-job record belongs with this Home Record. Nothing is added until you review and accept. Accept only if you recognize the sender and the link that brought you here.
             </p>
           </div>
           {entryError ? (
@@ -270,7 +270,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
               disabled={entryState !== 'ready' || action !== 'idle'}
               onClick={() => void claimEntryHandoff()}
             >
-              {entryState === 'claiming' ? 'Opening secure preview…' : 'Review this record'}
+              {entryState === 'claiming' ? 'Opening record details…' : 'View Completion record details'}
             </button>
           )}
         </div>
@@ -347,7 +347,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
         <div className="handoff-review" aria-labelledby="handoff-review-title">
           <div className="handoff-review__head">
             <div>
-              <p className="mono">Exact PDF preview</p>
+              <p className="mono">Completion record details</p>
               <h3 id="handoff-review-title" tabIndex={-1}>
                 {activeIsReviewable ? 'Decide whether to keep this record' : STATE_LABEL[active.state]}
               </h3>
@@ -389,6 +389,19 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
 
           {activeIsReviewable ? (
             <>
+              <div className="handoff-review__details">
+                <p><strong>This PDF cannot be opened before you accept it.</strong></p>
+                <p>The fixed, generated completion record contains only:</p>
+                <ul>
+                  <li>Contractor business display name</li>
+                  <li>Completed status</li>
+                  <li>Recorded start date</li>
+                  <li>Recorded completion date</li>
+                  <li>Issue date</li>
+                </ul>
+                <p>It does not include raw photos, raw documents, invoices, warranties, claims, or measurements.</p>
+                <p><strong>Accept only if you recognize the sender and the link that brought you here.</strong></p>
+              </div>
               <label className="handoff-consent">
                 <input
                   type="checkbox"

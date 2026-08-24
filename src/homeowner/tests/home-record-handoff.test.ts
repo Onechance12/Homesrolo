@@ -53,6 +53,18 @@ const homesroloKeys = generateKeyPairSync('ed25519')
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
+function nonCanonicalBase64urlAlias(canonical: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const expected = Buffer.from(canonical, 'base64url')
+  for (const character of alphabet) {
+    const candidate = `${canonical.slice(0, -1)}${character}`
+    if (candidate !== canonical && Buffer.from(candidate, 'base64url').equals(expected)) {
+      return candidate
+    }
+  }
+  throw new Error('no non-canonical base64url alias')
+}
+
 test('the in-memory export plan is bounded before object reads', () => {
   assert.equal(homeRecordHandoffExportPlanAllowed([]), true)
   assert.equal(homeRecordHandoffExportPlanAllowed([
@@ -162,7 +174,9 @@ function repository(readMembership: () => HomeownerMembership | null): Homeowner
   }
 }
 
-function persistenceHarness() {
+function persistenceHarness(
+  extraRecords: () => readonly HomeRecordHandoffRecord[] = () => [],
+) {
   let record: HomeRecordHandoffRecord | null = null
   const update = (next: HomeRecordHandoffRecord) => {
     record = parseHomeRecordHandoffRecord(next)
@@ -200,7 +214,7 @@ function persistenceHarness() {
     async readHandoff(_grant, requestedShareId) {
       return record?.manifest.shareId === requestedShareId ? record : null
     },
-    async listHandoffs() { return record ? [record] : [] },
+    async listHandoffs() { return [...(record ? [record] : []), ...extraRecords()] },
     async reserveAcceptance(input) {
       const current = requireRecord()
       if (current.state === 'accepted') return current
@@ -304,13 +318,18 @@ function harness(input: {
   scan?: () => HomeRecordHandoffScanResult
   fetchedBytes?: Uint8Array
   fetchThrows?: boolean
+  sourceCurrent?: boolean | (() => boolean)
+  sourceCurrentThrows?: boolean | (() => boolean)
+  now?: () => string
+  listExtraRecords?: () => readonly HomeRecordHandoffRecord[]
 } = {}) {
-  const persistence = persistenceHarness()
+  const persistence = persistenceHarness(input.listExtraRecords)
   const objects = new Map<string, Uint8Array>()
   let claimCalls = 0
   let claimAdmissionCalls = 0
   let lastClaimDigest: string | null = null
   let fetchCalls = 0
+  let currentOfferCalls = 0
   const offer = { manifest: manifest(), authorization: authorization() }
   const options: HomeRecordHandoffServiceOptions = {
     enabled: input.enabled ?? true,
@@ -344,7 +363,17 @@ function harness(input: {
         return { state: 'active' as const, ...structuredClone(offer) }
       },
       async checkCurrent() {
-        return { state: 'active' as const, ...structuredClone(offer) }
+        currentOfferCalls += 1
+        const throws = typeof input.sourceCurrentThrows === 'function'
+          ? input.sourceCurrentThrows()
+          : input.sourceCurrentThrows === true
+        if (throws) throw new Error('source unavailable')
+        const current = typeof input.sourceCurrent === 'function'
+          ? input.sourceCurrent()
+          : input.sourceCurrent !== false
+        return !current
+          ? { state: 'not_available' as const }
+          : { state: 'active' as const, ...structuredClone(offer) }
       },
       async fetchArtifact(request) {
         fetchCalls += 1
@@ -387,7 +416,7 @@ function harness(input: {
         return bytes
       },
     },
-    now: () => NOW,
+    now: input.now ?? (() => NOW),
   }
   return {
     service: new HomeRecordHandoffService(options),
@@ -397,6 +426,7 @@ function harness(input: {
     get claimAdmissionCalls() { return claimAdmissionCalls },
     get lastClaimDigest() { return lastClaimDigest },
     get fetchCalls() { return fetchCalls },
+    get currentOfferCalls() { return currentOfferCalls },
   }
 }
 
@@ -440,6 +470,112 @@ test('exact-share activation is controller-bound, admitted, and locally idempote
   assert.deepEqual(retry, first)
   assert.equal(testHarness.claimAdmissionCalls, 1)
   assert.equal(testHarness.claimCalls, 1)
+})
+
+test('retry, list, and preview never expose a revoked received offer as reviewable', async () => {
+  const operations = [
+    (testHarness: ReturnType<typeof harness>) => testHarness.service.claimForController(
+      context,
+      homeRef,
+      shareId,
+      recipientRef,
+    ),
+    (testHarness: ReturnType<typeof harness>) =>
+      testHarness.service.preview(context, homeRef, shareId),
+  ]
+  for (const operation of operations) {
+    const testHarness = harness({ sourceCurrent: false })
+    await testHarness.service.claim({ shareId, recipientRef })
+    await assert.rejects(operation(testHarness), /conflict/)
+    assert.equal(testHarness.currentOfferCalls, 1)
+  }
+  const listHarness = harness({ sourceCurrent: false })
+  await listHarness.service.claim({ shareId, recipientRef })
+  assert.deepEqual(await listHarness.service.list(context, homeRef), [])
+  assert.equal(listHarness.currentOfferCalls, 1)
+})
+
+test('retry, list, and preview share the same received-offer expiry path', async () => {
+  const operations = [
+    async (testHarness: ReturnType<typeof harness>) =>
+      (await testHarness.service.claimForController(
+        context,
+        homeRef,
+        shareId,
+        recipientRef,
+      )).state,
+    async (testHarness: ReturnType<typeof harness>) =>
+      (await testHarness.service.list(context, homeRef))[0]?.state,
+    async (testHarness: ReturnType<typeof harness>) =>
+      (await testHarness.service.preview(context, homeRef, shareId)).state,
+  ]
+  for (const operation of operations) {
+    let clock = NOW
+    const testHarness = harness({ now: () => clock })
+    await testHarness.service.claim({ shareId, recipientRef })
+    clock = EXPIRES
+    assert.equal(await operation(testHarness), 'expired')
+    assert.equal(testHarness.currentOfferCalls, 0)
+  }
+})
+
+test('a revoked or unreachable pending offer cannot hide an accepted receipt or export', async () => {
+  const extraRecords: HomeRecordHandoffRecord[] = []
+  let sourceCurrent = true
+  let sourceCurrentThrows = false
+  const testHarness = await claimed(harness({
+    sourceCurrent: () => sourceCurrent,
+    sourceCurrentThrows: () => sourceCurrentThrows,
+    listExtraRecords: () => extraRecords,
+  }))
+  const preview = await testHarness.service.preview(context, homeRef, shareId)
+  await testHarness.service.accept(context, homeRef, shareId, {
+    commandRef: ref('hcmd', 'l'),
+    reviewedPreviewDigest: preview.previewDigest,
+    selectedArtifactRefs: [preview.items[0]!.artifactRef],
+    consentAccepted: true,
+  })
+  const accepted = testHarness.persistence.record
+  assert.ok(accepted)
+  extraRecords.push(parseHomeRecordHandoffRecord({
+    recordVersion: accepted.recordVersion,
+    handoffRef: ref('hhof', 'v'),
+    homeRef: accepted.homeRef,
+    controllerPrincipalRef: accepted.controllerPrincipalRef,
+    recipientBindingRevision: accepted.recipientBindingRevision,
+    manifest: accepted.manifest,
+    authorization: accepted.authorization,
+    manifestDigest: accepted.manifestDigest,
+    authorizationReplayKey: accepted.authorizationReplayKey,
+    offerDigest: accepted.offerDigest,
+    state: 'received',
+    receivedAt: accepted.receivedAt,
+    expiresAt: accepted.expiresAt,
+    items: accepted.items.map(item => ({
+      sourceArtifactRef: item.sourceArtifactRef,
+      projectionKind: item.projectionKind,
+      projectionVersion: item.projectionVersion,
+      mediaType: item.mediaType,
+      byteLength: item.byteLength,
+      payloadSha256: item.payloadSha256,
+      displayName: item.displayName,
+      decision: 'pending',
+      copyState: 'not_started',
+    })),
+  }))
+  sourceCurrent = false
+  const listed = await testHarness.service.list(context, homeRef)
+  assert.equal(listed.length, 1)
+  assert.equal(listed[0]?.state, 'accepted')
+  assert.equal((await testHarness.service.exportHomeRecord(context, homeRef)).mediaType,
+    'application/zip')
+  sourceCurrent = true
+  sourceCurrentThrows = true
+  const listedDuringOutage = await testHarness.service.list(context, homeRef)
+  assert.equal(listedDuringOutage.length, 1)
+  assert.equal(listedDuringOutage[0]?.state, 'accepted')
+  assert.equal((await testHarness.service.exportHomeRecord(context, homeRef)).mediaType,
+    'application/zip')
 })
 
 test('exact-share activation rejects wrong home, controller, and binding revision pre-network', async () => {
@@ -518,6 +654,15 @@ test('offer verification binds exact digest, completion-PDF policy, expiry, and 
     { ...receipt, signing: { ...receipt.signing, signature: Buffer.alloc(64).toString('base64url') } },
     jobroloKeys.publicKey,
   ), false)
+  const aliasedSignature = nonCanonicalBase64urlAlias(receipt.signing.signature)
+  assert.deepEqual(
+    Buffer.from(aliasedSignature, 'base64url'),
+    Buffer.from(receipt.signing.signature, 'base64url'),
+  )
+  assert.equal(verifyHomeRecordHandoffAuthorizationSignature({
+    ...receipt,
+    signing: { ...receipt.signing, signature: aliasedSignature },
+  }, jobroloKeys.publicKey), false)
   const only = value.artifacts[0]!
   const rejected: readonly HomeownerShareManifest[] = [
     { ...value, artifacts: [{ ...only, projectionKind: 'work_document_copy' }] },
@@ -583,6 +728,19 @@ test('explicit acceptance copies the one clean completion PDF and exports it wit
   assert.equal(testHarness.objects.size, 1)
   assert.equal(accepted.items[0]!.copyState, 'available')
 
+  await assert.rejects(testHarness.service.accept(context, homeRef, shareId, {
+    commandRef: ref('hcmd', 'x'),
+    reviewedPreviewDigest: preview.previewDigest,
+    selectedArtifactRefs: [preview.items[0]!.artifactRef],
+    consentAccepted: true,
+  }), /conflict/, 'an accepted replay cannot substitute a new command')
+  await assert.rejects(testHarness.service.accept(context, homeRef, shareId, {
+    commandRef: ref('hcmd', 'c'),
+    reviewedPreviewDigest: preview.previewDigest,
+    selectedArtifactRefs: [ref('hproj', 'z')],
+    consentAccepted: true,
+  }), /conflict/, 'an accepted replay cannot substitute an artifact')
+
   const replay = await testHarness.service.accept(context, homeRef, shareId, {
     commandRef: ref('hcmd', 'c'),
     reviewedPreviewDigest: preview.previewDigest,
@@ -604,6 +762,34 @@ test('explicit acceptance copies the one clean completion PDF and exports it wit
   assert.match(zipText, /homeowner-share\.consent\.v1/)
   assert.match(zipText, /"sourceManifest"/)
   assert.match(zipText, /"contractVersion":"homeowner-share\.v1"/)
+})
+
+test('export rechecks the exact controller grant after the archive is built', async () => {
+  let exporting = false
+  let exportGrantReads = 0
+  const testHarness = await claimed(harness({
+    membershipForRead: () => {
+      if (!exporting) return membership
+      exportGrantReads += 1
+      return exportGrantReads === 4
+        ? { ...membership, revision: membership.revision + 1 }
+        : membership
+    },
+  }))
+  const preview = await testHarness.service.preview(context, homeRef, shareId)
+  await testHarness.service.accept(context, homeRef, shareId, {
+    commandRef: ref('hcmd', 'f'),
+    reviewedPreviewDigest: preview.previewDigest,
+    selectedArtifactRefs: [preview.items[0]!.artifactRef],
+    consentAccepted: true,
+  })
+  exporting = true
+  await assert.rejects(
+    testHarness.service.exportHomeRecord(context, homeRef),
+    /not_found/,
+  )
+  assert.equal(exportGrantReads, 4,
+    'initial, before-read, after-read, and final archive grants are all checked')
 })
 
 test('cross-home and non-controller review fail before source bytes or storage', async () => {

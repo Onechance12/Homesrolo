@@ -15,6 +15,7 @@ import {
 import { hashSessionHandle, mintOpaqueRef } from '../server/supabase-provider.ts'
 
 const CONFIG = {
+  NODE_ENV: 'production',
   HOMESROLO_SUPABASE_URL: 'https://project.supabase.co',
   HOMESROLO_SUPABASE_PUBLISHABLE_KEY: `sb_publishable_${'a'.repeat(30)}`,
   HOMESROLO_SUPABASE_SECRET_KEY: `sb_secret_${'b'.repeat(30)}`,

@@ -29,12 +29,14 @@ home match, or recipient-wide list. Possession of an `hrcp` is not permission
 to enumerate shares. Before a new producer call, a service-role RPC persists a
 domain-separated digest—not the supplied share ID—and enforces ten attempts per
 principal/home per hour plus a bounded 100,000-row global 24-hour window.
-Already-stored exact shares are returned locally without another reservation or
-network call.
+Already-stored exact shares require no second reservation or claim call. A
+still-received offer is nevertheless checked against Jobrolo's current signed
+authority before it is shown as reviewable, previewed, retried, or accepted.
 
 The Jobrolo exchange is server-to-server POST over a pinned origin with
 request-bound HMAC signatures, nonces, timestamps, body digests, signed response
-status/content type/body digests, bounded bodies, and redirects disabled.
+status/content type/body digests, bounded bodies, `Accept-Encoding: identity`,
+and redirects disabled. An encoded response still fails closed.
 Homesrolo then verifies the canonical manifest digest, Jobrolo Ed25519
 authorization, exact recipient/share, expiry, and the active runtime policy:
 exactly one `work_completion_record` version 1 PDF no larger than 1 MiB. The
@@ -54,7 +56,7 @@ The ordinary private homeowner runtime must first be valid:
 HOMESROLO_SUPABASE_URL=https://<project>.supabase.co
 HOMESROLO_SUPABASE_PUBLISHABLE_KEY=<server-configured-value>
 HOMESROLO_SUPABASE_SECRET_KEY=<service-role-secret>
-HOMESROLO_APP_ORIGIN=https://<homesrolo-host>
+HOMESROLO_APP_ORIGIN=https://app.homesrolo.com
 ```
 
 Both independent handoff gates are absent/off by default and accept only the
@@ -78,12 +80,31 @@ HOMESROLO_JOBROLO_HANDOFF_CLIENT_ID=
 HOMESROLO_JOBROLO_HANDOFF_SHARED_SECRET=
 ```
 
-The Jobrolo origin must be one exact HTTPS origin; only loopback HTTP is allowed
-for local development. The HMAC client and secret are dedicated to this lane.
+In production the Jobrolo origin must be the byte-exact
+`https://jobrolo.com`; URL normalization, alternate ports, casing, aliases, and
+paths are rejected. Explicit development loopback and test-only `.test`
+origins are accepted only under their matching `NODE_ENV`. Production also
+requires the byte-exact `https://app.homesrolo.com` app origin. The HMAC client
+and secret are dedicated to this lane. Neither value may equal the recipient,
+either signing-key ID, any raw/encoded/derived Ed25519 key material, or either
+credential from the existing Jobrolo intake lane. The inbound Jobrolo and
+outbound Homesrolo signing key IDs and Ed25519 public keys must be distinct.
+Raw intake client-ID/secret residue is inspected even when the old intake gate
+is off; partial, malformed, or reused residue blocks this handoff lane.
 ClamAV must be reachable on `127.0.0.1`, `::1`, or `localhost`; a remote scanner
 host is rejected. Record and verify the deployed ClamAV version. A scanner
 timeout, unknown reply, or unavailable socket fails closed and does not publish
 the copied file.
+
+This release has a code-owned production-readiness interlock set to `false`.
+Production configuration cannot activate the lane even if every environment
+or database gate is set to true. Development and test environments can exercise
+the bounded contract. The interlock must not be changed until the prerequisites
+listed below are implemented and separately reviewed. Those prerequisites also
+include one common database lock order for membership, recipient binding, and
+handoff mutations, plus a final in-transaction authority recheck, so concurrent
+membership or recipient revocation cannot race reserve, item-state, or finalize
+operations.
 
 Apply Supabase migrations in filename order through
 `202608240001_homeowner_inbound_handoffs.sql`. Its direct prerequisites are the
@@ -178,12 +199,14 @@ query, or obtain a session for Homesrolo.
    contractor/completed project.
 4. Verify loopback ClamAV with a clean synthetic completion PDF and a rejected
    antivirus test fixture. Verify no object is published on scanner failure.
-5. Run a synthetic end-to-end share: create it as the exact Jobrolo owner/admin,
+5. In a nonproduction environment, run a synthetic end-to-end share: create it
+   as the exact Jobrolo owner/admin,
    claim its exact `shareId` from the bound Homesrolo home with `{}`, review the
-   safe completion-record preview, accept it, confirm only its exact bytes appear, and
+   Completion record details, accept it, confirm only its exact bytes appear, and
    verify rejection, expiry, replay, rate-limit, and export behavior.
-6. Enable Homesrolo's two environment gates, then Jobrolo's environment gate,
-   and finally the one contractor database gate. Monitor only the canary.
+6. Leave all production gates off. This checklist is preflight-only and does
+   not authorize production activation. Production remains code-blocked in this
+   release.
 
 ## Rollback, reconciliation, and export truth
 
@@ -194,10 +217,15 @@ accepted homeowner-controlled copies disappeared.
 
 An uncertain fetch, scan, object write, or database finalization remains
 quarantined or `reconciliation_required`; it is not blindly retried or exposed.
-Reconcile the exact handoff/item against its immutable digests and private
-object receipt, clean up any staged orphan, and use the narrow service-role
-reconciliation operations. A failed claim can be retried by exact share ID;
-once its receipt is stored, retries are served locally.
+This release has no reconciliation or staged-object cleanup RPC, worker, CLI,
+or service transition. Do not use broad manual SQL or storage operations as a
+substitute. A future reviewed recovery design must bind the exact grant,
+reservation, consent, selection, command, object receipt, bytes, and digests;
+then either atomically finalize the accepted record or quarantine/delete only
+the exact invalid staged object. Until that exists, a staged orphan requires
+operator containment and production activation remains code-blocked. A failed
+claim can be retried by exact share ID only while its current Jobrolo authority
+is still valid; terminal accepted/rejected receipts remain locally listable.
 
 `homesrolo-home-record.zip` is specifically an export of accepted professional
 completion records, not every category in the full Home Record. It contains the
@@ -207,7 +235,23 @@ source manifest, signed Jobrolo authorization, signed Homesrolo consent,
 selection/acceptance digests, provenance, copy times, lengths, and SHA-256
 digests. Export is exact-home/controller authorized, rechecks authority around
 each private-object read, validates every original again, and is bounded before
-reading objects.
+reading objects. One stable accepted-only query requests an exact count and at
+most the 250-record cap plus one; a count/row mismatch or overflow fails closed
+instead of treating a short server page as the end of the record or truncating.
+The exact controller grant is checked again after the ZIP is built and
+immediately before the archive is returned.
+
+## Pre-acceptance limitation
+
+The current screen shows **Completion record details**, not the PDF itself.
+Before acceptance, the PDF cannot be opened. The fixed generator is limited to
+the contractor business display name, completed status, recorded start and
+completion dates, and issue date. It excludes raw photos, raw documents,
+invoices, warranties, claims, and measurements. A homeowner should accept only
+when they recognize the sender and the link. Keep production gates off until a
+separately reviewed pre-acceptance PDF renderer and signed browser-safe sender
+provenance, the exact reconciliation/cleanup path above, and the shared
+authority-lock/final-recheck design are available.
 
 ## Explicit exclusions
 

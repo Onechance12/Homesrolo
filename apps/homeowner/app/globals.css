@@ -2034,6 +2034,24 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
 }
 .handoff-items strong { font-size: 0.86rem; }
 .handoff-items small { color: #667f87; font-size: 0.7rem; text-transform: capitalize; }
+.handoff-review__details {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid #cedbdd;
+  border-radius: 0.75rem;
+  background: #f7f9f8;
+  padding: 0.85rem;
+  color: #405f68;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+.handoff-review__details ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+.handoff-review__details strong { color: #163641; }
 .handoff-consent {
   display: flex;
   align-items: start;

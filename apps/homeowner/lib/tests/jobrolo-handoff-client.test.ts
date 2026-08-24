@@ -26,6 +26,18 @@ const configuration = {
   sharedSecret: SECRET,
 }
 
+function nonCanonicalBase64urlAlias(canonical: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const expected = Buffer.from(canonical, 'base64url')
+  for (const character of alphabet) {
+    const candidate = `${canonical.slice(0, -1)}${character}`
+    if (candidate !== canonical && Buffer.from(candidate, 'base64url').equals(expected)) {
+      return candidate
+    }
+  }
+  throw new Error('no non-canonical base64url alias')
+}
+
 function sha256(value: string | Uint8Array) {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -73,6 +85,7 @@ function signedResponse(input: {
 test('handoff client configuration is independently default-off and pins an origin only', () => {
   assert.equal(readJobroloHandoffClientConfiguration({}), null)
   const environment = {
+    NODE_ENV: 'test',
     HOMESROLO_JOBROLO_HANDOFF_ENABLED: 'true',
     HOMESROLO_JOBROLO_HANDOFF_ORIGIN: configuration.origin,
     HOMESROLO_JOBROLO_HANDOFF_CLIENT_ID: configuration.clientId,
@@ -87,6 +100,53 @@ test('handoff client configuration is independently default-off and pins an orig
     ...environment,
     HOMESROLO_JOBROLO_HANDOFF_ENABLED: 'false',
   }), null)
+})
+
+test('handoff origin is byte-exact in production and only explicit loopback/test elsewhere', () => {
+  const base = {
+    HOMESROLO_JOBROLO_HANDOFF_ENABLED: 'true',
+    HOMESROLO_JOBROLO_HANDOFF_CLIENT_ID: configuration.clientId,
+    HOMESROLO_JOBROLO_HANDOFF_SHARED_SECRET: configuration.sharedSecret,
+  }
+  assert.deepEqual(readJobroloHandoffClientConfiguration({
+    ...base,
+    NODE_ENV: 'production',
+    HOMESROLO_JOBROLO_HANDOFF_ORIGIN: 'https://jobrolo.com',
+  }), { ...configuration, origin: 'https://jobrolo.com' })
+  for (const origin of [
+    'HTTPS://jobrolo.com',
+    'https://JOBROLO.com',
+    'https://jobrolo.com:443',
+    'https://jobrolo.example.test',
+    'http://127.0.0.1:3000',
+  ]) {
+    assert.equal(readJobroloHandoffClientConfiguration({
+      ...base,
+      NODE_ENV: 'production',
+      HOMESROLO_JOBROLO_HANDOFF_ORIGIN: origin,
+    }), null, origin)
+  }
+  assert.equal(readJobroloHandoffClientConfiguration({
+    ...base,
+    NODE_ENV: 'development',
+    HOMESROLO_JOBROLO_HANDOFF_ORIGIN: 'http://127.0.0.1:3000',
+  })?.origin, 'http://127.0.0.1:3000')
+  assert.equal(readJobroloHandoffClientConfiguration({
+    ...base,
+    NODE_ENV: 'test',
+    HOMESROLO_JOBROLO_HANDOFF_ORIGIN: 'https://jobrolo.example.test',
+  })?.origin, 'https://jobrolo.example.test')
+  for (const candidate of [
+    { NODE_ENV: 'development', origin: 'https://jobrolo.example.test' },
+    { NODE_ENV: 'test', origin: 'https://unrelated.example.com' },
+    { NODE_ENV: undefined, origin: 'http://localhost:3000' },
+  ]) {
+    assert.equal(readJobroloHandoffClientConfiguration({
+      ...base,
+      NODE_ENV: candidate.NODE_ENV,
+      HOMESROLO_JOBROLO_HANDOFF_ORIGIN: candidate.origin,
+    }), null, candidate.origin)
+  }
 })
 
 test('claim request and JSON response are exact-path, nonce, digest, and HMAC bound', async () => {
@@ -114,6 +174,7 @@ test('claim request and JSON response are exact-path, nonce, digest, and HMAC bo
   const body = String(observed?.body)
   const bodySha256 = sha256(body)
   assert.equal(headers.authorization, `Homesrolo-Handoff-HMAC ${configuration.clientId}`)
+  assert.equal(headers['accept-encoding'], 'identity')
   assert.equal(headers['x-homesrolo-body-sha256'], bodySha256)
   assert.equal(headers['x-homesrolo-signature'], hmac(jobroloHandoffRequestSigningMaterial({
     method: 'POST',
@@ -180,6 +241,33 @@ test('artifact responses require request-bound HMAC, descriptor digest, and exac
     consent: {} as never,
   }), (error: unknown) => error instanceof JobroloHandoffTransportError
     && error.disposition === 'unknown_outcome')
+
+  const nonCanonical = new SignedJobroloHandoffClient({
+    configuration,
+    fetchImpl: async (_url, request) => {
+      const response = signedResponse({
+        request: request!,
+        pathname,
+        body: bytes,
+        contentType: 'application/pdf',
+        extraHeaders: { 'x-jobrolo-artifact-sha256': sha256(bytes) },
+      })
+      const canonical = response.headers.get('x-jobrolo-response-signature')!
+      const alias = nonCanonicalBase64urlAlias(canonical)
+      assert.deepEqual(Buffer.from(alias, 'base64url'), Buffer.from(canonical, 'base64url'))
+      response.headers.set('x-jobrolo-response-signature', alias)
+      return response
+    },
+    now: () => NOW,
+    nonce: () => NONCE,
+  })
+  await assert.rejects(nonCanonical.fetchArtifact({
+    shareId,
+    artifactRef,
+    manifestDigest: 'a'.repeat(64),
+    consent: {} as never,
+  }), (error: unknown) => error instanceof JobroloHandoffTransportError
+    && error.disposition === 'unknown_outcome')
 })
 
 test('artifact transport rejects photos and advertised bytes above the completion-PDF cap', async () => {
@@ -200,6 +288,16 @@ test('artifact transport rejects photos and advertised bytes above the completio
       contentType: 'application/pdf',
       extraHeaders: {
         'content-length': String(HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES + 1),
+        'x-jobrolo-artifact-sha256': sha256(pdf),
+      },
+    })) as typeof fetch,
+    (async (_url: URL | RequestInfo, request?: RequestInit) => signedResponse({
+      request: request!,
+      pathname,
+      body: pdf,
+      contentType: 'application/pdf',
+      extraHeaders: {
+        'content-encoding': 'gzip',
         'x-jobrolo-artifact-sha256': sha256(pdf),
       },
     })) as typeof fetch,

@@ -23,10 +23,19 @@ import {
   type HomeownerRuntimeConfiguration,
 } from './config.ts'
 import { createSupabaseClients, SupabaseHomeownerProvider } from './supabase-provider.ts'
-import { jobroloIntakeClientForEnvironment } from './jobrolo-intake-client.ts'
-import { jobroloHandoffClientForEnvironment } from './jobrolo-handoff-client.ts'
+import {
+  SignedJobroloIntakeClient,
+  readJobroloIntakeClientConfiguration,
+  readJobroloIntakeCredentialResidue,
+} from './jobrolo-intake-client.ts'
+import {
+  SignedJobroloHandoffClient,
+  readJobroloHandoffClientConfiguration,
+} from './jobrolo-handoff-client.ts'
 import { SupabaseHomeRecordHandoffProvider } from './supabase-home-record-handoff-provider.ts'
 import {
+  homeRecordHandoffActivationCredentialsSeparated,
+  homeRecordHandoffReleaseEnvironmentAllowed,
   homeRecordHandoffSecurityProviders,
   readHomeRecordHandoffSecurityConfiguration,
 } from './home-record-handoff-security.ts'
@@ -86,19 +95,38 @@ const auth = configuration && clients
   : null
 
 let service: HomeownerApiService | null = null
-const jobroloIntakeClient = jobroloIntakeClientForEnvironment(environment)
+const jobroloIntakeConfiguration = readJobroloIntakeClientConfiguration(environment)
+const jobroloIntakeCredentialResidue = readJobroloIntakeCredentialResidue(environment)
+const jobroloIntakeClient = jobroloIntakeConfiguration
+  ? new SignedJobroloIntakeClient({ configuration: jobroloIntakeConfiguration })
+  : null
 const homeResearchConfiguration = readHomeResearchConfiguration(environment)
 const homeResearchClient = homeResearchConfiguration
   ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
   : null
 let projectReviewService: HomeownerProjectReviewService | null = null
-const jobroloHandoffClient = jobroloHandoffClientForEnvironment(environment)
+const jobroloHandoffConfiguration = readJobroloHandoffClientConfiguration(environment)
 const homeRecordHandoffSecurityConfiguration =
   readHomeRecordHandoffSecurityConfiguration(environment)
+const homeRecordHandoffCredentialsSeparated = jobroloHandoffConfiguration
+  && homeRecordHandoffSecurityConfiguration
+  && jobroloIntakeCredentialResidue.state !== 'invalid'
+  && homeRecordHandoffReleaseEnvironmentAllowed(environment.NODE_ENV)
+  ? homeRecordHandoffActivationCredentialsSeparated(
+      jobroloHandoffConfiguration,
+      homeRecordHandoffSecurityConfiguration,
+      jobroloIntakeCredentialResidue.credentials,
+    )
+  : false
+const jobroloHandoffClient = jobroloHandoffConfiguration
+  && homeRecordHandoffCredentialsSeparated
+  ? new SignedJobroloHandoffClient({ configuration: jobroloHandoffConfiguration })
+  : null
 const homeRecordHandoffProvider = clients && homeRecordHandoffSecurityConfiguration
   ? new SupabaseHomeRecordHandoffProvider(clients.service)
   : null
 const homeRecordHandoffSecurity = homeRecordHandoffSecurityConfiguration
+  && homeRecordHandoffCredentialsSeparated
   ? homeRecordHandoffSecurityProviders(homeRecordHandoffSecurityConfiguration)
   : null
 let homeRecordHandoffService: HomeRecordHandoffService | null = null
@@ -173,10 +201,11 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
 }
 
 /**
- * The handoff remains unavailable unless the base Supabase runtime, the
- * independent handoff gate, signed Jobrolo transport, pinned keys, and local
- * scanner are all configured. Routes must use the returned server-owned
- * recipient ref; a browser must never choose one.
+ * The handoff remains unavailable unless the code-owned release-environment
+ * interlock, base Supabase runtime, independent handoff gate, signed Jobrolo
+ * transport, pinned keys, separated credentials, and local scanner all allow
+ * it. Routes must use the returned server-owned recipient ref; a browser must
+ * never choose one.
  */
 export function configuredHomeRecordHandoffService(): {
   readonly service: HomeRecordHandoffService

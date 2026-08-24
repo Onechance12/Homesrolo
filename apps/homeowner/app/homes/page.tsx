@@ -48,7 +48,7 @@ export default function HomesPage({
                 ? <p className="mono" style={{ marginTop: '0.35rem' }}>{SYNTHETIC_NOTICE}</p>
                 : <p style={{ color: 'var(--ink-soft)', marginTop: '0.35rem' }}>
                     {handoff
-                      ? 'Choose the exact private Home Record. You will review every item before anything is copied.'
+                      ? 'Choose the exact private Home Record, then review Completion record details. The PDF cannot be opened before you accept it.'
                       : 'Choose a private home file or start one.'}
                   </p>}
 

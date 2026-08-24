@@ -9,6 +9,7 @@ import {
 } from '../../../../src/contracts/homeowner-share.v1.ts'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import {
+  HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS,
   HOME_RECORD_HANDOFF_VERSION,
   homeRecordHandoffDisplayName,
   parseHomeRecordHandoffRecord,
@@ -154,6 +155,42 @@ function grantArguments(grant: {
     p_membership_ref: grant.membershipRef,
     p_membership_revision: grant.membershipRevision,
   }
+}
+
+/**
+ * Export requests one stable, accepted-only result with an exact count and a
+ * cap+1 limit. Count/row disagreement (including a PostgREST max_rows cap or a
+ * changing result) is an error, never a reason to truncate history.
+ */
+export async function boundedAcceptedHandoffRefsForExport(
+  client: SupabaseClient,
+  homeRef: string,
+  principalRef: string,
+) {
+  const maximum = HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS
+  const { data, error, count } = await client
+    .from('homesrolo_homeowner_handoffs')
+    .select('handoff_ref,received_at', { count: 'exact' })
+    .eq('home_ref', homeRef)
+    .eq('controller_principal_ref', principalRef)
+    .eq('state', 'accepted')
+    .order('received_at', { ascending: false })
+    .order('handoff_ref', { ascending: false })
+    .limit(maximum + 1)
+  if (error || !Array.isArray(data) || typeof count !== 'number'
+    || !Number.isSafeInteger(count) || count < 0
+    || count > maximum || data.length !== count) {
+    throw new HomeownerApiError('unavailable')
+  }
+  const references: string[] = []
+  const seen = new Set<string>()
+  for (const value of data) {
+    const reference = text(row(value), 'handoff_ref')
+    if (seen.has(reference)) throw new HomeownerApiError('unavailable')
+    seen.add(reference)
+    references.push(reference)
+  }
+  return references
 }
 
 /** Service-role-only adapter. It never accepts or returns a Jobrolo object key. */
@@ -412,8 +449,21 @@ export class SupabaseHomeRecordHandoffProvider implements
   async listAcceptedForExport(
     grant: Parameters<HomeRecordHandoffPersistencePort['listAcceptedForExport']>[0],
   ) {
-    const records = await this.#listExact(grant.homeRef, grant.principalRef)
-    return records.filter(recordValue => recordValue.state === 'accepted')
+    const references = await boundedAcceptedHandoffRefsForExport(
+      this.#client,
+      grant.homeRef,
+      grant.principalRef,
+    )
+    return Promise.all(references.map(reference => this.#readByHandoff(
+      reference,
+      grant.homeRef,
+      grant.principalRef,
+    ).then(recordValue => {
+      if (!recordValue || recordValue.state !== 'accepted') {
+        throw new HomeownerApiError('unavailable')
+      }
+      return recordValue
+    })))
   }
 
   async stageExactObject(input: Parameters<HomeRecordHandoffObjectPort['stageExactObject']>[0]) {

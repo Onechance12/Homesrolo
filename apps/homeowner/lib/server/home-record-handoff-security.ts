@@ -13,10 +13,24 @@ import {
   type HomeRecordHandoffScannerPort,
   type HomeRecordHandoffTrustPort,
 } from '../../../../src/homeowner/home-record-handoff.v1.ts'
+import type { JobroloHandoffClientConfiguration } from './jobrolo-handoff-client.ts'
+import type { JobroloIntakeCredentialPair } from './jobrolo-intake-client.ts'
 
 const keyId = z.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/)
 const derKey = z.string().min(40).max(8192).regex(/^[A-Za-z0-9+/]+={0,2}$/)
 const recipientRef = z.string().regex(/^hrcp_[A-Za-z0-9_-]{43}$/)
+
+// Recovery/cleanup for reconciliation_required is not implemented in this
+// release. Production activation stays code-blocked until that reviewed seam,
+// pre-acceptance rendering, and signed sender provenance exist.
+export const HOME_RECORD_HANDOFF_PRODUCTION_READY = false as const
+
+export function homeRecordHandoffReleaseEnvironmentAllowed(
+  nodeEnvironment: string | undefined,
+) {
+  if (nodeEnvironment === 'production') return Boolean(HOME_RECORD_HANDOFF_PRODUCTION_READY)
+  return nodeEnvironment === 'development' || nodeEnvironment === 'test'
+}
 
 const configurationSchema = z.object({
   enabled: z.literal('true'),
@@ -55,6 +69,61 @@ function parseDerKey(input: string, kind: 'public' | 'private'): KeyObject | nul
   }
 }
 
+function publicDer(key: KeyObject) {
+  return Buffer.from(key.export({ format: 'der', type: 'spki' }))
+}
+
+function privateDer(key: KeyObject) {
+  return Buffer.from(key.export({ format: 'der', type: 'pkcs8' }))
+}
+
+function credentialByteRepresentations(value: string) {
+  const representations = [Buffer.from(value, 'utf8'), Buffer.from(value, 'latin1')]
+  if (/^(?:[A-Fa-f0-9]{2})+$/.test(value)) representations.push(Buffer.from(value, 'hex'))
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length % 4 === 0) {
+    const decoded = Buffer.from(value, 'base64')
+    if (decoded.toString('base64') === value) representations.push(decoded)
+  }
+  if (/^[A-Za-z0-9_-]+$/.test(value)) {
+    const decoded = Buffer.from(value, 'base64url')
+    if (decoded.toString('base64url') === value) representations.push(decoded)
+  }
+  return representations
+}
+
+function credentialMatchesKeyMaterial(credential: string, material: Buffer) {
+  return credentialByteRepresentations(credential).some(value => value.equals(material))
+}
+
+function credentialValuesArePairwiseDistinct(values: readonly string[]) {
+  const representations = values.map(credentialByteRepresentations)
+  return representations.every((left, index) =>
+    representations.slice(index + 1).every(right =>
+      left.every(leftBytes => right.every(rightBytes => !leftBytes.equals(rightBytes)))))
+}
+
+function securityKeyMaterial(
+  jobroloPublicKey: KeyObject,
+  homesroloPrivateKey: KeyObject,
+) {
+  const homesroloPublicKey = createPublicKey(homesroloPrivateKey)
+  const jobroloJwk = jobroloPublicKey.export({ format: 'jwk' })
+  const homesroloJwk = homesroloPrivateKey.export({ format: 'jwk' })
+  return [
+    publicDer(jobroloPublicKey),
+    privateDer(homesroloPrivateKey),
+    publicDer(homesroloPublicKey),
+    ...[jobroloJwk.x, homesroloJwk.d, homesroloJwk.x]
+      .filter((value): value is string => typeof value === 'string')
+      .map(value => Buffer.from(value, 'base64url')),
+  ]
+}
+
+function keyMaterialIsPairwiseDistinct(material: readonly Buffer[]) {
+  return material.every((value, index) =>
+    material.slice(index + 1).every(candidate => !value.equals(candidate)))
+}
+
 /**
  * This is an independent activation gate. A true transport flag alone cannot
  * enable imports: exact recipient binding, both Ed25519 keys, and a loopback
@@ -80,6 +149,18 @@ export function readHomeRecordHandoffSecurityConfiguration(
   const jobroloPublicKey = parseDerKey(parsed.data.jobroloPublicKey, 'public')
   const homesroloPrivateKey = parseDerKey(parsed.data.homesroloPrivateKey, 'private')
   if (!jobroloPublicKey || !homesroloPrivateKey) return null
+  const homesroloPublicKey = createPublicKey(homesroloPrivateKey)
+  const fixedIdentifiers = [
+    parsed.data.recipientRef,
+    parsed.data.jobroloKeyId,
+    parsed.data.homesroloKeyId,
+  ]
+  const material = securityKeyMaterial(jobroloPublicKey, homesroloPrivateKey)
+  if (!credentialValuesArePairwiseDistinct(fixedIdentifiers)
+    || publicDer(jobroloPublicKey).equals(publicDer(homesroloPublicKey))
+    || !keyMaterialIsPairwiseDistinct(material)
+    || fixedIdentifiers.some(identifier => material.some(value =>
+      credentialMatchesKeyMaterial(identifier, value)))) return null
   return Object.freeze({
     recipientRef: parsed.data.recipientRef,
     jobroloKeyId: parsed.data.jobroloKeyId,
@@ -90,6 +171,40 @@ export function readHomeRecordHandoffSecurityConfiguration(
     clamavPort: parsed.data.clamavPort,
     clamavVersion: parsed.data.clamavVersion,
   })
+}
+
+/**
+ * Final activation-only credential separation. Transport HMAC credentials and
+ * both directional Ed25519 identities must remain unrelated. This comparison
+ * is local and deliberately emits no credential value or diagnostic detail.
+ */
+export function homeRecordHandoffActivationCredentialsSeparated(
+  transport: JobroloHandoffClientConfiguration,
+  security: HomeRecordHandoffSecurityConfiguration,
+  priorIntake: JobroloIntakeCredentialPair | null = null,
+) {
+  if (security.jobroloKeyId === security.homesroloKeyId) return false
+  const homesroloPublicKey = createPublicKey(security.homesroloPrivateKey)
+  if (publicDer(security.jobroloPublicKey).equals(publicDer(homesroloPublicKey))) return false
+  const activationValues = [
+    transport.clientId,
+    transport.sharedSecret,
+    security.recipientRef,
+    security.jobroloKeyId,
+    security.homesroloKeyId,
+  ]
+  if (priorIntake) {
+    activationValues.push(priorIntake.clientId, priorIntake.sharedSecret)
+  }
+  if (!credentialValuesArePairwiseDistinct(activationValues)) return false
+
+  const keyMaterial = securityKeyMaterial(
+    security.jobroloPublicKey,
+    security.homesroloPrivateKey,
+  )
+  return keyMaterialIsPairwiseDistinct(keyMaterial)
+    && !activationValues.some(credential => keyMaterial.some(material =>
+    credentialMatchesKeyMaterial(credential, material)))
 }
 
 export class PinnedHomeRecordHandoffTrust implements HomeRecordHandoffTrustPort {

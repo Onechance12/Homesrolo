@@ -180,12 +180,22 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   assert.match(component, /const completionRecord = active\?\.items\[0\][\s\S]*selectedArtifactRefs: \[completionRecord\.artifactRef\]/,
     'acceptance submits only the one decoded completion PDF')
   assert.match(component, /this exact contractor-issued completion PDF is safety-checked/)
+  assert.match(component, /Completion record details/)
+  assert.match(component, /This PDF cannot be opened before you accept it\./)
+  for (const fixedContent of [
+    'Contractor business display name',
+    'Completed status',
+    'Recorded start date',
+    'Recorded completion date',
+    'Issue date',
+  ]) assert.match(component, new RegExp(fixedContent))
+  assert.match(component,
+    /does not include raw photos, raw documents, invoices, warranties, claims, or measurements/)
+  assert.match(component, /Accept only if you recognize the sender and the link that brought you here/)
   assert.match(component, /Download accepted completion records/,
     'the handoff-only ZIP is not mislabeled as the complete Home Record')
   assert.match(component, /Check whether this one-job record belongs with this Home Record/,
     'the pre-claim prompt does not claim the link matches a home')
-  assert.doesNotMatch(component, /project photos and paperwork|warrant(?:y|ies)|invoice/i,
-    'the active canary UI must not imply unsupported raw-file kinds')
   const claimHandler = component.slice(
     component.indexOf('async function claimEntryHandoff'),
     component.indexOf('async function openHandoff'),
@@ -199,7 +209,7 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   assert.match(claimHandler, /showPreview\(result\.value\)[\s\S]*clearHandoffFromAddressBar\(\)/,
     'the opaque query is cleared only after the exact preview succeeds')
   assert.match(component, /Choose a different home/)
-  assert.doesNotMatch(component, /coming soon|\bmeasurement/i)
+  assert.doesNotMatch(component, /coming soon/i)
   assert.match(boundary, /claimExactShare/,
     'the HTTP boundary may activate only one explicit share through its injected controller')
   assert.doesNotMatch(boundary, /\.claim\(|recipientRef|principalRef/,
@@ -207,6 +217,11 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   assert.match(runtime,
     /claimExactShare:[\s\S]*claimForController\([\s\S]*configuredRecipientRef/,
     'runtime closes over the fixed recipient ref before exposing exact-share activation')
+  assert.match(runtime,
+    /readJobroloIntakeCredentialResidue\(environment\)[\s\S]*state !== 'invalid'[\s\S]*homeRecordHandoffActivationCredentialsSeparated/,
+    'activation checks even disabled or partial prior-intake credential residue')
+  assert.match(runtime, /homeRecordHandoffReleaseEnvironmentAllowed\(environment\.NODE_ENV\)/,
+    'the release-owned production interlock participates in runtime activation')
 })
 
 test('synthetic is the default mode and the only config is the public mode value', () => {

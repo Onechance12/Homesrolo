@@ -33,6 +33,40 @@ export interface JobroloIntakeClientConfiguration {
   readonly sharedSecret: string
 }
 
+export interface JobroloIntakeCredentialPair {
+  readonly clientId: string
+  readonly sharedSecret: string
+}
+
+export type JobroloIntakeCredentialResidue =
+  | { readonly state: 'absent'; readonly credentials: null }
+  | { readonly state: 'valid'; readonly credentials: JobroloIntakeCredentialPair }
+  | { readonly state: 'invalid'; readonly credentials: null }
+
+/**
+ * Handoff activation inspects credential residue even when the older intake
+ * lane is disabled or otherwise malformed. Partial credentials fail closed;
+ * a complete pair participates in the cross-lane separation check.
+ */
+export function readJobroloIntakeCredentialResidue(
+  environment: Readonly<Record<string, string | undefined>>,
+): JobroloIntakeCredentialResidue {
+  const clientId = environment.HOMESROLO_JOBROLO_INTAKE_CLIENT_ID
+  const sharedSecret = environment.HOMESROLO_JOBROLO_INTAKE_SHARED_SECRET
+  if (clientId === undefined && sharedSecret === undefined) {
+    return Object.freeze({ state: 'absent', credentials: null })
+  }
+  const parsed = z.object({
+    clientId: z.string().regex(CLIENT_ID),
+    sharedSecret: z.string().min(32).max(512).regex(/^\S+$/),
+  }).strict().safeParse({ clientId, sharedSecret })
+  if (!parsed.success) return Object.freeze({ state: 'invalid', credentials: null })
+  return Object.freeze({
+    state: 'valid',
+    credentials: Object.freeze(parsed.data),
+  })
+}
+
 export function readJobroloIntakeClientConfiguration(
   environment: Readonly<Record<string, string | undefined>>,
 ): JobroloIntakeClientConfiguration | null {

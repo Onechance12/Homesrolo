@@ -160,7 +160,7 @@ export default function SignInPage({
           </h1>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
             {isHandoffEntry
-              ? 'Sign in, choose the right home, and review the exact completion PDF before anything can be copied into its private Home Record.'
+              ? 'Sign in, choose the right home, and review Completion record details before anything can be copied into its private Home Record. The PDF cannot be opened before you accept it.'
               : isRoofInspectionEntry
               ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
               : <>Start one private Home Record for the whole home. Record planned work, active projects,
