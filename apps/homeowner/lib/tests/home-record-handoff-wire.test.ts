@@ -25,8 +25,8 @@ const preview = Object.freeze({
   acceptanceText: HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
   items: [{
     artifactRef: itemRef,
-    projectionKind: 'work_warranty_record',
-    label: 'Warranty',
+    projectionKind: 'work_completion_record',
+    label: 'Project completion record',
     mediaType: 'application/pdf',
     byteLength: 2400,
     decision: 'pending',
@@ -44,8 +44,17 @@ test('handoff decoders accept only the browser-safe exact projection', () => {
     { ...preview, recipientRef: ref('hrcp', 'r') },
     { ...preview, storageObjectRef: ref('hobj', 'x') },
     { ...preview, items: [...preview.items, preview.items[0]] },
-    { ...preview, items: [{ ...preview.items[0], byteLength: 26 * 1024 * 1024 }] },
+    { ...preview, items: [{ ...preview.items[0], byteLength: 1024 * 1024 + 1 }] },
     { ...preview, items: [{ ...preview.items[0], mediaType: 'text/html' }] },
+    { ...preview, items: [{ ...preview.items[0], mediaType: 'image/jpeg' }] },
+    { ...preview, items: [{ ...preview.items[0], mediaType: 'image/png' }] },
+    { ...preview, items: [{ ...preview.items[0], label: 'Invoice' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_status_summary' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_schedule_summary' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_document_copy' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_photo_set' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_warranty_record' }] },
+    { ...preview, items: [{ ...preview.items[0], projectionKind: 'work_invoice_receipt' }] },
     { ...preview, expiresAt: preview.receivedAt },
   ]) {
     assert.throws(() => decodeHomeRecordHandoffPreview(mutated, 'data'), WireError)
@@ -153,7 +162,13 @@ test('malformed handoff refs and consent never become network requests', async (
   assert.deepEqual(await port.acceptHomeRecordHandoff(homeRef, shareId, {
     commandRef,
     reviewedPreviewDigest: preview.previewDigest,
-    selectedArtifactRefs: [],
+    selectedArtifactRefs: [] as unknown as [string],
+    consentAccepted: true,
+  }), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.acceptHomeRecordHandoff(homeRef, shareId, {
+    commandRef,
+    reviewedPreviewDigest: preview.previewDigest,
+    selectedArtifactRefs: [itemRef, ref('hproj', 'x')] as unknown as [string],
     consentAccepted: true,
   }), { ok: false, error: 'invalid' })
   assert.equal(calls, 0)

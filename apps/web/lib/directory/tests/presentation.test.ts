@@ -122,7 +122,9 @@ test('no rendered label calls a sample review a verified project', () => {
 })
 
 test('the homeowner conversion path starts a project instead of publishing a contractor directory', () => {
-  assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/homesrolo-homeowner-v2\.onrender\.com'/)
+  assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/app\.homesrolo\.com'/)
+  assert.doesNotMatch(site, /homesrolo-homeowner-v2\.onrender\.com/,
+    'public CTAs must use the canonical trusted app domain')
   assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
   assert.match(site, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=inspection`/)
   assert.match(site, /label: 'Home Watch'/)

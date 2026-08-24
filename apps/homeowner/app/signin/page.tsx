@@ -150,17 +150,17 @@ export default function SignInPage({
         <div className="gate__card">
           <p className="mono" style={{ marginBottom: '0.4rem' }}>
             {isHandoffEntry
-              ? 'Private file handoff · homeowner sign in'
+              ? 'Private completion record · homeowner sign in'
               : isRoofInspectionEntry ? 'Roof inspection · homeowner sign in' : 'Homeowner sign in'}
           </p>
           <h1 style={{ fontSize: '1.5rem' }}>
             {isHandoffEntry
-              ? 'Choose where these files belong.'
+              ? 'Choose where this completion record belongs.'
               : isRoofInspectionEntry ? 'Start your private roof record.' : <>Open your home&rsquo;s file.</>}
           </h1>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.92rem', marginTop: '0.6rem' }}>
             {isHandoffEntry
-              ? 'Sign in, choose the right home, and review the exact files before anything can be copied into its private Home Record.'
+              ? 'Sign in, choose the right home, and review the exact completion PDF before anything can be copied into its private Home Record.'
               : isRoofInspectionEntry
               ? 'Sign in to choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
               : <>Start one private Home Record for the whole home. Record planned work, active projects,
@@ -182,7 +182,7 @@ export default function SignInPage({
               </p>
               <Link className="btn btn--primary btn--block" href={withHomeownerEntryContext('/homes', context)}>
                 {isHandoffEntry
-                  ? 'Choose the home for these files'
+                  ? 'Choose the home for this record'
                   : isRoofInspectionEntry
                   ? 'Continue to my roof record'
                   : intent ? 'Continue my roof project' : 'Go to your homes'}

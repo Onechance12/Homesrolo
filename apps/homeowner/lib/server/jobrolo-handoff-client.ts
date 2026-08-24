@@ -1,15 +1,20 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import {
-  HOMEOWNER_SHARE_MAX_ARTIFACT_BYTES,
   HOMEOWNER_SHARE_MAX_MANIFEST_BYTES,
   homeownerShareCanonicalJson,
   type HomeownerShareConsentReceipt,
 } from '../../../../src/contracts/homeowner-share.v1.ts'
-import type {
-  HomeRecordHandoffSourcePort,
-  HomeRecordHandoffSourceResult,
+import {
+  HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES,
+  type HomeRecordHandoffSourcePort,
+  type HomeRecordHandoffSourceResult,
 } from '../../../../src/homeowner/home-record-handoff.v1.ts'
+/*
+ * The artifact request is deliberately shorter than a generic file transfer:
+ * this canary fetches one Jobrolo-generated completion PDF capped at 1 MiB.
+ */
+export const JOBROLO_HANDOFF_ARTIFACT_TIMEOUT_MS = 15_000
 
 export const JOBROLO_HANDOFF_TRANSPORT_VERSION =
   'jobrolo-homesrolo-project-handoff-transport.v1' as const
@@ -249,7 +254,7 @@ export class SignedJobroloHandoffClient implements HomeRecordHandoffSourcePort {
     const exchange = await this.#post(pathname, {
       manifestDigest: input.manifestDigest,
       consent: input.consent,
-    }, 60_000, 'application/pdf, image/jpeg, image/png')
+    }, JOBROLO_HANDOFF_ARTIFACT_TIMEOUT_MS, 'application/pdf')
     const { response } = exchange
     if (response.status === 404 || response.status === 410) {
       if (exactContentType(response) !== 'application/json; charset=utf-8') {
@@ -261,7 +266,7 @@ export class SignedJobroloHandoffClient implements HomeRecordHandoffSourcePort {
     }
     if (response.status !== 200) throw new JobroloHandoffTransportError('unknown_outcome')
     const mediaType = exactContentType(response)
-    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(mediaType)) {
+    if (mediaType !== 'application/pdf') {
       throw new JobroloHandoffTransportError('unknown_outcome')
     }
     if (response.headers.get('content-length') === null) {
@@ -269,7 +274,7 @@ export class SignedJobroloHandoffClient implements HomeRecordHandoffSourcePort {
     }
     const declaredDigest = response.headers.get('x-jobrolo-artifact-sha256') ?? ''
     if (!SHA256.test(declaredDigest)) throw new JobroloHandoffTransportError('unknown_outcome')
-    const bytes = await boundedBytes(response, HOMEOWNER_SHARE_MAX_ARTIFACT_BYTES)
+    const bytes = await boundedBytes(response, HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES)
     this.#verifyResponse(exchange, bytes)
     const payloadSha256 = sha256(bytes)
     if (payloadSha256 !== declaredDigest) throw new JobroloHandoffTransportError('unknown_outcome')

@@ -7,6 +7,7 @@ import {
   PinnedHomeRecordHandoffTrust,
   readHomeRecordHandoffSecurityConfiguration,
 } from '../server/home-record-handoff-security.ts'
+import { HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES } from '../../../../src/homeowner/home-record-handoff.v1.ts'
 
 const ref = (prefix: string, character: string) => `${prefix}_${character.repeat(43)}`
 const jobrolo = generateKeyPairSync('ed25519')
@@ -101,5 +102,16 @@ test('local ClamAV scanner verifies the input digest and treats unknown replies 
     bytes,
     mediaType: 'application/pdf',
     expectedSha256: '0'.repeat(64),
+  }), /handoff_scan_input_invalid/)
+  const oversized = new Uint8Array(HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES + 1)
+  await assert.rejects(clean.scan({
+    bytes: oversized,
+    mediaType: 'application/pdf',
+    expectedSha256: createHash('sha256').update(oversized).digest('hex'),
+  }), /handoff_scan_input_invalid/)
+  await assert.rejects(clean.scan({
+    bytes,
+    mediaType: 'image/jpeg' as 'application/pdf',
+    expectedSha256,
   }), /handoff_scan_input_invalid/)
 })

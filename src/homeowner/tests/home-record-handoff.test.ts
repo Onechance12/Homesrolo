@@ -9,6 +9,7 @@ import {
   HOMEOWNER_SHARE_CONTRACT_VERSION,
   HOMEOWNER_SHARE_PURPOSE,
   HOME_RECORD_HANDOFF_DEFAULT_ENABLED,
+  HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES,
   HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES,
   HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS,
   HomeRecordHandoffService,
@@ -83,20 +84,11 @@ function manifest(): HomeownerShareManifest {
       {
         artifactRef: ref('hproj', 'd'),
         source: 'homeowner_release',
-        projectionKind: 'work_document_copy',
+        projectionKind: 'work_completion_record',
         projectionVersion: 1,
         mediaType: 'application/pdf',
         byteLength: pdf.byteLength,
         sha256: digest(pdf),
-      },
-      {
-        artifactRef: ref('hproj', 'i'),
-        source: 'homeowner_release',
-        projectionKind: 'work_photo_set',
-        projectionVersion: 1,
-        mediaType: 'image/jpeg',
-        byteLength: jpeg.byteLength,
-        sha256: digest(jpeg),
       },
     ],
   }
@@ -360,7 +352,7 @@ function harness(input: {
         const item = offer.manifest.artifacts.find(candidate =>
           candidate.artifactRef === request.artifactRef)
         if (!item) throw new Error('missing')
-        const bytes = input.fetchedBytes ?? (item.mediaType === 'application/pdf' ? pdf : jpeg)
+        const bytes = input.fetchedBytes ?? pdf
         return {
           bytes,
           mediaType: item.mediaType,
@@ -513,7 +505,7 @@ test('persisted claim admission denial maps to rate limited before producer I/O'
   assert.equal(testHarness.claimCalls, 0)
 })
 
-test('offer verification binds exact digest, binary policy, expiry, and Ed25519 signature', () => {
+test('offer verification binds exact digest, completion-PDF policy, expiry, and Ed25519 signature', () => {
   const value = manifest()
   const receipt = authorization(value)
   const inspected = inspectHomeRecordHandoffOffer(
@@ -526,28 +518,59 @@ test('offer verification binds exact digest, binary policy, expiry, and Ed25519 
     { ...receipt, signing: { ...receipt.signing, signature: Buffer.alloc(64).toString('base64url') } },
     jobroloKeys.publicKey,
   ), false)
-  assert.throws(() => inspectHomeRecordHandoffOffer({
-    manifest: {
+  const only = value.artifacts[0]!
+  const rejected: readonly HomeownerShareManifest[] = [
+    { ...value, artifacts: [{ ...only, projectionKind: 'work_document_copy' }] },
+    {
       ...value,
       artifacts: [{
-        ...value.artifacts[0],
+        ...only,
+        projectionKind: 'work_photo_set',
+        mediaType: 'image/jpeg',
+        byteLength: jpeg.byteLength,
+        sha256: digest(jpeg),
+      }],
+    },
+    { ...value, artifacts: [{ ...only, projectionKind: 'work_warranty_record' }] },
+    { ...value, artifacts: [{ ...only, projectionKind: 'work_invoice_receipt' }] },
+    { ...value, artifacts: [{ ...only, projectionVersion: 2 }] },
+    {
+      ...value,
+      artifacts: [{
+        ...only,
+        byteLength: HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES + 1,
+      }],
+    },
+    {
+      ...value,
+      artifacts: [only, { ...only, artifactRef: ref('hproj', 'x') }],
+    },
+    {
+      ...value,
+      artifacts: [{
+        ...only,
         mediaType: 'application/json',
         byteLength: 2,
         sha256: digest(Uint8Array.from([123, 125])),
       }],
     },
-    authorization: receipt,
-  }, new Date(NOW)))
+  ]
+  for (const rejectedManifest of rejected) {
+    assert.throws(() => inspectHomeRecordHandoffOffer({
+      manifest: rejectedManifest,
+      authorization: authorization(rejectedManifest),
+    }, new Date(NOW)), /projection_not_allowed/)
+  }
   assert.throws(() => inspectHomeRecordHandoffOffer(
     { manifest: value, authorization: receipt },
     new Date(EXPIRES),
   ), /expired/)
 })
 
-test('itemized acceptance copies only selected clean exact bytes and exports a self-service ZIP', async () => {
+test('explicit acceptance copies the one clean completion PDF and exports it with provenance', async () => {
   const testHarness = await claimed()
   const preview = await testHarness.service.preview(context, homeRef, shareId)
-  assert.equal(preview.items.length, 2)
+  assert.equal(preview.items.length, 1)
   assert.equal(JSON.stringify(preview).includes('sha256'), false)
   const accepted = await testHarness.service.accept(context, homeRef, shareId, {
     commandRef: ref('hcmd', 'c'),
@@ -559,7 +582,6 @@ test('itemized acceptance copies only selected clean exact bytes and exports a s
   assert.equal(testHarness.fetchCalls, 1)
   assert.equal(testHarness.objects.size, 1)
   assert.equal(accepted.items[0]!.copyState, 'available')
-  assert.equal(accepted.items[1]!.decision, 'rejected')
 
   const replay = await testHarness.service.accept(context, homeRef, shareId, {
     commandRef: ref('hcmd', 'c'),
@@ -577,7 +599,7 @@ test('itemized acceptance copies only selected clean exact bytes and exports a s
   const zipText = Buffer.from(exported.bytes).toString('utf8')
   assert.match(zipText, /home-record-manifest\.json/)
   assert.match(zipText, /home-record-summary\.txt/)
-  assert.match(zipText, /originals\/001-work-document-copy\.pdf/)
+  assert.match(zipText, /originals\/001-work-completion-record\.pdf/)
   assert.match(zipText, /homeowner-share\.authorization\.v1/)
   assert.match(zipText, /homeowner-share\.consent\.v1/)
   assert.match(zipText, /"sourceManifest"/)

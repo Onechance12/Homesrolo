@@ -50,7 +50,7 @@ export interface SignInCapabilities {
   readonly photoCheckups: boolean
   readonly projectReview: boolean
   readonly projectReviewAttachments: boolean
-  /** Signed contractor-to-home file handoffs, copied only after homeowner consent. */
+  /** Signed contractor completion-record handoffs, copied only after homeowner consent. */
   readonly homeRecordHandoffs: boolean
   readonly invitations: boolean
   readonly sharing: boolean
@@ -430,21 +430,16 @@ export type HomeRecordHandoffState =
   | 'quarantined'
   | 'reconciliation_required'
 
-export type HomeRecordHandoffProjectionKind =
-  | 'work_document_copy'
-  | 'work_photo_set'
-  | 'work_completion_record'
-  | 'work_warranty_record'
-  | 'work_invoice_receipt'
+export type HomeRecordHandoffProjectionKind = 'work_completion_record'
 
 export const HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT =
-  'I accept only the items selected in this preview into this private Home Record. Homesrolo will copy those exact files into its own private storage and will not import unselected items.' as const
+  'I accept this contractor-issued project completion record into this private Home Record. Homesrolo will copy this exact PDF into its own private storage.' as const
 
 export interface HomeRecordHandoffItem {
   readonly artifactRef: string
   readonly projectionKind: HomeRecordHandoffProjectionKind
-  readonly label: string
-  readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
+  readonly label: 'Project completion record'
+  readonly mediaType: 'application/pdf'
   readonly byteLength: number
   readonly decision: 'pending' | 'accepted' | 'rejected'
   readonly copyState: 'not_started' | 'staged_clean' | 'available' | 'quarantined'
@@ -466,7 +461,7 @@ export interface HomeRecordHandoffPreview {
 export interface AcceptHomeRecordHandoffInput {
   readonly commandRef: string
   readonly reviewedPreviewDigest: string
-  readonly selectedArtifactRefs: readonly string[]
+  readonly selectedArtifactRefs: readonly [string]
   readonly consentAccepted: true
 }
 

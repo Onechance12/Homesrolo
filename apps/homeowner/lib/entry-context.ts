@@ -35,7 +35,7 @@ export function withHomeownerEntryContext(
   return encoded ? `${pathname}?${encoded}` : pathname
 }
 
-/** An exact file handoff takes the homeowner to that home's private documents page. */
+/** An exact completion-record handoff opens that home's private documents page. */
 export function homeownerEntryDestination(
   homeRef: string,
   context: HomeownerEntryContext,

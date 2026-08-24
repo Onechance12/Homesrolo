@@ -40,9 +40,9 @@ create table public.homesrolo_homeowner_handoffs (
   manifest jsonb not null check (jsonb_typeof(manifest) = 'object'),
   manifest_digest text not null check (manifest_digest ~ '^[a-f0-9]{64}$'),
   manifest_artifact_count integer not null
-    check (manifest_artifact_count between 1 and 25),
+    check (manifest_artifact_count = 1),
   manifest_total_bytes bigint not null
-    check (manifest_total_bytes between 1 and 104857600),
+    check (manifest_total_bytes between 1 and 1048576),
   authorization_id text not null
     check (authorization_id ~ '^hauth_[A-Za-z0-9_-]{43}$'),
   authorization_receipt jsonb not null
@@ -157,21 +157,16 @@ create table public.homesrolo_homeowner_handoff_items (
   handoff_ref text not null,
   source_artifact_ref text not null
     check (source_artifact_ref ~ '^hproj_[A-Za-z0-9_-]{43}$'),
-  manifest_ordinal integer not null check (manifest_ordinal between 1 and 25),
+  manifest_ordinal integer not null check (manifest_ordinal = 1),
   home_ref text not null,
   controller_principal_ref text not null,
   descriptor jsonb not null check (jsonb_typeof(descriptor) = 'object'),
   source text not null default 'homeowner_release'
     check (source = 'homeowner_release'),
-  projection_kind text not null check (projection_kind in (
-    'work_document_copy', 'work_photo_set', 'work_completion_record',
-    'work_warranty_record', 'work_invoice_receipt'
-  )),
-  projection_version integer not null check (projection_version between 1 and 100),
-  media_type text not null check (media_type in (
-    'application/pdf', 'image/jpeg', 'image/png'
-  )),
-  byte_length integer not null check (byte_length between 1 and 26214400),
+  projection_kind text not null check (projection_kind = 'work_completion_record'),
+  projection_version integer not null check (projection_version = 1),
+  media_type text not null check (media_type = 'application/pdf'),
+  byte_length integer not null check (byte_length between 1 and 1048576),
   payload_sha256 text not null check (payload_sha256 ~ '^[a-f0-9]{64}$'),
   decision text not null default 'pending'
     check (decision in ('pending', 'accepted', 'rejected')),
@@ -205,7 +200,7 @@ create table public.homesrolo_homeowner_handoff_items (
       or reserved_project_ref ~ '^hprj_[A-Za-z0-9_-]{43}$'),
   reserved_artifact_kind text
     check (reserved_artifact_kind is null
-      or reserved_artifact_kind in ('photo', 'document', 'warranty')),
+      or reserved_artifact_kind = 'document'),
   reserved_display_name text check (
     reserved_display_name is null
     or (reserved_display_name = btrim(reserved_display_name)
@@ -213,13 +208,11 @@ create table public.homesrolo_homeowner_handoff_items (
       and reserved_display_name !~ '[[:cntrl:]]')
   ),
   verified_media_type text check (
-    verified_media_type is null or verified_media_type in (
-      'application/pdf', 'image/jpeg', 'image/png'
-    )
+    verified_media_type is null or verified_media_type = 'application/pdf'
   ),
   verified_byte_length integer
     check (verified_byte_length is null
-      or verified_byte_length between 1 and 26214400),
+      or verified_byte_length between 1 and 1048576),
   verified_payload_sha256 text
     check (verified_payload_sha256 is null
       or verified_payload_sha256 ~ '^[a-f0-9]{64}$'),
@@ -261,14 +254,9 @@ create table public.homesrolo_homeowner_handoff_items (
     'byteLength', byte_length,
     'sha256', payload_sha256
   )),
-  check (
-    (media_type = 'application/pdf' and projection_kind in (
-      'work_document_copy', 'work_completion_record',
-      'work_warranty_record', 'work_invoice_receipt'
-    ))
-    or (media_type in ('image/jpeg', 'image/png')
-      and projection_kind = 'work_photo_set')
-  ),
+  check (media_type = 'application/pdf'
+    and projection_kind = 'work_completion_record'
+    and projection_version = 1),
   check (
     (decision = 'accepted') =
     (reserved_homeowner_artifact_ref is not null
@@ -280,11 +268,7 @@ create table public.homesrolo_homeowner_handoff_items (
   ),
   check (reserved_storage_key is null
     or reserved_storage_key = home_ref || '/' || reserved_storage_object_ref),
-  check (reserved_artifact_kind is null or reserved_artifact_kind = case
-    when media_type in ('image/jpeg', 'image/png') then 'photo'
-    when projection_kind = 'work_warranty_record' then 'warranty'
-    else 'document'
-  end),
+  check (reserved_artifact_kind is null or reserved_artifact_kind = 'document'),
   check (decision <> 'pending'
     or (scan_state = 'pending' and quarantine_state = 'isolated'
       and copy_state = 'not_requested' and decision_recorded_at is null)),
@@ -867,11 +851,13 @@ begin
           and command_ref = v_entry ->> 'artifactCommandRef')
     ) then raise exception 'handoff_copy_identity_conflict'; end if;
 
-    v_artifact_kind := case
-      when v_item.media_type in ('image/jpeg', 'image/png') then 'photo'
-      when v_item.projection_kind = 'work_warranty_record' then 'warranty'
-      else 'document'
-    end;
+    if v_item.projection_kind <> 'work_completion_record'
+      or v_item.projection_version <> 1
+      or v_item.media_type <> 'application/pdf'
+      or v_item.byte_length > 1048576 then
+      raise exception 'handoff_runtime_projection_not_allowed';
+    end if;
+    v_artifact_kind := 'document';
     update public.homesrolo_homeowner_handoff_items
     set decision = 'accepted', scan_state = 'pending',
         quarantine_state = 'isolated', copy_state = 'reserved',
@@ -1440,7 +1426,7 @@ begin
     or p_manifest ->> 'expiresAt'
       !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
     or jsonb_typeof(p_manifest -> 'artifacts') is distinct from 'array'
-    or jsonb_array_length(p_manifest -> 'artifacts') not between 1 and 25 then
+    or jsonb_array_length(p_manifest -> 'artifacts') <> 1 then
     raise exception 'handoff_manifest_invalid';
   end if;
 
@@ -1470,32 +1456,18 @@ begin
         <> '{}'::jsonb
       or v_descriptor ->> 'artifactRef' !~ '^hproj_[A-Za-z0-9_-]{43}$'
       or v_descriptor ->> 'source' <> 'homeowner_release'
-      or v_descriptor ->> 'projectionKind' not in (
-        'work_document_copy', 'work_photo_set', 'work_completion_record',
-        'work_warranty_record', 'work_invoice_receipt'
-      )
+      or v_descriptor ->> 'projectionKind' <> 'work_completion_record'
       or v_descriptor ->> 'projectionVersion' !~ '^[0-9]+$'
-      or (v_descriptor ->> 'projectionVersion')::integer not between 1 and 100
-      or v_descriptor ->> 'mediaType' not in (
-        'application/pdf', 'image/jpeg', 'image/png'
-      )
-      or not (
-        (v_descriptor ->> 'mediaType' = 'application/pdf'
-          and v_descriptor ->> 'projectionKind' in (
-            'work_document_copy', 'work_completion_record',
-            'work_warranty_record', 'work_invoice_receipt'
-          ))
-        or (v_descriptor ->> 'mediaType' in ('image/jpeg', 'image/png')
-          and v_descriptor ->> 'projectionKind' = 'work_photo_set')
-      )
+      or (v_descriptor ->> 'projectionVersion')::integer <> 1
+      or v_descriptor ->> 'mediaType' <> 'application/pdf'
       or v_descriptor ->> 'byteLength' !~ '^[0-9]+$'
-      or (v_descriptor ->> 'byteLength')::bigint not between 1 and 26214400
+      or (v_descriptor ->> 'byteLength')::bigint not between 1 and 1048576
       or v_descriptor ->> 'sha256' !~ '^[a-f0-9]{64}$' then
       raise exception 'handoff_artifact_descriptor_invalid';
     end if;
     v_artifact_count := v_artifact_count + 1;
     v_total_bytes := v_total_bytes + (v_descriptor ->> 'byteLength')::bigint;
-    if v_total_bytes > 104857600 then
+    if v_total_bytes > 1048576 then
       raise exception 'handoff_artifact_total_exceeded';
     end if;
   end loop;

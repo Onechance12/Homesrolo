@@ -50,7 +50,7 @@ export const HOME_RECORD_HANDOFF_VERSION = 'home-record-handoff.v1' as const
 export const HOME_RECORD_HANDOFF_ACCEPTANCE_VERSION =
   'home-record-handoff.acceptance.v1' as const
 export const HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT =
-  'I accept only the items selected in this preview into this private Home Record. Homesrolo will copy those exact files into its own private storage and will not import unselected items.' as const
+  'I accept this contractor-issued project completion record into this private Home Record. Homesrolo will copy this exact PDF into its own private storage.' as const
 export const HOME_RECORD_HANDOFF_DEFAULT_ENABLED = false as const
 
 const OPAQUE_BODY = '[A-Za-z0-9_-]{43}'
@@ -61,18 +61,13 @@ const utcInstant = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   .refine(value => new Date(value).toISOString() === value, 'must be a canonical UTC instant')
 
-const PDF_PROJECTION_KINDS = Object.freeze([
-  'work_document_copy',
-  'work_completion_record',
-  'work_warranty_record',
-  'work_invoice_receipt',
-] as const)
-const PHOTO_PROJECTION_KIND = 'work_photo_set' as const
+export const HOME_RECORD_HANDOFF_PROJECTION_KIND =
+  'work_completion_record' as const
+export const HOME_RECORD_HANDOFF_PROJECTION_VERSION = 1 as const
+export const HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES = 1024 * 1024
 
 export const HOME_RECORD_HANDOFF_ALLOWED_MEDIA_TYPES = Object.freeze([
   'application/pdf',
-  'image/jpeg',
-  'image/png',
 ] as const)
 export const HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES = 100 * 1024 * 1024
 export const HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS = 250
@@ -96,11 +91,10 @@ export function homeRecordHandoffExportPlanAllowed(
 
 function isAllowedBinaryProjection(artifact: HomeownerShareArtifact):
   artifact is HomeownerShareArtifact & { mediaType: HomeRecordHandoffMediaType } {
-  if (artifact.mediaType === 'application/pdf') {
-    return (PDF_PROJECTION_KINDS as readonly string[]).includes(artifact.projectionKind)
-  }
-  return artifact.projectionKind === PHOTO_PROJECTION_KIND
-    && (artifact.mediaType === 'image/jpeg' || artifact.mediaType === 'image/png')
+  return artifact.projectionKind === HOME_RECORD_HANDOFF_PROJECTION_KIND
+    && artifact.projectionVersion === HOME_RECORD_HANDOFF_PROJECTION_VERSION
+    && artifact.mediaType === 'application/pdf'
+    && artifact.byteLength <= HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES
 }
 
 export interface HomeRecordHandoffOffer {
@@ -112,7 +106,7 @@ export interface HomeRecordHandoffOffer {
 }
 
 /**
- * Verifies immutable offer binding and the new binary import policy. It still
+ * Verifies immutable offer binding and the single generated-PDF canary policy. It still
  * does not verify a trusted public key or current Jobrolo ledger state; the
  * service performs both separately before persistence and before every copy.
  */
@@ -140,7 +134,8 @@ export function inspectHomeRecordHandoffOffer(
     throw new Error('handoff_not_yet_valid')
   }
   if (nowMs >= Date.parse(manifest.expiresAt)) throw new Error('handoff_expired')
-  if (!manifest.artifacts.every(isAllowedBinaryProjection)) {
+  if (manifest.artifacts.length !== 1
+    || !manifest.artifacts.every(isAllowedBinaryProjection)) {
     throw new Error('handoff_projection_not_allowed')
   }
 
@@ -179,53 +174,25 @@ export function parseEd25519PublicKey(pem: string): KeyObject | null {
   }
 }
 
-function artifactKind(artifact: HomeownerShareArtifact) {
-  if (artifact.projectionKind === 'work_photo_set') return 'photo' as const
-  if (artifact.projectionKind === 'work_warranty_record') return 'warranty' as const
-  return 'document' as const
-}
-
-const PROJECTION_LABELS: Readonly<Record<HomeownerShareArtifact['projectionKind'], string>> =
-  Object.freeze({
-    // These two names exist in the immutable Phase 0 wire type but are
-    // rejected by isAllowedBinaryProjection before any handoff is stored.
-    work_status_summary: 'Unsupported project summary',
-    work_schedule_summary: 'Unsupported project schedule',
-    work_document_copy: 'Project document',
-    work_photo_set: 'Project photo',
-    work_completion_record: 'Completion record',
-    work_warranty_record: 'Warranty',
-    work_invoice_receipt: 'Invoice or receipt',
-  })
-
-function extension(mediaType: HomeRecordHandoffMediaType) {
-  if (mediaType === 'application/pdf') return 'pdf'
-  if (mediaType === 'image/jpeg') return 'jpg'
-  return 'png'
-}
+const COMPLETION_RECORD_LABEL = 'Project completion record' as const
 
 export function homeRecordHandoffDisplayName(
   artifact: HomeownerShareArtifact,
   position: number,
 ) {
+  if (position !== 0 || !isAllowedBinaryProjection(artifact)) {
+    throw new Error('handoff_projection_not_allowed')
+  }
   const suffix = String(position + 1).padStart(2, '0')
-  return `${PROJECTION_LABELS[artifact.projectionKind]} ${suffix}.${extension(
-    artifact.mediaType as HomeRecordHandoffMediaType,
-  )}`
+  return `${COMPLETION_RECORD_LABEL} ${suffix}.pdf`
 }
 
 const handoffItemRecordSchema = z.object({
   sourceArtifactRef: opaqueRef('hproj'),
-  projectionKind: z.enum([
-    'work_document_copy',
-    'work_photo_set',
-    'work_completion_record',
-    'work_warranty_record',
-    'work_invoice_receipt',
-  ]),
-  projectionVersion: z.number().int().min(1).max(100),
-  mediaType: z.enum(HOME_RECORD_HANDOFF_ALLOWED_MEDIA_TYPES),
-  byteLength: z.number().int().min(1).max(25 * 1024 * 1024),
+  projectionKind: z.literal(HOME_RECORD_HANDOFF_PROJECTION_KIND),
+  projectionVersion: z.literal(HOME_RECORD_HANDOFF_PROJECTION_VERSION),
+  mediaType: z.literal('application/pdf'),
+  byteLength: z.number().int().min(1).max(HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES),
   payloadSha256: z.string().regex(SHA256),
   displayName: z.string().trim().min(1).max(160),
   decision: z.enum(['pending', 'accepted', 'rejected']),
@@ -277,7 +244,7 @@ const handoffRecordBaseSchema = z.object({
   acceptanceStatementDigest: z.string().regex(SHA256).optional(),
   consent: z.unknown().optional(),
   decidedAt: utcInstant.optional(),
-  items: z.array(handoffItemRecordSchema).min(1).max(25),
+  items: z.array(handoffItemRecordSchema).length(1),
 }).strict()
 
 export interface HomeRecordHandoffRecord extends Omit<
@@ -293,6 +260,10 @@ export function parseHomeRecordHandoffRecord(input: unknown): HomeRecordHandoffR
   const base = handoffRecordBaseSchema.parse(input)
   const manifest = parseHomeownerShareManifest(base.manifest)
   const authorization = parseHomeownerShareAuthorizationReceipt(base.authorization)
+  if (manifest.artifacts.length !== 1
+    || !manifest.artifacts.every(isAllowedBinaryProjection)) {
+    throw new Error('handoff_record_projection_not_allowed')
+  }
   const manifestDigest = homeownerShareManifestDigest(manifest)
   if (base.homeRef === manifest.recipientRef
     || base.manifestDigest !== manifestDigest
@@ -371,7 +342,7 @@ export function parseHomeRecordHandoffRecord(input: unknown): HomeRecordHandoffR
 export const homeRecordHandoffAcceptInputSchema = z.object({
   commandRef: opaqueRef('hcmd'),
   reviewedPreviewDigest: z.string().regex(SHA256),
-  selectedArtifactRefs: z.array(opaqueRef('hproj')).min(1).max(25),
+  selectedArtifactRefs: z.array(opaqueRef('hproj')).length(1),
   consentAccepted: z.literal(true),
 }).strict().superRefine((value, context) => {
   if (new Set(value.selectedArtifactRefs).size !== value.selectedArtifactRefs.length) {
@@ -391,7 +362,7 @@ export const homeRecordHandoffRejectInputSchema = z.object({
 export const homeRecordHandoffPreviewItemSchema = z.object({
   artifactRef: opaqueRef('hproj'),
   projectionKind: handoffItemRecordSchema.shape.projectionKind,
-  label: z.string().trim().min(1).max(120),
+  label: z.literal(COMPLETION_RECORD_LABEL),
   mediaType: handoffItemRecordSchema.shape.mediaType,
   byteLength: handoffItemRecordSchema.shape.byteLength,
   decision: handoffItemRecordSchema.shape.decision,
@@ -407,7 +378,7 @@ export const homeRecordHandoffPreviewSchema = z.object({
   expiresAt: utcInstant,
   previewDigest: z.string().regex(SHA256),
   acceptanceText: z.literal(HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT),
-  items: z.array(homeRecordHandoffPreviewItemSchema).min(1).max(25),
+  items: z.array(homeRecordHandoffPreviewItemSchema).length(1),
 }).strict()
 
 export type HomeRecordHandoffPreview = z.infer<typeof homeRecordHandoffPreviewSchema>
@@ -631,7 +602,7 @@ function safePreview(recordInput: unknown): HomeRecordHandoffPreview {
     items: record.items.map(item => ({
       artifactRef: item.sourceArtifactRef,
       projectionKind: item.projectionKind,
-      label: PROJECTION_LABELS[item.projectionKind],
+      label: COMPLETION_RECORD_LABEL,
       mediaType: item.mediaType,
       byteLength: item.byteLength,
       decision: item.decision,
@@ -682,14 +653,12 @@ function sameGrant(
 }
 
 function stableSelected(record: HomeRecordHandoffRecord, selected: readonly string[]) {
-  const set = new Set(selected)
-  if (set.size !== selected.length
-    || selected.some(ref => !record.items.some(item => item.sourceArtifactRef === ref))) {
+  const onlyItem = record.items[0]
+  if (!onlyItem || selected.length !== 1
+    || selected[0] !== onlyItem.sourceArtifactRef) {
     throw new HomeownerApiError('invalid_request')
   }
-  return record.items
-    .filter(item => set.has(item.sourceArtifactRef))
-    .map(item => item.sourceArtifactRef)
+  return [onlyItem.sourceArtifactRef]
 }
 
 function acceptanceReservationMatches(input: {
@@ -727,15 +696,7 @@ function validateFetchedArtifact(
     throw new Error('digest_mismatch')
   }
   const validated = validateHomeownerArtifactPayload({
-    kind: artifactKind({
-      artifactRef: item.sourceArtifactRef,
-      source: 'homeowner_release',
-      projectionKind: item.projectionKind,
-      projectionVersion: item.projectionVersion,
-      mediaType: item.mediaType,
-      byteLength: item.byteLength,
-      sha256: item.payloadSha256,
-    }),
+    kind: 'document',
     displayName: item.displayName,
     bytes: fetched.bytes,
   })
@@ -1336,15 +1297,12 @@ export class HomeRecordHandoffService {
           throw new HomeownerApiError('unavailable')
         }
         validateHomeownerArtifactPayload({
-          kind: item.projectionKind === 'work_photo_set' ? 'photo'
-            : item.projectionKind === 'work_warranty_record' ? 'warranty' : 'document',
+          kind: 'document',
           displayName: item.displayName,
           bytes,
         })
         filePosition += 1
-        const path = `originals/${String(filePosition).padStart(3, '0')}-${
-          item.projectionKind.replaceAll('_', '-')
-        }.${extension(item.mediaType)}`
+        const path = `originals/${String(filePosition).padStart(3, '0')}-work-completion-record.pdf`
         entries.push({ path, bytes, modifiedAt: new Date(item.copiedAt) })
         exportItems.push({
           path,
@@ -1389,7 +1347,7 @@ export class HomeRecordHandoffService {
       '',
       `Exported: ${exportedAt}`,
       `Accepted handoffs: ${records.length}`,
-      `Original files: ${filePosition}`,
+      `Completion PDFs: ${filePosition}`,
       '',
       'Each original is stored with its exact byte length and SHA-256 digest in home-record-manifest.json.',
       'The manifest also includes the signed Jobrolo authorization and signed Homesrolo consent receipts.',

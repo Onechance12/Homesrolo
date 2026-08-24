@@ -109,11 +109,19 @@ function itemFromRow(
   const scannedAt = optionalInstant(value, 'scan_completed_at')
   const copiedAt = optionalInstant(value, 'available_at')
     ?? optionalInstant(value, 'copy_staged_at')
+  const projectionKind = text(value, 'projection_kind')
+  const projectionVersion = integer(value, 'projection_version')
+  const mediaType = text(value, 'media_type')
+  if (projectionKind !== 'work_completion_record'
+    || projectionVersion !== 1
+    || mediaType !== 'application/pdf') {
+    throw new HomeownerApiError('unavailable')
+  }
   return {
     sourceArtifactRef: text(value, 'source_artifact_ref'),
-    projectionKind: text(value, 'projection_kind') as HomeRecordHandoffItemRecord['projectionKind'],
-    projectionVersion: integer(value, 'projection_version'),
-    mediaType: text(value, 'media_type') as HomeRecordHandoffItemRecord['mediaType'],
+    projectionKind,
+    projectionVersion,
+    mediaType,
     byteLength: integer(value, 'byte_length'),
     payloadSha256: text(value, 'payload_sha256'),
     displayName: optionalText(value, 'reserved_display_name')

@@ -114,6 +114,30 @@ test('recipient revocation is an exact, revision-checked service-role RPC', () =
     /grant execute on function public\.homesrolo_revoke_homeowner_handoff_recipient\([\s\S]*?\) to service_role/)
 })
 
+test('the database admits only one version-1 completion PDF no larger than 1 MiB', () => {
+  assert.match(migration, /check \(manifest_artifact_count = 1\)/)
+  assert.match(migration, /check \(manifest_total_bytes between 1 and 1048576\)/)
+  assert.match(migration, /check \(projection_kind = 'work_completion_record'\)/)
+  assert.match(migration, /check \(projection_version = 1\)/)
+  assert.match(migration, /check \(media_type = 'application\/pdf'\)/)
+  assert.match(migration, /check \(byte_length between 1 and 1048576\)/)
+  assert.match(migration, /jsonb_array_length\(p_manifest -> 'artifacts'\) <> 1/)
+  assert.match(migration, /v_descriptor ->> 'projectionKind' <> 'work_completion_record'/)
+  assert.match(migration, /v_descriptor ->> 'mediaType' <> 'application\/pdf'/)
+  assert.match(migration, /v_descriptor ->> 'byteLength'\)::bigint not between 1 and 1048576/)
+  for (const rejected of [
+    'work_document_copy',
+    'work_photo_set',
+    'work_warranty_record',
+    'work_invoice_receipt',
+    'image/jpeg',
+    'image/png',
+  ]) {
+    assert.equal(migration.includes(rejected), false,
+      `${rejected} must not remain in an active table constraint or RPC`)
+  }
+})
+
 test('the inbound migration has no measurement import or recipient catalog', () => {
   assert.doesNotMatch(migration, /\bmeasurements?\b/i)
   assert.doesNotMatch(migration, /recipient_(catalog|discovery)|discover_homeowner_handoff/i)

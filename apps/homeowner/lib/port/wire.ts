@@ -468,19 +468,13 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
 
 const decodeHomeRecordHandoffItem = object<HomeRecordHandoffItem>({
   artifactRef: opaqueRef('hproj'),
-  projectionKind: oneOf([
-    'work_document_copy',
-    'work_photo_set',
-    'work_completion_record',
-    'work_warranty_record',
-    'work_invoice_receipt',
-  ] as const),
-  label: boundedLabel(120),
-  mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+  projectionKind: literal('work_completion_record'),
+  label: literal('Project completion record'),
+  mediaType: literal('application/pdf'),
   byteLength: (value, at) => typeof value === 'number'
-    && Number.isInteger(value) && value >= 1 && value <= 25 * 1024 * 1024
+    && Number.isInteger(value) && value >= 1 && value <= 1024 * 1024
     ? value
-    : fail(at, 'a byte length from 1 through 25 MiB'),
+    : fail(at, 'a byte length from 1 through 1 MiB'),
   decision: oneOf(['pending', 'accepted', 'rejected'] as const),
   copyState: oneOf(['not_started', 'staged_clean', 'available', 'quarantined'] as const),
   homeownerArtifactRef: optional(opaqueRef('hart')),
@@ -500,7 +494,7 @@ export const decodeHomeRecordHandoffPreview: Decoder<HomeRecordHandoffPreview> =
       expiresAt: utcInstant,
       previewDigest: matching(/^[a-f0-9]{64}$/, 'a SHA-256 digest'),
       acceptanceText: literal(HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT),
-      items: boundedArray(decodeHomeRecordHandoffItem, 1, 25),
+      items: boundedArray(decodeHomeRecordHandoffItem, 1, 1),
     })(value, at)
     if (decoded.expiresAt <= decoded.receivedAt
       || new Set(decoded.items.map(item => item.artifactRef)).size !== decoded.items.length) {

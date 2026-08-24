@@ -41,7 +41,7 @@ export default function HomesPage({
               <p className="mono" style={{ marginBottom: '0.4rem' }}>Your private home files</p>
               <h1 style={{ fontSize: '1.5rem' }}>
                 {handoff
-                  ? 'Which home should receive these files?'
+                  ? 'Which home should receive this completion record?'
                   : intent ? 'Which home is this roof project for?' : 'Which home are we working on?'}
               </h1>
               {mode === 'synthetic'

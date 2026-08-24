@@ -177,13 +177,15 @@ test('contractor handoffs stay capability-gated, consented, and free of browser 
   }
   assert.match(component, /active\.acceptanceText/,
     'the signed acceptance statement is shown beside the consent control')
-  assert.match(component, /selectedArtifactRefs:[\s\S]*selected\.has/,
-    'only checked items are sent to acceptance')
-  assert.match(component, /Unselected files stay out/)
-  assert.match(component, /Download accepted pro files/,
+  assert.match(component, /const completionRecord = active\?\.items\[0\][\s\S]*selectedArtifactRefs: \[completionRecord\.artifactRef\]/,
+    'acceptance submits only the one decoded completion PDF')
+  assert.match(component, /this exact contractor-issued completion PDF is safety-checked/)
+  assert.match(component, /Download accepted completion records/,
     'the handoff-only ZIP is not mislabeled as the complete Home Record')
-  assert.match(component, /Check whether this one-job link belongs with this Home Record/,
+  assert.match(component, /Check whether this one-job record belongs with this Home Record/,
     'the pre-claim prompt does not claim the link matches a home')
+  assert.doesNotMatch(component, /project photos and paperwork|warrant(?:y|ies)|invoice/i,
+    'the active canary UI must not imply unsupported raw-file kinds')
   const claimHandler = component.slice(
     component.indexOf('async function claimEntryHandoff'),
     component.indexOf('async function openHandoff'),

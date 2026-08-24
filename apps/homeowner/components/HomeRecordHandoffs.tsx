@@ -35,14 +35,12 @@ const STATE_LABEL: Readonly<Record<HomeRecordHandoffState, string>> = Object.fre
 
 const TYPE_LABEL = Object.freeze({
   'application/pdf': 'PDF',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
 })
 
 const ENTRY_WRONG_HOME_COPY =
-  'This file handoff is not available for this home. Nothing was added. You can choose a different home.'
+  'This completion record is not available for this home. Nothing was added. You can choose a different home.'
 const ENTRY_RETRY_COPY =
-  'We could not open this file handoff right now. Nothing was added. Try again in a moment.'
+  'We could not open this completion record right now. Nothing was added. Try again in a moment.'
 
 function friendlySize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -59,9 +57,9 @@ function friendlyDate(instant: string): string {
 
 function errorMessage(error: PortError): string {
   if (error === 'conflict') return 'This handoff changed. Open it again and review the current version.'
-  if (error === 'not_signed_in') return 'Your session ended. Sign in again before reviewing these files.'
+  if (error === 'not_signed_in') return 'Your session ended. Sign in again before reviewing this record.'
   if (error === 'forbidden' || error === 'not_found') return 'This handoff is not available for this home.'
-  if (error === 'rate_limited') return 'Homesrolo is busy checking files. Wait a moment and try again.'
+  if (error === 'rate_limited') return 'Homesrolo is busy checking completion records. Wait a moment and try again.'
   if (error === 'invalid') return 'The handoff could not be verified. Refresh and try again.'
   return 'The handoff could not be opened right now. Try again in a moment.'
 }
@@ -81,7 +79,6 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
   const [handoffs, setHandoffs] = useState<readonly HomeRecordHandoffPreview[]>([])
   const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [active, setActive] = useState<HomeRecordHandoffPreview | null>(null)
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [consent, setConsent] = useState(false)
   const [confirmReject, setConfirmReject] = useState(false)
   const [action, setAction] = useState<'idle' | 'claiming' | 'opening' | 'accepting' | 'rejecting'>('idle')
@@ -151,9 +148,6 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
 
   function showPreview(next: HomeRecordHandoffPreview) {
     setActive(next)
-    setSelected(new Set(next.items
-      .filter(item => item.decision === 'pending')
-      .map(item => item.artifactRef)))
     setConsent(false)
     setConfirmReject(false)
     acceptanceCommand.current = null
@@ -199,29 +193,16 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
     showPreview(result.value)
   }
 
-  function toggleItem(artifactRef: string) {
-    setSelected(current => {
-      const next = new Set(current)
-      if (next.has(artifactRef)) next.delete(artifactRef)
-      else next.add(artifactRef)
-      return next
-    })
-    acceptanceCommand.current = null
-    setConsent(false)
-    setError(null)
-  }
-
   async function accept() {
-    if (!active || action !== 'idle' || !consent || selected.size < 1) return
+    const completionRecord = active?.items[0]
+    if (!active || !completionRecord || action !== 'idle' || !consent) return
     acceptanceCommand.current ??= mintCommandRef()
     setAction('accepting')
     setError(null)
     const result = await port.acceptHomeRecordHandoff(homeId, active.shareId, {
       commandRef: acceptanceCommand.current,
       reviewedPreviewDigest: active.previewDigest,
-      selectedArtifactRefs: active.items
-        .filter(item => selected.has(item.artifactRef))
-        .map(item => item.artifactRef),
+      selectedArtifactRefs: [completionRecord.artifactRef],
       consentAccepted: true,
     })
     setAction('idle')
@@ -267,9 +248,9 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
           <div className="handoff-entry__mark" aria-hidden="true">→</div>
           <div>
             <p className="mono">Private delivery</p>
-            <h2 id="handoff-entry-title">Review a professional file handoff</h2>
+            <h2 id="handoff-entry-title">Review a project completion record</h2>
             <p>
-              Check whether this one-job link belongs with this Home Record. Nothing is added until you review and accept.
+              Check whether this one-job record belongs with this Home Record. Nothing is added until you review and accept.
             </p>
           </div>
           {entryError ? (
@@ -289,7 +270,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
               disabled={entryState !== 'ready' || action !== 'idle'}
               onClick={() => void claimEntryHandoff()}
             >
-              {entryState === 'claiming' ? 'Opening secure preview…' : 'Review these files'}
+              {entryState === 'claiming' ? 'Opening secure preview…' : 'Review this record'}
             </button>
           )}
         </div>
@@ -297,20 +278,20 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
       <div className="handoff-vault__head">
         <div>
           <p className="mono">Sent by a home service pro</p>
-          <h2 id="handoff-vault-title">Files waiting for your say-so</h2>
-          <p>A pro can send project photos and paperwork here. You choose each item before Homesrolo makes a private copy.</p>
+          <h2 id="handoff-vault-title">Completion records waiting for your say-so</h2>
+          <p>A pro can send one contractor-issued project completion PDF. You decide whether Homesrolo makes a private copy.</p>
         </div>
         {acceptedCount > 0 ? (
           <a
             className="btn btn--secondary"
             href={`/api/v1/homes/${homeId}/home-record/export`}
           >
-            Download accepted pro files
+            Download accepted completion records
           </a>
         ) : null}
       </div>
 
-      {listState === 'loading' ? <p role="status">Checking for files sent to this home…</p> : null}
+      {listState === 'loading' ? <p role="status">Checking for completion records sent to this home…</p> : null}
       {listState === 'error' ? (
         <div className="handoff-vault__error" role="alert">
           <p>{error}</p>
@@ -320,7 +301,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
 
       {listState === 'ready' ? (
         <>
-          <div className="handoff-vault__summary" aria-label="Contractor file handoff summary">
+          <div className="handoff-vault__summary" aria-label="Contractor completion record summary">
             <span><strong>{reviewableCount}</strong> to review</span>
             <span><strong>{acceptedCount}</strong> saved</span>
             <span><strong>Private</strong> unless you share</span>
@@ -332,9 +313,9 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                   <span className={`handoff-state handoff-state--${handoff.state}`}>
                     {STATE_LABEL[handoff.state]}
                   </span>
-                  <strong>Project file handoff {String(index + 1).padStart(2, '0')}</strong>
+                  <strong>Project completion record {String(index + 1).padStart(2, '0')}</strong>
                   <small>
-                    {handoff.items.length} {handoff.items.length === 1 ? 'item' : 'items'} · sent {friendlyDate(handoff.receivedAt)}
+                    PDF · sent {friendlyDate(handoff.receivedAt)}
                   </small>
                 </div>
                 {handoff.state === 'received' ? (
@@ -344,7 +325,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                     disabled={action !== 'idle'}
                     onClick={() => void openHandoff(handoff.shareId)}
                   >
-                    {action === 'opening' ? 'Opening…' : 'Review files'}
+                    {action === 'opening' ? 'Opening…' : 'Review record'}
                   </button>
                 ) : handoff.state === 'accepted' ? (
                   <button
@@ -366,9 +347,9 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
         <div className="handoff-review" aria-labelledby="handoff-review-title">
           <div className="handoff-review__head">
             <div>
-              <p className="mono">Exact file preview</p>
+              <p className="mono">Exact PDF preview</p>
               <h3 id="handoff-review-title" tabIndex={-1}>
-                {activeIsReviewable ? 'Choose what belongs in your record' : STATE_LABEL[active.state]}
+                {activeIsReviewable ? 'Decide whether to keep this record' : STATE_LABEL[active.state]}
               </h3>
               <p>
                 Received {friendlyDate(active.receivedAt)} · offer ends {friendlyDate(active.expiresAt)}
@@ -383,26 +364,21 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
           </div>
 
           <ul className="handoff-items">
-            {active.items.map((item, itemIndex) => (
+            {active.items.map(item => (
               <li key={item.artifactRef}>
                 {activeIsReviewable ? (
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(item.artifactRef)}
-                      disabled={action !== 'idle'}
-                      onChange={() => toggleItem(item.artifactRef)}
-                    />
+                  <span className="handoff-item__receipt">
+                    <span aria-hidden="true">PDF</span>
                     <span>
-                      <strong>{item.label} {String(itemIndex + 1).padStart(2, '0')}</strong>
+                      <strong>{item.label}</strong>
                       <small>{TYPE_LABEL[item.mediaType]} · {friendlySize(item.byteLength)}</small>
                     </span>
-                  </label>
+                  </span>
                 ) : (
                   <span className="handoff-item__receipt">
                     <span aria-hidden="true">{item.copyState === 'available' ? '✓' : '—'}</span>
                     <span>
-                      <strong>{item.label} {String(itemIndex + 1).padStart(2, '0')}</strong>
+                      <strong>{item.label}</strong>
                       <small>{TYPE_LABEL[item.mediaType]} · {friendlySize(item.byteLength)} · {item.decision}</small>
                     </span>
                   </span>
@@ -417,7 +393,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                 <input
                   type="checkbox"
                   checked={consent}
-                  disabled={selected.size < 1 || action !== 'idle'}
+                  disabled={action !== 'idle'}
                   onChange={event => {
                     setConsent(event.target.checked)
                     acceptanceCommand.current = null
@@ -430,12 +406,12 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                 <button
                   className="btn btn--primary"
                   type="button"
-                  disabled={!consent || selected.size < 1 || action !== 'idle'}
+                  disabled={!consent || action !== 'idle'}
                   onClick={() => void accept()}
                 >
                   {action === 'accepting'
                     ? 'Checking and saving…'
-                    : `Accept ${selected.size} selected ${selected.size === 1 ? 'item' : 'items'}`}
+                    : 'Accept completion record'}
                 </button>
                 {!confirmReject ? (
                   <button
@@ -446,7 +422,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                   >Decline this handoff</button>
                 ) : (
                   <span className="handoff-reject-confirm">
-                    <span>Decline every item?</span>
+                    <span>Decline this completion record?</span>
                     <button
                       className="btn btn--quiet"
                       type="button"
@@ -462,7 +438,7 @@ export function HomeRecordHandoffs({ homeId, entryShareId }: HomeRecordHandoffsP
                   </span>
                 )}
               </div>
-              <p className="handoff-review__boundary">Unselected files stay out. Accepted files are safety-checked, then copied into this private Home Record.</p>
+              <p className="handoff-review__boundary">If accepted, this exact contractor-issued completion PDF is safety-checked, then copied into this private Home Record.</p>
             </>
           ) : null}
 

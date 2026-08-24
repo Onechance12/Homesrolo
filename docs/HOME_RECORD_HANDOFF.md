@@ -1,7 +1,7 @@
 # Jobrolo → Homesrolo Home Record handoff
 
-This is a default-off, one-project canary for moving homeowner-approved work
-records from Jobrolo into one exact private Homesrolo Home Record. It preserves
+This is a default-off, one-project canary for moving one homeowner-approved,
+Jobrolo-generated work-completion PDF into one exact private Homesrolo Home Record. It preserves
 the boundaries in `HOME_FILE_RFC.md`, `ARCHITECTURE_BOUNDARY.md`, and the inert
 `homeowner-share.v1` contract.
 
@@ -36,11 +36,15 @@ The Jobrolo exchange is server-to-server POST over a pinned origin with
 request-bound HMAC signatures, nonces, timestamps, body digests, signed response
 status/content type/body digests, bounded bodies, and redirects disabled.
 Homesrolo then verifies the canonical manifest digest, Jobrolo Ed25519
-authorization, exact recipient/share, expiry, PDF/JPEG/PNG policy, and current
-authorization. Acceptance is itemized and signs a Homesrolo consent receipt.
-Selected bytes are fetched by opaque artifact reference, checked for exact
+authorization, exact recipient/share, expiry, and the active runtime policy:
+exactly one `work_completion_record` version 1 PDF no larger than 1 MiB. The
+broader Phase 0 structural contract stays immutable and dormant; raw project
+documents, photo sets, warranties, invoices, receipts, JSON, and every other
+projection fail closed in the Homesrolo service, browser decoder, and database
+RPC. Acceptance is explicit and signs a Homesrolo consent receipt. The one PDF
+is fetched by opaque artifact reference, checked for exact
 length/type/SHA-256, scanned, and copied to a Homesrolo-owned private object
-path. Unselected or failed items never become normal Home Record artifacts.
+path. A declined or failed record never becomes a normal Home Record artifact.
 
 ## Homesrolo configuration
 
@@ -172,11 +176,11 @@ query, or obtain a session for Homesrolo.
 3. Provision one `hrcp` against the intended Homesrolo home/controller and
    record its revision. Configure that same ref and only one Jobrolo
    contractor/completed project.
-4. Verify loopback ClamAV with a clean synthetic PDF/JPEG/PNG and a rejected
+4. Verify loopback ClamAV with a clean synthetic completion PDF and a rejected
    antivirus test fixture. Verify no object is published on scanner failure.
 5. Run a synthetic end-to-end share: create it as the exact Jobrolo owner/admin,
    claim its exact `shareId` from the bound Homesrolo home with `{}`, review the
-   safe preview, accept a subset, confirm only selected exact bytes appear, and
+   safe completion-record preview, accept it, confirm only its exact bytes appear, and
    verify rejection, expiry, replay, rate-limit, and export behavior.
 6. Enable Homesrolo's two environment gates, then Jobrolo's environment gate,
    and finally the one contractor database gate. Monitor only the canary.
@@ -196,8 +200,8 @@ reconciliation operations. A failed claim can be retried by exact share ID;
 once its receipt is stored, retries are served locally.
 
 `homesrolo-home-record.zip` is specifically an export of accepted professional
-handoff files, not every category in the full Home Record. It contains the
-selected original bytes, `home-record-manifest.json`, and a readable
+completion records, not every category in the full Home Record. It contains the
+accepted original PDFs, `home-record-manifest.json`, and a readable
 `home-record-summary.txt`. The machine-readable manifest includes the exact
 source manifest, signed Jobrolo authorization, signed Homesrolo consent,
 selection/acceptance digests, provenance, copy times, lengths, and SHA-256
@@ -208,7 +212,10 @@ reading objects.
 ## Explicit exclusions
 
 This slice imports no measurements and has no measurement field, projection,
-route, computation, or UI. It also excludes insurance/claim handling, public
-adjuster workflows, AI, paid services, broad recipient discovery, catalogs,
-address matching, direct Jobrolo database/session/object-key reads, public
-storage URLs, automatic acceptance, and production deployment.
+route, computation, or UI. The active canary also imports no raw documents,
+photos, warranties, invoices, or receipts; those remain only dormant Phase 0
+structural vocabulary until each kind has a separately reviewed content policy.
+It also excludes insurance/claim handling, public adjuster workflows, AI, paid
+services, broad recipient discovery, catalogs, address matching, direct Jobrolo
+database/session/object-key reads, public storage URLs, automatic acceptance,
+and production deployment.

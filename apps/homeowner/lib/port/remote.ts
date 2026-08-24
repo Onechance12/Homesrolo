@@ -610,8 +610,7 @@ export function createRemotePort(
         || !COMMAND_REF_PATTERN.test(input.commandRef)
         || !SHA256.test(input.reviewedPreviewDigest)
         || input.consentAccepted !== true
-        || selected.length < 1 || selected.length > 25
-        || new Set(selected).size !== selected.length
+        || selected.length !== 1
         || selected.some(ref => !HANDOFF_ARTIFACT_REF.test(ref))) {
         return { ok: false, error: 'invalid' }
       }

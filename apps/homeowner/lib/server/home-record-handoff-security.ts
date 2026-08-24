@@ -7,10 +7,11 @@ import {
 } from 'node:crypto'
 import { createConnection } from 'node:net'
 import { z } from 'zod'
-import type {
-  HomeRecordHandoffConsentSignerPort,
-  HomeRecordHandoffScannerPort,
-  HomeRecordHandoffTrustPort,
+import {
+  HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES,
+  type HomeRecordHandoffConsentSignerPort,
+  type HomeRecordHandoffScannerPort,
+  type HomeRecordHandoffTrustPort,
 } from '../../../../src/homeowner/home-record-handoff.v1.ts'
 
 const keyId = z.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/)
@@ -141,7 +142,7 @@ function clamdInstream(input: ClamAvTransportInput): Promise<string> {
       if (error) reject(error)
       else resolve(value ?? '')
     }
-    socket.setTimeout(30_000, () => finish(new Error('clamav_timeout')))
+    socket.setTimeout(10_000, () => finish(new Error('clamav_timeout')))
     socket.once('error', () => finish(new Error('clamav_unavailable')))
     socket.on('data', chunk => {
       response = Buffer.concat([response, chunk])
@@ -193,7 +194,9 @@ implements HomeRecordHandoffScannerPort {
   }
 
   async scan(input: Parameters<HomeRecordHandoffScannerPort['scan']>[0]) {
-    if (input.bytes.byteLength < 1 || input.bytes.byteLength > 25 * 1024 * 1024
+    if (input.mediaType !== 'application/pdf'
+      || input.bytes.byteLength < 1
+      || input.bytes.byteLength > HOME_RECORD_HANDOFF_MAX_ARTIFACT_BYTES
       || createHash('sha256').update(input.bytes).digest('hex') !== input.expectedSha256) {
       throw new Error('handoff_scan_input_invalid')
     }

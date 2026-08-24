@@ -385,7 +385,7 @@ export default function NewHomePage({
                 <h1>Set up your home</h1>
                 <p>
                   {handoff
-                    ? 'Start with a name and general area. Once the Home Record is open, you can check the file handoff against it.'
+                    ? 'Start with a name and general area. Once the Home Record is open, you can check the completion record against it.'
                     : 'Start with a name and general area. That is enough to open the file; optional details are best entered now only when you know them.'}
                 </p>
                 <div className="setup-head__notes" aria-label="Setup details">
@@ -667,7 +667,7 @@ export default function NewHomePage({
                         href={homeownerEntryDestination(submit.homeRef, context)}
                       >
                         {handoff
-                          ? 'Check the file handoff'
+                          ? 'Check the completion record'
                           : intent ? 'Continue to the roof project' : 'Open this home’s file'}
                       </Link>
                     </div>
