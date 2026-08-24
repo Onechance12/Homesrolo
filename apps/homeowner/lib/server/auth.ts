@@ -94,7 +94,8 @@ export class HomeownerAuthService {
     })
     if (error) {
       if (error.status === 429) return { kind: 'rate_limited' }
-      if ([400, 401, 403, 422].includes(error.status)) return { kind: 'invalid' }
+      if (typeof error.status === 'number'
+        && [400, 401, 403, 422].includes(error.status)) return { kind: 'invalid' }
       // Supabase represents a retryable fetch/network failure with status 0.
       // Unknown provider failures must not be misreported as a bad user code.
       return { kind: 'unavailable' }
