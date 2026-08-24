@@ -41,6 +41,7 @@ export const SYNTHETIC_NOTICE =
  * all false: the demo offers no real entry and persists nothing.
  */
 export interface SignInCapabilities {
+  readonly emailCodeSignIn: boolean
   readonly magicLinkSignIn: boolean
   readonly persistence: boolean
   readonly projectQuotes: boolean
@@ -57,6 +58,7 @@ export interface SignInCapabilities {
 }
 
 export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
+  emailCodeSignIn: false,
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
@@ -640,6 +642,15 @@ export interface HomeownerDataPort {
     intent?: RoofingNeed | null,
     handoff?: string | null,
   ): Promise<PortResult<{ readonly accepted: true }>>
+  /** Ask the server for a six-digit code; acceptance never reveals account state. */
+  requestEmailCode(email: string): Promise<PortResult<{ readonly accepted: true }>>
+  /** Verify a code server-side and establish the opaque session in this browser. */
+  verifyEmailCode(
+    email: string,
+    code: string,
+    intent?: RoofingNeed | null,
+    handoff?: string | null,
+  ): Promise<PortResult<{ readonly signedIn: true }>>
   signOut(): Promise<void>
 
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>

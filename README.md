@@ -19,6 +19,14 @@ projects, inventory, warranties, taxes and sale records, maintenance, and
 service history. Those library areas describe the information architecture;
 only records actually returned by the private runtime are shown.
 
+The preferred sign-in experience is a six-digit email code entered in the
+same browser where the homeowner started. It is implemented behind the
+default-off `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED` release gate. Until both
+Supabase email templates, production SMTP, expiry, and a real delivery smoke
+test are complete, the runtime continues to advertise the legacy email-link
+flow instead. See `docs/HOMEOWNER_EMAIL_CODE_SIGNIN.md` for the exact cutover
+and rollback order.
+
 The generic project route can create private records for roofing, exterior,
 interior/remodeling, electrical, plumbing, HVAC, landscaping, appliances, pest
 control, pools, new construction, and other home work. It supports work being
@@ -89,6 +97,7 @@ Chance decides whether and where to distribute it.
 | docs/PLATFORM_STRATEGY.md | Endgame, aggregation constraints, revenue shape, sequence, risks |
 | docs/LEGAL_POSTURE.md | Seeding sources, unclaimed profiles, Section 230, and the AI-agent boundary |
 | docs/HOMEOWNER_PHASE1_RUNTIME.md | Implemented homeowner runtime, capability gates, migrations, and remaining launch work |
+| docs/HOMEOWNER_EMAIL_CODE_SIGNIN.md | Same-browser six-digit email-code architecture, production cutover, and rollback |
 | docs/HOMEOWNER_PHOTO_CHECKUPS.md | Default-off private seasonal-photo beta, privacy boundary, hard caps, and release checklist |
 | docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
 | docs/HOME_RECORD_HANDOFF.md | Default-off exact-share Jobrolo → Homesrolo handoff architecture, configuration, canary, rollback, and export runbook |

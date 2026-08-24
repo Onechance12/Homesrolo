@@ -438,6 +438,39 @@ a:hover { color: var(--clay); }
 .signin__form .field input:hover { border-color: #76929a; }
 .signin__form .field input:focus { border-color: var(--signin-blue); }
 .signin__form .field__hint { color: var(--signin-ink-soft); font-size: 0.78rem; }
+.signin__code-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+.signin__code-heading h3 {
+  margin: 0.05rem 0 0.25rem;
+  color: var(--signin-ink);
+  font-size: 1.05rem;
+}
+.signin__code-heading p {
+  color: var(--signin-ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.signin__code-heading strong { color: var(--signin-ink); }
+.signin__form .field .signin__code-input {
+  min-height: 56px;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.38em;
+  text-align: center;
+}
+.signin__code-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.55rem;
+}
 .signin__action {
   display: grid;
   gap: 0.6rem;
@@ -498,6 +531,11 @@ a:hover { color: var(--clay); }
   text-decoration: underline;
   text-underline-offset: 0.18em;
   cursor: pointer;
+}
+.signin__try-again:disabled {
+  color: #74878c;
+  cursor: not-allowed;
+  text-decoration: none;
 }
 .signin__signed-in { display: grid; gap: 0.8rem; }
 .signin__signed-in > p { color: var(--signin-ink-soft); font-size: 0.9rem; }

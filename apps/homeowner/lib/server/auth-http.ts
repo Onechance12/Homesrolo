@@ -1,7 +1,9 @@
 import { clearSessionCookie, sessionCookie, sessionHandleFromCookieHeader } from './cookie.ts'
 import { configuredHomeownerAuthService, homeownerRuntimeConfiguration } from './runtime.ts'
 import {
+  emailCodeIsValid,
   homesPathForEntryContext,
+  magicLinkEmailIsValid,
   signInPathForEntryContext,
   validatedHandoffShareRef,
   validatedRoofingIntent,
@@ -86,6 +88,83 @@ export async function requestHomeownerMagicLink(request: Request): Promise<Respo
   } catch {
     return json(400, { error: { code: 'invalid_request' } })
   }
+}
+
+export async function requestHomeownerEmailCode(request: Request): Promise<Response> {
+  const configuration = homeownerRuntimeConfiguration()
+  const auth = configuredHomeownerAuthService()
+  if (!configuration || !auth || configuration.emailCodeSignInEnabled !== true) {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  if (!sameOrigin(request, configuration.appOrigin)) {
+    return json(403, { error: { code: 'forbidden' } })
+  }
+  const body = await boundedJson(request)
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'email')
+    || !magicLinkEmailIsValid((body as { email?: unknown }).email)) {
+    return json(400, { error: { code: 'invalid_request' } })
+  }
+  try {
+    const result = await auth.requestEmailCode((body as { email?: unknown }).email)
+    if (result === 'rate_limited') return json(429, { error: { code: 'rate_limited' } })
+    if (result === 'unavailable') return json(503, { error: { code: 'unavailable' } })
+    return json(202, { data: { accepted: true } })
+  } catch {
+    // Body validation has already completed; a thrown provider call is an
+    // outage, never evidence that the homeowner typed a bad address.
+    return json(503, { error: { code: 'unavailable' } })
+  }
+}
+
+export async function verifyHomeownerEmailCode(request: Request): Promise<Response> {
+  const configuration = homeownerRuntimeConfiguration()
+  const auth = configuredHomeownerAuthService()
+  if (!configuration || !auth || configuration.emailCodeSignInEnabled !== true) {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  if (!sameOrigin(request, configuration.appOrigin)) {
+    return json(403, { error: { code: 'forbidden' } })
+  }
+  const body = await boundedJson(request)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(400, { error: { code: 'invalid_request' } })
+  }
+  const keys = Object.keys(body)
+  if (!Object.hasOwn(body, 'email') || !Object.hasOwn(body, 'code')
+    || keys.length < 2 || keys.length > 4
+    || keys.some(key => key !== 'email' && key !== 'code' && key !== 'intent' && key !== 'handoff')
+    || !magicLinkEmailIsValid((body as { email?: unknown }).email)
+    || !emailCodeIsValid((body as { code?: unknown }).code)
+    || (Object.hasOwn(body, 'intent')
+      && validatedRoofingIntent((body as { intent?: unknown }).intent) === null)
+    || (Object.hasOwn(body, 'handoff')
+      && validatedHandoffShareRef((body as { handoff?: unknown }).handoff) === null)) {
+    return json(400, { error: { code: 'invalid_request' } })
+  }
+  let result: Awaited<ReturnType<typeof auth.completeEmailCode>>
+  try {
+    result = await auth.completeEmailCode(
+      (body as { email?: unknown }).email,
+      (body as { code?: unknown }).code,
+    )
+  } catch {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  if (result.kind === 'rate_limited') {
+    return json(429, { error: { code: 'rate_limited' } })
+  }
+  if (result.kind === 'unavailable') {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  if (result.kind === 'invalid') {
+    return json(422, { error: { code: 'invalid_code' } })
+  }
+  return json(
+    200,
+    { data: { signedIn: true } },
+    { 'set-cookie': sessionCookie(result.sessionHandle) },
+  )
 }
 
 export async function exchangeHomeownerProviderSession(request: Request): Promise<Response> {

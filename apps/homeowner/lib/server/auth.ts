@@ -13,10 +13,17 @@ import { roofingIntent } from '../roofing-intent.ts'
 import type { RoofingNeed } from '../port/types.ts'
 
 const emailSchema = z.string().trim().email().max(254)
+const emailCodeSchema = z.string().trim().regex(/^\d{6}$/)
 const tokenHashSchema = z.string().regex(/^[A-Za-z0-9_-]{20,256}$/)
 const accessTokenSchema = z.string().min(32).max(4096).regex(/^\S+$/)
 
-export type MagicLinkRequestResult = 'accepted' | 'rate_limited' | 'unavailable'
+export type EmailSignInRequestResult = 'accepted' | 'rate_limited' | 'unavailable'
+export type MagicLinkRequestResult = EmailSignInRequestResult
+export type EmailCodeCompletionResult =
+  | { readonly kind: 'complete'; readonly sessionHandle: string }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'rate_limited' }
+  | { readonly kind: 'unavailable' }
 
 export class HomeownerAuthService {
   readonly #auth: SupabaseClient
@@ -57,6 +64,47 @@ export class HomeownerAuthService {
     if (!error) return 'accepted'
     if (error.status === 429) return 'rate_limited'
     return 'unavailable'
+  }
+
+  async requestEmailCode(rawEmail: unknown): Promise<EmailSignInRequestResult> {
+    const parsed = emailSchema.safeParse(rawEmail)
+    if (!parsed.success) throw new Error('invalid_email')
+    const { error } = await this.#auth.auth.signInWithOtp({
+      email: parsed.data.toLowerCase(),
+      options: {
+        shouldCreateUser: true,
+      },
+    })
+    if (!error) return 'accepted'
+    if (error.status === 429) return 'rate_limited'
+    return 'unavailable'
+  }
+
+  async completeEmailCode(
+    rawEmail: unknown,
+    rawCode: unknown,
+  ): Promise<EmailCodeCompletionResult> {
+    const email = emailSchema.safeParse(rawEmail)
+    const code = emailCodeSchema.safeParse(rawCode)
+    if (!email.success || !code.success) return { kind: 'invalid' }
+    const { data, error } = await this.#auth.auth.verifyOtp({
+      email: email.data.toLowerCase(),
+      token: code.data,
+      type: 'email',
+    })
+    if (error) {
+      if (error.status === 429) return { kind: 'rate_limited' }
+      if (typeof error.status === 'number'
+        && [400, 401, 403, 422].includes(error.status)) return { kind: 'invalid' }
+      // Supabase represents a retryable fetch/network failure with status 0.
+      // Unknown provider failures must not be misreported as a bad user code.
+      return { kind: 'unavailable' }
+    }
+    if (!data.user) return { kind: 'invalid' }
+    const sessionHandle = await this.#mintHomeownerSession(data.user)
+    return sessionHandle
+      ? { kind: 'complete', sessionHandle }
+      : { kind: 'unavailable' }
   }
 
   async completeMagicLink(rawTokenHash: unknown): Promise<string | null> {
@@ -138,4 +186,8 @@ export function validatedHandoffShareRef(rawHandoff: unknown): string | null {
 
 export function magicLinkEmailIsValid(value: unknown): boolean {
   return emailSchema.safeParse(value).success
+}
+
+export function emailCodeIsValid(value: unknown): boolean {
+  return emailCodeSchema.safeParse(value).success
 }

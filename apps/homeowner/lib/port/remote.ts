@@ -358,6 +358,58 @@ export function createRemotePort(
       }, 202)
     },
 
+    async requestEmailCode(email) {
+      const normalized = email.trim().toLowerCase()
+      if (normalized.length < 3 || normalized.length > 254
+        || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return call({
+        method: 'POST',
+        path: `${API}/auth/email-code`,
+        body: { email: normalized },
+      }, value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)
+          || (value as { accepted?: unknown }).accepted !== true
+          || Object.keys(value).length !== 1) {
+          throw new Error('invalid email-code acceptance')
+        }
+        return { accepted: true as const }
+      }, 202)
+    },
+
+    async verifyEmailCode(email, code, requestedIntent = null, requestedHandoff = null) {
+      const normalized = email.trim().toLowerCase()
+      if (normalized.length < 3 || normalized.length > 254
+        || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+        || !/^\d{6}$/.test(code)) {
+        return { ok: false, error: 'invalid' }
+      }
+      const intent = requestedIntent === null ? null : roofingIntent(requestedIntent)
+      if (requestedIntent !== null && intent === null) return { ok: false, error: 'invalid' }
+      const handoff = requestedHandoff === null || SHARE_REF.test(requestedHandoff)
+        ? requestedHandoff
+        : null
+      if (requestedHandoff !== null && handoff === null) return { ok: false, error: 'invalid' }
+      return call({
+        method: 'POST',
+        path: `${API}/auth/email-code/verify`,
+        body: {
+          email: normalized,
+          code,
+          ...(intent ? { intent } : {}),
+          ...(handoff ? { handoff } : {}),
+        },
+      }, value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)
+          || (value as { signedIn?: unknown }).signedIn !== true
+          || Object.keys(value).length !== 1) {
+          throw new Error('invalid email-code verification')
+        }
+        return { signedIn: true as const }
+      })
+    },
+
     async signOut() {
       const result = await call({ method: 'POST', path: `${API}/auth/signout` }, value => {
         if (!value || typeof value !== 'object' || Array.isArray(value)

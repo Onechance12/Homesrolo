@@ -88,6 +88,7 @@ function service(input: {
     },
     now: () => now,
     capabilities: {
+      emailCodeSignIn: false,
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
       projectQuotes: false,
