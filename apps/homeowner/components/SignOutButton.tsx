@@ -24,8 +24,7 @@ export function SignOutButton({ compact = false }: { readonly compact?: boolean 
   return (
     <button
       type="button"
-      className="btn btn--quiet"
-      style={compact ? { minHeight: '2rem', padding: '0.35rem 0.65rem', fontSize: '0.78rem' } : undefined}
+      className={`btn btn--quiet${compact ? ' btn--compact' : ''}`}
       onClick={signOut}
       disabled={busy}
     >

@@ -49,7 +49,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
   if (session.kind === 'loading') {
     return (
       <div className="gate">
-        <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
+        <span className="gate__brand"><HouseMark /> <span>homesrolo</span></span>
         <div className="gate__main"><div className="gate__card"><Skeleton lines={4} label="Checking your session" /></div></div>
       </div>
     )
@@ -58,7 +58,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
   if (session.kind === 'signed_out') {
     return (
       <div className="gate">
-        <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
+        <span className="gate__brand"><HouseMark /> <span>homesrolo</span></span>
         <div className="gate__main"><div className="gate__card"><UnauthorizedState /></div></div>
       </div>
     )
@@ -76,22 +76,27 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
 
       <header className="topbar">
         <Link href="/homes" className="topbar__brand">
-          <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
+          <HouseMark /> <span>homesrolo</span>
         </Link>
         <span className="topbar__home">{alias}</span>
-        <Link className="topbar__account" href={`/home/${homeId}/settings`}>
+        <Link
+          className="topbar__account"
+          href={`/home/${homeId}/settings`}
+          aria-label="Account and settings"
+          aria-current={pathname === `/home/${homeId}/settings` ? 'page' : undefined}
+        >
           <IconGear size={19} /> <span>Account</span>
         </Link>
       </header>
 
       <nav className="rail" aria-label="Home Record">
         <Link href="/homes" className="rail__brand">
-          <HouseMark /> <span>Homes<span className="accent">rolo</span></span>
+          <HouseMark /> <span>homesrolo</span>
         </Link>
         <div className="rail__home">
           <span className="mono">Home Record</span>
           <strong>{alias}</strong>
-          <Link href="/homes" style={{ fontSize: '0.8rem' }}>Switch home</Link>
+          <Link href="/homes" className="rail__switch">Switch home</Link>
         </div>
         <div className="rail__nav">
           {visibleNav.map(({ segment, label, icon: Icon }) => (
@@ -113,7 +118,11 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           {mode === 'synthetic'
             ? <span className="mono">Demo session — memory only</span>
             : null}
-          <Link className="rail__account" href={`/home/${homeId}/settings`}>
+          <Link
+            className="rail__account"
+            href={`/home/${homeId}/settings`}
+            aria-current={pathname === `/home/${homeId}/settings` ? 'page' : undefined}
+          >
             <IconGear size={18} /> Account &amp; settings
           </Link>
           <SignOutButton compact />

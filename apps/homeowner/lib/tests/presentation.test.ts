@@ -36,6 +36,12 @@ function sourceFiles(dir: string): string[] {
 const css = read('app/globals.css')
 const appSources = ['app', 'components', 'lib'].flatMap(sourceFiles)
 
+function customProperty(source: string, name: string): string {
+  const match = source.match(new RegExp(`--${name}:\\s*([^;]+);`))
+  assert.ok(match?.[1], `--${name} must be declared`)
+  return match[1].trim()
+}
+
 // --- accessibility -----------------------------------------------------------
 
 test('focus is always visible and never removed', () => {
@@ -547,6 +553,59 @@ test('the complete sign-in journey uses the whole-home navy and lime identity', 
     'the retry action preserves a real phone hit target')
   assert.match(css, /@media \(max-width: 52rem\) \{[\s\S]*?\.signin__main \{[\s\S]*?grid-template-columns: 1fr/,
     'the desktop composition collapses into one readable phone column')
+})
+
+test('the authenticated shell carries the public navy, lime, and sans-serif identity', () => {
+  const publicCss = readFileSync(path.resolve(APP, '../web/app/globals.css'), 'utf8')
+  const shell = read('components/AppShell.tsx')
+
+  for (const token of [
+    'canvas', 'surface', 'surface-muted', 'ink', 'ink-soft', 'ink-faint', 'line',
+    'brand', 'brand-deep', 'brand-soft', 'signal', 'signal-soft', 'night',
+    'night-raised', 'night-ink', 'night-soft', 'night-faint', 'night-rule',
+    'font-display', 'font-body', 'font-mono',
+  ]) {
+    assert.equal(
+      customProperty(css, token),
+      customProperty(publicCss, token),
+      `the private app must use the public site's canonical --${token} token`,
+    )
+  }
+
+  assert.doesNotMatch(css, /Iowan Old Style|Palatino(?: Linotype)?|ui-serif|Georgia, serif/i,
+    'the old paper-ledger serif stack cannot return through a root font token')
+  assert.match(css, /body\s*\{[^}]*font-family:\s*var\(--font-body\)/,
+    'all authenticated pages inherit the canonical sans-serif body face')
+
+  for (const selector of ['rail', 'topbar', 'tabbar']) {
+    assert.match(
+      css,
+      new RegExp(`\\.${selector}\\s*\\{[^}]*background:[^;}]+(?:var\\(--night\\)|rgb\\(7 28 39)`, 's'),
+      `${selector} uses the same navy chrome as homesrolo.com`,
+    )
+  }
+  assert.match(css, /\.rail__nav a\[aria-current='page'\]\s*\{[^}]*border-left-color:\s*var\(--signal\)/s,
+    'the desktop rail keeps a visible lime position marker')
+  assert.match(css, /\.rail__nav a\[aria-current='page'\] svg\s*\{[^}]*(?:color|stroke):\s*var\(--signal\)/s,
+    'the active desktop destination carries a signal-lime icon')
+  assert.match(css, /\.tabbar a\[aria-current='page'\]\s*\{[^}]*color:\s*var\(--signal\)/s,
+    'the active mobile destination is signal lime')
+  assert.match(css, /\.tabbar a\[aria-current='page'\] svg\s*\{[^}]*stroke:\s*(?:var\(--signal\)|currentColor)/s,
+    'the active mobile icon follows the lime destination state')
+
+  const houseMarks = shell.match(/<HouseMark \/>/g) ?? []
+  const lowercaseWordmarks = shell.match(/<HouseMark \/>\s*<span>homesrolo<\/span>/g) ?? []
+  assert.ok(houseMarks.length > 0, 'the authenticated chrome displays the Homesrolo mark')
+  assert.equal(lowercaseWordmarks.length, houseMarks.length,
+    'every authenticated shell wordmark uses the lowercase homesrolo identity')
+
+  for (const entry of ['app/page.tsx', 'app/onboarding/page.tsx', 'app/homes/page.tsx', 'app/homes/new/page.tsx']) {
+    assert.match(
+      read(entry),
+      /<HouseMark \/>\s*<span>homesrolo<\/span>/,
+      `${entry} uses the same lowercase homesrolo entry wordmark`,
+    )
+  }
 })
 
 test('project review renders only on its exact server-reported capability', () => {
