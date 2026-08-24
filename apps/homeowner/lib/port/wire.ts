@@ -15,7 +15,8 @@
  */
 
 import {
-  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
+  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -251,6 +252,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   photoCheckups: boolean,
   projectReview: boolean,
   projectReviewAttachments: boolean,
+  homeRecordHandoffs: boolean,
   invitations: boolean,
   sharing: boolean,
 })
@@ -463,6 +465,58 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     isSynthetic: false,
   }
 }
+
+const decodeHomeRecordHandoffItem = object<HomeRecordHandoffItem>({
+  artifactRef: opaqueRef('hproj'),
+  projectionKind: oneOf([
+    'work_document_copy',
+    'work_photo_set',
+    'work_completion_record',
+    'work_warranty_record',
+    'work_invoice_receipt',
+  ] as const),
+  label: boundedLabel(120),
+  mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
+  byteLength: (value, at) => typeof value === 'number'
+    && Number.isInteger(value) && value >= 1 && value <= 25 * 1024 * 1024
+    ? value
+    : fail(at, 'a byte length from 1 through 25 MiB'),
+  decision: oneOf(['pending', 'accepted', 'rejected'] as const),
+  copyState: oneOf(['not_started', 'staged_clean', 'available', 'quarantined'] as const),
+  homeownerArtifactRef: optional(opaqueRef('hart')),
+})
+
+/** Exact browser projection of HomeRecordHandoffPreview. */
+export const decodeHomeRecordHandoffPreview: Decoder<HomeRecordHandoffPreview> =
+  (value, at) => {
+    const decoded = object<HomeRecordHandoffPreview>({
+      handoffRef: opaqueRef('hhof'),
+      shareId: opaqueRef('hshr'),
+      state: oneOf([
+        'received', 'accepting', 'accepted', 'rejected', 'expired',
+        'quarantined', 'reconciliation_required',
+      ] as const),
+      receivedAt: utcInstant,
+      expiresAt: utcInstant,
+      previewDigest: matching(/^[a-f0-9]{64}$/, 'a SHA-256 digest'),
+      acceptanceText: literal(HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT),
+      items: boundedArray(decodeHomeRecordHandoffItem, 1, 25),
+    })(value, at)
+    if (decoded.expiresAt <= decoded.receivedAt
+      || new Set(decoded.items.map(item => item.artifactRef)).size !== decoded.items.length) {
+      return fail(at, 'a chronologically valid handoff with unique items')
+    }
+    return decoded
+  }
+
+export const decodeHomeRecordHandoffList: Decoder<readonly HomeRecordHandoffPreview[]> =
+  (value, at) => {
+    const decoded = boundedArray(decodeHomeRecordHandoffPreview, 0, 100)(value, at)
+    if (new Set(decoded.map(handoff => handoff.shareId)).size !== decoded.length) {
+      return fail(at, 'handoffs with unique share IDs')
+    }
+    return decoded
+  }
 
 const PHOTO_CHECKUP_AREAS = [
   'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',

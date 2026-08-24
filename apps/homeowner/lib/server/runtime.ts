@@ -62,6 +62,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 })
@@ -143,6 +144,10 @@ export function homeownerApiService(): HomeownerApiService {
           jobroloIntakeClient !== null,
         ) && configuration?.privateUploadsEnabled === true
           && configuration?.jobroloAttachmentsEnabled === true,
+        homeRecordHandoffs: homeRecordHandoffProvider !== null
+          && jobroloHandoffClient !== null
+          && homeRecordHandoffSecurity !== null
+          && homeRecordHandoffSecurityConfiguration !== null,
         invitations: false,
         sharing: false,
       }) : UNCONFIGURED_CAPABILITIES,

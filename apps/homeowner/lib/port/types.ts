@@ -50,6 +50,8 @@ export interface SignInCapabilities {
   readonly photoCheckups: boolean
   readonly projectReview: boolean
   readonly projectReviewAttachments: boolean
+  /** Signed contractor-to-home file handoffs, copied only after homeowner consent. */
+  readonly homeRecordHandoffs: boolean
   readonly invitations: boolean
   readonly sharing: boolean
 }
@@ -63,6 +65,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 })
@@ -418,6 +421,60 @@ export interface UploadPrivateArtifactInput {
   readonly projectRef?: string
 }
 
+export type HomeRecordHandoffState =
+  | 'received'
+  | 'accepting'
+  | 'accepted'
+  | 'rejected'
+  | 'expired'
+  | 'quarantined'
+  | 'reconciliation_required'
+
+export type HomeRecordHandoffProjectionKind =
+  | 'work_document_copy'
+  | 'work_photo_set'
+  | 'work_completion_record'
+  | 'work_warranty_record'
+  | 'work_invoice_receipt'
+
+export const HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT =
+  'I accept only the items selected in this preview into this private Home Record. Homesrolo will copy those exact files into its own private storage and will not import unselected items.' as const
+
+export interface HomeRecordHandoffItem {
+  readonly artifactRef: string
+  readonly projectionKind: HomeRecordHandoffProjectionKind
+  readonly label: string
+  readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
+  readonly byteLength: number
+  readonly decision: 'pending' | 'accepted' | 'rejected'
+  readonly copyState: 'not_started' | 'staged_clean' | 'available' | 'quarantined'
+  readonly homeownerArtifactRef?: string
+}
+
+/** Browser-safe view: no provider IDs, storage keys, address, or recipient binding. */
+export interface HomeRecordHandoffPreview {
+  readonly handoffRef: string
+  readonly shareId: string
+  readonly state: HomeRecordHandoffState
+  readonly receivedAt: string
+  readonly expiresAt: string
+  readonly previewDigest: string
+  readonly acceptanceText: string
+  readonly items: readonly HomeRecordHandoffItem[]
+}
+
+export interface AcceptHomeRecordHandoffInput {
+  readonly commandRef: string
+  readonly reviewedPreviewDigest: string
+  readonly selectedArtifactRefs: readonly string[]
+  readonly consentAccepted: true
+}
+
+export interface RejectHomeRecordHandoffInput {
+  readonly commandRef: string
+  readonly reviewedPreviewDigest: string
+}
+
 /** Fixed, repeatable views make like-for-like seasonal comparison possible. */
 export type PhotoCheckupArea =
   | 'front_exterior'
@@ -633,6 +690,23 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: UploadPrivateArtifactInput,
   ): Promise<PortResult<DocumentSummary>>
+  listHomeRecordHandoffs(
+    homeRef: string,
+  ): Promise<PortResult<readonly HomeRecordHandoffPreview[]>>
+  previewHomeRecordHandoff(
+    homeRef: string,
+    shareId: string,
+  ): Promise<PortResult<HomeRecordHandoffPreview>>
+  acceptHomeRecordHandoff(
+    homeRef: string,
+    shareId: string,
+    input: AcceptHomeRecordHandoffInput,
+  ): Promise<PortResult<HomeRecordHandoffPreview>>
+  rejectHomeRecordHandoff(
+    homeRef: string,
+    shareId: string,
+    input: RejectHomeRecordHandoffInput,
+  ): Promise<PortResult<HomeRecordHandoffPreview>>
   listPhotoCheckups(
     homeRef: string,
   ): Promise<PortResult<readonly PhotoCheckup[]>>

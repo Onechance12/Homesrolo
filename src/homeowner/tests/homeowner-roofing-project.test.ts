@@ -96,6 +96,7 @@ function service(input: {
       photoCheckups: false,
       projectReview: false,
       projectReviewAttachments: false,
+      homeRecordHandoffs: false,
       invitations: false,
       sharing: false,
     },

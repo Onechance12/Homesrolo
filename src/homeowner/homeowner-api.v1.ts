@@ -75,6 +75,7 @@ export const homeownerApiCapabilitiesSchema = z.object({
   photoCheckups: z.boolean(),
   projectReview: z.boolean(),
   projectReviewAttachments: z.boolean(),
+  homeRecordHandoffs: z.boolean(),
   invitations: z.boolean(),
   sharing: z.boolean(),
 }).strict()

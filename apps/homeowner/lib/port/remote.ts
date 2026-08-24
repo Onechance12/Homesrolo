@@ -46,7 +46,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -62,6 +62,9 @@ const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 const PHOTO_REF = /^hpho_[A-Za-z0-9_-]{43}$/
 const QUOTE_REF = /^hquo_[A-Za-z0-9_-]{43}$/
+const SHARE_REF = /^hshr_[A-Za-z0-9_-]{43}$/
+const HANDOFF_ARTIFACT_REF = /^hproj_[A-Za-z0-9_-]{43}$/
+const SHA256 = /^[a-f0-9]{64}$/
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
 const QUOTE_SCOPE_KEYS = new Set([
   'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
@@ -551,6 +554,77 @@ export function createRemotePort(
       } catch {
         return { ok: false, error: 'invalid' }
       }
+    },
+
+    async listHomeRecordHandoffs(homeRef) {
+      const home = homeRefSegment(homeRef)
+      if (!home) return { ok: false, error: 'not_found' }
+      return call(
+        { method: 'GET', path: `${API}/homes/${home}/handoffs` },
+        decodeHomeRecordHandoffList,
+      )
+    },
+
+    async previewHomeRecordHandoff(homeRef, shareId) {
+      const home = homeRefSegment(homeRef)
+      if (!home || !SHARE_REF.test(shareId)) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/handoffs/${shareId}` },
+        decodeHomeRecordHandoffPreview,
+      )
+      if (result.ok && result.value.shareId !== shareId) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async acceptHomeRecordHandoff(homeRef, shareId, input) {
+      const home = homeRefSegment(homeRef)
+      const selected = [...input.selectedArtifactRefs]
+      if (!home || !SHARE_REF.test(shareId)
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !SHA256.test(input.reviewedPreviewDigest)
+        || input.consentAccepted !== true
+        || selected.length < 1 || selected.length > 25
+        || new Set(selected).size !== selected.length
+        || selected.some(ref => !HANDOFF_ARTIFACT_REF.test(ref))) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/handoffs/${shareId}/accept`,
+        body: {
+          commandRef: input.commandRef,
+          reviewedPreviewDigest: input.reviewedPreviewDigest,
+          selectedArtifactRefs: selected,
+          consentAccepted: true,
+        },
+      }, decodeHomeRecordHandoffPreview)
+      if (result.ok && result.value.shareId !== shareId) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async rejectHomeRecordHandoff(homeRef, shareId, input) {
+      const home = homeRefSegment(homeRef)
+      if (!home || !SHARE_REF.test(shareId)
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !SHA256.test(input.reviewedPreviewDigest)) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/handoffs/${shareId}/reject`,
+        body: {
+          commandRef: input.commandRef,
+          reviewedPreviewDigest: input.reviewedPreviewDigest,
+        },
+      }, decodeHomeRecordHandoffPreview)
+      if (result.ok && result.value.shareId !== shareId) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
     },
 
     async listPhotoCheckups(homeRef) {

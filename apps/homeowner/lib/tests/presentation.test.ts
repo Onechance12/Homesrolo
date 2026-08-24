@@ -154,6 +154,24 @@ test('browser and server-to-server network calls exist only in their sanctioned 
   }
 })
 
+test('contractor handoffs stay capability-gated, consented, and free of browser authority', () => {
+  const page = read('app/home/[homeId]/documents/page.tsx')
+  const component = read('components/HomeRecordHandoffs.tsx')
+  const boundary = read('lib/server/home-record-handoff-http.ts')
+  assert.match(page, /session\.state\.capabilities\.homeRecordHandoffs/)
+  assert.match(page, /handoffsEnabled \? <HomeRecordHandoffs homeId=\{homeId\} \/> : null/)
+  assert.match(component, /active\.acceptanceText/,
+    'the signed acceptance statement is shown beside the consent control')
+  assert.match(component, /selectedArtifactRefs:[\s\S]*selected\.has/,
+    'only checked items are sent to acceptance')
+  assert.match(component, /Unselected files stay out/)
+  assert.match(component, /Download accepted pro files/,
+    'the handoff-only ZIP is not mislabeled as the complete Home Record')
+  assert.doesNotMatch(component, /coming soon|\bmeasurement/i)
+  assert.doesNotMatch(boundary, /\.claim\(|recipientRef|principalRef/,
+    'the homeowner HTTP boundary cannot claim an offer or choose authority')
+})
+
 test('synthetic is the default mode and the only config is the public mode value', () => {
   const mode = read('lib/port/mode.ts')
   assert.match(mode, /raw === 'remote' \? 'remote' : 'synthetic'/,
@@ -224,13 +242,32 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts',
     'app/api/v1/homes/[homeRef]/research/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/accept/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/reject/route.ts',
+    'app/api/v1/homes/[homeRef]/home-record/export/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
     'the route inventory must remain exactly the allowlisted paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    if (rel === 'app/api/v1/auth/callback/route.ts') {
+    if (rel.endsWith('/handoffs/[shareId]/accept/route.ts')
+      || rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
+      assert.match(content, /export async function POST/, `${rel} serves one exact decision`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} exposes no decision read`)
+      assert.match(content, /handleHomeRecordHandoffHttp/,
+        `${rel} delegates to the isolated handoff boundary`)
+    } else if (rel.includes('/handoffs/') || rel.endsWith('/handoffs/route.ts')
+      || rel.endsWith('/home-record/export/route.ts')) {
+      assert.match(content, /export async function GET/, `${rel} serves one private handoff read`)
+      assert.doesNotMatch(content, /export (async function|const) POST/,
+        `${rel} exposes no mutation`)
+      assert.match(content, /handleHomeRecordHandoffHttp/,
+        `${rel} delegates to the isolated handoff boundary`)
+    } else if (rel === 'app/api/v1/auth/callback/route.ts') {
       assert.match(content, /export async function GET/, `${rel} completes one magic link`)
       assert.match(content, /completeHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/auth/exchange/route.ts') {
@@ -311,7 +348,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts'
+      && !rel.endsWith('/handoffs/[shareId]/accept/route.ts')
+      && !rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
@@ -328,7 +367,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts'
+      && !rel.includes('/handoffs/')
+      && !rel.endsWith('/handoffs/route.ts')
+      && !rel.endsWith('/home-record/export/route.ts')) {
       assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
     }
   }

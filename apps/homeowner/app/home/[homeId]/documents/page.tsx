@@ -6,6 +6,7 @@ import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconDocs } from '../../../../components/icons.tsx'
+import { HomeRecordHandoffs } from '../../../../components/HomeRecordHandoffs.tsx'
 import { mintCommandRef } from '../../../../lib/port/command-ref.ts'
 import type { DocumentKind, DocumentSummary } from '../../../../lib/port/types.ts'
 
@@ -58,6 +59,9 @@ export default function HomeRecordPage({ params }: { params: Promise<{ homeId: s
   const photoCheckupsEnabled = mode === 'remote'
     && session.state.kind === 'signed_in'
     && session.state.capabilities.photoCheckups
+  const handoffsEnabled = mode === 'remote'
+    && session.state.kind === 'signed_in'
+    && session.state.capabilities.homeRecordHandoffs
   const recordsReadable = mode === 'synthetic' || uploadsEnabled
   const { state, retry } = usePortCall(
     () => recordsReadable
@@ -116,6 +120,8 @@ export default function HomeRecordPage({ params }: { params: Promise<{ homeId: s
       {mode === 'synthetic' ? (
         <div className="notice"><strong>Sample record.</strong> Listed items are synthetic and disappear on refresh.</div>
       ) : null}
+
+      {handoffsEnabled ? <HomeRecordHandoffs homeId={homeId} /> : null}
 
       <section aria-labelledby="record-sections-title">
         <div className="panel__head">

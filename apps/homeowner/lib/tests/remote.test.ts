@@ -45,6 +45,7 @@ const CAPABILITIES = {
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 }
@@ -201,7 +202,7 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
 
   const { photoCheckups: _photoCheckups, ...nineCaps } = CAPABILITIES
   assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: nineCaps }, 'data'),
-    WireError, 'all ten capability booleans are required')
+    WireError, 'all capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
