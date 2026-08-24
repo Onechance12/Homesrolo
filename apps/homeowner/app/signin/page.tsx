@@ -157,7 +157,7 @@ export default function SignInPage({
       ? 'Start your private roof record.'
       : 'Open your Home Record.'
   const summary = isHandoffEntry
-    ? 'Sign in, choose the right home, and review every detail before anything is added to its private record.'
+    ? 'Sign in, choose the right home, and review the Completion record details before anything can be copied into its private Home Record. The PDF becomes available only after you accept it.'
     : isRoofInspectionEntry
       ? 'Choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
       : 'Keep the projects, photos, documents, systems, and decisions that shape your home together—under your control.'
@@ -165,7 +165,7 @@ export default function SignInPage({
   return (
     <div className="signin">
       <header className="signin__topbar">
-        <Link href="/" className="signin__brand" aria-label="Homesrolo home">
+        <Link href="https://homesrolo.com/" className="signin__brand" aria-label="Homesrolo home">
           <span className="signin__brand-mark"><HouseMark /></span>
           <span>homesrolo</span>
         </Link>

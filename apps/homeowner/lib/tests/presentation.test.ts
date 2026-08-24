@@ -495,6 +495,8 @@ test('the complete sign-in journey uses the whole-home navy and lime identity', 
     'the primary entry uses the permanent whole-home product language')
   assert.match(signin, /The whole home, not one trade/,
     'the entry surface keeps Homesrolo broader than roofing')
+  assert.match(signin, /The PDF becomes available only after you accept it/,
+    'handoff entry explains that document access follows explicit acceptance')
   assert.match(signin, /<span>homesrolo<\/span>/,
     'the current lowercase wordmark is present')
   assert.doesNotMatch(signin, /gate__card/,
@@ -506,6 +508,8 @@ test('the complete sign-in journey uses the whole-home navy and lime identity', 
     'the email completion state stays in the same visual journey')
   assert.match(complete, /Opening your Home Record/,
     'the completion state uses the same whole-home language')
+  assert.match(complete, /<main id="main" tabIndex=\{-1\}/,
+    'the completion screen preserves the global main landmark target')
   assert.doesNotMatch(complete, /gate__card/,
     'opening a magic link cannot reveal the old theme')
 
@@ -516,6 +520,8 @@ test('the complete sign-in journey uses the whole-home navy and lime identity', 
     'email entry remains comfortably sized on a phone')
   assert.match(css, /\.signin \.btn \{[\s\S]*?min-height: 52px/,
     'the sign-in action remains comfortably sized on a phone')
+  assert.match(css, /\.signin__try-again \{[\s\S]*?min-height: 44px/,
+    'the retry action preserves a real phone hit target')
   assert.match(css, /@media \(max-width: 52rem\) \{[\s\S]*?\.signin__main \{[\s\S]*?grid-template-columns: 1fr/,
     'the desktop composition collapses into one readable phone column')
 })

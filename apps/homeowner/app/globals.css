@@ -437,7 +437,7 @@ a:hover { color: var(--clay); }
 }
 .signin__form .field input:hover { border-color: #76929a; }
 .signin__form .field input:focus { border-color: var(--signin-blue); }
-.signin__form .field__hint { color: #698089; font-size: 0.75rem; }
+.signin__form .field__hint { color: var(--signin-ink-soft); font-size: 0.78rem; }
 .signin__action {
   display: grid;
   gap: 0.6rem;
@@ -469,6 +469,7 @@ a:hover { color: var(--clay); }
   background: var(--signin-canvas);
   padding: 1rem;
   text-align: left;
+  justify-items: start;
 }
 .signin__status-mark {
   display: grid;
@@ -483,10 +484,13 @@ a:hover { color: var(--clay); }
 .signin .signin__status h3 { color: var(--signin-ink); font-size: 1.1rem; }
 .signin .signin__status p { color: var(--signin-ink-soft); font-size: 0.84rem; line-height: 1.55; }
 .signin__try-again {
+  display: inline-flex;
+  align-items: center;
   width: fit-content;
+  min-height: 44px;
   border: 0;
   background: transparent;
-  padding: 0.1rem 0;
+  padding: 0.5rem 0;
   color: var(--signin-blue);
   font: inherit;
   font-size: 0.8rem;
@@ -500,8 +504,8 @@ a:hover { color: var(--clay); }
 .signin__footnote,
 .signin__panel-footer {
   margin-top: 1.1rem;
-  color: #71858c;
-  font-size: 0.69rem;
+  color: var(--signin-ink-soft);
+  font-size: 0.78rem;
   line-height: 1.5;
   text-align: center;
 }
