@@ -45,13 +45,13 @@ export default function CompleteSignInPage() {
   return (
     <div className="signin signin--complete">
       <header className="signin__topbar">
-        <Link href="/" className="signin__brand" aria-label="Homesrolo home">
+        <Link href="https://homesrolo.com/" className="signin__brand" aria-label="Homesrolo home">
           <span className="signin__brand-mark"><HouseMark /></span>
           <span>homesrolo</span>
         </Link>
         <span className="signin__privacy"><span aria-hidden="true" /> Private by default</span>
       </header>
-      <main className="signin__complete-main">
+      <main id="main" tabIndex={-1} className="signin__complete-main">
         <section className="signin__panel signin__complete-panel" role="status" aria-live="polite">
           <span className={`signin__complete-mark${failed ? ' signin__complete-mark--failed' : ''}`} aria-hidden="true">
             {failed ? '!' : <HouseMark />}
