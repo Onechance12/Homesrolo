@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
-const HOMEOWNER_PRODUCTION_APP_ORIGIN = 'https://app.homesrolo.com'
+const HOMEOWNER_PRODUCTION_APP_ORIGINS = new Set([
+  'https://app.homesrolo.com',
+  'https://homesrolo-homeowner-v2.onrender.com',
+])
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 const httpsUrl = z.string().url().transform(value => new URL(value)).refine(
@@ -37,7 +40,7 @@ export interface HomeownerRuntimeConfiguration {
 function homeownerAppOriginAllowed(origin: URL, nodeEnvironment: string | undefined) {
   if (origin.username || origin.password || origin.search || origin.hash
     || (origin.pathname !== '/' && origin.pathname !== '')) return false
-  if (origin.origin === HOMEOWNER_PRODUCTION_APP_ORIGIN) return true
+  if (HOMEOWNER_PRODUCTION_APP_ORIGINS.has(origin.origin)) return true
   if (nodeEnvironment === 'production') return false
   const loopback = LOOPBACK_HOSTS.has(origin.hostname)
   if (nodeEnvironment === 'development') return loopback
@@ -56,7 +59,7 @@ export function readHomeownerRuntimeConfiguration(
   environment: Readonly<Record<string, string | undefined>>,
 ): HomeownerRuntimeConfiguration | null {
   if (environment.NODE_ENV === 'production'
-    && environment.HOMESROLO_APP_ORIGIN !== HOMEOWNER_PRODUCTION_APP_ORIGIN) return null
+    && !HOMEOWNER_PRODUCTION_APP_ORIGINS.has(environment.HOMESROLO_APP_ORIGIN ?? '')) return null
   const parsed = configurationSchema.safeParse({
     supabaseUrl: environment.HOMESROLO_SUPABASE_URL,
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
