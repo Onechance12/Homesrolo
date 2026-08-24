@@ -9,7 +9,10 @@ import {
   HOMEOWNER_SHARE_CONTRACT_VERSION,
   HOMEOWNER_SHARE_PURPOSE,
   HOME_RECORD_HANDOFF_DEFAULT_ENABLED,
+  HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES,
+  HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS,
   HomeRecordHandoffService,
+  homeRecordHandoffExportPlanAllowed,
   homeownerShareAuthorizationSigningPayload,
   homeownerShareManifestDigest,
   inspectHomeRecordHandoffOffer,
@@ -47,6 +50,21 @@ const jobroloKeys = generateKeyPairSync('ed25519')
 const homesroloKeys = generateKeyPairSync('ed25519')
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
+
+test('the in-memory export plan is bounded before object reads', () => {
+  assert.equal(homeRecordHandoffExportPlanAllowed([]), true)
+  assert.equal(homeRecordHandoffExportPlanAllowed([
+    HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES,
+  ]), true)
+  assert.equal(homeRecordHandoffExportPlanAllowed([
+    HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES,
+    1,
+  ]), false)
+  assert.equal(homeRecordHandoffExportPlanAllowed(
+    Array.from({ length: HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS + 1 }, () => 1),
+  ), false)
+  assert.equal(homeRecordHandoffExportPlanAllowed([0, 1]), false)
+})
 
 function manifest(): HomeownerShareManifest {
   return {

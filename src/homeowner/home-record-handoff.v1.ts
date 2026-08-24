@@ -74,9 +74,25 @@ export const HOME_RECORD_HANDOFF_ALLOWED_MEDIA_TYPES = Object.freeze([
   'image/jpeg',
   'image/png',
 ] as const)
+export const HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES = 100 * 1024 * 1024
+export const HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS = 250
 
 export type HomeRecordHandoffMediaType =
   (typeof HOME_RECORD_HANDOFF_ALLOWED_MEDIA_TYPES)[number]
+
+export function homeRecordHandoffExportPlanAllowed(
+  byteLengths: readonly number[],
+): boolean {
+  if (byteLengths.length > HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINALS) return false
+  let total = 0
+  for (const byteLength of byteLengths) {
+    if (!Number.isSafeInteger(byteLength) || byteLength < 1) return false
+    total += byteLength
+    if (!Number.isSafeInteger(total)
+      || total > HOME_RECORD_HANDOFF_MAX_EXPORT_ORIGINAL_BYTES) return false
+  }
+  return true
+}
 
 function isAllowedBinaryProjection(artifact: HomeownerShareArtifact):
   artifact is HomeownerShareArtifact & { mediaType: HomeRecordHandoffMediaType } {
@@ -1188,6 +1204,23 @@ export class HomeRecordHandoffService {
     const grant = await this.#grant(context, requestedHomeRef, 'home_record.export')
     const records = (await this.#persistence.listAcceptedForExport(grant))
       .map(parseHomeRecordHandoffRecord)
+    const originalByteLengths: number[] = []
+    for (const record of records) {
+      if (record.state !== 'accepted' || record.homeRef !== grant.homeRef
+        || record.controllerPrincipalRef !== grant.principalRef || !record.consent) {
+        throw new HomeownerApiError('unavailable')
+      }
+      originalByteLengths.push(...record.items
+        .filter(item => item.decision === 'accepted')
+        .map(item => item.byteLength))
+    }
+    // The current ZIP builder is intentionally in-memory. Bound the complete
+    // plan before reading a single object so a large Home Record fails closed
+    // instead of exhausting the application process. A later streaming export
+    // can lift this limit without changing artifact ownership or provenance.
+    if (!homeRecordHandoffExportPlanAllowed(originalByteLengths)) {
+      throw new HomeownerApiError('unavailable')
+    }
     const entries: ZipEntry[] = []
     const exportHandoffs: unknown[] = []
     let filePosition = 0
