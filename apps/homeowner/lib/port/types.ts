@@ -623,7 +623,7 @@ export type PortError =
 
 export type PortResult<T> =
   | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: PortError }
+  | { readonly ok: false; readonly error: PortError; readonly retryAfterSeconds?: number }
 
 export interface HomeownerDataPort {
   getSession(): Promise<SessionState>

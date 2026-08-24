@@ -32,6 +32,7 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
     emailCodeSignInEnabled: false,
+    emailCodeRateLimitSecret: null,
     projectQuotesEnabled: false,
     privateUploadsEnabled: false,
     photoCheckupsEnabled: false,
@@ -40,7 +41,22 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+    HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: 'rate-limit-secret-that-is-at-least-32-bytes',
   })?.emailCodeSignInEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+    HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: 'too-short',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+    HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
+  }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PROJECT_QUOTES_ENABLED: 'true',

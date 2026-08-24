@@ -24,8 +24,9 @@ same browser where the homeowner started. It is implemented behind the
 default-off `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED` release gate. Until both
 Supabase email templates, production SMTP, expiry, and a real delivery smoke
 test are complete, the runtime continues to advertise the legacy email-link
-flow instead. See `docs/HOMEOWNER_EMAIL_CODE_SIGNIN.md` for the exact cutover
-and rollback order.
+flow instead. Activation also requires the independent server-only
+`HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET`. See
+`docs/HOMEOWNER_EMAIL_CODE_SIGNIN.md` for the exact cutover and rollback order.
 
 The generic project route can create private records for roofing, exterior,
 interior/remodeling, electrical, plumbing, HVAC, landscaping, appliances, pest

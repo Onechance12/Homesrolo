@@ -20,9 +20,17 @@ defaults to `false`. The request and verify endpoints return unavailable while
 the gate is false. This prevents the app from asking for a code while the email
 provider is still sending link-only messages.
 
+Activation also requires a separate server-only
+`HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET` containing at least 32 non-whitespace
+characters and distinct from both Supabase credentials. The runtime fails
+closed if the code gate is enabled without that independent secret. It is used
+only to HMAC email and network subjects for the bounded process-local limiter;
+raw email addresses are never stored as limiter keys.
+
 ## Production cutover
 
-1. Deploy the code and keep `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED=false`.
+1. Deploy the code with `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED=false` and add a
+   unique `HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET` to the server environment.
 2. Configure production SMTP. Supabase's shared development mailer is not a
    production delivery service.
 3. Update both the **Magic Link** and **Confirm signup** templates to include
@@ -52,7 +60,12 @@ previous link lifetime has elapsed and production logs show no remaining use.
 
 ## Public-launch hardening
 
-Provider limits are a baseline, not the final abuse boundary. Before a broad
-public launch, add durable failed-attempt throttling keyed by IP plus an
-HMAC-derived email key, never a raw email address, and add a privacy-preserving
-bot challenge. Neither measure may expose whether an account already exists.
+The app now applies bounded, fail-closed process-local limits to sends and
+verification attempts by network address, HMAC-derived email subject, and the
+pair, with provider quotas as the cross-instance backstop. A syntactically
+valid send request always receives the same accepted response even when the
+local limiter or provider suppresses it, so the response cannot reveal whether
+an account exists. Before a broad public launch, replace or supplement the
+process-local counters with a durable shared limiter and add a
+privacy-preserving bot challenge. Neither measure may expose whether an account
+already exists.

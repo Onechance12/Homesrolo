@@ -51,3 +51,32 @@ test('production pins byte-exact known app origins while explicit nonproduction 
     HOMESROLO_APP_ORIGIN: 'http://localhost:3100',
   }), null)
 })
+
+test('email-code activation requires an independent server-only HMAC secret', () => {
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+    HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: 'short',
+  }), null)
+  for (const providerCredential of [
+    CONFIG.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
+    CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
+  ]) {
+    assert.equal(readHomeownerRuntimeConfiguration({
+      ...CONFIG,
+      HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+      HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: providerCredential,
+    }), null, 'the limiter HMAC secret must not reuse a Supabase credential')
+  }
+  const configured = readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+    HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET: `rate_${'r'.repeat(43)}`,
+  })
+  assert.equal(configured?.emailCodeSignInEnabled, true)
+  assert.equal(configured?.emailCodeRateLimitSecret, `rate_${'r'.repeat(43)}`)
+})

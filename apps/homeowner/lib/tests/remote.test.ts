@@ -169,6 +169,43 @@ test('the adapter surfaces mapped errors and treats network failure as unavailab
   assert.deepEqual(await throwing.listHomes(), { ok: false, error: 'unavailable' })
 })
 
+test('the adapter preserves only bounded retry-after seconds from a rate-limit reply', async () => {
+  for (const retryAfterSeconds of [1, 60, 900, 3_600]) {
+    const port = createRemotePort(transportReturning(429, {
+      error: { code: 'rate_limited', retryAfterSeconds },
+    }))
+    assert.deepEqual(await port.requestEmailCode('person@example.com'), {
+      ok: false,
+      error: 'rate_limited',
+      retryAfterSeconds,
+    })
+  }
+})
+
+test('the adapter discards malformed or out-of-bounds retry-after metadata', async () => {
+  const malformedBodies: readonly unknown[] = [
+    { error: { code: 'rate_limited', retryAfterSeconds: 0 } },
+    { error: { code: 'rate_limited', retryAfterSeconds: 3_601 } },
+    { error: { code: 'rate_limited', retryAfterSeconds: -1 } },
+    { error: { code: 'rate_limited', retryAfterSeconds: 1.5 } },
+    { error: { code: 'rate_limited', retryAfterSeconds: '60' } },
+    { error: { code: 'rate_limited', retryAfterSeconds: null } },
+    { error: { code: 'rate_limited' } },
+    { error: { code: 'rate_limited', retryAfterSeconds: 60, extra: true } },
+    { error: { code: 'unavailable', retryAfterSeconds: 60 } },
+    { error: { code: 'rate_limited', retryAfterSeconds: 60 }, extra: true },
+    { error: null },
+  ]
+
+  for (const body of malformedBodies) {
+    const port = createRemotePort(transportReturning(429, body))
+    assert.deepEqual(await port.requestEmailCode('person@example.com'), {
+      ok: false,
+      error: 'rate_limited',
+    }, `must discard ${JSON.stringify(body)}`)
+  }
+})
+
 // --- envelope -----------------------------------------------------------------
 
 test('the envelope accepts exactly one key, data (a route-adapter requirement)', () => {

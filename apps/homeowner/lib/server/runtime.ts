@@ -16,6 +16,7 @@ import type {
   HomeownerCommandPort, HomeownerIdentityPort, HomeownerRepositoryPort,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
 import { HomeownerAuthService } from './auth.ts'
+import { EmailCodeRateLimiter } from './email-code-rate-limit.ts'
 import { HomeownerProjectReviewService } from '../../../../src/homeowner/homeowner-project-review.v1.ts'
 import { HomeRecordHandoffService } from '../../../../src/homeowner/home-record-handoff.v1.ts'
 import {
@@ -94,6 +95,9 @@ const provider = clients && configuration
 const auth = configuration && clients
   ? new HomeownerAuthService({ auth: clients.auth, service: clients.service, configuration })
   : null
+const emailCodeRateLimiter = configuration?.emailCodeRateLimitSecret
+  ? new EmailCodeRateLimiter({ secret: configuration.emailCodeRateLimitSecret })
+  : null
 
 let service: HomeownerApiService | null = null
 const jobroloIntakeConfiguration = readJobroloIntakeClientConfiguration(environment)
@@ -145,6 +149,10 @@ export function homeownerRuntimeConfiguration(): HomeownerRuntimeConfiguration |
 
 export function configuredHomeownerAuthService(): HomeownerAuthService | null {
   return auth
+}
+
+export function configuredEmailCodeRateLimiter(): EmailCodeRateLimiter | null {
+  return emailCodeRateLimiter
 }
 
 export function homeownerApiService(): HomeownerApiService {

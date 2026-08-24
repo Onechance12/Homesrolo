@@ -13,7 +13,7 @@ import { roofingIntent } from '../roofing-intent.ts'
 import type { RoofingNeed } from '../port/types.ts'
 
 const emailSchema = z.string().trim().email().max(254)
-const emailCodeSchema = z.string().trim().regex(/^\d{6}$/)
+const emailCodeSchema = z.string().regex(/^[0-9]{6}$/)
 const tokenHashSchema = z.string().regex(/^[A-Za-z0-9_-]{20,256}$/)
 const accessTokenSchema = z.string().min(32).max(4096).regex(/^\S+$/)
 
