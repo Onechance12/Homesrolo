@@ -488,12 +488,15 @@ test('the browser shell does not import private contracts or other repositories'
 
 test('the same-browser email-code form is preferred and every auth form is capability-gated', () => {
   const signin = read('app/signin/page.tsx')
+  const pending = read('lib/email-code-pending.ts')
   assert.match(signin, /capabilities\.emailCodeSignIn \?/,
     'the code form is gated on the exact server capability')
   assert.match(signin, /capabilities\.magicLinkSignIn \?/,
     'the migration fallback remains independently capability-gated')
+  assert.match(signin, /If a code arrives for/,
+    'code acceptance copy is generic and does not claim that delivery occurred')
   assert.match(signin, /If that address can sign in/,
-    'acceptance copy is generic and does not reveal whether an address exists')
+    'legacy fallback copy remains generic during migration')
   assert.match(signin, /autoComplete="one-time-code"/)
   assert.match(signin, /inputMode="numeric"/)
   assert.match(signin, /type="text"/,
@@ -505,9 +508,35 @@ test('the same-browser email-code form is preferred and every auth form is capab
     'resend timing uses an absolute deadline after background timer throttling')
   assert.match(signin, /disabled=\{requestState === 'sending'\}/,
     'the address cannot change while its request is in flight')
+  assert.match(signin, /requestInFlight\.current\s*\|\|\s*Date\.now\(\) < resendDeadline\.current/,
+    'a synchronous ref lock prevents duplicate send and resend requests before React rerenders')
+  assert.match(signin, /if \(\s*verifyInFlight\.current\s*\|\| requestInFlight\.current\s*\|\| Date\.now\(\) < verifyDeadline\.current\s*\) return/,
+    'verification cannot race a resend or bypass a server-directed lockout')
+  assert.match(signin, /disabled=\{requestState === 'sending'[\s\S]*verifyState === 'verifying'[\s\S]*secondsUntilVerify > 0[\s\S]*code\.length !== 6\}/,
+    'verification is visibly disabled during an in-flight request or verification lockout')
+  assert.match(signin, /result\.error === 'rate_limited'[\s\S]*startResendCooldown\(result\.retryAfterSeconds\)/,
+    'a request 429 preserves the server resend cooldown')
+  assert.match(signin, /result\.error === 'rate_limited'[\s\S]*startVerifyCooldown\(result\.retryAfterSeconds\)/,
+    'a verification 429 uses a separate server-directed verification cooldown')
+  assert.match(signin, /window\.sessionStorage\.setItem\([\s\S]*encodePendingEmailCode\(email, resendAvailableAt, verifyAvailableAt\)/,
+    'the pending code stage survives a same-tab reload or mobile page eviction')
+  assert.match(pending, /readonly email: string[\s\S]*readonly resendAvailableAt: number[\s\S]*readonly verifyAvailableAt: number[\s\S]*readonly savedAt: number/,
+    'only the destination, cooldown deadlines, and original save time are persisted')
+  assert.match(signin, /if \(verifyAt > 0\) setVerifyState\('rate_limited'\)/,
+    'a mobile reload restores an active verification lockout')
+  assert.match(signin, /async function resend\(\)[\s\S]*setVerifyState\(current => current === 'rate_limited' \? current : 'idle'\)/,
+    'requesting another code cannot visually clear an active verification lockout')
+  assert.match(signin, /if \(!storageReady\) return[\s\S]*\[stage, storageReady\]/,
+    'autofocus runs after pending session state has been restored')
+  const storageWriter = signin.match(/function writePendingEmailCode[\s\S]*?\n\}/)?.[0] ?? ''
+  assert.ok(storageWriter, 'the pending-code storage writer exists')
+  assert.doesNotMatch(storageWriter, /\bcode\s*[:,]/i,
+    'the one-time code itself is never written to browser storage')
+  assert.match(signin, /I already have a code/,
+    'a homeowner can recover the code-entry screen without requesting another email')
   assert.match(signin, /port\.verifyEmailCode\([\s\S]*context\.intent, context\.handoff/,
     'bounded entry context is preserved through server-side code verification')
-  assert.doesNotMatch(signin, /email (was|has been) sent/i,
+  assert.doesNotMatch(signin, /(email|code) (was|has been|is) sent/i,
     'nothing claims a send the server did not accept')
   assert.match(signin, /mode === 'synthetic'\s*\?\s*\(?\s*<SyntheticEntry/,
     'synthetic mode keeps the honest demo entry')

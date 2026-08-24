@@ -14,6 +14,7 @@ const httpsUrl = z.string().url().transform(value => new URL(value)).refine(
 )
 
 const providerKey = z.string().min(20).max(4096).regex(/^\S+$/)
+const hmacSecret = z.string().min(32).max(4096).regex(/^\S+$/)
 
 const configurationSchema = z.object({
   supabaseUrl: httpsUrl,
@@ -21,11 +22,30 @@ const configurationSchema = z.object({
   secretKey: providerKey,
   appOrigin: httpsUrl,
   emailCodeSignInEnabled: z.enum(['true', 'false']).optional().default('false'),
+  emailCodeRateLimitSecret: hmacSecret.optional(),
   projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
   photoCheckupsEnabled: z.enum(['true', 'false']).optional().default('false'),
   jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
-}).strict()
+}).strict().superRefine((value, context) => {
+  if (value.emailCodeSignInEnabled === 'true' && !value.emailCodeRateLimitSecret) {
+    context.addIssue({
+      code: 'custom',
+      path: ['emailCodeRateLimitSecret'],
+      message: 'required when email-code sign-in is enabled',
+    })
+  }
+  if (value.emailCodeSignInEnabled === 'true'
+    && value.emailCodeRateLimitSecret
+    && (value.emailCodeRateLimitSecret === value.publishableKey
+      || value.emailCodeRateLimitSecret === value.secretKey)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['emailCodeRateLimitSecret'],
+      message: 'must be distinct from Supabase credentials',
+    })
+  }
+})
 
 export interface HomeownerRuntimeConfiguration {
   readonly supabaseUrl: string
@@ -33,6 +53,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly secretKey: string
   readonly appOrigin: string
   readonly emailCodeSignInEnabled: boolean
+  readonly emailCodeRateLimitSecret: string | null
   readonly projectQuotesEnabled: boolean
   readonly privateUploadsEnabled: boolean
   readonly photoCheckupsEnabled: boolean
@@ -68,6 +89,7 @@ export function readHomeownerRuntimeConfiguration(
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
     emailCodeSignInEnabled: environment.HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED,
+    emailCodeRateLimitSecret: environment.HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET,
     projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
     photoCheckupsEnabled: environment.HOMESROLO_PHOTO_CHECKUPS_ENABLED,
@@ -81,6 +103,7 @@ export function readHomeownerRuntimeConfiguration(
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
     emailCodeSignInEnabled: parsed.data.emailCodeSignInEnabled === 'true',
+    emailCodeRateLimitSecret: parsed.data.emailCodeRateLimitSecret ?? null,
     projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
     photoCheckupsEnabled: parsed.data.photoCheckupsEnabled === 'true',

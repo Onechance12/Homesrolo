@@ -159,6 +159,20 @@ const UNDEFINED_ROUTE: PortResult<never> = Object.freeze({
   error: 'unavailable' as const,
 })
 
+function boundedRetryAfterSeconds(body: unknown): number | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'error')) return null
+  const error = (body as { error?: unknown }).error
+  if (!error || typeof error !== 'object' || Array.isArray(error)
+    || Object.keys(error).length !== 2
+    || (error as { code?: unknown }).code !== 'rate_limited') return null
+  const seconds = (error as { retryAfterSeconds?: unknown }).retryAfterSeconds
+  return typeof seconds === 'number' && Number.isSafeInteger(seconds)
+    && seconds >= 1 && seconds <= 3_600
+    ? seconds
+    : null
+}
+
 export function createRemotePort(
   transport: JsonTransport,
   artifactTransport: ArtifactUploadTransport = fetchArtifactUploadTransport,
@@ -177,7 +191,13 @@ export function createRemotePort(
     }
     if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
     if (reply.status !== successStatus) {
-      return { ok: false, error: portErrorForStatus(reply.status) }
+      const error = portErrorForStatus(reply.status)
+      const retryAfterSeconds = error === 'rate_limited'
+        ? boundedRetryAfterSeconds(reply.body)
+        : null
+      return retryAfterSeconds === null
+        ? { ok: false, error }
+        : { ok: false, error, retryAfterSeconds }
     }
     try {
       return { ok: true, value: decode(unwrapEnvelope(reply.body), 'data') }

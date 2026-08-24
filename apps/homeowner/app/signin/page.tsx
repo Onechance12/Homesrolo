@@ -12,6 +12,13 @@ import {
 } from '../../lib/entry-context.ts'
 import { HouseMark } from '../../components/icons.tsx'
 import { Skeleton } from '../../components/states.tsx'
+import {
+  decodePendingEmailCode,
+  emailCodeCooldownDeadline,
+  EMAIL_CODE_PENDING_KEY,
+  encodePendingEmailCode,
+  type PendingEmailCode,
+} from '../../lib/email-code-pending.ts'
 
 /**
  * Sign in.
@@ -26,6 +33,47 @@ import { Skeleton } from '../../components/states.tsx'
 
 type EmailCodeRequestState = 'idle' | 'sending' | 'rate_limited' | 'invalid' | 'failed'
 type EmailCodeVerifyState = 'idle' | 'verifying' | 'rate_limited' | 'invalid' | 'failed'
+type EmailCodeSendOutcome =
+  | { readonly kind: 'accepted'; readonly resendAvailableAt: number }
+  | { readonly kind: 'rate_limited'; readonly resendAvailableAt: number }
+  | { readonly kind: 'not_sent' | 'blocked' }
+
+function clearPendingEmailCode() {
+  try {
+    window.sessionStorage.removeItem(EMAIL_CODE_PENDING_KEY)
+  } catch {
+    // Sign-in still works when storage is unavailable or disabled.
+  }
+}
+
+function readPendingEmailCode(): PendingEmailCode | null {
+  try {
+    const raw = window.sessionStorage.getItem(EMAIL_CODE_PENDING_KEY)
+    const pending = decodePendingEmailCode(raw)
+    if (raw && !pending) clearPendingEmailCode()
+    return pending
+  } catch {
+    clearPendingEmailCode()
+    return null
+  }
+}
+
+function writePendingEmailCode(
+  email: string,
+  resendAvailableAt: number,
+  verifyAvailableAt: number,
+) {
+  try {
+    // The pending address and cooldown deadlines may survive a mobile reload. The OTP
+    // itself deliberately remains only in React state and is never persisted.
+    window.sessionStorage.setItem(
+      EMAIL_CODE_PENDING_KEY,
+      encodePendingEmailCode(email, resendAvailableAt, verifyAvailableAt),
+    )
+  } catch {
+    // A blocked storage API must not block passwordless sign-in.
+  }
+}
 
 function maskedEmail(value: string): string {
   const [local = '', domain = ''] = value.split('@')
@@ -41,6 +89,10 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
   const emailInput = useRef<HTMLInputElement>(null)
   const codeInput = useRef<HTMLInputElement>(null)
   const operationGeneration = useRef(0)
+  const requestInFlight = useRef(false)
+  const verifyInFlight = useRef(false)
+  const resendDeadline = useRef(0)
+  const verifyDeadline = useRef(0)
   const [stage, setStage] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('')
   const [destinationEmail, setDestinationEmail] = useState('')
@@ -49,21 +101,56 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
   const [verifyState, setVerifyState] = useState<EmailCodeVerifyState>('idle')
   const [resendAvailableAt, setResendAvailableAt] = useState(0)
   const [secondsUntilResend, setSecondsUntilResend] = useState(0)
+  const [verifyAvailableAt, setVerifyAvailableAt] = useState(0)
+  const [secondsUntilVerify, setSecondsUntilVerify] = useState(0)
+  const [storageReady, setStorageReady] = useState(false)
 
   useEffect(() => {
+    const pending = readPendingEmailCode()
+    const restore = window.setTimeout(() => {
+      if (pending) {
+        const now = Date.now()
+        const resendAt = pending.resendAvailableAt > now ? pending.resendAvailableAt : 0
+        const verifyAt = pending.verifyAvailableAt > now ? pending.verifyAvailableAt : 0
+        resendDeadline.current = resendAt
+        verifyDeadline.current = verifyAt
+        setEmail(pending.email)
+        setDestinationEmail(pending.email)
+        setResendAvailableAt(resendAt)
+        setSecondsUntilResend(resendAt > 0
+          ? Math.max(0, Math.ceil((resendAt - now) / 1_000))
+          : 0)
+        setVerifyAvailableAt(verifyAt)
+        setSecondsUntilVerify(verifyAt > 0
+          ? Math.max(0, Math.ceil((verifyAt - now) / 1_000))
+          : 0)
+        if (verifyAt > 0) setVerifyState('rate_limited')
+        setStage('code')
+      }
+      setStorageReady(true)
+    }, 0)
+    return () => window.clearTimeout(restore)
+  }, [])
+
+  useEffect(() => {
+    if (!storageReady) return
     if (stage === 'code') codeInput.current?.focus()
     else {
       emailInput.current?.focus()
       if (emailInput.current?.value) emailInput.current.select()
     }
-  }, [stage])
+  }, [stage, storageReady])
 
   useEffect(() => {
-    if (stage !== 'code' || resendAvailableAt <= 0) return
+    if (resendAvailableAt <= 0) return
     const updateCountdown = () => {
       const remaining = Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1_000))
       setSecondsUntilResend(remaining)
-      if (remaining === 0) setResendAvailableAt(0)
+      if (remaining === 0) {
+        resendDeadline.current = 0
+        setResendAvailableAt(0)
+        setRequestState(current => current === 'rate_limited' ? 'idle' : current)
+      }
     }
     updateCountdown()
     const interval = window.setInterval(updateCountdown, 1_000)
@@ -74,71 +161,170 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
       window.removeEventListener('focus', updateCountdown)
       document.removeEventListener('visibilitychange', updateCountdown)
     }
-  }, [stage, resendAvailableAt])
+  }, [resendAvailableAt])
 
-  async function sendCode(address: string) {
-    if (requestState === 'sending') return false
-    setRequestState('sending')
-    const result = await port.requestEmailCode(address)
-    if (result.ok) {
-      setRequestState('idle')
-      setVerifyState('idle')
-      setResendAvailableAt(Date.now() + 60_000)
-      setSecondsUntilResend(60)
-      return true
+  useEffect(() => {
+    if (verifyAvailableAt <= 0) return
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((verifyAvailableAt - Date.now()) / 1_000))
+      setSecondsUntilVerify(remaining)
+      if (remaining === 0) {
+        verifyDeadline.current = 0
+        setVerifyAvailableAt(0)
+        setVerifyState(current => current === 'rate_limited' ? 'idle' : current)
+      }
     }
-    if (result.error === 'rate_limited') setRequestState('rate_limited')
-    else if (result.error === 'invalid') setRequestState('invalid')
-    else setRequestState('failed')
-    return false
+    updateCountdown()
+    const interval = window.setInterval(updateCountdown, 1_000)
+    window.addEventListener('focus', updateCountdown)
+    document.addEventListener('visibilitychange', updateCountdown)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', updateCountdown)
+      document.removeEventListener('visibilitychange', updateCountdown)
+    }
+  }, [verifyAvailableAt])
+
+  function startResendCooldown(retryAfterSeconds?: number): number {
+    const deadline = emailCodeCooldownDeadline(retryAfterSeconds)
+    resendDeadline.current = deadline
+    setResendAvailableAt(deadline)
+    setSecondsUntilResend(Math.max(1, Math.ceil((deadline - Date.now()) / 1_000)))
+    return deadline
+  }
+
+  function startVerifyCooldown(retryAfterSeconds?: number): number {
+    const deadline = emailCodeCooldownDeadline(retryAfterSeconds)
+    verifyDeadline.current = deadline
+    setVerifyAvailableAt(deadline)
+    setSecondsUntilVerify(Math.max(1, Math.ceil((deadline - Date.now()) / 1_000)))
+    return deadline
+  }
+
+  async function sendCode(address: string): Promise<EmailCodeSendOutcome> {
+    if (requestInFlight.current || Date.now() < resendDeadline.current) {
+      return { kind: 'blocked' }
+    }
+    requestInFlight.current = true
+    setRequestState('sending')
+    const generation = operationGeneration.current
+    try {
+      const result = await port.requestEmailCode(address)
+      if (generation !== operationGeneration.current) return { kind: 'blocked' }
+      if (result.ok) {
+        const deadline = startResendCooldown()
+        setRequestState('idle')
+        return { kind: 'accepted', resendAvailableAt: deadline }
+      }
+      if (result.error === 'rate_limited') {
+        const deadline = startResendCooldown(result.retryAfterSeconds)
+        setRequestState('rate_limited')
+        return { kind: 'rate_limited', resendAvailableAt: deadline }
+      }
+      if (result.error === 'invalid') setRequestState('invalid')
+      else setRequestState('failed')
+      return { kind: 'not_sent' }
+    } catch {
+      if (generation === operationGeneration.current) setRequestState('failed')
+      return { kind: 'not_sent' }
+    } finally {
+      requestInFlight.current = false
+    }
   }
 
   async function request(event: React.FormEvent) {
     event.preventDefault()
     const requestedEmail = email.trim().toLowerCase()
-    if (await sendCode(requestedEmail)) {
+    const outcome = await sendCode(requestedEmail)
+    if (outcome.kind === 'accepted') {
       setDestinationEmail(requestedEmail)
       setStage('code')
+      writePendingEmailCode(requestedEmail, outcome.resendAvailableAt, 0)
     }
+  }
+
+  function enterExistingCode() {
+    if (requestInFlight.current || !emailInput.current?.reportValidity()) return
+    const requestedEmail = email.trim().toLowerCase()
+    operationGeneration.current += 1
+    resendDeadline.current = 0
+    verifyDeadline.current = 0
+    setCode('')
+    setDestinationEmail(requestedEmail)
+    setRequestState('idle')
+    setVerifyState('idle')
+    setResendAvailableAt(0)
+    setSecondsUntilResend(0)
+    setVerifyAvailableAt(0)
+    setSecondsUntilVerify(0)
+    setStage('code')
+    writePendingEmailCode(requestedEmail, 0, 0)
   }
 
   async function verify(event: React.FormEvent) {
     event.preventDefault()
-    if (verifyState === 'verifying') return
+    if (
+      verifyInFlight.current
+      || requestInFlight.current
+      || Date.now() < verifyDeadline.current
+    ) return
     if (!/^\d{6}$/.test(code)) {
       setVerifyState('invalid')
       return
     }
+    verifyInFlight.current = true
     setRequestState('idle')
     setVerifyState('verifying')
     const generation = ++operationGeneration.current
-    const result = await port.verifyEmailCode(
-      destinationEmail, code, context.intent, context.handoff,
-    )
-    if (generation !== operationGeneration.current) return
-    if (result.ok) {
-      await refresh()
-      router.replace(withHomeownerEntryContext('/homes', context))
-      return
+    try {
+      const result = await port.verifyEmailCode(
+        destinationEmail, code, context.intent, context.handoff,
+      )
+      if (generation !== operationGeneration.current) return
+      if (result.ok) {
+        clearPendingEmailCode()
+        await refresh()
+        router.replace(withHomeownerEntryContext('/homes', context))
+        return
+      }
+      if (result.error === 'rate_limited') {
+        const deadline = startVerifyCooldown(result.retryAfterSeconds)
+        writePendingEmailCode(destinationEmail, resendDeadline.current, deadline)
+        setVerifyState('rate_limited')
+      } else if (result.error === 'invalid') {
+        setVerifyState('invalid')
+        window.setTimeout(() => codeInput.current?.select(), 0)
+      } else setVerifyState('failed')
+    } catch {
+      if (generation === operationGeneration.current) setVerifyState('failed')
+    } finally {
+      verifyInFlight.current = false
     }
-    if (result.error === 'rate_limited') setVerifyState('rate_limited')
-    else if (result.error === 'invalid') {
-      setVerifyState('invalid')
-      window.setTimeout(() => codeInput.current?.select(), 0)
-    } else setVerifyState('failed')
   }
 
   async function resend() {
-    if (secondsUntilResend > 0 || requestState === 'sending' || verifyState === 'verifying') return
-    setVerifyState('idle')
-    if (await sendCode(destinationEmail)) {
+    if (
+      Date.now() < resendDeadline.current
+      || requestInFlight.current
+      || verifyInFlight.current
+    ) return
+    setVerifyState(current => current === 'rate_limited' ? current : 'idle')
+    const outcome = await sendCode(destinationEmail)
+    if (outcome.kind === 'accepted') {
       setCode('')
       window.setTimeout(() => codeInput.current?.focus(), 0)
+    }
+    if (outcome.kind === 'accepted' || outcome.kind === 'rate_limited') {
+      writePendingEmailCode(
+        destinationEmail,
+        outcome.resendAvailableAt,
+        verifyDeadline.current,
+      )
     }
   }
 
   function changeEmail() {
-    if (verifyState === 'verifying') return
+    if (requestInFlight.current || verifyInFlight.current) return
     operationGeneration.current += 1
     setCode('')
     setDestinationEmail('')
@@ -146,7 +332,16 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
     setVerifyState('idle')
     setResendAvailableAt(0)
     setSecondsUntilResend(0)
+    setVerifyAvailableAt(0)
+    setSecondsUntilVerify(0)
+    resendDeadline.current = 0
+    verifyDeadline.current = 0
     setStage('email')
+    clearPendingEmailCode()
+  }
+
+  if (!storageReady) {
+    return <Skeleton lines={3} label="Restoring sign-in" />
   }
 
   if (stage === 'code') {
@@ -161,7 +356,7 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
           <span className="signin__status-mark" aria-hidden="true">✓</span>
           <div>
             <h3>Enter the code here</h3>
-            <p>If that address can sign in, use the six-digit code sent to <strong>{maskedEmail(destinationEmail)}</strong>.</p>
+            <p>If a code arrives for <strong>{maskedEmail(destinationEmail)}</strong>, enter all six digits below.</p>
           </div>
         </div>
         <div className="field">
@@ -201,7 +396,7 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
         )}
         {(verifyState === 'rate_limited' || requestState === 'rate_limited') && (
           <p id="signin-code-error" role="alert" className="signin__error">
-            Too many attempts. Wait a minute, then try again.
+            Too many attempts. Try again when the countdown ends.
           </p>
         )}
         {(verifyState === 'failed' || requestState === 'invalid' || requestState === 'failed') && (
@@ -213,9 +408,16 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
           <button
             type="submit"
             className="btn btn--primary btn--block"
-            disabled={verifyState === 'verifying' || code.length !== 6}
+            disabled={requestState === 'sending'
+              || verifyState === 'verifying'
+              || secondsUntilVerify > 0
+              || code.length !== 6}
           >
-            {verifyState === 'verifying' ? 'Checking your code…' : 'Verify and open my home'}
+            {verifyState === 'verifying'
+              ? 'Checking your code…'
+              : secondsUntilVerify > 0
+                ? `Try again in ${secondsUntilVerify}s`
+                : 'Verify and open my home'}
           </button>
         </div>
         <div className="signin__code-options">
@@ -223,7 +425,7 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
             type="button"
             className="signin__try-again"
             onClick={changeEmail}
-            disabled={verifyState === 'verifying'}
+            disabled={requestState === 'sending' || verifyState === 'verifying'}
           >
             Change email
           </button>
@@ -265,7 +467,7 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
         <span className="field__hint">We&rsquo;ll email a six-digit code. No password to remember.</span>
       </div>
       {requestState === 'rate_limited' && (
-        <p role="alert" className="signin__error">Too many requests. Wait a minute, then try again.</p>
+        <p role="alert" className="signin__error">Too many requests. Wait for the countdown, then try again.</p>
       )}
       {requestState === 'invalid' && (
         <p role="alert" className="signin__error">Check the email address and try again.</p>
@@ -274,9 +476,32 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
         <p role="alert" className="signin__error">That did not go through. Try again in a moment.</p>
       )}
       <div className="signin__action">
-        <button type="submit" className="btn btn--primary btn--block" disabled={requestState === 'sending'}>
-          {requestState === 'sending' ? 'Requesting your code…' : 'Email me a sign-in code'}
+        <button
+          type="submit"
+          className="btn btn--primary btn--block"
+          disabled={requestState === 'sending' || secondsUntilResend > 0}
+        >
+          {requestState === 'sending'
+            ? 'Requesting your code…'
+            : secondsUntilResend > 0
+              ? `Try again in ${secondsUntilResend}s`
+              : 'Email me a sign-in code'}
         </button>
+      </div>
+      <div className="signin__code-options">
+        <button
+          type="button"
+          className="signin__try-again"
+          onClick={enterExistingCode}
+          disabled={requestState === 'sending'}
+        >
+          I already have a code
+        </button>
+        <span className="sr-only" aria-live="polite">
+          {requestState === 'rate_limited' && secondsUntilResend > 0
+            ? `You can request another code in ${secondsUntilResend} seconds.`
+            : ''}
+        </span>
       </div>
     </form>
   )
