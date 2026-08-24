@@ -11,6 +11,7 @@ import {
   SITE_DESCRIPTION,
   INDEXABLE_ROUTES,
   PRIMARY_NAV,
+  roofWatchLocationSmsUrl,
 } from '../../site.ts'
 import { ROOF_WATCH_GUIDES } from '../roof-watch-guides.ts'
 
@@ -31,6 +32,13 @@ test('public contact stays centralized and text-only', () => {
   assert.match(agentPage, /AGENT_PHONE_DISPLAY/)
   assert.match(agentPage, /AGENT_SMS_URL/)
   assert.match(footer, /ROOF_WATCH_SMS_URL/)
+  assert.equal(
+    decodeURIComponent(roofWatchLocationSmsUrl('  Tulsa, OK   74103  ')),
+    'sms:+18178862418?&body=ROOF WATCH - Please check availability for Tulsa, OK 74103.',
+  )
+  const encodedLocation = roofWatchLocationSmsUrl('Tulsa, OK\r\n&body=INJECT')
+  assert.equal((encodedLocation.match(/&body=/g) ?? []).length, 1)
+  assert.match(encodedLocation, /Tulsa%2C%20OK%20%26body%3DINJECT/)
 
   const telephoneScheme = ['te', 'l:'].join('')
   assert.equal([agentPage, footer, layout].some(source => source.includes(telephoneScheme)), false)
@@ -94,6 +102,8 @@ test('public trust pages state the current account and photo boundary', () => {
   assert.match(privacy, /does not publish it, create a public profile, or send it to a contractor/)
   assert.match(privacy, /JPEG or PNG/)
   assert.match(privacy, /not sent to a contractor, Jobrolo, a public page/)
+  assert.match(privacy, /Roof Watch area check runs in your browser/)
+  assert.match(privacy, /does not receive or store what you type there/)
   assert.match(security, /Exact-home authorization/)
   assert.match(security, /opaque, HttpOnly session cookie/)
   assert.match(security, /bounded PDF, JPEG, and PNG uploads/)

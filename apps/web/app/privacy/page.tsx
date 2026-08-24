@@ -31,6 +31,7 @@ export default function PrivacyPage() {
             <section className="prose">
               <h2>The public website</h2>
               <p>Homesrolo.com is a static information site. It does not contain an account form, file upload, advertising tracker, or analytics script. Links that say “Open my home” take you to the separate signed-in homeowner application.</p>
+              <p>The Roof Watch area check runs in your browser. Homesrolo.com does not receive or store what you type there. Opening the draft passes the city or ZIP to your device’s messaging app; Homesrolo receives it only if you choose to send the text.</p>
             </section>
             <section className="prose">
               <h2>The homeowner application</h2>

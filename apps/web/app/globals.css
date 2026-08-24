@@ -430,6 +430,106 @@ a:hover { color: var(--brand-deep); }
   .roof-watch-deliverables > li:first-child { padding-left: 0.25rem; }
   .roof-watch-deliverables > li + li { border-top: 0; border-left: 1px solid var(--rule); }
 }
+
+.roof-watch-area-check {
+  display: grid;
+  gap: 1.5rem;
+  padding: clamp(1.35rem, 3vw, 2rem);
+  border: 1px solid var(--night-rule);
+  border-radius: var(--radius);
+  background: var(--night);
+  color: var(--night-ink);
+  box-shadow: var(--shadow-lift);
+}
+.roof-watch-area-check__copy .eyebrow { margin-bottom: 0.5rem; color: var(--signal); }
+.roof-watch-area-check__copy h3 { margin-bottom: 0.55rem; color: var(--night-ink); font-size: clamp(1.35rem, 3vw, 1.75rem); }
+.roof-watch-area-check__copy > p:last-child { margin: 0; color: var(--night-soft); line-height: 1.65; }
+.roof-watch-location-checker label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--night-ink);
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+.roof-watch-location-checker__controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.roof-watch-location-checker__icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  color: var(--brand-deep);
+}
+.roof-watch-location-checker__icon svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.9; }
+.roof-watch-location-checker input {
+  min-width: 0;
+  min-height: 3.35rem;
+  padding: 0.8rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.roof-watch-location-checker input::placeholder { color: var(--ink-faint); }
+.roof-watch-location-checker input:focus-visible,
+.roof-watch-location-checker button:focus-visible { outline-offset: -4px; }
+.roof-watch-location-checker button {
+  min-height: 3.35rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  background: var(--signal);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 780;
+}
+.roof-watch-location-checker button:hover { background: #d8f876; }
+.roof-watch-location-checker__note { margin: 0.65rem 0 0; color: var(--night-soft); font-size: 0.78rem; line-height: 1.55; }
+.roof-watch-location-checker__note a { color: var(--night-ink); font-weight: 700; }
+.roof-watch-location-checker__error { margin: 0.6rem 0 0; color: #ffd6c9; font-size: 0.82rem; font-weight: 700; }
+.roof-watch-city-guides {
+  margin-top: 1.25rem;
+  border-block: 1px solid var(--rule-strong);
+}
+.roof-watch-city-guides > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0.25rem;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.roof-watch-city-guides > summary::-webkit-details-marker { display: none; }
+.roof-watch-city-guides > summary small { display: block; margin-bottom: 0.2rem; color: var(--brand-deep); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.roof-watch-city-guides > summary strong { display: block; font-size: 1rem; }
+.roof-watch-city-guides__toggle { color: var(--brand-deep); font-size: 1.65rem; line-height: 1; transition: transform 160ms ease; }
+.roof-watch-city-guides[open] .roof-watch-city-guides__toggle { transform: rotate(45deg); }
+.roof-watch-city-guides__body { padding: 0 0.25rem 1.25rem; }
+.roof-watch-city-guides__body > p { max-width: var(--measure); margin-bottom: 1rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+.roof-watch-city-guides__body ul { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.roof-watch-city-guides__body li { border-bottom: 1px solid var(--rule); }
+.roof-watch-city-guides__body a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; padding: 0.7rem 0.2rem; text-decoration: none; }
+.roof-watch-city-guides__body a > span:first-child { display: grid; gap: 0.1rem; }
+.roof-watch-city-guides__body a strong { color: var(--ink); }
+.roof-watch-city-guides__body a small { color: var(--ink-faint); font-size: 0.78rem; }
+@media (min-width: 48rem) {
+  .roof-watch-area-check { grid-template-columns: minmax(15rem, 0.7fr) minmax(22rem, 1.3fr); align-items: end; }
+  .roof-watch-city-guides__body ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roof-watch-city-guides__body li:nth-child(odd) { padding-right: 1rem; }
+  .roof-watch-city-guides__body li:nth-child(even) { padding-left: 1rem; border-left: 1px solid var(--rule); }
+}
+@media (max-width: 39.99rem) {
+  .roof-watch-location-checker__controls { grid-template-columns: auto minmax(0, 1fr); }
+  .roof-watch-location-checker button { grid-column: 1 / -1; }
+}
 .roof-photo-grid { display: grid; gap: 1.25rem; align-items: start; margin: 0; padding: 0; list-style: none; }
 .roof-photo-grid > li { min-width: 0; }
 @media (min-width: 40rem) { .roof-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

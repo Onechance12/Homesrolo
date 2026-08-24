@@ -38,6 +38,12 @@ export function roofWatchSmsUrl(city: string): string {
   return textMessageUrl(message)
 }
 
+export function roofWatchLocationSmsUrl(location: string): string {
+  const normalized = location.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  if (!normalized) return ROOF_WATCH_SMS_URL
+  return textMessageUrl(`ROOF WATCH - Please check availability for ${normalized}.`)
+}
+
 /**
  * The only public-to-private roofing handoff. The value is deliberately a
  * closed enum rather than homeowner text, an address, or another identifier.

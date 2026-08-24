@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { DocumentaryImage } from '../../components/DocumentaryImage.tsx'
 import { PageHeader } from '../../components/Prose.tsx'
+import { RoofWatchLocationCheck } from '../../components/RoofWatchLocationCheck.tsx'
 import {
   HOMEOWNER_ROOF_WATCH_SIGNIN_URL,
   ROOF_WATCH_PHONE_DISPLAY,
@@ -251,33 +252,31 @@ export default function RoofWatchPage() {
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">Service area</p>
             <h2 id="rw-cities">Check Roof Watch across Texas and Oklahoma</h2>
-            <p>Text the city and ZIP for any address in either state. We will confirm current availability, the assigned professional, and the written program limits before anything is scheduled.</p>
+            <p>Service is checked area by area, not assumed from a state or city list. Tell us where the home is and we will confirm current availability, the assigned professional, and the written program limits before anything is scheduled.</p>
           </div>
-          <div className="grid grid--2" style={{ marginBottom: '2.5rem' }}>
-            <article className="card">
-              <p className="eyebrow">Texas</p>
-              <h3 className="card__title">One address at a time</h3>
-              <p>Send the Texas city and ZIP. A statewide invitation to check availability is not a promise that every address can be scheduled.</p>
-            </article>
-            <article className="card">
-              <p className="eyebrow">Oklahoma</p>
-              <h3 className="card__title">The same written limits first</h3>
-              <p>Send the Oklahoma city and ZIP. We will answer with the current service result before a roof visit is discussed.</p>
-            </article>
-          </div>
-          <div className="prose" style={{ marginBottom: '2rem' }}>
-            <p className="eyebrow">Detailed local pages</p>
-            <h3>Current detailed Texas city pages</h3>
-            <p>These six city pages add genuinely local conditions and sources. We will add more local pages only when the service and local information are real—not just to manufacture city names for search.</p>
-          </div>
-          <div className="grid grid--2">
-            {ROOF_WATCH_CITIES.map(city => (
-              <div key={city.slug} className="card">
-                <h3 className="card__title"><Link href={`/roof-watch/${city.slug}/`}>Free roof inspections in {city.name}</Link></h3>
-                <p>{city.county} · {city.cardSummary}</p>
-              </div>
-            ))}
-          </div>
+          <RoofWatchLocationCheck />
+          <details className="roof-watch-city-guides">
+            <summary>
+              <span>
+                <small>Detailed city guides</small>
+                <strong>Browse six researched Texas locations</strong>
+              </span>
+              <span className="roof-watch-city-guides__toggle" aria-hidden="true">+</span>
+            </summary>
+            <div className="roof-watch-city-guides__body">
+              <p>You can check any Texas or Oklahoma city above. These six locations have additional local roofing conditions and reviewed sources—not just a city name added for search.</p>
+              <ul>
+                {ROOF_WATCH_CITIES.map(city => (
+                  <li key={city.slug}>
+                    <Link href={`/roof-watch/${city.slug}/`}>
+                      <span><strong>{city.name}</strong><small>{city.county}</small></span>
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
         </div>
       </section>
 
