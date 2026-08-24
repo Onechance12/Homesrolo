@@ -25,6 +25,7 @@ const roofing = read('app/services/roofing/page.tsx')
 const roofingArticle = read('components/RoofingArticle.tsx')
 const howItWorks = read('app/how-it-works/page.tsx')
 const site = read('lib/site.ts')
+const retiredCompanyPage = read('app/companies/[slug]/page.tsx')
 
 // --- target size (WCAG 2.5.8) -------------------------------------------------
 
@@ -87,12 +88,19 @@ test('dense profile metadata is allowed to wrap on a narrow screen', () => {
 
 // --- unfinished listings stay out of the public application ------------------
 
-test('the company-profile contract lab has no public route', () => {
-  assert.equal(existsSync(path.join(WEB, 'app/companies/[slug]/page.tsx')), false,
-    'an internal synthetic profile must not become a production page')
+test('retired synthetic company URLs are redirect-only tombstones', () => {
+  assert.equal(existsSync(path.join(WEB, 'app/companies/[slug]/page.tsx')), true)
+  for (const slug of ['demo', 'sample-roofworks', 'sample-windowcraft']) {
+    assert.match(retiredCompanyPage, new RegExp(`['"]${slug}['"]`))
+  }
+  assert.match(retiredCompanyPage, /httpEquiv="refresh" content="0; url=\/for-professionals\/"/)
+  assert.match(retiredCompanyPage, /canonical:\s*'\/for-professionals\/'/)
+  assert.match(retiredCompanyPage, /robots:\s*\{\s*index:\s*false,\s*follow:\s*true\s*\}/)
+  assert.doesNotMatch(retiredCompanyPage, /fixtures|findSyntheticProfile|VerificationFacts|Reviews/,
+    'a retired URL may redirect, but it must never render the internal directory lab')
 })
 
-test('robots lets search crawlers observe retired company URLs while the sitemap omits them', () => {
+test('robots lets search crawlers observe retired company redirects while the sitemap omits them', () => {
   assert.match(robots, /userAgent:\s*'Googlebot',\s*\.\.\.publicRules/)
   assert.match(robots, /userAgent:\s*'Bingbot',\s*\.\.\.publicRules/)
   assert.match(robots, /userAgent:\s*'OAI-SearchBot',\s*\.\.\.publicRules/)
