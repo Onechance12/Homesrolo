@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { HouseMark } from '../../../components/icons.tsx'
 import { exchangeHomeownerProviderCredential } from '../../../lib/port/transport.ts'
 import {
   homeownerEntryContext,
@@ -41,19 +43,29 @@ export default function CompleteSignInPage() {
   }, [])
 
   return (
-    <main className="gate__main" style={{ minHeight: '100dvh' }}>
-      <div className="gate__card" role="status" aria-live="polite">
-        <p className="mono">Homesrolo sign in</p>
-        <h1 style={{ fontSize: '1.5rem', marginTop: '0.45rem' }}>
-          {failed ? 'That sign-in link did not work.' : 'Opening your home file\u2026'}
-        </h1>
-        {failed && (
-          <p style={{ marginTop: '0.7rem' }}>
-            The link may be expired or already used. Return to the sign-in page and request a new one.
+    <div className="signin signin--complete">
+      <header className="signin__topbar">
+        <Link href="/" className="signin__brand" aria-label="Homesrolo home">
+          <span className="signin__brand-mark"><HouseMark /></span>
+          <span>homesrolo</span>
+        </Link>
+        <span className="signin__privacy"><span aria-hidden="true" /> Private by default</span>
+      </header>
+      <main className="signin__complete-main">
+        <section className="signin__panel signin__complete-panel" role="status" aria-live="polite">
+          <span className={`signin__complete-mark${failed ? ' signin__complete-mark--failed' : ''}`} aria-hidden="true">
+            {failed ? '!' : <HouseMark />}
+          </span>
+          <p className="signin__panel-kicker">Homesrolo sign in</p>
+          <h1>{failed ? 'That sign-in link did not work.' : 'Opening your Home Record\u2026'}</h1>
+          <p className="signin__complete-copy">
+            {failed
+              ? 'The link may be expired or already used. Return to sign in and request a fresh one.'
+              : 'Your private home information stays under your control.'}
           </p>
-        )}
-        {failed && <a className="btn btn--primary" href={retryHref} style={{ marginTop: '1rem' }}>Back to sign in</a>}
-      </div>
-    </main>
+          {failed && <a className="btn btn--primary" href={retryHref}>Back to sign in</a>}
+        </section>
+      </main>
+    </div>
   )
 }
