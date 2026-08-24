@@ -175,6 +175,7 @@ function repository(overrides: Partial<HomeownerRepositoryPort> = {}): Homeowner
 }
 
 const capabilities = {
+  emailCodeSignIn: false,
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,

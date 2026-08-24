@@ -37,6 +37,7 @@ function recordingTransport(replies: Record<string, unknown>) {
 
 /** Exactly homeownerApiCapabilitiesSchema. */
 const CAPABILITIES = {
+  emailCodeSignIn: false,
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
@@ -1121,13 +1122,16 @@ test('project review uses a server preview and submits only its exact reviewed d
   ])
 })
 
-test('magic-link request and sign-out use only their exact same-origin routes', async () => {
+test('email-code, legacy link, and sign-out use only their exact same-origin routes', async () => {
   const requests: TransportRequest[] = []
   const handoff = REF('hshr', 's')
   const port = createRemotePort(async request => {
     requests.push(request)
-    if (request.path.endsWith('/magic-link')) {
+    if (request.path.endsWith('/magic-link') || request.path.endsWith('/email-code')) {
       return { kind: 'reply', status: 202, body: { data: { accepted: true } } }
+    }
+    if (request.path.endsWith('/email-code/verify')) {
+      return { kind: 'reply', status: 200, body: { data: { signedIn: true } } }
     }
     return { kind: 'reply', status: 200, body: { data: { signedOut: true } } }
   })
@@ -1147,6 +1151,15 @@ test('magic-link request and sign-out use only their exact same-origin routes', 
   assert.deepEqual(await port.requestMagicLink(
     ' Person@Example.com ', null, 'hshr_short',
   ), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.requestEmailCode(' Person@Example.com '), {
+    ok: true, value: { accepted: true },
+  })
+  assert.deepEqual(await port.verifyEmailCode(
+    ' Person@Example.com ', '012345', 'storm_damage', handoff,
+  ), { ok: true, value: { signedIn: true } })
+  assert.deepEqual(await port.verifyEmailCode(
+    ' Person@Example.com ', '12345', null, handoff,
+  ), { ok: false, error: 'invalid' })
   await port.signOut()
   assert.deepEqual(requests, [
     { method: 'POST', path: '/api/v1/auth/magic-link', body: { email: 'person@example.com' } },
@@ -1159,6 +1172,16 @@ test('magic-link request and sign-out use only their exact same-origin routes', 
       method: 'POST',
       path: '/api/v1/auth/magic-link',
       body: { email: 'person@example.com', handoff },
+    },
+    {
+      method: 'POST', path: '/api/v1/auth/email-code',
+      body: { email: 'person@example.com' },
+    },
+    {
+      method: 'POST', path: '/api/v1/auth/email-code/verify',
+      body: {
+        email: 'person@example.com', code: '012345', intent: 'storm_damage', handoff,
+      },
     },
     { method: 'POST', path: '/api/v1/auth/signout' },
   ])

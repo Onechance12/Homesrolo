@@ -20,6 +20,7 @@ const configurationSchema = z.object({
   publishableKey: providerKey,
   secretKey: providerKey,
   appOrigin: httpsUrl,
+  emailCodeSignInEnabled: z.enum(['true', 'false']).optional().default('false'),
   projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
   photoCheckupsEnabled: z.enum(['true', 'false']).optional().default('false'),
@@ -31,6 +32,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly publishableKey: string
   readonly secretKey: string
   readonly appOrigin: string
+  readonly emailCodeSignInEnabled: boolean
   readonly projectQuotesEnabled: boolean
   readonly privateUploadsEnabled: boolean
   readonly photoCheckupsEnabled: boolean
@@ -65,6 +67,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
+    emailCodeSignInEnabled: environment.HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED,
     projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
     photoCheckupsEnabled: environment.HOMESROLO_PHOTO_CHECKUPS_ENABLED,
@@ -77,6 +80,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: parsed.data.publishableKey,
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
+    emailCodeSignInEnabled: parsed.data.emailCodeSignInEnabled === 'true',
     projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
     photoCheckupsEnabled: parsed.data.photoCheckupsEnabled === 'true',

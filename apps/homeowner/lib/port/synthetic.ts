@@ -70,6 +70,16 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async requestEmailCode() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async verifyEmailCode() {
+    await wait()
+    return err('unavailable')
+  },
+
   async enterDemoSession(displayName: string) {
     await wait()
     memory.session = {

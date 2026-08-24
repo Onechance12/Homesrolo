@@ -31,11 +31,16 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     publishableKey: CONFIG.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
+    emailCodeSignInEnabled: false,
     projectQuotesEnabled: false,
     privateUploadsEnabled: false,
     photoCheckupsEnabled: false,
     jobroloAttachmentsEnabled: false,
   })
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'true',
+  })?.emailCodeSignInEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PROJECT_QUOTES_ENABLED: 'true',
@@ -55,6 +60,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'yes',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED: 'yes',
   }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
@@ -110,7 +119,7 @@ test('opaque sessions are hashed at rest and cookies carry the browser security 
   assert.match(mintOpaqueRef('hprn'), /^hprn_[A-Za-z0-9_-]{43}$/)
 })
 
-test('magic-link completion mints a Homesrolo session and sends only its hash to persistence', async () => {
+test('email link and code completion mint only opaque hashed Homesrolo sessions', async () => {
   const authCalls: unknown[] = []
   const rpcCalls: unknown[] = []
   const authClient = {
@@ -165,10 +174,66 @@ test('magic-link completion mints a Homesrolo session and sends only its hash to
   assert.deepEqual(authCalls[2], { getUser: `header.${'x'.repeat(40)}.signature` })
   assert.equal((rpcCalls[1] as { name: string }).name, 'homesrolo_complete_magic_link')
 
+  assert.equal(await service.requestEmailCode(' Person@Example.com '), 'accepted')
+  const codeCompletion = await service.completeEmailCode(' Person@Example.com ', '012345')
+  assert.equal(codeCompletion.kind, 'complete')
+  assert.deepEqual(authCalls[3], {
+    email: 'person@example.com',
+    options: { shouldCreateUser: true },
+  })
+  assert.deepEqual(authCalls[4], {
+    email: 'person@example.com', token: '012345', type: 'email',
+  })
+  assert.equal((rpcCalls[2] as { name: string }).name, 'homesrolo_complete_magic_link')
+  if (codeCompletion.kind === 'complete') {
+    assert.equal(
+      (rpcCalls[2] as { input: Record<string, unknown> }).input.p_session_hash,
+      hashSessionHandle(codeCompletion.sessionHandle),
+    )
+  }
+
   await service.revokeSession(handle)
-  const revocation = rpcCalls[2] as { name: string; input: Record<string, unknown> }
+  const revocation = rpcCalls[3] as { name: string; input: Record<string, unknown> }
   assert.equal(revocation.name, 'homesrolo_revoke_homeowner_session')
   assert.equal(revocation.input.p_session_hash, hashSessionHandle(handle))
+})
+
+test('email-code verification separates bad codes, throttling, and provider outages', async () => {
+  const configuration = readHomeownerRuntimeConfiguration(CONFIG)
+  assert.ok(configuration)
+  const statuses = new Map([
+    ['111111', 400],
+    ['222222', 429],
+    ['333333', 0],
+    ['444444', 503],
+  ])
+  const verifyCalls: unknown[] = []
+  const authClient = {
+    auth: {
+      async signInWithOtp() { return { error: null } },
+      async verifyOtp(input: { token: string }) {
+        verifyCalls.push(input)
+        if (input.token === '555555') throw new Error('network detail')
+        return {
+          data: { user: null },
+          error: { status: statuses.get(input.token), message: 'provider detail' },
+        }
+      },
+    },
+  } as unknown as SupabaseClient
+  const service = new HomeownerAuthService({
+    auth: authClient,
+    service: { async rpc() { throw new Error('must not persist') } } as unknown as SupabaseClient,
+    configuration,
+  })
+
+  assert.deepEqual(await service.completeEmailCode('person@example.com', '12345'), { kind: 'invalid' })
+  assert.equal(verifyCalls.length, 0, 'malformed codes never reach the provider')
+  assert.deepEqual(await service.completeEmailCode('person@example.com', '111111'), { kind: 'invalid' })
+  assert.deepEqual(await service.completeEmailCode('person@example.com', '222222'), { kind: 'rate_limited' })
+  assert.deepEqual(await service.completeEmailCode('person@example.com', '333333'), { kind: 'unavailable' })
+  assert.deepEqual(await service.completeEmailCode('person@example.com', '444444'), { kind: 'unavailable' })
+  await assert.rejects(service.completeEmailCode('person@example.com', '555555'), /network detail/)
 })
 
 test('the migration is deny-by-default and exposes only narrow service functions', () => {

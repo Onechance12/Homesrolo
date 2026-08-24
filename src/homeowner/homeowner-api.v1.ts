@@ -67,6 +67,7 @@ const opaqueRef = (prefix: string) =>
   z.string().regex(new RegExp(`^${prefix}_${OPAQUE_BODY}$`))
 
 export const homeownerApiCapabilitiesSchema = z.object({
+  emailCodeSignIn: z.boolean(),
   magicLinkSignIn: z.boolean(),
   persistence: z.boolean(),
   projectQuotes: z.boolean(),

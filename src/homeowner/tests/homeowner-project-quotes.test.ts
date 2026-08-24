@@ -145,6 +145,7 @@ function service(input: {
     projectQuotes: input.quotes ?? quotePort(),
     now: () => now,
     capabilities: {
+      emailCodeSignIn: false,
       magicLinkSignIn: true,
       persistence: input.persistence ?? true,
       projectQuotes: input.projectQuotes ?? true,

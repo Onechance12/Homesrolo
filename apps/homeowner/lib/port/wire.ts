@@ -244,6 +244,7 @@ const RELATIONSHIP_LABELS = [
 ] as const satisfies readonly RelationshipLabel[]
 
 const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilities>({
+  emailCodeSignIn: boolean,
   magicLinkSignIn: boolean,
   persistence: boolean,
   projectQuotes: boolean,

@@ -274,6 +274,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
   // create-home command. The file inventory remains an allowlist.
   const ROUTE_ALLOWLIST = [
     'app/api/v1/auth/callback/route.ts',
+    'app/api/v1/auth/email-code/route.ts',
+    'app/api/v1/auth/email-code/verify/route.ts',
     'app/api/v1/auth/exchange/route.ts',
     'app/api/v1/auth/magic-link/route.ts',
     'app/api/v1/auth/signout/route.ts',
@@ -327,6 +329,12 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/auth/exchange/route.ts') {
       assert.match(content, /export async function POST/, `${rel} exchanges one provider credential`)
       assert.match(content, /exchangeHomeownerProviderSession/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/email-code/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} requests one email code`)
+      assert.match(content, /requestHomeownerEmailCode/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/email-code/verify/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} verifies one email code`)
+      assert.match(content, /verifyHomeownerEmailCode/, `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/auth/magic-link/route.ts') {
       assert.match(content, /export async function POST/, `${rel} requests one magic link`)
       assert.match(content, /requestHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
@@ -472,12 +480,27 @@ test('the browser shell does not import private contracts or other repositories'
   }
 })
 
-test('the magic-link form renders only on server-reported capability', () => {
+test('the same-browser email-code form is preferred and every auth form is capability-gated', () => {
   const signin = read('app/signin/page.tsx')
+  assert.match(signin, /capabilities\.emailCodeSignIn \?/,
+    'the code form is gated on the exact server capability')
   assert.match(signin, /capabilities\.magicLinkSignIn \?/,
-    'the form is gated on the session capability, never assumed')
+    'the migration fallback remains independently capability-gated')
   assert.match(signin, /If that address can sign in/,
     'acceptance copy is generic and does not reveal whether an address exists')
+  assert.match(signin, /autoComplete="one-time-code"/)
+  assert.match(signin, /inputMode="numeric"/)
+  assert.match(signin, /type="text"/,
+    'a text input preserves leading-zero codes')
+  assert.match(signin, /Keep this page open/)
+  assert.match(signin, /const requestedEmail = email\.trim\(\)\.toLowerCase\(\)[\s\S]*setDestinationEmail\(requestedEmail\)/,
+    'the accepted request remains bound to the exact submitted address')
+  assert.match(signin, /resendAvailableAt - Date\.now\(\)/,
+    'resend timing uses an absolute deadline after background timer throttling')
+  assert.match(signin, /disabled=\{requestState === 'sending'\}/,
+    'the address cannot change while its request is in flight')
+  assert.match(signin, /port\.verifyEmailCode\([\s\S]*context\.intent, context\.handoff/,
+    'bounded entry context is preserved through server-side code verification')
   assert.doesNotMatch(signin, /email (was|has been) sent/i,
     'nothing claims a send the server did not accept')
   assert.match(signin, /mode === 'synthetic'\s*\?\s*\(?\s*<SyntheticEntry/,
@@ -895,6 +918,7 @@ test('one opaque handoff context survives auth and home selection without auto-c
   assert.match(helper, /\^hshr_\[A-Za-z0-9_-\]\{43\}\$/,
     'only one opaque share reference is accepted')
   assert.match(signin, /port\.requestMagicLink\(email\.trim\(\), context\.intent, context\.handoff\)/)
+  assert.match(signin, /port\.verifyEmailCode\([\s\S]*context\.intent, context\.handoff/)
   assert.match(authComplete, /withHomeownerEntryContext\('\/homes', context\)/)
   assert.match(authHttp, /signInPathForEntryContext\(rawIntent, rawHandoff\)/,
     'a valid handoff survives an expired provider token so the homeowner can sign in again')

@@ -121,6 +121,7 @@ function handler() {
     commands,
     now: () => now,
     capabilities: {
+      emailCodeSignIn: false,
       magicLinkSignIn: false,
       persistence: true,
       projectQuotes: false,
@@ -212,6 +213,7 @@ test('unexpected repository errors are a generic unavailable problem', async () 
     commands,
     now: () => now,
     capabilities: {
+      emailCodeSignIn: false,
       magicLinkSignIn: false,
       persistence: false,
       projectQuotes: false,

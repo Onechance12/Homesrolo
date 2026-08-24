@@ -15,12 +15,12 @@ schema must never make the home a child row of an account.
 ## Phase 1 — a real homeowner, a real home
 
 1. **Identity provider** behind `HomeownerIdentityPort.resolvePrincipal`.
-   Magic-link email sign-in (`capabilities.magicLinkSignIn`), no passwords.
-   Needs: `POST /api/v1/session/magic-link` accepting `{ email }` with a
-   generic 202 that never reveals whether the address exists, a token
-   redemption route that mints the session, and `DELETE /api/v1/session`.
-   The browser client already hides the email form until the capability is
-   true and already treats acceptance generically.
+   Same-browser six-digit email-code sign-in (`capabilities.emailCodeSignIn`),
+   no passwords. `POST /api/v1/auth/email-code` accepts exactly `{ email }`
+   with a generic 202. `POST /api/v1/auth/email-code/verify` verifies the
+   provider token server-side and mints the opaque Homesrolo session in the
+   browser that submitted the code. The older magic-link callback remains a
+   migration fallback but is not the primary interaction.
 
 2. **Session mint.** Cookie name `hrolo_session` (one constant in
    `apps/homeowner/lib/server/cookie.ts` — rename freely); value is an opaque

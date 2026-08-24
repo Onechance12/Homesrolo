@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { use, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { usePort, usePortMode, useSession } from '../../lib/port/provider.tsx'
 import { SYNTHETIC_NOTICE } from '../../lib/port/types.ts'
 import {
@@ -19,11 +19,268 @@ import { Skeleton } from '../../components/states.tsx'
  * Synthetic mode (the default): an honest sample-account doorway. No account
  * exists, and the screen says so.
  *
- * Remote mode: the email magic-link form renders ONLY when the server's own
- * session capabilities report it live. Acceptance shows a generic message that
- * never reveals whether an address exists, and nothing claims an email was
- * sent unless the server accepted the request.
+ * Remote mode: the same-browser email-code form is preferred when the server
+ * reports it live. The legacy link form remains a capability-gated fallback
+ * during migration. Neither request path reveals whether an address exists.
  */
+
+type EmailCodeRequestState = 'idle' | 'sending' | 'rate_limited' | 'invalid' | 'failed'
+type EmailCodeVerifyState = 'idle' | 'verifying' | 'rate_limited' | 'invalid' | 'failed'
+
+function maskedEmail(value: string): string {
+  const [local = '', domain = ''] = value.split('@')
+  if (!local || !domain) return value
+  const hidden = '•'.repeat(Math.min(5, Math.max(2, local.length - 1)))
+  return `${local.slice(0, 1)}${hidden}@${domain}`
+}
+
+function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
+  const port = usePort()
+  const { refresh } = useSession()
+  const router = useRouter()
+  const emailInput = useRef<HTMLInputElement>(null)
+  const codeInput = useRef<HTMLInputElement>(null)
+  const operationGeneration = useRef(0)
+  const [stage, setStage] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState('')
+  const [destinationEmail, setDestinationEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [requestState, setRequestState] = useState<EmailCodeRequestState>('idle')
+  const [verifyState, setVerifyState] = useState<EmailCodeVerifyState>('idle')
+  const [resendAvailableAt, setResendAvailableAt] = useState(0)
+  const [secondsUntilResend, setSecondsUntilResend] = useState(0)
+
+  useEffect(() => {
+    if (stage === 'code') codeInput.current?.focus()
+    else {
+      emailInput.current?.focus()
+      if (emailInput.current?.value) emailInput.current.select()
+    }
+  }, [stage])
+
+  useEffect(() => {
+    if (stage !== 'code' || resendAvailableAt <= 0) return
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1_000))
+      setSecondsUntilResend(remaining)
+      if (remaining === 0) setResendAvailableAt(0)
+    }
+    updateCountdown()
+    const interval = window.setInterval(updateCountdown, 1_000)
+    window.addEventListener('focus', updateCountdown)
+    document.addEventListener('visibilitychange', updateCountdown)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', updateCountdown)
+      document.removeEventListener('visibilitychange', updateCountdown)
+    }
+  }, [stage, resendAvailableAt])
+
+  async function sendCode(address: string) {
+    if (requestState === 'sending') return false
+    setRequestState('sending')
+    const result = await port.requestEmailCode(address)
+    if (result.ok) {
+      setRequestState('idle')
+      setVerifyState('idle')
+      setResendAvailableAt(Date.now() + 60_000)
+      setSecondsUntilResend(60)
+      return true
+    }
+    if (result.error === 'rate_limited') setRequestState('rate_limited')
+    else if (result.error === 'invalid') setRequestState('invalid')
+    else setRequestState('failed')
+    return false
+  }
+
+  async function request(event: React.FormEvent) {
+    event.preventDefault()
+    const requestedEmail = email.trim().toLowerCase()
+    if (await sendCode(requestedEmail)) {
+      setDestinationEmail(requestedEmail)
+      setStage('code')
+    }
+  }
+
+  async function verify(event: React.FormEvent) {
+    event.preventDefault()
+    if (verifyState === 'verifying') return
+    if (!/^\d{6}$/.test(code)) {
+      setVerifyState('invalid')
+      return
+    }
+    setRequestState('idle')
+    setVerifyState('verifying')
+    const generation = ++operationGeneration.current
+    const result = await port.verifyEmailCode(
+      destinationEmail, code, context.intent, context.handoff,
+    )
+    if (generation !== operationGeneration.current) return
+    if (result.ok) {
+      await refresh()
+      router.replace(withHomeownerEntryContext('/homes', context))
+      return
+    }
+    if (result.error === 'rate_limited') setVerifyState('rate_limited')
+    else if (result.error === 'invalid') {
+      setVerifyState('invalid')
+      window.setTimeout(() => codeInput.current?.select(), 0)
+    } else setVerifyState('failed')
+  }
+
+  async function resend() {
+    if (secondsUntilResend > 0 || requestState === 'sending' || verifyState === 'verifying') return
+    setVerifyState('idle')
+    if (await sendCode(destinationEmail)) {
+      setCode('')
+      window.setTimeout(() => codeInput.current?.focus(), 0)
+    }
+  }
+
+  function changeEmail() {
+    if (verifyState === 'verifying') return
+    operationGeneration.current += 1
+    setCode('')
+    setDestinationEmail('')
+    setRequestState('idle')
+    setVerifyState('idle')
+    setResendAvailableAt(0)
+    setSecondsUntilResend(0)
+    setStage('email')
+  }
+
+  if (stage === 'code') {
+    const errorId = verifyState === 'invalid' || verifyState === 'rate_limited'
+      || verifyState === 'failed' || requestState === 'rate_limited'
+      || requestState === 'invalid' || requestState === 'failed'
+      ? 'signin-code-error'
+      : null
+    return (
+      <form className="signin__form signin__code-form" onSubmit={verify}>
+        <div className="signin__code-heading" role="status">
+          <span className="signin__status-mark" aria-hidden="true">✓</span>
+          <div>
+            <h3>Enter the code here</h3>
+            <p>If that address can sign in, use the six-digit code sent to <strong>{maskedEmail(destinationEmail)}</strong>.</p>
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="signin-code">6-digit code</label>
+          <input
+            ref={codeInput}
+            id="signin-code"
+            className="signin__code-input"
+            type="text"
+            required
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            enterKeyHint="done"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            value={code}
+            onChange={event => {
+              const normalized = event.target.value.replace(/[\s-]/g, '')
+              if (/^\d{0,6}$/.test(normalized)) {
+                setCode(normalized)
+                if (verifyState === 'invalid' || verifyState === 'failed') {
+                  setVerifyState('idle')
+                }
+              }
+            }}
+            aria-describedby={['signin-code-help', errorId].filter(Boolean).join(' ')}
+            aria-invalid={verifyState === 'invalid'}
+          />
+          <span id="signin-code-help" className="field__hint">
+            Read the email wherever you like, then return here and enter the code.
+          </span>
+        </div>
+        {verifyState === 'invalid' && (
+          <p id="signin-code-error" role="alert" className="signin__error">
+            That code is invalid or expired. Check all six digits or request a new code.
+          </p>
+        )}
+        {(verifyState === 'rate_limited' || requestState === 'rate_limited') && (
+          <p id="signin-code-error" role="alert" className="signin__error">
+            Too many attempts. Wait a minute, then try again.
+          </p>
+        )}
+        {(verifyState === 'failed' || requestState === 'invalid' || requestState === 'failed') && (
+          <p id="signin-code-error" role="alert" className="signin__error">
+            That did not go through. Try again in a moment.
+          </p>
+        )}
+        <div className="signin__action">
+          <button
+            type="submit"
+            className="btn btn--primary btn--block"
+            disabled={verifyState === 'verifying' || code.length !== 6}
+          >
+            {verifyState === 'verifying' ? 'Checking your code…' : 'Verify and open my home'}
+          </button>
+        </div>
+        <div className="signin__code-options">
+          <button
+            type="button"
+            className="signin__try-again"
+            onClick={changeEmail}
+            disabled={verifyState === 'verifying'}
+          >
+            Change email
+          </button>
+          <button
+            type="button"
+            className="signin__try-again"
+            onClick={resend}
+            disabled={secondsUntilResend > 0 || requestState === 'sending' || verifyState === 'verifying'}
+          >
+            {requestState === 'sending'
+              ? 'Requesting a new code…'
+              : secondsUntilResend > 0
+                ? `Send a new code in ${secondsUntilResend}s`
+                : 'Send a new code'}
+          </button>
+          <span className="sr-only" aria-live="polite">
+            {secondsUntilResend === 0 ? 'You can request a new code now.' : ''}
+          </span>
+        </div>
+      </form>
+    )
+  }
+
+  return (
+    <form className="signin__form" onSubmit={request}>
+      <div className="field">
+        <label htmlFor="signin-email">Email</label>
+        <input
+          ref={emailInput}
+          id="signin-email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          disabled={requestState === 'sending'}
+          onChange={event => setEmail(event.target.value)}
+          placeholder="you@example.com"
+        />
+        <span className="field__hint">We&rsquo;ll email a six-digit code. No password to remember.</span>
+      </div>
+      {requestState === 'rate_limited' && (
+        <p role="alert" className="signin__error">Too many requests. Wait a minute, then try again.</p>
+      )}
+      {requestState === 'invalid' && (
+        <p role="alert" className="signin__error">Check the email address and try again.</p>
+      )}
+      {requestState === 'failed' && (
+        <p role="alert" className="signin__error">That did not go through. Try again in a moment.</p>
+      )}
+      <div className="signin__action">
+        <button type="submit" className="btn btn--primary btn--block" disabled={requestState === 'sending'}>
+          {requestState === 'sending' ? 'Requesting your code…' : 'Email me a sign-in code'}
+        </button>
+      </div>
+    </form>
+  )
+}
 
 type MagicLinkState =
   | { kind: 'idle' }
@@ -146,6 +403,9 @@ export default function SignInPage({
   const isHandoffEntry = handoff !== null
   const mode = usePortMode()
   const { state: session } = useSession()
+  const emailCodeAvailable = mode === 'remote'
+    && session.kind === 'signed_out'
+    && session.capabilities.emailCodeSignIn
   const eyebrow = isHandoffEntry
     ? 'COMPLETION RECORD'
     : isRoofInspectionEntry
@@ -204,7 +464,9 @@ export default function SignInPage({
             {isHandoffEntry ? 'Choose where this record belongs' : 'Continue with your email'}
           </h2>
           <p className="signin__panel-copy">
-            We use a private, one-time link so there is no password to keep or reuse.
+            {emailCodeAvailable
+              ? 'We’ll email a six-digit code. Keep this page open and enter it here—no browser switching.'
+              : 'We use a private, one-time link so there is no password to keep or reuse.'}
           </p>
           {mode === 'synthetic' ? (
             <SyntheticEntry />
@@ -227,6 +489,10 @@ export default function SignInPage({
                   : intent ? 'Continue my roof project' : 'Go to your homes'}
               </Link>
             </div>
+          ) : session.capabilities.emailCodeSignIn ? (
+            <div className="signin__form-wrap">
+              <EmailCodeForm context={context} />
+            </div>
           ) : session.capabilities.magicLinkSignIn ? (
             <div className="signin__form-wrap">
               <MagicLinkForm context={context} />
@@ -240,7 +506,11 @@ export default function SignInPage({
               </p>
             </div>
           )}
-          <p className="signin__panel-footer">One secure link. No password. No public address page.</p>
+          <p className="signin__panel-footer">
+            {emailCodeAvailable
+              ? 'One secure code. Same browser. No password. No public address page.'
+              : 'One secure link. No password. No public address page.'}
+          </p>
         </section>
       </main>
     </div>

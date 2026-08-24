@@ -67,6 +67,7 @@ const unconfiguredCommands: HomeownerCommandPort = {
 }
 
 const UNCONFIGURED_CAPABILITIES = Object.freeze({
+  emailCodeSignIn: false,
   magicLinkSignIn: false,
   persistence: false,
   projectQuotes: false,
@@ -161,7 +162,10 @@ export function homeownerApiService(): HomeownerApiService {
         : {}),
       now: () => new Date().toISOString(),
       capabilities: provider ? Object.freeze({
-        magicLinkSignIn: true,
+        // This stays false until both Supabase email templates and production
+        // SMTP have been verified to deliver a six-digit {{ .Token }}.
+        emailCodeSignIn: configuration?.emailCodeSignInEnabled === true,
+        magicLinkSignIn: configuration?.emailCodeSignInEnabled !== true,
         persistence: true,
         projectQuotes: configuration?.projectQuotesEnabled === true,
         homeResearch: homeResearchClient !== null,
