@@ -11,6 +11,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const RISKY_CLAIMS = /do not call your insurance|look before you file|burn(?:ing)? a claim|strongest thing a claim|always goes first|more roof damage per year than any single storm/i
 const roofWatchHub = readFileSync('apps/web/app/roof-watch/page.tsx', 'utf8')
 const roofWatchGuidesHub = readFileSync('apps/web/app/roof-watch/guides/page.tsx', 'utf8')
+const roofWatchLocationCheck = readFileSync('apps/web/components/RoofWatchLocationCheck.tsx', 'utf8')
 
 function fiveWordShingles(copy: string): Set<string> {
   const words = copy.toLowerCase().match(/[a-z0-9]+/g) ?? []
@@ -53,13 +54,23 @@ test('Roof Watch checks Texas and Oklahoma without inventing Oklahoma city pages
   assert.match(roofWatchHub, /Availability is confirmed address by address/)
   assert.match(roofWatchHub, /'State', name: 'Texas'/)
   assert.match(roofWatchHub, /'State', name: 'Oklahoma'/)
-  assert.match(roofWatchHub, /Current detailed Texas city pages/)
+  assert.match(roofWatchHub, /<RoofWatchLocationCheck \/>/)
+  assert.match(roofWatchHub, /Browse six researched Texas locations/)
+  assert.match(roofWatchHub, /You can check any Texas or Oklahoma city above/)
   assert.match(roofWatchHub, /Home Watch · Roofs · Texas \+ Oklahoma/)
   assert.match(roofWatchHub, /Roof Watch sits inside Home Watch/)
   assert.doesNotMatch(roofWatchHub, /North Texas/)
   assert.match(roofWatchGuidesHub, /Each guide identifies its region and sources/)
   assert.doesNotMatch(roofWatchGuidesHub, /Texas and Oklahoma homeowners/)
   assert.equal(ROOF_WATCH_CITIES.some(city => city.slug.includes('oklahoma') || city.name.includes('Oklahoma')), false)
+  assert.match(roofWatchLocationCheck, /Nothing is submitted on this page/)
+  assert.match(roofWatchLocationCheck, /does not check or promise coverage/)
+  assert.match(roofWatchLocationCheck, /Open my availability text/)
+  assert.match(roofWatchLocationCheck, /prefix >= 730/)
+  assert.match(roofWatchLocationCheck, /prefix >= 750/)
+  assert.match(roofWatchLocationCheck, /maxLength=\{80\}/)
+  assert.match(roofWatchLocationCheck, /type="button"/)
+  assert.doesNotMatch(roofWatchLocationCheck, /<form/)
 })
 
 test('Roof Watch city pages keep distinct local substance', () => {

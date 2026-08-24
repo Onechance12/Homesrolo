@@ -130,6 +130,7 @@ const FORBIDDEN_SOURCE = [
   ['auth library', /\b(?:next-auth|@clerk\/|@auth\/core|jsonwebtoken|bcrypt)\b/],
   ['payment library', /\b(?:stripe|@stripe\/|paypal|braintree)\b/],
   ['analytics or cookies', /\b(?:gtag|googletagmanager|analytics\.track|mixpanel|posthog|document\.cookie)\b/],
+  ['browser persistence or geolocation', /\b(?:localStorage|sessionStorage|navigator\.geolocation)\b/],
   ['file upload', /\b(?:multer|formidable|<input[^>]+type=["']file)/],
   ['jobrolo application import', /from\s+['"][^'"]*\/(?:jobrolo|thresher|hcn|chance-brain)\//],
   ['telephone link (public contact is SMS-only)', /\btel:/i],
