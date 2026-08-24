@@ -1,0 +1,13 @@
+[build]
+  command = "npm ci && npm --prefix apps/homeowner ci && npm --prefix apps/homeowner run build"
+  publish = "apps/homeowner/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NETLIFY_NEXT_SKEW_PROTECTION = "true"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"

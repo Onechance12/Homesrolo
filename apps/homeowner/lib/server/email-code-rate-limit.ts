@@ -65,14 +65,16 @@ function normalizedAddress(value: string | null): string | null {
 }
 
 /**
- * Render routes public ingress through Cloudflare, whose single-value
- * CF-Connecting-IP header is the stable original-client boundary. We do not
- * fall back to client-controlled forwarding headers: a missing or malformed
- * Cloudflare value enters one shared, conservative bucket instead of bypassing
- * throttling.
+ * Render routes public ingress through Cloudflare; Netlify supplies its own
+ * single-value connection header after stripping any visitor-supplied value.
+ * Prefer Cloudflare while the rollback deployment exists, then accept the
+ * Netlify boundary. We never fall back to generic forwarding headers: a
+ * missing or malformed trusted value enters one shared, conservative bucket
+ * instead of bypassing throttling.
  */
 export function emailCodeClientAddress(request: Request): string {
   return normalizedAddress(request.headers.get('cf-connecting-ip'))
+    ?? normalizedAddress(request.headers.get('x-nf-client-connection-ip'))
     ?? 'unresolved'
 }
 

@@ -136,6 +136,17 @@ test('client addressing is bounded and malformed proxy data cannot bypass a shar
     },
   })
   assert.equal(emailCodeClientAddress(cloudflareWins), '198.51.100.5')
+  const netlifyIngress = new Request(`${APP_ORIGIN}/`, {
+    headers: { 'x-nf-client-connection-ip': '203.0.113.55' },
+  })
+  assert.equal(emailCodeClientAddress(netlifyIngress), '203.0.113.55')
+  const cloudflareStillWinsDuringRollback = new Request(`${APP_ORIGIN}/`, {
+    headers: {
+      'cf-connecting-ip': '198.51.100.6',
+      'x-nf-client-connection-ip': '203.0.113.56',
+    },
+  })
+  assert.equal(emailCodeClientAddress(cloudflareStillWinsDuringRollback), '198.51.100.6')
   const spoofedForwardingOnly = new Request(`${APP_ORIGIN}/`, {
     headers: {
       'x-forwarded-for': '198.51.100.7',

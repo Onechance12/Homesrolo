@@ -8,6 +8,7 @@ import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { RELATIONSHIP_COPY } from '../../../../components/relationship.ts'
 import { homeLabel, homeLocality } from '../../../../lib/port/types.ts'
+import { InstallHomesrolo } from '../../../../components/PwaRegistrar.tsx'
 
 /** Account controls and truthful, read-only context for the currently open home. */
 export default function SettingsPage({ params }: { params: Promise<{ homeId: string }> }) {
@@ -78,6 +79,8 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
           </>
         )}
       </section>
+
+      <InstallHomesrolo />
     </div>
   )
 }

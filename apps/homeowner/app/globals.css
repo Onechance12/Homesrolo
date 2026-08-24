@@ -77,6 +77,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+@media (display-mode: standalone) {
+  body { padding-top: env(safe-area-inset-top); }
+  .tabbar { padding-bottom: env(safe-area-inset-bottom); }
+}
+
 h1, h2, h3 {
   font-family: var(--font-display);
   font-weight: 760;
@@ -129,6 +134,26 @@ a:hover { color: var(--brand-deep); }
   letter-spacing: 0.04em;
   color: var(--ink-faint);
 }
+
+.install-state {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--ink-soft);
+}
+.install-state > span {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--signal);
+  color: var(--night);
+  font-weight: 900;
+}
+.install-state strong { display: block; color: var(--ink); }
+.install-state p { margin-top: 0.1rem; }
 
 /* =============================================================================
    Demo banner — every screen carries it; screenshots cannot overclaim.
