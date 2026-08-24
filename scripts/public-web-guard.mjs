@@ -307,10 +307,36 @@ if (!existsSync(OUT)) {
     }
   }
 
-  // The directory model is an internal contract lab. No sample company may
-  // escape into the production static export.
+  // Render has retained deleted static files across deploys. The only company
+  // pages allowed in the export are explicit noindex redirect shims for the
+  // three synthetic URLs that escaped in an older build. They must contain no
+  // old company content and must send readers to the professional overview.
   const companyPages = walk(path.join(OUT, 'companies'), name => name.endsWith('.html'), new Set([]))
-  if (companyPages.length > 0) fail(`production export contains ${companyPages.length} synthetic company page(s)`)
+  const retiredCompanyPages = new Set([
+    'companies/demo/index.html',
+    'companies/sample-roofworks/index.html',
+    'companies/sample-windowcraft/index.html',
+  ])
+  if (companyPages.length !== retiredCompanyPages.size) {
+    fail(`production export must contain exactly ${retiredCompanyPages.size} retired company redirect shims`)
+  }
+  for (const file of companyPages) {
+    const relative = path.relative(OUT, file).split(path.sep).join('/')
+    const page = readFileSync(file, 'utf8')
+    if (!retiredCompanyPages.has(relative)) fail(`${relative}: unexpected company page in production export`)
+    if (!/http-equiv="refresh" content="0; url=\/for-professionals\/"/i.test(page)) {
+      fail(`${relative}: retired company URL does not immediately redirect to /for-professionals/`)
+    }
+    if (!/name="robots" content="noindex, follow"/i.test(page)) {
+      fail(`${relative}: retired company URL must be noindex, follow`)
+    }
+    if (!/rel="canonical" href="https:\/\/homesrolo\.com\/for-professionals\/"/i.test(page)) {
+      fail(`${relative}: retired company URL must canonicalize to /for-professionals/`)
+    }
+    if (/Demo Exteriors|Aspen Sample Roofworks|Meridian Sample Windowcraft|Sample Listing/i.test(page)) {
+      fail(`${relative}: old synthetic company content escaped into the redirect shim`)
+    }
+  }
 
   const robotsPath = path.join(OUT, 'robots.txt')
   if (!existsSync(robotsPath)) fail('robots.txt was not exported')
@@ -324,7 +350,7 @@ if (!existsSync(OUT)) {
       }
       if (!/^Allow:\s*\/$/im.test(group)) fail(`robots.txt must allow / for ${crawler}`)
       if (/^Disallow:\s*\/companies\/$/im.test(group)) {
-        fail(`robots.txt must let ${crawler} fetch retired company URLs and observe the 404`)
+        fail(`robots.txt must let ${crawler} fetch retired company URLs and observe the redirect`)
       }
     }
     const gptBotGroup = robots.match(/User-Agent:\s*GPTBot\s*([\s\S]*?)(?=\nUser-Agent:|\nSitemap:|$)/i)?.[1]
