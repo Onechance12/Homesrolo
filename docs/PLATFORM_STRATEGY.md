@@ -7,7 +7,7 @@ next five decisions are made against a destination rather than one at a time.
 
 **Homesrolo is the system of record for a home, and chat is how you use it.**
 
-The test of whether it worked: when a house sells, the passport goes with it,
+The test of whether it worked: when a house sells, the deliberately transferable Home Record goes with it,
 and the buyer's first question is "let me see the Homesrolo file" — the way a
 used-car buyer asks for the Carfax before they ask the seller anything.
 
@@ -99,7 +99,7 @@ built:
    valuable, which is a real return even if Homesrolo bills nothing.
 3. **Academy tuition.** Legitimate under the rules: a fee buys a seat, never a
    pass. Small revenue, large trust dividend, and it is the marketing.
-4. **The transaction.** A passport at closing — disclosure support, buyer
+4. **The transaction.** A Home Record handoff at closing — disclosure support, buyer
    confidence, agent tooling. Highest value per event, latest to arrive, and the
    most regulated.
 
@@ -148,7 +148,7 @@ pest, HVAC. This is what turns the home file from a filing cabinet into
 something opened weekly. It is also where the first released records come from
 at volume, because small recurring jobs vastly outnumber roof replacements.
 
-**Phase 4 — the transaction.** Passport transfer at sale, disclosure support,
+**Phase 4 — the transaction.** Home Record transfer at sale, disclosure support,
 new-owner onboarding. Requires the FCRA question answered first.
 
 Per-company chat sits at Phase 3 or later. It sounds small and is not: the

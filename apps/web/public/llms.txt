@@ -1,47 +1,54 @@
 # Homesrolo
 
-> Homesrolo helps homeowners understand major home projects and keep a durable history of the work performed on a property. Public guides show the sources behind material facts. Home records remain private unless the homeowner chooses to share them.
+> Homesrolo gives a homeowner one private Home Record for home care, projects, repeatable photo checkups, files, and the decisions that shape a home. Signed-in home records stay separate from the public homeowner guides.
+
+## Start with the home
+
+- [Home care](https://homesrolo.com/home-care/): A practical map for seasonal maintenance, safety checks, home systems, exterior care, and knowing when to stop and call a professional.
+- [Home projects](https://homesrolo.com/home-projects/): Plan repairs, maintenance, remodels, upgrades, and new construction; compare written scopes and close out the work clearly.
+- [Home record](https://homesrolo.com/home-record/): What a useful property history should remember and how to rebuild the record when details are scattered.
+- [Homeowner guides](https://homesrolo.com/guides/): Browse practical guidance by the problem, system, or project in front of you.
+- [How Homesrolo works](https://homesrolo.com/how-it-works/): Create a home workspace, add past or current projects, and use repeatable photo checkups.
+
+## Whole-home topics
+
+- Heating and cooling, filters, service, and comfort
+- Plumbing, shutoffs, leaks, fixtures, and water heating
+- Electrical panels, protection devices, alarms, and lighting
+- Interiors, kitchens, bathrooms, paint, floors, and remodeling
+- Appliances and their service or replacement history
+- Exterior walls, windows, doors, drainage, gutters, and yard care
+- New construction selections, walkthroughs, changes, and handoff
+- Home safety, urgent boundaries, and when to use a qualified professional
 
 ## Roofing
 
 - [Texas roofing center](https://homesrolo.com/services/roofing/): Cost, materials, contractor checks, insurance boundaries, and Dallas Fort Worth rules.
 - [Repair or replace a roof](https://homesrolo.com/services/roofing/repair-or-replace/): Evidence that separates a durable repair from a complete roof replacement.
-- [Roof replacement cost](https://homesrolo.com/services/roofing/cost/): Dallas market benchmarks and a line-by-line estimate comparison.
+- [Roof replacement cost](https://homesrolo.com/services/roofing/cost/): Why one generic price cannot quote a roof and how to compare actual written proposals.
 - [Roofing materials](https://homesrolo.com/services/roofing/materials/): Asphalt, impact-resistant, metal, tile, slate, composite, and the full roof assembly.
-- [Contractor checklist](https://homesrolo.com/services/roofing/choose-a-contractor/): Documents to verify and 12 questions to ask before signing.
+- [Contractor checklist](https://homesrolo.com/services/roofing/choose-a-contractor/): Documents to verify and questions to ask before signing.
 - [Dallas Fort Worth roofing](https://homesrolo.com/services/roofing/dfw/): North Texas weather, local rules, and project records.
-- [Dallas roofing](https://homesrolo.com/services/roofing/dallas/): Dallas roofing permits, bids, and closeout records.
-- [Fort Worth roofing](https://homesrolo.com/services/roofing/fort-worth/): Fort Worth permit triggers, wood repairs, and scope details.
 
 ## Roof Watch
 
-- [Roof Watch](https://homesrolo.com/roof-watch/): Current program description, written limits, inspection scope, archival field photos, service area, and availability instructions.
-- [Roof Watch homeowner guides](https://homesrolo.com/roof-watch/guides/): Sourced guidance for hail response, roof reports, North Texas heat, and ventilation.
-- [The first 72 hours after hail](https://homesrolo.com/roof-watch/guides/hail-first-72-hours/): Safety, documentation, temporary protection, and prompt insurer notice, with Texas Department of Insurance sources.
+- [Roof Watch](https://homesrolo.com/roof-watch/): Written program limits, inspection scope, archival field photos, service area, and availability instructions.
+- [Roof Watch homeowner guides](https://homesrolo.com/roof-watch/guides/): Sourced guidance for hail response, roof reports, North Texas heat, ventilation, and selling a documented home.
+- [The first 72 hours after hail](https://homesrolo.com/roof-watch/guides/hail-first-72-hours/): Safety, documentation, temporary protection, and prompt insurer notice.
 - [What belongs in a roof inspection report](https://homesrolo.com/roof-watch/guides/roof-inspection-report/): A practical checklist for locations, observations, photographs, limits, and next steps.
-- [What Texas heat does to a roof](https://homesrolo.com/roof-watch/guides/texas-heat-roof/): Heat, ventilation, attic, and roof-surface context with manufacturer and building-science sources.
 
-### Current Roof Watch service-area pages
-
-- [Keller](https://homesrolo.com/roof-watch/keller/)
-- [Roanoke](https://homesrolo.com/roof-watch/roanoke/)
-- [Grapevine](https://homesrolo.com/roof-watch/grapevine/)
-- [Southlake](https://homesrolo.com/roof-watch/southlake/)
-- [Flower Mound](https://homesrolo.com/roof-watch/flower-mound/)
-- [Fort Worth](https://homesrolo.com/roof-watch/fort-worth/)
-
-## Trust and method
+## Trust and research
 
 - [About Homesrolo](https://homesrolo.com/about/)
-- [Editorial standards](https://homesrolo.com/editorial-standards/)
-- [How Homesrolo verifies facts](https://homesrolo.com/how-we-verify/)
+- [How Homesrolo researches homeowner guides](https://homesrolo.com/editorial-standards/)
+- [Privacy](https://homesrolo.com/privacy/)
+- [Security](https://homesrolo.com/security/)
 - [Sitemap](https://homesrolo.com/sitemap.xml)
 
 ## Important limits
 
-- Roof Watch is a Homesrolo-coordinated program. An identified roofing professional performs the visit; current address coverage, the assigned professional, and written program limits are confirmed before scheduling.
-- Roof Watch documents visible roof condition. It does not certify a roof, decide cause or insurance coverage, file or negotiate claims, or require the homeowner to award later work to the inspecting professional.
-- Field photos on the program page were selected from the operator's archival roof-photo library. They are documentation examples, not Roof Watch findings about a particular home.
-- Cost figures are dated market benchmarks, not quotes for a particular home.
-- Permit rules and laws can change. The current source is linked from each guide.
-- Homesrolo is built around the home and its project record, not a pay-to-rank contractor directory.
+- A photo checkup can show change between dated views; it does not diagnose a cause or prove that work is safe.
+- Homesrolo does not quote a particular home, choose a professional, decide insurance coverage, or act as a contractor or public adjuster.
+- Cost figures are dated market benchmarks, not bids for a particular home.
+- Permit rules, laws, products, and warranty terms can change. Current sources are linked from the relevant guide.
+- Roof Watch is a Homesrolo-coordinated local program performed by an identified roofing professional under written limits supplied before scheduling.

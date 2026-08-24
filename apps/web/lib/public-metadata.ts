@@ -8,6 +8,7 @@ type PublicPageMetadata = {
   readonly socialTitle?: string
   readonly socialDescription?: string
   readonly openGraphType?: 'website' | 'article'
+  readonly index?: boolean
 }
 
 /** Keep ordinary page, canonical, Open Graph, and X/Twitter copy in sync. */
@@ -18,6 +19,7 @@ export function publicPageMetadata({
   socialTitle = title,
   socialDescription = description,
   openGraphType = 'website',
+  index = true,
 }: PublicPageMetadata): Metadata {
   return {
     title,
@@ -36,5 +38,6 @@ export function publicPageMetadata({
       description: socialDescription,
       images: [{ url: '/homesrolo-social-card.png', alt: SOCIAL_CARD_ALT }],
     },
+    ...(!index ? { robots: { index: false, follow: true } } : {}),
   }
 }

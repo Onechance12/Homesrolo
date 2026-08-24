@@ -433,22 +433,23 @@ export const ABOUT_HOMESROLO: readonly EducationalSection[] = Object.freeze([
   {
     heading: 'The idea behind Homesrolo',
     body: Object.freeze([
-      'A house can go through several owners and dozens of projects, but its records are usually scattered across inboxes, filing cabinets, contractors, and insurance files. Homesrolo gives the property one organized history that can stay with it.',
+      'A house can go through dozens of projects, but its records are usually scattered across inboxes, filing cabinets, contractors, and insurance files. Homesrolo gives the homeowner one organized history to keep.',
+      'The name borrows the simple idea behind a Rolodex: one dependable place to remember the people and details that matter. The product is the Home Record—the projects, service, products, photos, files, and decisions connected to one home.',
       'The homeowner controls the private file. Public company information and educational guides are kept separate from private home records.',
     ]),
   },
   {
-    heading: 'Why roofing comes first',
+    heading: 'Every part of the home belongs',
     body: Object.freeze([
-      'Roofing combines a large purchase, technical construction details, local permit rules, severe-weather exposure, warranties, and sometimes an insurance claim. Homeowners are often asked to make decisions before they know which questions to ask.',
-      'Homesrolo starts by making those questions, sources, and records easier to understand. The private project record already extends across major home systems; secure files, sharing, and public proof come later.',
+      'A home is more than a roof. Heating and cooling, plumbing, electrical work, interiors, appliances, drainage, paint, landscaping, pest care, pools, and new construction all create decisions worth remembering.',
+      'The same record can hold work that is being considered, work happening now, and projects completed years ago. Roofing has the deepest guide library today, but it is one part of the home.',
     ]),
   },
   {
-    heading: 'How the directory is meant to work',
+    heading: 'The homeowner stays in control',
     body: Object.freeze([
-      'A useful company listing shows separate facts with a source and date. Business identity, insurance, local registration, project history, and review provenance should not collapse into one badge.',
-      'Payment cannot change a company’s facts or position in neutral results. Real public listings will not open until their data and correction process are ready.',
+      'Creating a home or project does not publish the address, hire a contractor, or send the record to somebody else. The account begins as the homeowner’s own workspace.',
+      'Public homeowner guides stay separate from private home records. Homesrolo does not sell a homeowner’s project as a lead or choose which professional should get the work.',
     ]),
   },
 ])
@@ -457,7 +458,7 @@ export const EDITORIAL_STANDARDS: readonly EducationalSection[] = Object.freeze(
   {
     heading: 'Why these standards matter',
     body: Object.freeze([
-      'Roof work is expensive, technical, and hard to compare. A price with no context, an outdated permit rule, or a weather report treated as proof can point a homeowner in the wrong direction.',
+      'Home repairs and improvements can be expensive, technical, and hard to compare. A price with no context, an outdated permit rule, or a product claim treated as proof can point a homeowner in the wrong direction.',
       'Our guides show where important facts came from, when the page was meaningfully updated, and the limits of the information.',
     ]),
   },
@@ -491,7 +492,7 @@ export const EDITORIAL_STANDARDS: readonly EducationalSection[] = Object.freeze(
   },
 ])
 
-/** /how-it-works — the Home Project Passport explained. */
+/** /how-it-works — the private Home Record explained. */
 export const HOW_IT_WORKS_STEPS: readonly EducationalSection[] = Object.freeze([
   {
     heading: 'Open one private file for the home',
@@ -508,25 +509,18 @@ export const HOW_IT_WORKS_STEPS: readonly EducationalSection[] = Object.freeze([
     ]),
   },
   {
-    heading: 'Repeat the same photo when it helps',
+    heading: 'Repeat useful photos over time',
     body: Object.freeze([
-      'On accounts in the private beta, a homeowner can save a JPEG or PNG with an area, a repeatable view name, '
-        + 'and the day it was observed. Homesrolo can place the latest two photos together; it does not diagnose what changed.',
-      'Storing other documents, invoices, manuals, warranties, and insurance files is not available yet.',
+      'Save a JPEG or PNG with an area, a repeatable view name, and the day it was observed. Homesrolo can place the latest two photos together; it does not diagnose what changed.',
+      'Use the same view for a ceiling mark, exterior wall, mechanical equipment, crawlspace, roofline, or any other place that is worth checking again.',
     ]),
   },
   {
-    heading: 'Compare the words in a roof proposal',
+    heading: 'Keep decisions with the project',
     body: Object.freeze([
       'A private roof project can record what written proposals include, exclude, leave as an allowance, or do not state. '
         + 'Homesrolo does not rank a contractor, score a price, or tell a homeowner what a roof should cost.',
-    ]),
-  },
-  {
-    heading: 'Homeowner-controlled sharing comes later',
-    body: Object.freeze([
-      'Project Rooms, invitations for professionals, sharing, arrival information, and saved homeowner approvals '
-        + 'are not available today.',
+      'For every other kind of work, the project title, category, timing, status, and homeowner notes keep the basic story attached to the home.',
     ]),
   },
 ])

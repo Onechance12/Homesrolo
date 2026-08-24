@@ -9,32 +9,35 @@ export function SiteFooter() {
           <div className="footer-brand">
             <p className="footer-brand__name">homesrolo</p>
             <p>
-              The private Rolodex for home projects and decisions, with seasonal photo checkups and roof proposal
-              notes in private beta.
+              A private home workspace for current projects, historical work, seasonal photo checkups, and roof
+              proposal notes.
             </p>
             <a className="footer-home-link" href={HOMEOWNER_SIGNIN_URL}>
               Open my home <span aria-hidden="true">→</span>
             </a>
           </div>
           <div>
-            <h2>Product</h2>
+            <h2>Your home</h2>
+            <Link href="/home-care/">Home care</Link>
+            <Link href="/home-projects/">Home projects</Link>
+            <Link href="/home-record/">Home record</Link>
+            <Link href="/guides/">Homeowner guides</Link>
+          </div>
+          <div>
+            <h2>Learn</h2>
             <Link href="/how-it-works/">How it works</Link>
-            <Link href="/professionals/">Start a home project</Link>
-            <Link href="/how-we-verify/">How we verify</Link>
-            <Link href="/academy/">Home care</Link>
-          </div>
-          <div>
-            <h2>People</h2>
-            <Link href="/for-professionals/">For professionals</Link>
-            <Link href="/for-agents/">For agents</Link>
-            <Link href="/about/">About Homesrolo</Link>
-            <Link href="/editorial-standards/">Editorial standards</Link>
-          </div>
-          <div>
-            <h2>Roofing</h2>
             <Link href="/roof-watch/">Roof Watch</Link>
             <Link href="/roof-watch/guides/">Roof Watch guides</Link>
             <Link href="/services/roofing/">Roofing center</Link>
+          </div>
+          <div>
+            <h2>Homesrolo</h2>
+            <Link href="/about/">About Homesrolo</Link>
+            <Link href="/for-professionals/">For home professionals</Link>
+            <Link href="/for-agents/">For real estate agents</Link>
+            <Link href="/editorial-standards/">How we research</Link>
+            <Link href="/privacy/">Privacy</Link>
+            <Link href="/security/">Security</Link>
             <a href={ROOF_WATCH_SMS_URL}>Text Roof Watch: {ROOF_WATCH_PHONE_DISPLAY}</a>
           </div>
         </div>

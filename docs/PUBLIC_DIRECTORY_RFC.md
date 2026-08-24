@@ -9,7 +9,7 @@ constraints intended to keep a later, reviewed launch possible.
 
 ## 1. Why this layer exists
 
-The wedge is the **Home Project Passport**: a homeowner explicitly releases a
+The wedge is the **Home Record**: a homeowner explicitly releases a
 record of real work — what was done, by whom, which materials, what is
 warranted, which photos are approved. That release is the only thing that can
 later substantiate a company's project proof, because it is the one claim a

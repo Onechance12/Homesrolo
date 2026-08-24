@@ -11,7 +11,7 @@ assistant, and the consent-bound Jobrolo review handoff are implemented.
 migrations, server configuration, release gates, and the security conditions
 below still control what a deployed session may use.
 
-The Homesrolo homeowner application is the home’s private Rolodex: a workspace
+The Homesrolo homeowner application is the private Home Record: a workspace
 for a person to organize the people, planned and completed work, photos,
 documents, equipment, warranties, care, and history connected to one home.
 Roofing is the first deep content and workflow vertical, not the limit of the

@@ -90,7 +90,7 @@ export default function RoofingGuidePage() {
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
             <a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Start my roof project</a>
-            <Link className="btn btn--quiet" href="/professionals/">See how the project works</Link>
+            <Link className="btn btn--quiet" href="/home-projects/">See how the project works</Link>
           </div>
         </div>
       </section>

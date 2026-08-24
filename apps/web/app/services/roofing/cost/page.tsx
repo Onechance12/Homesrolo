@@ -85,7 +85,7 @@ export default function RoofingCostPage() {
             <div className="prose">
               <p className="eyebrow">Use your own proposals</p>
               <h2 id="save-roof-proposals">Record the proposals. Compare the scope.</h2>
-              <p>Give each proposal a private label, then mark what it says about measurement, materials, tear-off, decking, valleys, flashing, penetrations, ventilation, permits, cleanup, warranties, payment terms, and exclusions. When reviewed private uploads are available, the original PDF can be linked to that record.</p>
+              <p>Give each proposal a private label, then mark what it says about measurement, materials, tear-off, decking, valleys, flashing, penetrations, ventilation, permits, cleanup, warranties, payment terms, and exclusions. Keep the original written proposal in your own records and use Homesrolo to preserve the scope notes you want to compare.</p>
               <p><a className="btn btn--primary" href={HOMEOWNER_ROOFING_SIGNIN_URL}>Compare my roof proposals</a></p>
             </div>
             <div className="note">

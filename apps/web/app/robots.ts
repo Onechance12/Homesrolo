@@ -3,12 +3,7 @@ import { SITE_ORIGIN } from '../lib/site.ts'
 
 export const dynamic = 'force-static'
 
-/**
- * Synthetic company examples remain crawlable only so search engines can read
- * their page-level `noindex` directive. Blocking the path here would prevent a
- * crawler from seeing that directive and could leave a URL-only result. The
- * examples are also omitted from the sitemap.
- */
+/** Retired company URLs stay crawlable by search engines so their 404 is visible. */
 export default function robots(): MetadataRoute.Robots {
   const publicRules = {
     allow: '/',
@@ -21,8 +16,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       { userAgent: '*', ...publicRules },
       // OAI-SearchBot controls ChatGPT Search discovery. GPTBot is a separate
-      // training crawler: it may read public education but not invented company
-      // fixtures, which search crawlers may fetch only to observe `noindex`.
+      // training crawler: it may read public education while the unused company
+      // namespace stays excluded. Search crawlers may fetch retired URLs as 404s.
       { userAgent: 'OAI-SearchBot', ...publicRules },
       { userAgent: 'GPTBot', ...trainingRules },
       { userAgent: 'ChatGPT-User', ...publicRules },

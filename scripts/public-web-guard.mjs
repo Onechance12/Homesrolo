@@ -277,18 +277,40 @@ if (!existsSync(OUT)) {
     }
   }
 
-  // Synthetic company pages must be noindex and must carry the sample notice.
-  const companyPages = walk(path.join(OUT, 'companies'), name => name.endsWith('.html'), new Set([]))
-  if (companyPages.length === 0) fail('no exported company pages found')
-  for (const file of companyPages) {
+  // Every first-party anchor must resolve to an exported page, and a fragment
+  // must identify a real element on that page. This catches polished cards
+  // that quietly lead to a missing route or to the top of a long hub.
+  for (const file of html) {
     const page = readFileSync(file, 'utf8')
-    if (!/<meta name="robots" content="[^"]*noindex/.test(page)) {
-      fail(`${rel(file)}: a synthetic company page must be noindex`)
-    }
-    if (!/Sample listing/i.test(page)) {
-      fail(`${rel(file)}: a synthetic company page must say it is a sample`)
+    const routeFromFile = path.relative(OUT, file).replace(/(?:^|\/)index\.html$/, '/').replace(/^404\.html$/, '/')
+    const sourceUrl = new URL(routeFromFile, 'https://homesrolo.com/')
+    for (const match of page.matchAll(/<a\b[^>]*\bhref="([^"]+)"/gi)) {
+      const rawHref = match[1].replaceAll('&amp;', '&')
+      if (/^(?:sms:|mailto:|tel:|javascript:)/i.test(rawHref)) continue
+      const targetUrl = new URL(rawHref, sourceUrl)
+      if (targetUrl.origin !== 'https://homesrolo.com') continue
+
+      const route = targetUrl.pathname.replace(/^\/+|\/+$/g, '')
+      const targetPath = route ? path.join(OUT, route, 'index.html') : path.join(OUT, 'index.html')
+      if (!existsSync(targetPath)) {
+        fail(`${rel(file)}: internal link has no exported page (${rawHref})`)
+        continue
+      }
+      if (targetUrl.hash) {
+        const fragment = decodeURIComponent(targetUrl.hash.slice(1))
+        const targetPage = readFileSync(targetPath, 'utf8')
+        const escaped = fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        if (!new RegExp(`(?:id|name)="${escaped}"`).test(targetPage)) {
+          fail(`${rel(file)}: internal link fragment does not exist (${rawHref})`)
+        }
+      }
     }
   }
+
+  // The directory model is an internal contract lab. No sample company may
+  // escape into the production static export.
+  const companyPages = walk(path.join(OUT, 'companies'), name => name.endsWith('.html'), new Set([]))
+  if (companyPages.length > 0) fail(`production export contains ${companyPages.length} synthetic company page(s)`)
 
   const robotsPath = path.join(OUT, 'robots.txt')
   if (!existsSync(robotsPath)) fail('robots.txt was not exported')
@@ -302,12 +324,12 @@ if (!existsSync(OUT)) {
       }
       if (!/^Allow:\s*\/$/im.test(group)) fail(`robots.txt must allow / for ${crawler}`)
       if (/^Disallow:\s*\/companies\/$/im.test(group)) {
-        fail(`robots.txt must let ${crawler} fetch synthetic company pages and observe noindex`)
+        fail(`robots.txt must let ${crawler} fetch retired company URLs and observe the 404`)
       }
     }
     const gptBotGroup = robots.match(/User-Agent:\s*GPTBot\s*([\s\S]*?)(?=\nUser-Agent:|\nSitemap:|$)/i)?.[1]
     if (!gptBotGroup || !/^Allow:\s*\/$/im.test(gptBotGroup) || !/^Disallow:\s*\/companies\/$/im.test(gptBotGroup)) {
-      fail('robots.txt must allow GPTBot on public education and disallow it from synthetic company fixtures')
+      fail('robots.txt must allow GPTBot on public education and disallow the unused company namespace')
     }
   }
 
@@ -315,7 +337,7 @@ if (!existsSync(OUT)) {
   if (!existsSync(sitemapPath)) fail('sitemap.xml was not exported')
   else {
     const sitemap = readFileSync(sitemapPath, 'utf8')
-    if (/\/companies\//.test(sitemap)) fail('sitemap.xml must not list synthetic company profiles')
+    if (/\/companies\//.test(sitemap)) fail('sitemap.xml must not list company-profile routes')
 
     // A successful Next build can still export the not-found body at a real
     // sitemap route (for example when an async dynamic param is read
@@ -346,6 +368,9 @@ if (!existsSync(OUT)) {
         fail(`${rel(outputPath)}: sitemap route is not explicitly index, follow`)
       }
       if (!/<h1\b/i.test(page)) fail(`${rel(outputPath)}: sitemap route has no h1`)
+      if (/private[- ]beta|coming soon|not live yet|in development|not available today/i.test(page)) {
+        fail(`${rel(outputPath)}: indexable page contains product-roadmap language`)
+      }
 
       const canonical = page.match(/<link rel="canonical" href="([^"]+)"/i)?.[1]
       if (canonical !== location) {
@@ -450,9 +475,12 @@ if (!existsSync(OUT)) {
   if (!existsSync(llmsPath)) fail('llms.txt was not exported')
   else {
     const llms = readFileSync(llmsPath, 'utf8')
+    for (const route of ['/home-care/', '/home-projects/', '/home-record/', '/guides/']) {
+      if (!llms.includes(`https://homesrolo.com${route}`)) fail(`llms.txt must name the canonical whole-home route ${route}`)
+    }
     if (!llms.includes('https://homesrolo.com/services/roofing/')) fail('llms.txt must name the canonical roofing center')
     if (!llms.includes('https://homesrolo.com/roof-watch/')) fail('llms.txt must name the canonical Roof Watch page')
-    if (/homesrolo\.example\.com|\/companies\/[a-z0-9-]+/i.test(llms)) fail('llms.txt must not advertise placeholder hosts or sample company profiles')
+    if (/homesrolo\.example\.com|\/companies\/[a-z0-9-]+/i.test(llms)) fail('llms.txt must not advertise placeholder hosts or company profiles')
   }
 
   const genericSocialPath = path.join(OUT, 'homesrolo-social-card.png')

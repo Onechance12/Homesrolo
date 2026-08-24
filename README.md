@@ -1,7 +1,7 @@
 # Homesrolo
 
 Homesrolo is the homeowner side of the Jobrolo network and the home’s private
-Rolodex: one durable record for the people, projects, photos, documents,
+Home Record: one durable record for the people, projects, photos, documents,
 equipment, care, and history connected to a home. Roofing is the first deep
 education and search vertical, not the product boundary. Homesrolo does not act
 as a contractor CRM, public adjuster, insurer, claim advocate, or seller of home
@@ -104,7 +104,7 @@ Chance decides whether and where to distribute it.
 
 ## The public layer
 
-The wedge is the **Home Project Passport**: a homeowner releases a record of
+The wedge is the **Home Record**: a homeowner releases a record of
 real work, and that release is the only thing that can substantiate a company's
 project proof. The public directory is downstream of it, and is deliberately not
 a general review site.

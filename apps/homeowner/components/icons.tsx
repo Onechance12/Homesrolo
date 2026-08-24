@@ -53,6 +53,15 @@ export function IconDocs({ size = 20 }: IconProps) {
   )
 }
 
+export function IconCamera({ size = 20 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M4.5 8.5 H8 L9.5 6.5 H14.5 L16 8.5 H19.5 V18.5 H4.5 Z" />
+      <circle cx="12" cy="13.5" r="3" />
+    </svg>
+  )
+}
+
 export function IconShield({ size = 20 }: IconProps) {
   return (
     <svg {...base(size)}>

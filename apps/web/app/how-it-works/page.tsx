@@ -7,7 +7,7 @@ import { HOMEOWNER_SIGNIN_URL } from '../../lib/site.ts'
 export const metadata = publicPageMetadata({
   title: 'How it works',
   description:
-    'Start a private whole-home record, add work from any point in its life, and use supported photo checkups and roof proposal notes.',
+    'Start a home record, organize planned and completed projects, and use repeatable photo checkups to remember how the property changes.',
   canonical: '/how-it-works/',
 })
 
@@ -18,8 +18,8 @@ export default function HowItWorksPage() {
         <div className="shell">
           <PageHeader
             eyebrow="How it works"
-            title="Start the home’s history with what you know."
-            lede="The private account and whole-home project record work today. Photo checkups and roof proposal notes are private-beta tools. General files and sharing remain separate."
+            title="Give the home one place to remember."
+            lede="Start with what you know. Add projects from any point in the home’s life, repeat useful photos over time, and keep the next decision connected to the last one."
           />
         </div>
       </section>
@@ -42,29 +42,24 @@ export default function HowItWorksPage() {
       <section className="section">
         <div className="shell">
           <div className="prose">
-            <h2>What works today, and what comes next</h2>
+            <h2>What you can keep in Homesrolo</h2>
             <p>
-              Private passwordless homeowner accounts, private home workspaces, guided starting details, and
-              whole-home project records work today. A homeowner can record work that is planned, underway, or
-              already completed across the property in a separate authenticated application.
+              A passwordless account gives each home its own workspace. Record projects that are planned,
+              underway, completed, or remembered from a previous year across every major part of the property.
             </p>
             <p>
-              Private-beta seasonal photo checkups can save JPEG or PNG views for later comparison. A roofing
-              project can also keep homeowner-entered notes about what written proposals include or leave out;
-              Homesrolo does not rank the proposals, score the prices, or choose a contractor.
+              Photo checkups save a dated JPEG or PNG by area and repeatable view, then place the newest two
+              observations together. Roofing projects can also keep homeowner-entered notes about what written
+              proposals include or leave out. Homesrolo does not diagnose a photo, score a price, or choose a
+              contractor.
             </p>
             <p>
-              General document uploads, invitations, sharing, online home research, and a professional network
-              are not available yet. Starting a private project does not hire a contractor or send the request
-              outside the homeowner account.
-            </p>
-            <p>
-              Public company and project examples remain synthetic. A private home file never becomes public just
-              because an account or project was created.
+              Creating a home or project does not hire a professional, send a lead, publish the address, or give
+              another person access. It is the homeowner’s record first.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-              <a className="btn btn--primary" href={HOMEOWNER_SIGNIN_URL}>Open my home Rolodex</a>
-              <Link className="btn btn--quiet" href="/how-we-verify/">What a verified fact means</Link>
+              <a className="btn btn--primary" href={HOMEOWNER_SIGNIN_URL}>Open my home</a>
+              <Link className="btn btn--quiet" href="/home-record/">See what belongs in a home record</Link>
             </div>
           </div>
         </div>

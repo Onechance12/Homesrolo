@@ -20,7 +20,7 @@ const SOURCES = [
 const RELATED = [
   { href: '/services/roofing/cost/', title: 'Compare roof costs', description: 'Turn proposals into the same rows before comparing totals.' },
   { href: '/services/roofing/materials/', title: 'Compare materials', description: 'Know which exact product and assembly details belong in the scope.' },
-  { href: '/how-we-verify/', title: 'How Homesrolo verifies', description: 'See why each fact needs its own source, status, and date.' },
+  { href: '/editorial-standards/', title: 'How Homesrolo researches', description: 'See how practical guidance is sourced, dated, reviewed, and corrected.' },
 ] as const
 
 const QUESTIONS = [

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 /**
@@ -18,10 +18,9 @@ const read = (relative: string) => readFileSync(path.join(WEB, relative), 'utf8'
 const css = read('app/globals.css')
 const layout = read('app/layout.tsx')
 const notFound = read('app/not-found.tsx')
-const companyPage = read('app/companies/[slug]/page.tsx')
 const robots = read('app/robots.ts')
 const sitemap = read('app/sitemap.ts')
-const professionals = read('app/professionals/page.tsx')
+const homeProjects = read('app/home-projects/page.tsx')
 const roofing = read('app/services/roofing/page.tsx')
 const roofingArticle = read('components/RoofingArticle.tsx')
 const howItWorks = read('app/how-it-works/page.tsx')
@@ -86,17 +85,14 @@ test('dense profile metadata is allowed to wrap on a narrow screen', () => {
     'the fact meta line must not hold one long unwrappable row on mobile')
 })
 
-// --- synthetic listings stay out of search ------------------------------------
+// --- unfinished listings stay out of the public application ------------------
 
-test('company profiles are noindex at the source, not just in the built output', () => {
-  assert.match(companyPage, /robots:\s*\{\s*index:\s*false/,
-    'a synthetic company page must never be indexable')
-  assert.match(companyPage, /follow:\s*false/)
-  assert.match(companyPage, /export const dynamicParams = false/,
-    'an unknown slug must 404 rather than render')
+test('the company-profile contract lab has no public route', () => {
+  assert.equal(existsSync(path.join(WEB, 'app/companies/[slug]/page.tsx')), false,
+    'an internal synthetic profile must not become a production page')
 })
 
-test('robots lets crawlers observe company noindex while the sitemap omits the namespace', () => {
+test('robots lets search crawlers observe retired company URLs while the sitemap omits them', () => {
   assert.match(robots, /userAgent:\s*'Googlebot',\s*\.\.\.publicRules/)
   assert.match(robots, /userAgent:\s*'Bingbot',\s*\.\.\.publicRules/)
   assert.match(robots, /userAgent:\s*'OAI-SearchBot',\s*\.\.\.publicRules/)
@@ -104,12 +100,6 @@ test('robots lets crawlers observe company noindex while the sitemap omits the n
   assert.match(robots, /trainingRules[\s\S]*disallow:\s*\['\/companies\/'\]/)
   assert.doesNotMatch(sitemap, /companies/,
     'a sitemap entry is an invitation to index a company that does not exist')
-})
-
-test('the synthetic banner is a note landmark on every demo surface', () => {
-  assert.match(companyPage, /className="synthetic-banner"[^>]*role="note"/,
-    'the sample-data warning must be announced, not just styled')
-  assert.match(css, /\.synthetic-banner\s*\{/)
 })
 
 // --- honest labelling in the UI layer ----------------------------------------
@@ -123,37 +113,28 @@ test('no rendered label calls a sample review a verified project', () => {
   assert.doesNotMatch(reviews, /state === 'published'\) return 'chip chip--confirmed'/)
 })
 
-test('the profile renders the retraction disclaimers, not just the model', () => {
-  assert.match(companyPage, /REVIEW_PROOF_DISCLAIMER/)
-  assert.match(companyPage, /CREDENTIAL_DEMO_DISCLAIMER/)
-  assert.match(companyPage, /CLAIM_DEMO_DISCLAIMER/)
-  assert.match(companyPage, /REVIEW_ACTIVATION_REQUIREMENTS/)
-})
-
 test('the homeowner conversion path starts a project instead of publishing a contractor directory', () => {
   assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/homesrolo-homeowner-v2\.onrender\.com'/)
   assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
   assert.match(site, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=inspection`/)
   assert.match(site, /label: 'Home care'/)
-  assert.doesNotMatch(site, /label: 'Roofing'/)
-  assert.match(professionals, /Create my home account/)
-  assert.match(professionals, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
-  assert.match(professionals, /Start with your home, not a contractor list/)
-  assert.doesNotMatch(professionals, /SYNTHETIC_PROFILES|sample listings|ordered by name/)
+  for (const route of ['/home-care/', '/home-projects/', '/home-record/', '/guides/', '/how-it-works/', '/about/']) {
+    assert.match(site, new RegExp(route.replaceAll('/', '\\/')))
+  }
+  assert.doesNotMatch(site, /label: 'Roof Watch'|label: 'Roofing'|label: 'For pros'|label: 'For agents'/)
+  assert.match(homeProjects, /Start a private project/)
+  assert.match(homeProjects, /Give the work a clear record before the details get scattered/)
+  assert.doesNotMatch(homeProjects, /SYNTHETIC_PROFILES|sample listings|ordered by name/)
   assert.match(roofing, /Start my roof project/)
   assert.match(roofing, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
   assert.match(roofingArticle, /href=\{HOMEOWNER_ROOFING_SIGNIN_URL\}/)
 })
 
 test('how it works states the live homeowner boundary without overclaiming', () => {
-  assert.match(howItWorks, /Private passwordless homeowner accounts/)
-  assert.match(howItWorks, /private home workspaces/)
-  assert.match(howItWorks, /whole-home project records work today/)
-  assert.match(howItWorks, /Private-beta seasonal photo checkups/)
-  assert.match(howItWorks, /homeowner-entered notes/)
-  for (const unavailable of ['General document uploads', 'invitations', 'sharing', 'online home research', 'professional network']) {
-    assert.match(howItWorks, new RegExp(unavailable))
-  }
-  assert.match(howItWorks, /does not hire a\s+contractor or send the request\s+outside the homeowner account/)
-  assert.doesNotMatch(howItWorks, /There are no accounts|no home\s+files/)
+  assert.match(howItWorks, /passwordless account gives each home its own workspace/)
+  assert.match(howItWorks, /planned,\s+underway, completed, or remembered from a previous year/)
+  assert.match(howItWorks, /Photo checkups save a dated JPEG or PNG/)
+  assert.match(howItWorks, /does not diagnose a photo, score a price, or choose a\s+contractor/)
+  assert.match(howItWorks, /does not hire a professional, send a lead, publish the address/)
+  assert.doesNotMatch(howItWorks, /private[- ]beta|coming soon|not live yet|in development/i)
 })

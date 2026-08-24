@@ -41,14 +41,14 @@ const MODES: readonly {
 ]
 
 const CATEGORIES: readonly { value: ProjectCategory; label: string }[] = [
-  { value: 'roofing', label: 'Roof' },
   { value: 'interior', label: 'Interior / remodel' },
   { value: 'hvac', label: 'Heating & cooling' },
   { value: 'plumbing', label: 'Plumbing' },
   { value: 'electrical', label: 'Electrical' },
-  { value: 'exterior', label: 'Exterior / gutters' },
-  { value: 'landscaping', label: 'Yard / landscaping' },
   { value: 'appliances', label: 'Appliances' },
+  { value: 'exterior', label: 'Exterior / gutters' },
+  { value: 'roofing', label: 'Roof' },
+  { value: 'landscaping', label: 'Yard / landscaping' },
   { value: 'pest', label: 'Pest control' },
   { value: 'pool', label: 'Pool' },
   { value: 'new_construction', label: 'New construction' },
@@ -130,7 +130,7 @@ export default function ProjectsPage({
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
       <div className="pagehead">
-        <p className="mono">Your home Rolodex</p>
+        <p className="mono">Your Home Record</p>
         <h1>Projects, repairs, and upgrades</h1>
         <p>
           Record anything that changes or maintains the home—from a filter service to a remodel.

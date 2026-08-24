@@ -4,7 +4,7 @@ import { ROOF_WATCH_CITIES } from '../lib/content/roof-watch-cities.ts'
 import { ROOF_WATCH_GUIDES } from '../lib/content/roof-watch-guides.ts'
 
 /**
- * Synthetic company profiles are deliberately absent. A sitemap entry is an
+ * Company-profile routes are deliberately absent. A sitemap entry is an
  * invitation to index, and inviting a crawler to an invented company would put
  * a fabricated business into search results no matter what the page says.
  *
@@ -12,7 +12,7 @@ import { ROOF_WATCH_GUIDES } from '../lib/content/roof-watch-guides.ts'
  * build date is not a content update and gives crawlers a false freshness
  * signal. The fixed value also keeps two builds of one commit byte-identical.
  */
-const ROOF_WATCH_HUB_LAST_MODIFIED = '2026-08-20'
+const ROOF_WATCH_HUB_LAST_MODIFIED = '2026-08-23'
 const ROOF_WATCH_GUIDES_INDEX_LAST_MODIFIED = '2026-08-21'
 export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   '/roof-watch/': ROOF_WATCH_HUB_LAST_MODIFIED,
@@ -25,12 +25,23 @@ export const ROOF_WATCH_ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = 
 })
 const ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
   ...ROOF_WATCH_ROUTE_LAST_MODIFIED,
-  '/': '2026-08-21',
-  '/for-agents/': '2026-08-21',
+  '/': '2026-08-23',
+  '/home-care/': '2026-08-23',
+  '/home-projects/': '2026-08-23',
+  '/home-record/': '2026-08-23',
+  '/guides/': '2026-08-23',
+  '/how-it-works/': '2026-08-23',
+  '/privacy/': '2026-08-23',
+  '/security/': '2026-08-23',
+  '/for-professionals/': '2026-08-23',
+  '/for-agents/': '2026-08-23',
+  '/about/': '2026-08-23',
   '/services/roofing/': '2026-08-21',
-  '/services/roofing/cost/': '2026-08-21',
-  '/editorial-standards/': '2026-08-21',
+  '/services/roofing/cost/': '2026-08-23',
+  '/editorial-standards/': '2026-08-23',
 })
+
+const CORE_ROUTES = new Set(['/', '/home-care/', '/home-projects/', '/home-record/', '/guides/'])
 export const ROUTE_IMAGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
   '/roof-watch/': [
     '/images/roof-watch/architectural-shingle-roof-condition.webp',
@@ -65,7 +76,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       ...(lastModified ? { lastModified: new Date(`${lastModified}T00:00:00.000Z`) } : {}),
       ...(images ? { images: images.map(image => `${SITE_ORIGIN}${image}`) } : {}),
       changeFrequency: 'monthly' as const,
-      priority: route === '/' ? 1 : route === '/services/roofing/' ? 0.9 : 0.7,
+      priority: route === '/' ? 1 : CORE_ROUTES.has(route) ? 0.9 : 0.7,
     }
   })
 }
