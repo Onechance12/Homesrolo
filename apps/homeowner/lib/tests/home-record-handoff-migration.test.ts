@@ -9,6 +9,19 @@ const migration = readFileSync(path.resolve(
 ), 'utf8')
 
 test('service role can read handoff rows but may mutate them only through narrow RPCs', () => {
+  for (const table of [
+    'homesrolo_homeowner_handoff_recipients',
+    'homesrolo_homeowner_handoffs',
+    'homesrolo_homeowner_handoff_replay_conflicts',
+    'homesrolo_homeowner_handoff_items',
+    'homesrolo_homeowner_handoff_acceptance_commands',
+    'homesrolo_homeowner_handoff_rejection_commands',
+    'homesrolo_homeowner_handoff_claim_attempts',
+  ]) {
+    assert.match(migration, new RegExp(
+      `revoke all on table public\\.${table}\\s+from public, anon, authenticated, service_role`,
+    ), `${table} explicitly removes inherited service-role CRUD grants`)
+  }
   const grantsStart = migration.indexOf(
     '-- The application reads exact private records directly',
   )

@@ -422,17 +422,17 @@ alter table public.homesrolo_homeowner_handoff_rejection_commands enable row lev
 alter table public.homesrolo_homeowner_handoff_claim_attempts enable row level security;
 
 revoke all on table public.homesrolo_homeowner_handoff_recipients
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoffs
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoff_replay_conflicts
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoff_items
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoff_acceptance_commands
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoff_rejection_commands
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on table public.homesrolo_homeowner_handoff_claim_attempts
   from public, anon, authenticated, service_role;
 
