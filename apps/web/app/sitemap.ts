@@ -44,14 +44,11 @@ const ROUTE_LAST_MODIFIED: Readonly<Record<string, string>> = Object.freeze({
 const CORE_ROUTES = new Set(['/', '/home-care/', '/home-projects/', '/home-record/', '/guides/'])
 export const ROUTE_IMAGES: Readonly<Record<string, readonly string[]>> = Object.freeze({
   '/roof-watch/': [
-    '/images/roof-watch/architectural-shingle-roof-condition.webp',
+    '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
     '/images/roof-watch/roof-ridge-cap-and-vent-detail.webp',
     '/images/roof-watch/round-attic-vent-and-shingle-field.webp',
     '/images/roof-watch/roof-tear-off-hidden-assembly.webp',
-    '/images/roof-watch/roof-shingle-surface-detail.webp',
-    '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
     '/images/roof-watch/laminated-shingle-ridge-detail.webp',
-    '/images/roof-watch/roof-field-and-hip-ridge-detail.webp',
   ],
   '/roof-watch/guides/hail-first-72-hours/': ['/images/roof-watch/architectural-shingle-roof-condition.webp'],
   '/roof-watch/guides/roof-inspection-report/': ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp'],

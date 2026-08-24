@@ -19,7 +19,7 @@ export function SiteFooter() {
           </div>
           <div>
             <h2>Your home</h2>
-            <Link href="/home-care/">Home care</Link>
+            <Link href="/home-care/">Home Watch</Link>
             <Link href="/home-projects/">Home projects</Link>
             <Link href="/home-record/">Home record</Link>
             <Link href="/guides/">Homeowner guides</Link>

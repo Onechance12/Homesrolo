@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { DocumentaryImage } from '../../components/DocumentaryImage.tsx'
-import { Illustration } from '../../components/Illustration.tsx'
 import { PageHeader } from '../../components/Prose.tsx'
 import {
   HOMEOWNER_ROOF_WATCH_SIGNIN_URL,
@@ -14,38 +13,38 @@ import { ROOF_WATCH_CITIES } from '../../lib/content/roof-watch-cities.ts'
 
 export const metadata: Metadata = {
   title: 'Roof Watch availability in Texas and Oklahoma',
-  description: 'Check Roof Watch availability in Texas and Oklahoma. The free annual visit provides written findings and available photos when conditions allow; limits come first.',
+  description: 'Roof Watch is the roof check inside Homesrolo Home Watch. Check Texas and Oklahoma availability for a free annual visit with written findings and photos.',
   alternates: { canonical: '/roof-watch/' },
   openGraph: {
     type: 'website',
     title: 'Roof Watch availability in Texas and Oklahoma',
-    description: 'Written findings, available roof photos when conditions allow, and clearly stated limits for participating Texas and Oklahoma addresses.',
+    description: 'The roof-specific check inside Homesrolo Home Watch, with written findings, available photos, and clearly stated limits in Texas and Oklahoma.',
     url: '/roof-watch/',
     images: [{ url: '/roof-watch-social-card.png', width: 1200, height: 630, alt: 'Roof Watch: a yearly roof check with the findings in writing' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Roof Watch availability in Texas and Oklahoma',
-    description: 'Written findings, available roof photos when conditions allow, and program limits shared before scheduling.',
+    description: 'The roof check inside Homesrolo Home Watch, with written findings, available photos, and limits shared before scheduling.',
     images: [{ url: '/roof-watch-social-card.png', alt: 'Roof Watch: a yearly roof check with the findings in writing' }],
   },
 }
 
 const YOURS = [
   {
-    kind: 'frame' as const,
+    label: 'Written record',
     title: 'A report you can keep',
-    body: 'After a completed visit, you receive the written findings and available photos. Keep them with the rest of the home record and use them when you compare future work.',
+    body: 'You get the written findings and available photos. Save them with the home so next year’s check starts with something real.',
   },
   {
-    kind: 'roofline' as const,
-    title: 'Useful beyond one visit',
-    body: 'You may share the report with an insurer, builder, buyer, consultant, or contractor of your choice. The report records observations; it does not certify a roof or decide coverage.',
+    label: 'Use it anywhere',
+    title: 'Share it with anyone you choose',
+    body: 'Show it to a contractor, insurer, builder, buyer, or consultant. It records what was visible; it does not certify the roof or decide coverage.',
   },
   {
-    kind: 'window' as const,
-    title: 'No required future contract',
-    body: 'A Roof Watch visit does not require you to award later work to the inspecting professional. Ask questions, seek another opinion, and keep the written copy provided to you.',
+    label: 'Your decision',
+    title: 'No required follow-up contract',
+    body: 'You do not have to award later work to the inspecting professional. Ask questions, get another opinion, and keep your copy.',
   },
 ] as const
 
@@ -81,36 +80,16 @@ const FIELD_PHOTOS = [
     caption: 'A tear-off can expose assembly details that are hidden after the roof is closed. That is why progress records matter.',
   },
   {
-    src: '/images/roof-watch/roof-shingle-surface-detail.webp',
-    width: 1200,
-    height: 900,
-    alt: 'Close view of a gray asphalt-shingle roof field',
-    caption: 'A wider surface view records shingle pattern and orientation without pretending that one photo proves cause or coverage.',
-  },
-  {
-    src: '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
-    width: 1200,
-    height: 727,
-    alt: 'Finished gray architectural-shingle roof with ridge caps and pipe penetrations',
-    caption: 'A wide finished-roof view makes future changes easier to locate by ridge, slope, and penetration.',
-  },
-  {
     src: '/images/roof-watch/laminated-shingle-ridge-detail.webp',
     width: 1200,
     height: 774,
     alt: 'Close view of laminated asphalt shingles and a ridge-cap line',
     caption: 'A close view can preserve course alignment and ridge-cap detail. It is a reference image, not a condition verdict.',
   },
-  {
-    src: '/images/roof-watch/roof-field-and-hip-ridge-detail.webp',
-    width: 1200,
-    height: 991,
-    alt: 'Brown asphalt-shingle roof field with adjoining hip and ridge lines',
-    caption: 'A view across adjoining slopes helps a report explain orientation and the exact area observed.',
-  },
 ] as const
 
 const FAQ = [
+  { question: 'How does Roof Watch fit into Home Watch?', answer: 'Home Watch is Homesrolo’s whole-home rhythm for checking, photographing, maintaining, and remembering the house over time. Roof Watch is its roof-specific professional visit. It contributes one dated roof record; it does not turn Homesrolo into a roofing company.' },
   { question: 'Is the Roof Watch visit free?', answer: 'The annual inspection is offered at no charge for participating addresses. Current availability and the written program limits are sent before scheduling. Some minor maintenance may be included within those limits; anything outside them requires separate authorization.' },
   { question: 'What do I receive after the visit?', answer: 'You receive written findings and the photos available from the completed inspection. Keep that copy with your home records and share it with any professional you choose. It is an observation report, not a roof certification, warranty, or insurance decision.' },
   { question: 'What minor maintenance may be included?', answer: 'The written limits sent before scheduling define it. Depending on the roof and safe access, examples may include a small sealant or exposed-fastener correction. Material-specific work, uncertain conditions, and larger repairs are outside a routine visit unless separately explained and authorized.' },
@@ -128,6 +107,7 @@ export default function RoofWatchPage() {
     '@type': 'Service',
     name: 'Roof Watch',
     serviceType: 'Free annual residential roof inspection program',
+    category: 'Homesrolo Home Watch',
     provider: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
     areaServed: [
       { '@type': 'State', name: 'Texas' },
@@ -152,9 +132,9 @@ export default function RoofWatchPage() {
         <div className="shell">
           <div className="grid grid--2" style={{ alignItems: 'start', gap: '3rem' }}>
             <PageHeader
-              eyebrow="Roof Watch · Texas + Oklahoma"
+              eyebrow="Home Watch · Roofs · Texas + Oklahoma"
               title="Check the roof once a year. Keep the report."
-              lede="Roof Watch offers a free annual visit at participating Texas and Oklahoma addresses. We photograph what is visible, explain what may need attention, and put the findings in writing. Availability is confirmed address by address."
+              lede="Home Watch keeps the whole house on a repeatable care rhythm. Roof Watch is its roof-specific professional visit: at participating Texas and Oklahoma addresses, we photograph what is visible, explain what may need attention, and put the findings in writing. Availability is confirmed address by address."
             />
             <div className="answer-box">
               <p className="kicker">Check your address before you schedule</p>
@@ -167,14 +147,14 @@ export default function RoofWatchPage() {
           </div>
           <figure className="roof-watch-hero-photo">
             <DocumentaryImage
-              src="/images/roof-watch/architectural-shingle-roof-condition.webp"
+              src="/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp"
               width={1200}
-              height={894}
+              height={727}
               sizes="(max-width: 48rem) calc(100vw - 2.5rem), 42rem"
               priority
-              alt="Brown architectural asphalt shingles viewed across a roof slope"
+              alt="Finished gray architectural-shingle roof with ridge caps and pipe penetrations"
             />
-            <figcaption><strong>Archival example.</strong> This is not a Roof Watch visit or a finding about a home.</figcaption>
+            <figcaption><strong>From our field archive.</strong> A finished architectural-shingle roof. Every Roof Watch report is written for the home actually inspected.</figcaption>
           </figure>
         </div>
       </section>
@@ -184,7 +164,7 @@ export default function RoofWatchPage() {
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">From the field-photo archive</p>
             <h2 id="rw-field-photos">What a roof record can actually show</h2>
-            <p>These field photos were selected from the operator&rsquo;s archival roof-photo library. They are not photographs from Roof Watch inspections. They show how a clear location, a wider roof view, and a close detail can make a report easier to understand later. A photograph records what was visible; it does not by itself diagnose cause, certify a roof, or decide an insurance claim.</p>
+            <p>These examples from our roof-photo archive show why location and context matter. A wide view tells you where you are; a close view preserves the detail. Every Roof Watch report is specific to the roof observed.</p>
           </div>
           <ul
             className="roof-photo-grid"
@@ -216,15 +196,18 @@ export default function RoofWatchPage() {
             <h2 id="rw-yours">The visit should leave something useful behind</h2>
             <p>A verbal opinion is hard to compare a year later. Roof Watch is built around a written report that identifies the roof areas observed, includes photos when conditions allow, and separates ordinary maintenance from items that need a closer evaluation.</p>
           </div>
-          <div className="grid grid--2">
-            {YOURS.map(item => (
-              <div key={item.title} className="card">
-                <Illustration kind={item.kind} />
-                <h3 className="card__title">{item.title}</h3>
-                <p>{item.body}</p>
-              </div>
+          <ol className="roof-watch-deliverables">
+            {YOURS.map((item, index) => (
+              <li key={item.title}>
+                <span className="roof-watch-deliverables__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                <div>
+                  <p className="roof-watch-deliverables__label">{item.label}</p>
+                  <h3>{item.title}</h3>
+                  <p>{item.body}</p>
+                </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
@@ -257,6 +240,7 @@ export default function RoofWatchPage() {
             <p className="eyebrow">Why it costs nothing</p>
             <h2 id="rw-why">Why Homesrolo is testing a free annual program</h2>
             <p>{SITE_NAME} gives a home a durable project history. Roof Watch applies that idea to a part of the house that is difficult to see and easy to forget between storms. A consistent inspection format also gives homeowners and roofing professionals a clearer starting point for later maintenance.</p>
+            <p>Roof Watch sits inside Home Watch, the whole-home system for repeated checkups, service records, and dated points of comparison. It is one chapter of the home record—not the definition of Homesrolo.</p>
             <p>The annual visit is offered without a membership fee at participating addresses. Availability, who performs the visit, any included maintenance, and the service limits are provided in writing before scheduling. You are not required to hire that professional for later work.</p>
           </div>
         </div>

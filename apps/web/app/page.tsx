@@ -10,8 +10,8 @@ export const metadata = {
 
 const HOME_TASKS = [
   {
-    label: 'Maintain it',
-    title: 'Stay ahead of the ordinary stuff',
+    label: 'Home Watch',
+    title: 'Keep an eye on the whole home',
     body: 'Build a simple rhythm for filters, drains, alarms, exterior checks, seasonal service, and the systems you rely on every day.',
     href: '/home-care/',
   },
@@ -290,8 +290,12 @@ export default function HomePage() {
             </figcaption>
           </figure>
           <div className="section-heading">
-            <p className="eyebrow">One home program</p>
-            <h2 id="home-roof-watch">Roof Watch is one useful chapter—not the whole house.</h2>
+            <p className="eyebrow">Home Watch · Roofs</p>
+            <h2 id="home-roof-watch">Roof Watch is the roof chapter of Home Watch.</h2>
+            <p>
+              Home Watch is the whole-home rhythm: look at the same systems and spaces, record what changed, and keep
+              service and maintenance connected to the home. Roof Watch adds a professional roof visit to that record.
+            </p>
             <p>
               At participating Texas and Oklahoma addresses, Roof Watch offers a free annual roof visit with written visible
               findings and photos when conditions allow. Program limits and the assigned professional are provided

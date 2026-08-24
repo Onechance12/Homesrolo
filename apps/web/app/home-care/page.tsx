@@ -3,8 +3,8 @@ import { publicPageMetadata } from '../../lib/public-metadata.ts'
 import { HOMEOWNER_SIGNIN_URL } from '../../lib/site.ts'
 
 export const metadata = publicPageMetadata({
-  title: 'Home care that is easier to keep up with',
-  description: 'A practical whole-home care guide for seasonal checks, HVAC, plumbing, electrical, roof, exterior, appliances, safety, yard, pool, and pest control.',
+  title: 'Home Watch: a whole-home care rhythm',
+  description: 'Use Home Watch for seasonal checks across HVAC, plumbing, electrical, roofing, exterior, appliances, safety, yard, pool, and pest care.',
   canonical: '/home-care/',
 })
 
@@ -96,16 +96,16 @@ export default function HomeCarePage() {
       <section className="hub-hero">
         <div className="shell hub-hero__layout">
           <div>
-            <p className="eyebrow">Whole-home care</p>
-            <h1>A house runs better when the small things have a rhythm.</h1>
+            <p className="eyebrow">Home Watch · the whole home</p>
+            <h1>Keep an eye on the whole home, not just the emergency.</h1>
             <p className="hub-hero__lede">
-              Home care is not a perfect checklist taped to the refrigerator. It is a short, repeatable walk through
-              the places that matter, a record of what changed, and a clear line between a safe homeowner check and
-              work that needs the right professional.
+              Home Watch is a short, repeatable look at the places and systems that matter, a record of what changed,
+              and a clear line between a safe homeowner check and work that needs the right professional. Roof Watch
+              is the roof-specific professional visit inside this whole-home rhythm.
             </p>
             <div className="hub-hero__actions">
               <a className="btn btn--signal" href={HOMEOWNER_SIGNIN_URL}>Open my home</a>
-              <Link className="btn btn--night" href="/home-record/">Build the home record</Link>
+              <Link className="btn btn--night" href="/roof-watch/">See Roof Watch</Link>
             </div>
           </div>
           <aside className="hub-hero__aside" aria-label="A simple home care rhythm">

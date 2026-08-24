@@ -25,14 +25,11 @@ const fail = (message) => failures.push(message)
 
 const EXPECTED_ROOF_WATCH_IMAGES = new Map([
   ['/roof-watch/', [
-    '/images/roof-watch/architectural-shingle-roof-condition.webp',
+    '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
     '/images/roof-watch/roof-ridge-cap-and-vent-detail.webp',
     '/images/roof-watch/round-attic-vent-and-shingle-field.webp',
     '/images/roof-watch/roof-tear-off-hidden-assembly.webp',
-    '/images/roof-watch/roof-shingle-surface-detail.webp',
-    '/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp',
     '/images/roof-watch/laminated-shingle-ridge-detail.webp',
-    '/images/roof-watch/roof-field-and-hip-ridge-detail.webp',
   ]],
   ['/roof-watch/guides/hail-first-72-hours/', ['/images/roof-watch/architectural-shingle-roof-condition.webp']],
   ['/roof-watch/guides/roof-inspection-report/', ['/images/roof-watch/roof-ridge-cap-and-vent-detail.webp']],
@@ -457,7 +454,7 @@ if (!existsSync(OUT)) {
       }
     }
     const hubImageUrls = sitemapImageEntries.get('https://homesrolo.com/roof-watch/') ?? []
-    if (new Set(hubImageUrls).size !== 8) fail('Roof Watch hub must expose eight distinct documentary images')
+    if (new Set(hubImageUrls).size !== 5) fail('Roof Watch hub must expose five distinct documentary images')
     for (const imageLocation of imageLocations) {
       const imageUrl = new URL(imageLocation)
       if (imageUrl.origin !== 'https://homesrolo.com') {
@@ -543,10 +540,10 @@ if (!existsSync(OUT)) {
   if (!existsSync(roofWatchHubPath)) fail('Roof Watch hub was not exported')
   else {
     const hub = readFileSync(roofWatchHubPath, 'utf8')
-    if (!hub.includes('/images/roof-watch/architectural-shingle-roof-condition.webp')) {
+    if (!hub.includes('/images/roof-watch/gray-shingle-roof-ridges-and-vents.webp')) {
       fail('Roof Watch hub must contain the reviewed documentary hero photo')
     }
-    if (!/alt="Brown architectural asphalt shingles viewed across a roof slope"/.test(hub)) {
+    if (!/alt="Finished gray architectural-shingle roof with ridge caps and pipe penetrations"/.test(hub)) {
       fail('Roof Watch documentary hero photo must retain its factual alt text')
     }
     if (!hub.includes('/roof-watch-social-card.png')) {

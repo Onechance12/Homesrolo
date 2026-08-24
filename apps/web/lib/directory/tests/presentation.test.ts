@@ -125,7 +125,7 @@ test('the homeowner conversion path starts a project instead of publishing a con
   assert.match(site, /HOMEOWNER_APP_ORIGIN = 'https:\/\/homesrolo-homeowner-v2\.onrender\.com'/)
   assert.match(site, /HOMEOWNER_ROOFING_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=not_sure`/)
   assert.match(site, /HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `\$\{HOMEOWNER_APP_ORIGIN\}\/signin\?intent=inspection`/)
-  assert.match(site, /label: 'Home care'/)
+  assert.match(site, /label: 'Home Watch'/)
   for (const route of ['/home-care/', '/home-projects/', '/home-record/', '/guides/', '/how-it-works/', '/about/']) {
     assert.match(site, new RegExp(route.replaceAll('/', '\\/')))
   }

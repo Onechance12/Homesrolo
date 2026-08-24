@@ -61,7 +61,7 @@ test('homepage and navigation present one working whole-home product', () => {
   assert.deepEqual(PRIMARY_NAV.map(item => item.href), [
     '/home-care/', '/home-projects/', '/home-record/', '/guides/', '/how-it-works/', '/about/',
   ])
-  assert.match(homepage, /Roof Watch is one useful chapter/)
+  assert.match(homepage, /Roof Watch is the roof chapter of Home Watch/)
   assert.match(homepage, /Every home has a history\. Keep yours\./)
   assert.match(homepage, /Private by default/)
   for (const card of ['Roof replacement', 'Kitchen remodel', 'Exterior paint', 'Home wish list', 'Insurance & property']) {

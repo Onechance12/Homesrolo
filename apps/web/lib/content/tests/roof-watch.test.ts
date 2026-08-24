@@ -54,6 +54,8 @@ test('Roof Watch checks Texas and Oklahoma without inventing Oklahoma city pages
   assert.match(roofWatchHub, /'State', name: 'Texas'/)
   assert.match(roofWatchHub, /'State', name: 'Oklahoma'/)
   assert.match(roofWatchHub, /Current detailed Texas city pages/)
+  assert.match(roofWatchHub, /Home Watch · Roofs · Texas \+ Oklahoma/)
+  assert.match(roofWatchHub, /Roof Watch sits inside Home Watch/)
   assert.doesNotMatch(roofWatchHub, /North Texas/)
   assert.match(roofWatchGuidesHub, /Each guide identifies its region and sources/)
   assert.doesNotMatch(roofWatchGuidesHub, /Texas and Oklahoma homeowners/)
@@ -105,7 +107,7 @@ test('Roof Watch image sitemap covers every photographed page', () => {
     ...ROOF_WATCH_GUIDES.map(guide => `/roof-watch/guides/${guide.slug}/`),
   ])
   assert.deepEqual(new Set(Object.keys(ROUTE_IMAGES)), expectedRoutes)
-  assert.equal(new Set(ROUTE_IMAGES['/roof-watch/']).size, 8)
+  assert.equal(new Set(ROUTE_IMAGES['/roof-watch/']).size, 5)
   for (const images of Object.values(ROUTE_IMAGES)) {
     for (const image of images) assert.match(image, /^\/images\/roof-watch\/[a-z0-9-]+\.webp$/)
   }
