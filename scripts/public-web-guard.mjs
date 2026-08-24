@@ -518,9 +518,25 @@ if (!existsSync(OUT)) {
       fail(`the generic Homesrolo social card is ${dimensions?.width ?? 'unreadable'}x${dimensions?.height ?? 'unreadable'}; expected 1200x630`)
     }
   }
-  for (const publicAsset of ['manifest.webmanifest', 'icon.svg', 'apple-icon.png']) {
+  for (const publicAsset of [
+    'manifest.webmanifest', 'icon.svg', 'apple-icon.png', 'homesrolo-mark.svg',
+    'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
+  ]) {
     const assetPath = path.join(OUT, publicAsset)
     if (!existsSync(assetPath) || statSync(assetPath).size === 0) fail(`${publicAsset} must be exported`)
+  }
+  for (const [publicAsset, expected] of Object.entries({
+    'apple-icon.png': [180, 180],
+    'icon-192.png': [192, 192],
+    'icon-512.png': [512, 512],
+    'icon-maskable-512.png': [512, 512],
+  })) {
+    const assetPath = path.join(OUT, publicAsset)
+    if (!existsSync(assetPath)) continue
+    const dimensions = pngDimensions(readFileSync(assetPath))
+    if (dimensions?.width !== expected[0] || dimensions?.height !== expected[1]) {
+      fail(`${publicAsset} is ${dimensions?.width ?? 'unreadable'}x${dimensions?.height ?? 'unreadable'}; expected ${expected[0]}x${expected[1]}`)
+    }
   }
 
   const roofWatchHubPath = path.join(OUT, 'roof-watch', 'index.html')
@@ -533,16 +549,16 @@ if (!existsSync(OUT)) {
     if (!/alt="Brown architectural asphalt shingles viewed across a roof slope"/.test(hub)) {
       fail('Roof Watch documentary hero photo must retain its factual alt text')
     }
-    if (!hub.includes('/images/roof-watch/roof-watch-field-photos-social.jpg')) {
-      fail('Roof Watch hub must expose the reviewed photo-based social image')
+    if (!hub.includes('/roof-watch-social-card.png')) {
+      fail('Roof Watch hub must expose the branded Texas and Oklahoma social card')
     }
-    const socialCardPath = path.join(OUT, 'images', 'roof-watch', 'roof-watch-field-photos-social.jpg')
+    const socialCardPath = path.join(OUT, 'roof-watch-social-card.png')
     if (!existsSync(socialCardPath) || statSync(socialCardPath).size === 0) {
-      fail('Roof Watch social image must export as a non-empty JPEG')
+      fail('Roof Watch social card must export as a non-empty PNG')
     } else {
-      const dimensions = jpegDimensions(readFileSync(socialCardPath))
+      const dimensions = pngDimensions(readFileSync(socialCardPath))
       if (dimensions?.width !== 1200 || dimensions?.height !== 630) {
-        fail(`Roof Watch social image is ${dimensions?.width ?? 'unreadable'}x${dimensions?.height ?? 'unreadable'}; expected 1200x630`)
+        fail(`Roof Watch social card is ${dimensions?.width ?? 'unreadable'}x${dimensions?.height ?? 'unreadable'}; expected 1200x630`)
       }
     }
   }

@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     name: SITE_NAME,
     url: SITE_ORIGIN,
     description: SITE_DESCRIPTION,
-    logo: `${SITE_ORIGIN}/apple-icon.png`,
+    logo: `${SITE_ORIGIN}/icon-512.png`,
   }
   const websiteSchema = {
     '@context': 'https://schema.org',

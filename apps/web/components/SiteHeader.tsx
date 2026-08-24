@@ -3,17 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { HOMEOWNER_SIGNIN_URL, PRIMARY_NAV, SITE_NAME } from '../lib/site.ts'
-
-/** Two record tabs hold a house: the home and its history in one mark. */
-function Mark() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true" focusable="false">
-      <path d="M2.5 7.5h9l2.2 2.5h9.8v13H2.5z" fill="var(--brand-soft)" opacity=".3" />
-      <path d="M4 5h7.3l2 2.3H22v14H4z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="m8.2 13 4.8-4 4.8 4M9.6 12.2v5.3h6.8v-5.3" fill="none" stroke="var(--signal)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
+import { BrandMark } from './BrandMark.tsx'
 
 export function SiteHeader() {
   const pathname = usePathname()
@@ -32,7 +22,7 @@ export function SiteHeader() {
     <header className="masthead">
       <div className="shell masthead__inner">
         <Link href="/" className="wordmark">
-          <Mark />
+          <BrandMark />
           <span>homesrolo</span>
         </Link>
         <nav aria-label={`${SITE_NAME} primary`} className="nav nav--desktop">

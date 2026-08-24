@@ -116,7 +116,7 @@ export const ROOF_WATCH_GUIDES: readonly RoofWatchGuide[] = [
       ]},
       { heading: 'A warranty label is not a service-life prediction', body: [
         'Shingle warranties differ in coverage, exclusions, transfer rules, installation requirements, and ventilation requirements. The number used to describe a product is not a promise that every roof will last that many years in every condition. Keep the exact product and warranty document with the home record.',
-        'Maintenance does not stop normal aging, but it can catch debris, drainage issues, open sealant, damaged accessories, and other conditions before they create a larger problem. Roof Watch offers an annual documented check at participating North Texas addresses. Text your city and ZIP to (817) 886-2418 to confirm availability.',
+        'Maintenance does not stop normal aging, but it can catch debris, drainage issues, open sealant, damaged accessories, and other conditions before they create a larger problem. Roof Watch offers an annual documented check at participating Texas and Oklahoma addresses. Text your city and ZIP to (817) 886-2418 to confirm availability.',
       ]},
     ],
     sources: [

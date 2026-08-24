@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { DocumentaryImage } from '../components/DocumentaryImage.tsx'
+import { HomeRecordDeck } from '../components/HomeRecordDeck.tsx'
 import { HOMEOWNER_SIGNIN_URL, ROOF_WATCH_SMS_URL, SITE_DESCRIPTION } from '../lib/site.ts'
 
 export const metadata = {
@@ -129,58 +130,7 @@ export default function HomePage() {
               </ul>
             </div>
 
-            <div id="sample-home-record" className="home-stream" role="group" aria-label="Illustrative private home timeline">
-              <span className="home-stream__tab home-stream__tab--one" aria-hidden="true" />
-              <span className="home-stream__tab home-stream__tab--two" aria-hidden="true" />
-              <div className="home-stream__head">
-                <div>
-                  <span>Sample home record</span>
-                  <strong>The Martin home</strong>
-                </div>
-                <span className="status-pill status-pill--private">Private</span>
-              </div>
-              <ol className="home-stream__list">
-                <li>
-                  <span className="activity-dot activity-dot--live" aria-hidden="true" />
-                  <div>
-                    <strong>New construction handoff</strong>
-                    <span>2019 · systems and finish details recorded</span>
-                  </div>
-                  <span className="activity-state">Origin</span>
-                </li>
-                <li>
-                  <span className="activity-dot" aria-hidden="true" />
-                  <div>
-                    <strong>Upstairs AC service</strong>
-                    <span>2021 · service visit</span>
-                  </div>
-                  <span className="activity-state activity-state--quiet">Service</span>
-                </li>
-                <li>
-                  <span className="activity-dot" aria-hidden="true" />
-                  <div>
-                    <strong>Water heater replacement</strong>
-                    <span>2023 · product and warranty saved</span>
-                  </div>
-                  <span className="activity-state activity-state--quiet">Project</span>
-                </li>
-                <li>
-                  <span className="activity-dot activity-dot--live" aria-hidden="true" />
-                  <div>
-                    <strong>Kitchen remodel</strong>
-                    <span>2026 · decisions and completed work</span>
-                  </div>
-                  <span className="activity-state">Today</span>
-                </li>
-              </ol>
-              <p className="home-stream__note">Illustrative record · different people, products, and projects; one history</p>
-            </div>
-          </div>
-
-          <div className="home-paths" aria-label="Ways to use Homesrolo">
-            <div><strong>Care for it</strong><span>Build a repeatable rhythm around the whole home.</span></div>
-            <div><strong>Work on it</strong><span>Give every repair, remodel, and service visit a clear record.</span></div>
-            <div><strong>Remember it</strong><span>Keep the useful facts after the project is over.</span></div>
+            <HomeRecordDeck />
           </div>
         </div>
       </section>
@@ -343,7 +293,7 @@ export default function HomePage() {
             <p className="eyebrow">One home program</p>
             <h2 id="home-roof-watch">Roof Watch is one useful chapter—not the whole house.</h2>
             <p>
-              At participating North Texas addresses, Roof Watch offers a free annual roof visit with written visible
+              At participating Texas and Oklahoma addresses, Roof Watch offers a free annual roof visit with written visible
               findings and photos when conditions allow. Program limits and the assigned professional are provided
               before scheduling.
             </p>

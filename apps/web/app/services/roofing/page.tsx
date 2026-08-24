@@ -16,7 +16,7 @@ const GUIDES = [
   {
     href: '/roof-watch/',
     title: 'Roof Watch: a free yearly roof check',
-    body: 'Homesrolo\u2019s free North Texas maintenance program: an annual professional inspection, written findings provided to you, and some minor maintenance that may be included within written limits.',
+    body: 'Check availability for Homesrolo\u2019s free annual roof program at participating Texas and Oklahoma addresses: a professional visit, written findings, and clearly stated limits before scheduling.',
   },
   {
     href: '/services/roofing/repair-or-replace/',

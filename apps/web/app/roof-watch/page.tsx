@@ -13,21 +13,21 @@ import {
 import { ROOF_WATCH_CITIES } from '../../lib/content/roof-watch-cities.ts'
 
 export const metadata: Metadata = {
-  title: 'Free annual roof inspections in North Texas',
-  description: 'Check Roof Watch availability in North Texas. The free annual visit provides written findings and available photos when conditions allow; limits come first.',
+  title: 'Roof Watch availability in Texas and Oklahoma',
+  description: 'Check Roof Watch availability in Texas and Oklahoma. The free annual visit provides written findings and available photos when conditions allow; limits come first.',
   alternates: { canonical: '/roof-watch/' },
   openGraph: {
     type: 'website',
-    title: 'Roof Watch — a free annual roof check in North Texas',
-    description: 'Written findings, available roof photos when conditions allow, and clearly stated limits for participating North Texas addresses.',
+    title: 'Roof Watch availability in Texas and Oklahoma',
+    description: 'Written findings, available roof photos when conditions allow, and clearly stated limits for participating Texas and Oklahoma addresses.',
     url: '/roof-watch/',
-    images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', width: 1200, height: 630, alt: 'Close field photo of architectural asphalt shingles' }],
+    images: [{ url: '/roof-watch-social-card.png', width: 1200, height: 630, alt: 'Roof Watch: a yearly roof check with the findings in writing' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Roof Watch — a free annual roof check in North Texas',
+    title: 'Roof Watch availability in Texas and Oklahoma',
     description: 'Written findings, available roof photos when conditions allow, and program limits shared before scheduling.',
-    images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', alt: 'Close field photo of architectural asphalt shingles' }],
+    images: [{ url: '/roof-watch-social-card.png', alt: 'Roof Watch: a yearly roof check with the findings in writing' }],
   },
 }
 
@@ -118,7 +118,8 @@ const FAQ = [
   { question: 'Who comes to the house?', answer: 'The coordinator identifies the roofing professional assigned to the visit before the appointment. Ask for the company name, the person who will inspect, the observation method, and any current business or insurance evidence that applies. Homesrolo does not make a blanket verification claim.' },
   { question: 'How often is Roof Watch offered?', answer: 'Roof Watch is designed as a yearly visit. A separate inspection may be appropriate after severe weather, a leak, or a material change. If damage is possible, follow your policy and contact your insurer promptly; do not wait for the annual visit.' },
   { question: 'Does Roof Watch handle insurance claims?', answer: 'No. Roof Watch documents visible roof condition. It does not file, negotiate, or adjust claims, decide coverage, or promise an insurance result. Questions about a possible claim belong with your insurer or another appropriately licensed adviser.' },
-  { question: 'Which cities are in the current service area?', answer: 'Roof Watch is checking availability in Keller, Roanoke, Grapevine, Southlake, Flower Mound, and Fort Worth. Coverage is confirmed by address because scheduling and service boundaries can change.' },
+  { question: 'Can I check an address anywhere in Texas or Oklahoma?', answer: 'Yes. Text the city and ZIP for an address in Texas or Oklahoma. Availability is confirmed address by address because scheduling, safe access, and service boundaries can change. No visit is booked until the current answer and written limits are provided.' },
+  { question: 'Which cities have detailed local pages?', answer: 'Homesrolo currently publishes detailed local Roof Watch pages for Keller, Roanoke, Grapevine, Southlake, Flower Mound, and Fort Worth. Those pages document established city routes in Texas; they do not limit where a Texas or Oklahoma homeowner can ask us to check availability.' },
 ] as const
 
 export default function RoofWatchPage() {
@@ -128,9 +129,13 @@ export default function RoofWatchPage() {
     name: 'Roof Watch',
     serviceType: 'Free annual residential roof inspection program',
     provider: { '@type': 'Organization', name: SITE_NAME, url: SITE_ORIGIN },
-    areaServed: ROOF_WATCH_CITIES.map(city => ({ '@type': 'City', name: `${city.name}, TX` })),
+    areaServed: [
+      { '@type': 'State', name: 'Texas' },
+      { '@type': 'State', name: 'Oklahoma' },
+      ...ROOF_WATCH_CITIES.map(city => ({ '@type': 'City', name: `${city.name}, TX` })),
+    ],
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Free annual inspection at participating addresses, with written program limits sent before scheduling.' },
-    image: `${SITE_ORIGIN}/images/roof-watch/roof-watch-field-photos-social.jpg`,
+    image: `${SITE_ORIGIN}/roof-watch-social-card.png`,
     url: `${SITE_ORIGIN}/roof-watch/`,
   }
   const faqSchema = {
@@ -147,9 +152,9 @@ export default function RoofWatchPage() {
         <div className="shell">
           <div className="grid grid--2" style={{ alignItems: 'start', gap: '3rem' }}>
             <PageHeader
-              eyebrow="Roof Watch · Free annual roof inspections · North Texas"
+              eyebrow="Roof Watch · Texas + Oklahoma"
               title="Check the roof once a year. Keep the report."
-              lede="Roof Watch offers a free annual visit at participating North Texas addresses. We photograph what is visible, explain what may need attention, and put the findings in writing."
+              lede="Roof Watch offers a free annual visit at participating Texas and Oklahoma addresses. We photograph what is visible, explain what may need attention, and put the findings in writing. Availability is confirmed address by address."
             />
             <div className="answer-box">
               <p className="kicker">Check your address before you schedule</p>
@@ -165,11 +170,11 @@ export default function RoofWatchPage() {
               src="/images/roof-watch/architectural-shingle-roof-condition.webp"
               width={1200}
               height={894}
-              sizes="(max-width: 48rem) 100vw, 72rem"
+              sizes="(max-width: 48rem) calc(100vw - 2.5rem), 42rem"
               priority
               alt="Brown architectural asphalt shingles viewed across a roof slope"
             />
-            <figcaption>Selected from the operator&rsquo;s archival roof-photo library. It shows the kind of detail a useful record can preserve; it is not a Roof Watch visit or a finding about your home.</figcaption>
+            <figcaption><strong>Archival example.</strong> This is not a Roof Watch visit or a finding about a home.</figcaption>
           </figure>
         </div>
       </section>
@@ -181,20 +186,26 @@ export default function RoofWatchPage() {
             <h2 id="rw-field-photos">What a roof record can actually show</h2>
             <p>These field photos were selected from the operator&rsquo;s archival roof-photo library. They are not photographs from Roof Watch inspections. They show how a clear location, a wider roof view, and a close detail can make a report easier to understand later. A photograph records what was visible; it does not by itself diagnose cause, certify a roof, or decide an insurance claim.</p>
           </div>
-          <div className="roof-photo-grid">
+          <ul
+            className="roof-photo-grid"
+            tabIndex={0}
+            aria-label="Roof field-photo examples. On a small screen, scroll horizontally to browse."
+          >
             {FIELD_PHOTOS.map(photo => (
-              <figure key={photo.src} className="roof-photo">
-                <DocumentaryImage
-                  src={photo.src}
-                  width={photo.width}
-                  height={photo.height}
-                  sizes="(max-width: 40rem) 100vw, 50vw"
-                  alt={photo.alt}
-                />
-                <figcaption>{photo.caption}</figcaption>
-              </figure>
+              <li key={photo.src}>
+                <figure className="roof-photo">
+                  <DocumentaryImage
+                    src={photo.src}
+                    width={photo.width}
+                    height={photo.height}
+                    sizes="(max-width: 40rem) 82vw, 50vw"
+                    alt={photo.alt}
+                  />
+                  <figcaption>{photo.caption}</figcaption>
+                </figure>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </section>
 
@@ -255,8 +266,25 @@ export default function RoofWatchPage() {
         <div className="shell">
           <div className="prose" style={{ marginBottom: '2rem' }}>
             <p className="eyebrow">Service area</p>
-            <h2 id="rw-cities">Roof Watch across North Texas</h2>
-            <p>Homes across these six cities may qualify, subject to address confirmation. Each local page explains the roof conditions and questions the yearly record is designed to capture:</p>
+            <h2 id="rw-cities">Check Roof Watch across Texas and Oklahoma</h2>
+            <p>Text the city and ZIP for any address in either state. We will confirm current availability, the assigned professional, and the written program limits before anything is scheduled.</p>
+          </div>
+          <div className="grid grid--2" style={{ marginBottom: '2.5rem' }}>
+            <article className="card">
+              <p className="eyebrow">Texas</p>
+              <h3 className="card__title">One address at a time</h3>
+              <p>Send the Texas city and ZIP. A statewide invitation to check availability is not a promise that every address can be scheduled.</p>
+            </article>
+            <article className="card">
+              <p className="eyebrow">Oklahoma</p>
+              <h3 className="card__title">The same written limits first</h3>
+              <p>Send the Oklahoma city and ZIP. We will answer with the current service result before a roof visit is discussed.</p>
+            </article>
+          </div>
+          <div className="prose" style={{ marginBottom: '2rem' }}>
+            <p className="eyebrow">Detailed local pages</p>
+            <h3>Current detailed Texas city pages</h3>
+            <p>These six city pages add genuinely local conditions and sources. We will add more local pages only when the service and local information are real—not just to manufacture city names for search.</p>
           </div>
           <div className="grid grid--2">
             {ROOF_WATCH_CITIES.map(city => (
