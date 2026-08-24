@@ -13,12 +13,19 @@ import type {
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
 import { HomeownerAuthService } from './auth.ts'
 import { HomeownerProjectReviewService } from '../../../../src/homeowner/homeowner-project-review.v1.ts'
+import { HomeRecordHandoffService } from '../../../../src/homeowner/home-record-handoff.v1.ts'
 import {
   readHomeownerRuntimeConfiguration,
   type HomeownerRuntimeConfiguration,
 } from './config.ts'
 import { createSupabaseClients, SupabaseHomeownerProvider } from './supabase-provider.ts'
 import { jobroloIntakeClientForEnvironment } from './jobrolo-intake-client.ts'
+import { jobroloHandoffClientForEnvironment } from './jobrolo-handoff-client.ts'
+import { SupabaseHomeRecordHandoffProvider } from './supabase-home-record-handoff-provider.ts'
+import {
+  homeRecordHandoffSecurityProviders,
+  readHomeRecordHandoffSecurityConfiguration,
+} from './home-record-handoff-security.ts'
 import {
   OpenAIHomeResearchClient,
   readHomeResearchConfiguration,
@@ -80,6 +87,16 @@ const homeResearchClient = homeResearchConfiguration
   ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
   : null
 let projectReviewService: HomeownerProjectReviewService | null = null
+const jobroloHandoffClient = jobroloHandoffClientForEnvironment(environment)
+const homeRecordHandoffSecurityConfiguration =
+  readHomeRecordHandoffSecurityConfiguration(environment)
+const homeRecordHandoffProvider = clients && homeRecordHandoffSecurityConfiguration
+  ? new SupabaseHomeRecordHandoffProvider(clients.service)
+  : null
+const homeRecordHandoffSecurity = homeRecordHandoffSecurityConfiguration
+  ? homeRecordHandoffSecurityProviders(homeRecordHandoffSecurityConfiguration)
+  : null
+let homeRecordHandoffService: HomeRecordHandoffService | null = null
 
 export function projectReviewCapabilityEnabled(
   providerConfigured: boolean,
@@ -144,6 +161,36 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
     attachmentsEnabled: configuration?.jobroloAttachmentsEnabled === true,
   })
   return projectReviewService
+}
+
+/**
+ * The handoff remains unavailable unless the base Supabase runtime, the
+ * independent handoff gate, signed Jobrolo transport, pinned keys, and local
+ * scanner are all configured. Routes must use the returned server-owned
+ * recipient ref; a browser must never choose one.
+ */
+export function configuredHomeRecordHandoffService(): {
+  readonly service: HomeRecordHandoffService
+  readonly recipientRef: string
+} | null {
+  if (!provider || !homeRecordHandoffProvider || !jobroloHandoffClient
+    || !homeRecordHandoffSecurity || !homeRecordHandoffSecurityConfiguration) return null
+  homeRecordHandoffService ??= new HomeRecordHandoffService({
+    enabled: true,
+    identity: provider,
+    repository: provider,
+    recipients: homeRecordHandoffProvider,
+    trust: homeRecordHandoffSecurity.trust,
+    source: jobroloHandoffClient,
+    signer: homeRecordHandoffSecurity.signer,
+    scanner: homeRecordHandoffSecurity.scanner,
+    persistence: homeRecordHandoffProvider,
+    objects: homeRecordHandoffProvider,
+  })
+  return Object.freeze({
+    service: homeRecordHandoffService,
+    recipientRef: homeRecordHandoffSecurityConfiguration.recipientRef,
+  })
 }
 
 export function configuredHomeResearchClient(): OpenAIHomeResearchClient | null {

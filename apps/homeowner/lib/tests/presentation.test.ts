@@ -113,6 +113,7 @@ test('browser and server-to-server network calls exist only in their sanctioned 
   // default-off, stateless OpenAI home-research adapter.
   const BROWSER_TRANSPORT = 'lib/port/transport.ts'
   const SERVER_TRANSPORT = 'lib/server/jobrolo-intake-client.ts'
+  const HANDOFF_TRANSPORT = 'lib/server/jobrolo-handoff-client.ts'
   const AI_TRANSPORT = 'lib/server/home-research.ts'
   for (const rel of appSources) {
     const content = read(rel)
@@ -125,6 +126,15 @@ test('browser and server-to-server network calls exist only in their sanctioned 
       assert.match(content, /SignedJobroloIntakeClient/, 'the server transport is explicit and named')
       assert.match(content, /\/api\/integrations\/homesrolo\/v1\/project-intakes/,
         'the server transport pins one exact integration path')
+      continue
+    }
+    if (rel === HANDOFF_TRANSPORT) {
+      assert.match(content, /SignedJobroloHandoffClient/,
+        'the handoff transport is explicit and named')
+      assert.match(content, /project-handoffs\/\$\{shareId\}\/claim/,
+        'the handoff transport pins the reviewed claim path')
+      assert.match(content, /Homesrolo-Handoff-HMAC/,
+        'the handoff transport authenticates every request')
       continue
     }
     if (rel === AI_TRANSPORT) {
