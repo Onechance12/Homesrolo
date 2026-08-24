@@ -1,5 +1,11 @@
-import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
-import type { HomeRecordHandoffService } from '../../../../src/homeowner/home-record-handoff.v1.ts'
+import {
+  HomeownerApiError,
+  type HomeownerApiRequestContext,
+} from '../../../../src/homeowner/homeowner-api.v1.ts'
+import type {
+  HomeRecordHandoffPreview,
+  HomeRecordHandoffService,
+} from '../../../../src/homeowner/home-record-handoff.v1.ts'
 import { sessionHandleFromCookieHeader } from './cookie.ts'
 import {
   configuredHomeRecordHandoffService,
@@ -26,10 +32,17 @@ type HandoffHttpService = Pick<HomeRecordHandoffService,
 export interface HomeRecordHandoffHttpDependencies {
   readonly appOrigin: string
   readonly service: HandoffHttpService
+  /** Server-owned closure; its fixed recipient ref never enters this boundary. */
+  readonly claimExactShare: (
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedShareId: string,
+  ) => Promise<HomeRecordHandoffPreview>
 }
 
 export type HomeRecordHandoffHttpOperation =
   | { readonly kind: 'list' }
+  | { readonly kind: 'claim'; readonly shareId: string }
   | { readonly kind: 'preview'; readonly shareId: string }
   | { readonly kind: 'accept'; readonly shareId: string }
   | { readonly kind: 'reject'; readonly shareId: string }
@@ -63,7 +76,11 @@ function runtimeDependencies(): HomeRecordHandoffHttpDependencies | null {
   const configuration = homeownerRuntimeConfiguration()
   const configured = configuredHomeRecordHandoffService()
   if (!configuration || !configured) return null
-  return { appOrigin: configuration.appOrigin, service: configured.service }
+  return {
+    appOrigin: configuration.appOrigin,
+    service: configured.service,
+    claimExactShare: configured.claimExactShare,
+  }
 }
 
 function readEnvelopeAllowed(request: Request, expectedOrigin: string): boolean {
@@ -126,9 +143,14 @@ async function boundedJson(request: Request): Promise<unknown | null> {
   }
 }
 
+function strictEmptyObject(value: unknown): value is Readonly<Record<string, never>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).length === 0
+}
+
 /**
- * Authenticated homeowner boundary only. It intentionally exposes no claim
- * operation: recipient resolution and offer claiming remain server-owned.
+ * Authenticated homeowner boundary only. Exact-share activation accepts an
+ * empty object; recipient resolution and source claiming remain server-owned.
  */
 export async function handleHomeRecordHandoffHttp(
   request: Request,
@@ -191,6 +213,16 @@ export async function handleHomeRecordHandoffHttp(
     }
     const body = await boundedJson(request)
     if (body === null) return problem(400, 'invalid_request')
+    if (operation.kind === 'claim') {
+      if (!strictEmptyObject(body)) return problem(400, 'invalid_request')
+      return json(200, {
+        data: await dependencies.claimExactShare(
+          context,
+          requestedHomeRef,
+          operation.shareId,
+        ),
+      })
+    }
     const data = operation.kind === 'accept'
       ? await dependencies.service.accept(
           context,

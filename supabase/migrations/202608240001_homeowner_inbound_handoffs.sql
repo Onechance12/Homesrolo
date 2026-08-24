@@ -380,8 +380,38 @@ create table public.homesrolo_homeowner_handoff_rejection_commands (
   foreign key (handoff_ref, home_ref, principal_ref)
     references public.homesrolo_homeowner_handoffs(
       handoff_ref, home_ref, controller_principal_ref
+  )
+);
+
+-- Exact-share claim attempts are admitted before any producer network call.
+-- Only a domain-separated digest of the caller-supplied high-entropy share ID
+-- is retained; this ledger is not a recipient catalog and cannot enumerate
+-- Jobrolo offers.
+create table public.homesrolo_homeowner_handoff_claim_attempts (
+  attempt_ref bigint generated always as identity primary key,
+  principal_ref text not null
+    references public.homesrolo_homeowner_principals(principal_ref),
+  home_ref text not null references public.homesrolo_private_homes(home_ref),
+  membership_ref text not null
+    references public.homesrolo_homeowner_memberships(membership_ref),
+  membership_revision integer not null check (membership_revision >= 1),
+  recipient_ref text not null,
+  recipient_binding_revision integer not null
+    check (recipient_binding_revision >= 1),
+  claim_digest text not null check (claim_digest ~ '^[a-f0-9]{64}$'),
+  attempted_at timestamptz not null,
+  foreign key (recipient_ref, home_ref, principal_ref)
+    references public.homesrolo_homeowner_handoff_recipients(
+      recipient_ref, home_ref, controller_principal_ref
     )
 );
+
+create index homesrolo_handoff_claim_attempts_scope_time_idx
+  on public.homesrolo_homeowner_handoff_claim_attempts(
+    principal_ref, home_ref, attempted_at desc
+  );
+create index homesrolo_handoff_claim_attempts_time_idx
+  on public.homesrolo_homeowner_handoff_claim_attempts(attempted_at);
 
 alter table public.homesrolo_homeowner_handoff_recipients enable row level security;
 alter table public.homesrolo_homeowner_handoffs enable row level security;
@@ -389,6 +419,7 @@ alter table public.homesrolo_homeowner_handoff_replay_conflicts enable row level
 alter table public.homesrolo_homeowner_handoff_items enable row level security;
 alter table public.homesrolo_homeowner_handoff_acceptance_commands enable row level security;
 alter table public.homesrolo_homeowner_handoff_rejection_commands enable row level security;
+alter table public.homesrolo_homeowner_handoff_claim_attempts enable row level security;
 
 revoke all on table public.homesrolo_homeowner_handoff_recipients
   from public, anon, authenticated;
@@ -402,6 +433,8 @@ revoke all on table public.homesrolo_homeowner_handoff_acceptance_commands
   from public, anon, authenticated;
 revoke all on table public.homesrolo_homeowner_handoff_rejection_commands
   from public, anon, authenticated;
+revoke all on table public.homesrolo_homeowner_handoff_claim_attempts
+  from public, anon, authenticated, service_role;
 
 grant select, insert, update on table public.homesrolo_homeowner_handoff_recipients
   to service_role;
@@ -1172,6 +1205,180 @@ begin
 end;
 $$;
 
+create or replace function public.homesrolo_reserve_homeowner_handoff_claim_attempt(
+  p_principal_ref text,
+  p_home_ref text,
+  p_membership_ref text,
+  p_membership_revision integer,
+  p_recipient_ref text,
+  p_recipient_binding_revision integer,
+  p_claim_digest text,
+  p_attempted_at timestamptz
+) returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_now timestamptz := statement_timestamp();
+  v_scope_count integer;
+  v_global_count integer;
+begin
+  if p_claim_digest !~ '^[a-f0-9]{64}$'
+    or p_recipient_ref !~ '^hrcp_[A-Za-z0-9_-]{43}$'
+    or p_recipient_binding_revision < 1
+    or p_attempted_at is null
+    or p_attempted_at < v_now - interval '5 minutes'
+    or p_attempted_at > v_now + interval '1 minute' then
+    raise exception 'handoff_claim_attempt_invalid';
+  end if;
+
+  if not exists (
+    select 1 from public.homesrolo_homeowner_memberships
+    where membership_ref = p_membership_ref
+      and principal_ref = p_principal_ref
+      and home_ref = p_home_ref
+      and revision = p_membership_revision
+      and state = 'active'
+      and role = 'workspace_controller'
+  ) then
+    raise exception 'membership_not_authorized';
+  end if;
+  if not exists (
+    select 1 from public.homesrolo_homeowner_handoff_recipients
+    where recipient_ref = p_recipient_ref
+      and home_ref = p_home_ref
+      and controller_principal_ref = p_principal_ref
+      and revision = p_recipient_binding_revision
+      and state = 'active'
+  ) then
+    raise exception 'handoff_recipient_binding_conflict';
+  end if;
+
+  -- Serialize cleanup, the bounded global cap, and scoped admission so
+  -- concurrent service instances cannot over-admit.
+  perform pg_advisory_xact_lock(
+    hashtextextended('homesrolo:handoff-claim-attempts:global', 0)
+  );
+  perform pg_advisory_xact_lock(hashtextextended(
+    'homesrolo:handoff-claim-attempts:' || p_principal_ref || ':' || p_home_ref,
+    0
+  ));
+
+  -- Recheck authority after waiting for admission locks. Revocation or
+  -- revision changes must win before a reservation is persisted.
+  if not exists (
+    select 1 from public.homesrolo_homeowner_memberships
+    where membership_ref = p_membership_ref
+      and principal_ref = p_principal_ref
+      and home_ref = p_home_ref
+      and revision = p_membership_revision
+      and state = 'active'
+      and role = 'workspace_controller'
+  ) or not exists (
+    select 1 from public.homesrolo_homeowner_handoff_recipients
+    where recipient_ref = p_recipient_ref
+      and home_ref = p_home_ref
+      and controller_principal_ref = p_principal_ref
+      and revision = p_recipient_binding_revision
+      and state = 'active'
+  ) then
+    raise exception 'handoff_claim_authority_changed';
+  end if;
+
+  delete from public.homesrolo_homeowner_handoff_claim_attempts
+  where attempted_at < v_now - interval '24 hours';
+
+  select count(*) into v_global_count
+  from public.homesrolo_homeowner_handoff_claim_attempts;
+  if v_global_count >= 100000 then return false; end if;
+
+  select count(*) into v_scope_count
+  from public.homesrolo_homeowner_handoff_claim_attempts
+  where principal_ref = p_principal_ref
+    and home_ref = p_home_ref
+    and attempted_at >= v_now - interval '1 hour';
+  if v_scope_count >= 10 then return false; end if;
+
+  insert into public.homesrolo_homeowner_handoff_claim_attempts (
+    principal_ref, home_ref, membership_ref, membership_revision,
+    recipient_ref, recipient_binding_revision, claim_digest, attempted_at
+  ) values (
+    p_principal_ref, p_home_ref, p_membership_ref, p_membership_revision,
+    p_recipient_ref, p_recipient_binding_revision, p_claim_digest, v_now
+  );
+  return true;
+end;
+$$;
+
+create or replace function public.homesrolo_revoke_homeowner_handoff_recipient(
+  p_principal_ref text,
+  p_home_ref text,
+  p_membership_ref text,
+  p_membership_revision integer,
+  p_recipient_ref text,
+  p_expected_recipient_revision integer,
+  p_revoked_at timestamptz
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_recipient public.homesrolo_homeowner_handoff_recipients%rowtype;
+  v_now timestamptz := statement_timestamp();
+begin
+  if p_recipient_ref !~ '^hrcp_[A-Za-z0-9_-]{43}$'
+    or p_expected_recipient_revision < 1
+    or p_revoked_at is null
+    or p_revoked_at < v_now - interval '5 minutes'
+    or p_revoked_at > v_now + interval '1 minute' then
+    raise exception 'handoff_recipient_revocation_invalid';
+  end if;
+  if not exists (
+    select 1 from public.homesrolo_homeowner_memberships
+    where membership_ref = p_membership_ref
+      and principal_ref = p_principal_ref
+      and home_ref = p_home_ref
+      and revision = p_membership_revision
+      and state = 'active'
+      and role = 'workspace_controller'
+  ) then
+    raise exception 'membership_not_authorized';
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended('homesrolo:handoff-recipient:' || p_recipient_ref, 0)
+  );
+  select * into v_recipient
+  from public.homesrolo_homeowner_handoff_recipients
+  where recipient_ref = p_recipient_ref
+  for update;
+  if not found
+    or v_recipient.home_ref <> p_home_ref
+    or v_recipient.controller_principal_ref <> p_principal_ref then
+    raise exception 'handoff_recipient_binding_conflict';
+  end if;
+  if v_recipient.state = 'revoked'
+    and v_recipient.revision = p_expected_recipient_revision + 1 then
+    return to_jsonb(v_recipient);
+  end if;
+  if v_recipient.state <> 'active'
+    or v_recipient.revision <> p_expected_recipient_revision then
+    raise exception 'handoff_recipient_revision_conflict';
+  end if;
+
+  update public.homesrolo_homeowner_handoff_recipients
+  set state = 'revoked',
+    revision = revision + 1,
+    updated_at = p_revoked_at,
+    revoked_at = p_revoked_at
+  where recipient_ref = p_recipient_ref
+  returning * into v_recipient;
+  return to_jsonb(v_recipient);
+end;
+$$;
+
 create or replace function public.homesrolo_receive_homeowner_handoff(
   p_handoff_ref text,
   p_recipient_ref text,
@@ -1894,6 +2101,12 @@ revoke all on function public.homesrolo_guard_handoff_acceptance_command_immutab
 revoke all on function public.homesrolo_bind_homeowner_handoff_recipient(
   text, text, text, integer, text, timestamptz
 ) from public, anon, authenticated;
+revoke all on function public.homesrolo_reserve_homeowner_handoff_claim_attempt(
+  text, text, text, integer, text, integer, text, timestamptz
+) from public, anon, authenticated;
+revoke all on function public.homesrolo_revoke_homeowner_handoff_recipient(
+  text, text, text, integer, text, integer, timestamptz
+) from public, anon, authenticated;
 revoke all on function public.homesrolo_receive_homeowner_handoff(
   text, text, text, jsonb, text, jsonb, text, text, text, timestamptz
 ) from public, anon, authenticated;
@@ -1934,6 +2147,12 @@ grant execute on function public.homesrolo_guard_handoff_acceptance_command_immu
   to service_role;
 grant execute on function public.homesrolo_bind_homeowner_handoff_recipient(
   text, text, text, integer, text, timestamptz
+) to service_role;
+grant execute on function public.homesrolo_reserve_homeowner_handoff_claim_attempt(
+  text, text, text, integer, text, integer, text, timestamptz
+) to service_role;
+grant execute on function public.homesrolo_revoke_homeowner_handoff_recipient(
+  text, text, text, integer, text, integer, timestamptz
 ) to service_role;
 grant execute on function public.homesrolo_receive_homeowner_handoff(
   text, text, text, jsonb, text, jsonb, text, text, text, timestamptz

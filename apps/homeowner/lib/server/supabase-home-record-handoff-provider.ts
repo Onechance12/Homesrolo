@@ -178,6 +178,23 @@ export class SupabaseHomeRecordHandoffProvider implements
     }
   }
 
+  async reserveClaimAttempt(
+    input: Parameters<HomeRecordHandoffRecipientPort['reserveClaimAttempt']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_reserve_homeowner_handoff_claim_attempt',
+      {
+        ...grantArguments(input.grant),
+        p_recipient_ref: input.recipientRef,
+        p_recipient_binding_revision: input.recipientBindingRevision,
+        p_claim_digest: input.claimDigest,
+        p_attempted_at: input.attemptedAt,
+      },
+    )
+    if (error || typeof data !== 'boolean') throw new HomeownerApiError('unavailable')
+    return data
+  }
+
   async receiveOffer(input: Parameters<HomeRecordHandoffPersistencePort['receiveOffer']>[0]) {
     if (input.binding.recipientRef !== input.offer.manifest.recipientRef
       || input.items.length !== input.offer.manifest.artifacts.length) {

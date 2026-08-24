@@ -422,6 +422,13 @@ export interface HomeRecordHandoffRecipientBinding {
 
 export interface HomeRecordHandoffRecipientPort {
   resolveRecipientBinding(recipientRef: string): Promise<HomeRecordHandoffRecipientBinding | null>
+  reserveClaimAttempt(input: {
+    readonly grant: AuthorizedHomeownerAction<'handoff.preview'>
+    readonly recipientRef: string
+    readonly recipientBindingRevision: number
+    readonly claimDigest: string
+    readonly attemptedAt: string
+  }): Promise<boolean>
 }
 
 export interface HomeRecordHandoffTrustPort {
@@ -844,6 +851,83 @@ export class HomeRecordHandoffService {
       throw new HomeownerApiError('unavailable')
     }
     return { handoffRef: stored.handoffRef, state: stored.state }
+  }
+
+  /**
+   * Exact-share activation for an authenticated Home Record controller.
+   *
+   * The recipient ref is still supplied only by the server runtime. The fresh
+   * homeowner grant must name the same home and controller as the immutable
+   * recipient binding before the source is contacted. `claim` resolves that
+   * binding again, and the persisted binding revision is checked before a safe
+   * browser projection is returned.
+   */
+  async claimForController(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedShareId: string,
+    serverRecipientRef: string,
+  ): Promise<HomeRecordHandoffPreview> {
+    this.#requireEnabled()
+    if (!opaqueRef('hshr').safeParse(requestedShareId).success
+      || !opaqueRef('hrcp').safeParse(serverRecipientRef).success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
+    const binding = await this.#recipients.resolveRecipientBinding(serverRecipientRef)
+    if (!binding || binding.state !== 'active'
+      || binding.recipientRef !== serverRecipientRef
+      || binding.homeRef !== grant.homeRef
+      || binding.controllerPrincipalRef !== grant.principalRef
+      || !Number.isSafeInteger(binding.revision) || binding.revision < 1) {
+      throw new HomeownerApiError('not_found')
+    }
+
+    // A retry for an already-persisted exact share is satisfied locally. This
+    // neither consumes admission capacity nor contacts Jobrolo again.
+    const existingInput = await this.#persistence.readHandoff(grant, requestedShareId)
+    if (existingInput) {
+      const existing = parseHomeRecordHandoffRecord(existingInput)
+      if (existing.homeRef !== binding.homeRef
+        || existing.controllerPrincipalRef !== binding.controllerPrincipalRef
+        || existing.recipientBindingRevision !== binding.revision
+        || existing.manifest.shareId !== requestedShareId
+        || existing.manifest.recipientRef !== binding.recipientRef) {
+        throw new HomeownerApiError('not_found')
+      }
+      const retryGrant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
+      if (!sameGrant(grant, retryGrant)) throw new HomeownerApiError('not_found')
+      return safePreview(existing)
+    }
+
+    const admitted = await this.#recipients.reserveClaimAttempt({
+      grant,
+      recipientRef: binding.recipientRef,
+      recipientBindingRevision: binding.revision,
+      claimDigest: homeownerShareSha256({
+        version: HOME_RECORD_HANDOFF_VERSION,
+        operation: 'claim_attempt',
+        shareId: requestedShareId,
+      }),
+      attemptedAt: this.#now(),
+    })
+    if (!admitted) throw new HomeownerApiError('rate_limited')
+
+    const claimed = await this.claim({
+      shareId: requestedShareId,
+      recipientRef: serverRecipientRef,
+    })
+    const finalGrant = await this.#grant(context, requestedHomeRef, 'handoff.preview')
+    if (!sameGrant(grant, finalGrant)) throw new HomeownerApiError('not_found')
+    const stored = await this.#readExact(finalGrant, requestedShareId)
+    if (stored.handoffRef !== claimed.handoffRef
+      || stored.homeRef !== binding.homeRef
+      || stored.controllerPrincipalRef !== binding.controllerPrincipalRef
+      || stored.recipientBindingRevision !== binding.revision
+      || stored.manifest.recipientRef !== binding.recipientRef) {
+      throw new HomeownerApiError('not_found')
+    }
+    return safePreview(stored)
   }
 
   async list(
@@ -1279,6 +1363,7 @@ export class HomeRecordHandoffService {
       exportHandoffs.push({
         handoffRef: record.handoffRef,
         shareId: record.manifest.shareId,
+        sourceManifest: record.manifest,
         manifestDigest: record.manifestDigest,
         authorization: record.authorization,
         consent: record.consent,

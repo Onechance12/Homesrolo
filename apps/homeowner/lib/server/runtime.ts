@@ -7,7 +7,11 @@
  * on this side of the boundary.
  */
 
-import { HomeownerApiError, HomeownerApiService } from '../../../../src/homeowner/homeowner-api.v1.ts'
+import {
+  HomeownerApiError,
+  HomeownerApiService,
+  type HomeownerApiRequestContext,
+} from '../../../../src/homeowner/homeowner-api.v1.ts'
 import type {
   HomeownerCommandPort, HomeownerIdentityPort, HomeownerRepositoryPort,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
@@ -176,7 +180,11 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
  */
 export function configuredHomeRecordHandoffService(): {
   readonly service: HomeRecordHandoffService
-  readonly recipientRef: string
+  readonly claimExactShare: (
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedShareId: string,
+  ) => ReturnType<HomeRecordHandoffService['claimForController']>
 } | null {
   if (!provider || !homeRecordHandoffProvider || !jobroloHandoffClient
     || !homeRecordHandoffSecurity || !homeRecordHandoffSecurityConfiguration) return null
@@ -192,9 +200,17 @@ export function configuredHomeRecordHandoffService(): {
     persistence: homeRecordHandoffProvider,
     objects: homeRecordHandoffProvider,
   })
+  const configuredService = homeRecordHandoffService
+  const configuredRecipientRef = homeRecordHandoffSecurityConfiguration.recipientRef
   return Object.freeze({
-    service: homeRecordHandoffService,
-    recipientRef: homeRecordHandoffSecurityConfiguration.recipientRef,
+    service: configuredService,
+    claimExactShare: (context, requestedHomeRef, requestedShareId) =>
+      configuredService.claimForController(
+        context,
+        requestedHomeRef,
+        requestedShareId,
+        configuredRecipientRef,
+      ),
   })
 }
 

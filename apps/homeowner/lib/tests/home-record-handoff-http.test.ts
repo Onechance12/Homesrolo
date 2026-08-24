@@ -15,9 +15,19 @@ const shareId = `hshr_${'s'.repeat(43)}`
 const sessionHandle = 'k'.repeat(43)
 const preview = Object.freeze({ handoffRef: `hhof_${'o'.repeat(43)}`, state: 'received' })
 
-function dependencies(overrides: Partial<HomeRecordHandoffHttpDependencies['service']> = {}): HomeRecordHandoffHttpDependencies {
+function dependencies(
+  overrides: Partial<HomeRecordHandoffHttpDependencies['service']> = {},
+  claimExactShare: HomeRecordHandoffHttpDependencies['claimExactShare'] =
+    async (context, requestedHomeRef, requestedShareId) => {
+      assert.deepEqual(context, { sessionHandle })
+      assert.equal(requestedHomeRef, homeRef)
+      assert.equal(requestedShareId, shareId)
+      return preview as never
+    },
+): HomeRecordHandoffHttpDependencies {
   return {
     appOrigin: origin,
+    claimExactShare,
     service: {
       async list(context, requestedHomeRef) {
         assert.deepEqual(context, { sessionHandle })
@@ -147,6 +157,68 @@ test('mutations require exact origin, bounded plain JSON, and pass no browser au
     )
     assert.ok(response.status === 400 || response.status === 403)
   }
+})
+
+test('one exact share is claimed with strict empty JSON and no browser authority fields', async () => {
+  const path = `/api/v1/homes/${homeRef}/handoffs/${shareId}/claim`
+  let calls = 0
+  const exact = dependencies({}, async (context, requestedHomeRef, requestedShareId) => {
+    calls += 1
+    assert.deepEqual(context, { sessionHandle })
+    assert.equal(requestedHomeRef, homeRef)
+    assert.equal(requestedShareId, shareId)
+    return preview as never
+  })
+  const response = await handleHomeRecordHandoffHttp(
+    post(path, {}),
+    homeRef,
+    { kind: 'claim', shareId },
+    exact,
+  )
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { data: preview })
+  assert.equal(calls, 1)
+
+  for (const body of [
+    { recipientRef: `hrcp_${'r'.repeat(43)}` },
+    { principalRef: `hprn_${'p'.repeat(43)}` },
+    { homeRef },
+    [],
+  ]) {
+    const rejected = await handleHomeRecordHandoffHttp(
+      post(path, body),
+      homeRef,
+      { kind: 'claim', shareId },
+      exact,
+    )
+    assert.equal(rejected.status, 400)
+    assert.deepEqual(await rejected.json(), { error: { code: 'invalid_request' } })
+  }
+  assert.equal(calls, 1)
+})
+
+test('exact-share claim hides binding and controller mismatches behind not found', async () => {
+  const response = await handleHomeRecordHandoffHttp(
+    post(`/api/v1/homes/${homeRef}/handoffs/${shareId}/claim`, {}),
+    homeRef,
+    { kind: 'claim', shareId },
+    dependencies({}, async () => { throw new HomeownerApiError('not_found') }),
+  )
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: { code: 'not_found' } })
+})
+
+test('exact-share admission denial is a bounded rate-limit response', async () => {
+  const response = await handleHomeRecordHandoffHttp(
+    post(`/api/v1/homes/${homeRef}/handoffs/${shareId}/claim`, {}),
+    homeRef,
+    { kind: 'claim', shareId },
+    dependencies({}, async () => { throw new HomeownerApiError('rate_limited') }),
+  )
+  assert.equal(response.status, 429)
+  assert.deepEqual(await response.json(), { error: { code: 'rate_limited' } })
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.match(response.headers.get('retry-after') ?? '', /^\d+$/)
 })
 
 test('service conflicts are bounded and never expose internal details', async () => {

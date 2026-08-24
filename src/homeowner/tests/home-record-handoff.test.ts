@@ -21,6 +21,7 @@ import {
   type HomeRecordHandoffItemRecord,
   type HomeRecordHandoffOffer,
   type HomeRecordHandoffPersistencePort,
+  type HomeRecordHandoffRecipientBinding,
   type HomeRecordHandoffRecord,
   type HomeRecordHandoffScanResult,
   type HomeRecordHandoffServiceOptions,
@@ -306,6 +307,8 @@ function persistenceHarness() {
 function harness(input: {
   enabled?: boolean
   membershipForRead?: () => HomeownerMembership | null
+  bindingForRead?: () => HomeRecordHandoffRecipientBinding | null
+  claimAdmission?: boolean
   scan?: () => HomeRecordHandoffScanResult
   fetchedBytes?: Uint8Array
   fetchThrows?: boolean
@@ -313,6 +316,8 @@ function harness(input: {
   const persistence = persistenceHarness()
   const objects = new Map<string, Uint8Array>()
   let claimCalls = 0
+  let claimAdmissionCalls = 0
+  let lastClaimDigest: string | null = null
   let fetchCalls = 0
   const offer = { manifest: manifest(), authorization: authorization() }
   const options: HomeRecordHandoffServiceOptions = {
@@ -321,13 +326,19 @@ function harness(input: {
     repository: repository(input.membershipForRead ?? (() => membership)),
     recipients: {
       async resolveRecipientBinding(requestedRecipientRef) {
-        return requestedRecipientRef === recipientRef ? {
+        if (requestedRecipientRef !== recipientRef) return null
+        return input.bindingForRead ? input.bindingForRead() : {
           recipientRef,
           homeRef,
           controllerPrincipalRef: principalRef,
           revision: 2,
           state: 'active' as const,
-        } : null
+        }
+      },
+      async reserveClaimAttempt(attempt) {
+        claimAdmissionCalls += 1
+        lastClaimDigest = attempt.claimDigest
+        return input.claimAdmission ?? true
       },
     },
     trust: {
@@ -391,6 +402,8 @@ function harness(input: {
     persistence,
     objects,
     get claimCalls() { return claimCalls },
+    get claimAdmissionCalls() { return claimAdmissionCalls },
+    get lastClaimDigest() { return lastClaimDigest },
     get fetchCalls() { return fetchCalls },
   }
 }
@@ -407,6 +420,96 @@ test('the activation seam is default-off before any source or recipient work', a
     testHarness.service.claim({ shareId, recipientRef }),
     /unavailable/,
   )
+  assert.equal(testHarness.claimCalls, 0)
+})
+
+test('exact-share activation is controller-bound, admitted, and locally idempotent', async () => {
+  const testHarness = harness()
+  const first = await testHarness.service.claimForController(
+    context,
+    homeRef,
+    shareId,
+    recipientRef,
+  )
+  assert.equal(first.shareId, shareId)
+  assert.equal(first.state, 'received')
+  assert.equal(testHarness.claimAdmissionCalls, 1)
+  assert.equal(testHarness.claimCalls, 1)
+  assert.match(testHarness.lastClaimDigest ?? '', /^[a-f0-9]{64}$/)
+  assert.notEqual(testHarness.lastClaimDigest, shareId)
+  assert.equal((testHarness.lastClaimDigest ?? '').includes(shareId), false)
+
+  const retry = await testHarness.service.claimForController(
+    context,
+    homeRef,
+    shareId,
+    recipientRef,
+  )
+  assert.deepEqual(retry, first)
+  assert.equal(testHarness.claimAdmissionCalls, 1)
+  assert.equal(testHarness.claimCalls, 1)
+})
+
+test('exact-share activation rejects wrong home, controller, and binding revision pre-network', async () => {
+  const cases: readonly {
+    readonly requestedHomeRef: string
+    readonly bindingForRead?: () => HomeRecordHandoffRecipientBinding | null
+  }[] = [
+    { requestedHomeRef: otherHomeRef },
+    {
+      requestedHomeRef: homeRef,
+      bindingForRead: () => ({
+        recipientRef,
+        homeRef,
+        controllerPrincipalRef: ref('hprn', 'q'),
+        revision: 2,
+        state: 'active',
+      }),
+    },
+    {
+      requestedHomeRef: homeRef,
+      bindingForRead: () => ({
+        recipientRef,
+        homeRef: otherHomeRef,
+        controllerPrincipalRef: principalRef,
+        revision: 2,
+        state: 'active',
+      }),
+    },
+    {
+      requestedHomeRef: homeRef,
+      bindingForRead: () => ({
+        recipientRef,
+        homeRef,
+        controllerPrincipalRef: principalRef,
+        revision: 0,
+        state: 'active',
+      }),
+    },
+  ]
+  for (const testCase of cases) {
+    const testHarness = harness({ bindingForRead: testCase.bindingForRead })
+    await assert.rejects(
+      testHarness.service.claimForController(
+        context,
+        testCase.requestedHomeRef,
+        shareId,
+        recipientRef,
+      ),
+      /not_found/,
+    )
+    assert.equal(testHarness.claimAdmissionCalls, 0)
+    assert.equal(testHarness.claimCalls, 0)
+  }
+})
+
+test('persisted claim admission denial maps to rate limited before producer I/O', async () => {
+  const testHarness = harness({ claimAdmission: false })
+  await assert.rejects(
+    testHarness.service.claimForController(context, homeRef, shareId, recipientRef),
+    /rate_limited/,
+  )
+  assert.equal(testHarness.claimAdmissionCalls, 1)
   assert.equal(testHarness.claimCalls, 0)
 })
 
@@ -477,6 +580,8 @@ test('itemized acceptance copies only selected clean exact bytes and exports a s
   assert.match(zipText, /originals\/001-work-document-copy\.pdf/)
   assert.match(zipText, /homeowner-share\.authorization\.v1/)
   assert.match(zipText, /homeowner-share\.consent\.v1/)
+  assert.match(zipText, /"sourceManifest"/)
+  assert.match(zipText, /"contractVersion":"homeowner-share\.v1"/)
 })
 
 test('cross-home and non-controller review fail before source bytes or storage', async () => {
