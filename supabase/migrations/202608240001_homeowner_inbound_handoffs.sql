@@ -436,17 +436,19 @@ revoke all on table public.homesrolo_homeowner_handoff_rejection_commands
 revoke all on table public.homesrolo_homeowner_handoff_claim_attempts
   from public, anon, authenticated, service_role;
 
-grant select, insert, update on table public.homesrolo_homeowner_handoff_recipients
+-- The application reads exact private records directly, but every mutation is
+-- confined to the narrow, revision-checked security-definer functions below.
+-- In particular, service_role cannot reactivate a revoked recipient with a
+-- direct table update or bypass command/replay invariants with a direct insert.
+grant select on table public.homesrolo_homeowner_handoff_recipients
   to service_role;
-grant select, insert, update on table public.homesrolo_homeowner_handoffs
+grant select on table public.homesrolo_homeowner_handoffs
   to service_role;
-grant select, insert on table public.homesrolo_homeowner_handoff_replay_conflicts
+grant select on table public.homesrolo_homeowner_handoff_items
   to service_role;
-grant select, insert, update on table public.homesrolo_homeowner_handoff_items
+grant select on table public.homesrolo_homeowner_handoff_acceptance_commands
   to service_role;
-grant select, insert, update on table public.homesrolo_homeowner_handoff_acceptance_commands
-  to service_role;
-grant select, insert on table public.homesrolo_homeowner_handoff_rejection_commands
+grant select on table public.homesrolo_homeowner_handoff_rejection_commands
   to service_role;
 
 -- Immutability guards ensure even privileged application code cannot mutate a

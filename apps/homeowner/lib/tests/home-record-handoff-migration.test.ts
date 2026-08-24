@@ -8,6 +8,31 @@ const migration = readFileSync(path.resolve(
   '../../../../supabase/migrations/202608240001_homeowner_inbound_handoffs.sql',
 ), 'utf8')
 
+test('service role can read handoff rows but may mutate them only through narrow RPCs', () => {
+  const grantsStart = migration.indexOf(
+    '-- The application reads exact private records directly',
+  )
+  const grantsEnd = migration.indexOf(
+    '-- Immutability guards ensure even privileged application code',
+    grantsStart,
+  )
+  assert.ok(grantsStart >= 0 && grantsEnd > grantsStart)
+  const grants = migration.slice(grantsStart, grantsEnd)
+  for (const table of [
+    'homesrolo_homeowner_handoff_recipients',
+    'homesrolo_homeowner_handoffs',
+    'homesrolo_homeowner_handoff_items',
+    'homesrolo_homeowner_handoff_acceptance_commands',
+    'homesrolo_homeowner_handoff_rejection_commands',
+  ]) {
+    assert.match(grants, new RegExp(`grant select on table public\\.${table}\\s+to service_role`))
+  }
+  assert.doesNotMatch(grants, /grant\s+(?:[^;]*\b)?(?:insert|update|delete)\b[^;]*to service_role/i,
+    'direct service-role writes would bypass exact revision and replay guards')
+  assert.doesNotMatch(grants, /homesrolo_homeowner_handoff_replay_conflicts\s+to service_role/,
+    'replay conflicts are written and reviewed only inside narrow RPCs')
+})
+
 test('exact-share claim admission is private, persisted, digest-only, and bounded', () => {
   const ledgerStart = migration.indexOf(
     'create table public.homesrolo_homeowner_handoff_claim_attempts',
