@@ -370,7 +370,7 @@ export default function NewHomePage({
 
   return (
     <div className="gate">
-      <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
+      <span className="gate__brand"><HouseMark /> <span>homesrolo</span></span>
       <main id="main" tabIndex={-1} className="gate__main gate__main--setup">
         <div className="gate__card gate__card--setup">
           {session.kind === 'signed_out' ? (

@@ -18,7 +18,7 @@ export default function IndexPage() {
 
   return (
     <div className="gate">
-      <span className="gate__brand"><HouseMark /> <span>Homes<span className="accent">rolo</span></span></span>
+      <span className="gate__brand"><HouseMark /> <span>homesrolo</span></span>
       <main id="main" tabIndex={-1} className="gate__main">
         <div className="gate__card">
           <Skeleton lines={3} label="Opening Homesrolo" />
