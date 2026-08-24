@@ -181,6 +181,402 @@ a:hover { color: var(--clay); }
 }
 .gate__brand .accent { color: var(--clay); }
 
+/* =============================================================================
+   Authentication — the living Home Record identity
+   =============================================================================
+   Sign in is the first private product surface most homeowners see. It shares
+   the public site's deep navy, bright signal lime, whole-home language, and
+   clean sans-serif voice without changing the denser record UI behind it.
+   ========================================================================== */
+
+.signin {
+  --signin-night: #071c27;
+  --signin-night-raised: #0f3040;
+  --signin-blue: #0b4f6c;
+  --signin-blue-deep: #08384a;
+  --signin-signal: #c8ef4d;
+  --signin-canvas: #f4f7f6;
+  --signin-ink: #0b1f2a;
+  --signin-ink-soft: #536b75;
+  --signin-rule: #c8d7da;
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 18%, rgb(200 239 77 / 0.13), transparent 24rem),
+    radial-gradient(circle at 88% 82%, rgb(11 79 108 / 0.52), transparent 30rem),
+    var(--signin-night);
+  color: #fff;
+  font-family: var(--font-body);
+}
+.signin::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  opacity: 0.23;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+.signin h1,
+.signin h2,
+.signin h3 {
+  font-family: var(--font-body);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.signin__topbar {
+  width: min(100% - 2rem, 76rem);
+  min-height: 5.25rem;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.13);
+}
+.signin__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+}
+.signin__brand:hover { color: #fff; }
+.signin__brand-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--signin-signal);
+}
+.signin__brand-mark svg { width: 100%; height: 100%; }
+.signin__privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #c7d6da;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.signin__privacy > span {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 50%;
+  background: var(--signin-signal);
+  box-shadow: 0 0 0 0.24rem rgb(200 239 77 / 0.12);
+}
+.signin__main {
+  width: min(100% - 2rem, 76rem);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(22rem, 0.78fr);
+  align-items: center;
+  gap: clamp(3rem, 7vw, 7rem);
+  min-height: calc(100dvh - 5.25rem);
+  padding-block: clamp(3rem, 7vh, 5.5rem);
+}
+.signin__intro { min-width: 0; }
+.signin__eyebrow,
+.signin__panel-kicker {
+  color: var(--signin-signal);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+.signin__intro h1 {
+  max-width: 12ch;
+  margin-top: 0.7rem;
+  font-size: clamp(2.65rem, 5.2vw, 5.1rem);
+  line-height: 0.98;
+  text-wrap: balance;
+}
+.signin__summary {
+  max-width: 42rem;
+  margin-top: 1.25rem;
+  color: #c7d6da;
+  font-size: clamp(1rem, 1.4vw, 1.17rem);
+  line-height: 1.65;
+}
+.signin__record-preview {
+  position: relative;
+  width: min(100%, 31rem);
+  margin-top: 2rem;
+}
+.signin__record-card {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 0.72rem;
+  border: 1px solid #315765;
+  border-radius: 1.15rem;
+  background: linear-gradient(145deg, #123a4a, #0a2734);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.28);
+  padding: 1.2rem 1.25rem 1.3rem;
+}
+.signin__record-card::before,
+.signin__record-card::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0.4rem -0.45rem -0.45rem 0.4rem;
+  border: 1px solid rgb(115 165 180 / 0.34);
+  border-radius: inherit;
+}
+.signin__record-card::after { inset: 0.8rem -0.85rem -0.85rem 0.8rem; opacity: 0.58; }
+.signin__record-card > span {
+  color: #9eb7be;
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+.signin__record-card > strong {
+  margin-bottom: 0.25rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+}
+.signin__record-card > div {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border-top: 1px solid #315765;
+  padding-top: 0.68rem;
+  color: #d5e1e4;
+  font-size: 0.78rem;
+}
+.signin__record-card i {
+  width: 0.48rem;
+  height: 0.48rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--signin-signal);
+}
+.signin__record-tab {
+  position: absolute;
+  z-index: 3;
+  right: -0.85rem;
+  width: 1.15rem;
+  height: 3.15rem;
+  border-radius: 0 0.45rem 0.45rem 0;
+}
+.signin__record-tab--lime { top: 1.35rem; background: var(--signin-signal); }
+.signin__record-tab--blue { top: 4.85rem; background: #63c4d8; }
+.signin__trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  margin: 1.65rem 0 0;
+  padding: 0;
+  color: #bcd0d5;
+  list-style: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.signin__trust li { display: inline-flex; align-items: center; gap: 0.42rem; }
+.signin__trust li > span { color: var(--signin-signal); font-weight: 900; }
+.signin__panel {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.78);
+  border-radius: 1.35rem;
+  background: rgb(255 255 255 / 0.98);
+  box-shadow: 0 2rem 5rem rgb(0 0 0 / 0.3);
+  padding: clamp(1.5rem, 3.5vw, 2.25rem);
+  color: var(--signin-ink);
+}
+.signin__panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0.3rem;
+  background: linear-gradient(90deg, var(--signin-signal) 0 34%, #63c4d8 34% 68%, var(--signin-blue) 68%);
+}
+.signin__panel-kicker { color: var(--signin-blue); }
+.signin__panel h2 {
+  margin-top: 0.55rem;
+  color: var(--signin-ink);
+  font-size: clamp(1.65rem, 3vw, 2.1rem);
+  line-height: 1.08;
+}
+.signin__panel-copy {
+  margin-top: 0.75rem;
+  color: var(--signin-ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.signin__form-wrap,
+.signin__loading,
+.signin__signed-in,
+.signin__status,
+.signin__demo-notice { margin-top: 1.35rem; }
+.signin__form .field { margin-top: 0; gap: 0.42rem; }
+.signin__form .field label {
+  color: var(--signin-ink);
+  font-size: 0.83rem;
+  font-weight: 800;
+}
+.signin__form .field input {
+  min-height: 52px;
+  border: 1px solid #aebfc3;
+  border-radius: 0.72rem;
+  background: #fff;
+  color: var(--signin-ink);
+  padding: 0.75rem 0.9rem;
+  font-size: 1rem;
+}
+.signin__form .field input:hover { border-color: #76929a; }
+.signin__form .field input:focus { border-color: var(--signin-blue); }
+.signin__form .field__hint { color: #698089; font-size: 0.75rem; }
+.signin__action {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+}
+.signin .btn {
+  min-height: 52px;
+  border-radius: 0.72rem;
+  font-size: 0.95rem;
+  font-weight: 850;
+}
+.signin .btn--primary {
+  background: var(--signin-signal);
+  box-shadow: 0 0.65rem 1.4rem rgb(110 146 12 / 0.2);
+  color: #13252d;
+}
+.signin .btn--primary:hover { background: #d8f771; color: #0b1f2a; }
+.signin__error {
+  margin-top: 0.75rem;
+  color: #9a3f2e;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.signin .signin__status {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid #cbd9db;
+  border-radius: 0.9rem;
+  background: var(--signin-canvas);
+  padding: 1rem;
+  text-align: left;
+}
+.signin__status-mark {
+  display: grid;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+  background: var(--signin-signal);
+  color: var(--signin-ink);
+  font-weight: 950;
+}
+.signin .signin__status h3 { color: var(--signin-ink); font-size: 1.1rem; }
+.signin .signin__status p { color: var(--signin-ink-soft); font-size: 0.84rem; line-height: 1.55; }
+.signin__try-again {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  padding: 0.1rem 0;
+  color: var(--signin-blue);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+.signin__signed-in { display: grid; gap: 0.8rem; }
+.signin__signed-in > p { color: var(--signin-ink-soft); font-size: 0.9rem; }
+.signin__footnote,
+.signin__panel-footer {
+  margin-top: 1.1rem;
+  color: #71858c;
+  font-size: 0.69rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.signin__demo-notice { color: var(--signin-ink); }
+.signin__complete-main {
+  width: min(100% - 2rem, 40rem);
+  min-height: calc(100dvh - 5.25rem);
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+  padding-block: 3rem;
+}
+.signin__complete-panel { text-align: center; }
+.signin__complete-panel h1 {
+  margin-top: 0.6rem;
+  color: var(--signin-ink);
+  font-size: clamp(1.85rem, 5vw, 2.5rem);
+}
+.signin__complete-mark {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto 1.2rem;
+  border-radius: 1.15rem;
+  background: var(--signin-night);
+  color: var(--signin-signal);
+}
+.signin__complete-mark svg { width: 2.65rem; height: 2.65rem; }
+.signin__complete-mark--failed {
+  background: #fff0e7;
+  color: #9a3f2e;
+  font-size: 2rem;
+  font-weight: 950;
+}
+.signin__complete-copy {
+  max-width: 34rem;
+  margin: 0.85rem auto 0;
+  color: var(--signin-ink-soft);
+  line-height: 1.6;
+}
+.signin__complete-panel .btn { margin-top: 1.25rem; }
+
+@media (max-width: 52rem) {
+  .signin { overflow: auto; }
+  .signin__main {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 1.75rem;
+    min-height: auto;
+    padding-block: 2.25rem 3rem;
+  }
+  .signin__intro h1 { max-width: 15ch; font-size: clamp(2.4rem, 10vw, 4rem); }
+  .signin__summary { max-width: 38rem; }
+  .signin__record-preview { display: none; }
+  .signin__trust { margin-top: 1.1rem; }
+  .signin__panel { max-width: 38rem; }
+}
+
+@media (max-width: 32rem) {
+  .signin__topbar,
+  .signin__main,
+  .signin__complete-main { width: min(100% - 1.25rem, 76rem); }
+  .signin__topbar { min-height: 4.5rem; }
+  .signin__privacy { font-size: 0; }
+  .signin__privacy > span { width: 0.6rem; height: 0.6rem; }
+  .signin__main { padding-top: 1.65rem; gap: 1.35rem; }
+  .signin__intro h1 { font-size: clamp(2.25rem, 12vw, 3.4rem); }
+  .signin__summary { margin-top: 0.85rem; font-size: 0.96rem; line-height: 1.55; }
+  .signin__trust { display: grid; gap: 0.4rem; }
+  .signin__panel { border-radius: 1rem; padding: 1.35rem 1.1rem 1.25rem; }
+  .signin__panel h2 { font-size: 1.6rem; }
+  .signin__complete-main { min-height: calc(100dvh - 4.5rem); align-items: start; padding-top: 2rem; }
+}
+
 .field { display: grid; gap: 0.35rem; margin-top: 1rem; }
 .field label { font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); }
 .field input, .field select, .field textarea {

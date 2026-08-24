@@ -484,6 +484,42 @@ test('the magic-link form renders only on server-reported capability', () => {
     'synthetic mode keeps the honest demo entry')
 })
 
+test('the complete sign-in journey uses the whole-home navy and lime identity', () => {
+  const signin = read('app/signin/page.tsx')
+  const complete = read('app/auth/complete/page.tsx')
+  const css = read('app/globals.css')
+
+  assert.match(signin, /className="signin"/,
+    'sign in uses the dedicated modern authentication shell')
+  assert.match(signin, /Open your Home Record\./,
+    'the primary entry uses the permanent whole-home product language')
+  assert.match(signin, /The whole home, not one trade/,
+    'the entry surface keeps Homesrolo broader than roofing')
+  assert.match(signin, /<span>homesrolo<\/span>/,
+    'the current lowercase wordmark is present')
+  assert.doesNotMatch(signin, /gate__card/,
+    'the sign-in screen cannot fall back to the legacy drafting-card shell')
+  assert.doesNotMatch(signin, /a link is on its way/i,
+    'provider acceptance is not presented as delivery confirmation')
+
+  assert.match(complete, /signin signin--complete/,
+    'the email completion state stays in the same visual journey')
+  assert.match(complete, /Opening your Home Record/,
+    'the completion state uses the same whole-home language')
+  assert.doesNotMatch(complete, /gate__card/,
+    'opening a magic link cannot reveal the old theme')
+
+  for (const token of ['#071c27', '#0b4f6c', '#c8ef4d']) {
+    assert.match(css, new RegExp(token), `${token} is represented in the authentication identity`)
+  }
+  assert.match(css, /\.signin__form \.field input \{[\s\S]*?min-height: 52px/,
+    'email entry remains comfortably sized on a phone')
+  assert.match(css, /\.signin \.btn \{[\s\S]*?min-height: 52px/,
+    'the sign-in action remains comfortably sized on a phone')
+  assert.match(css, /@media \(max-width: 52rem\) \{[\s\S]*?\.signin__main \{[\s\S]*?grid-template-columns: 1fr/,
+    'the desktop composition collapses into one readable phone column')
+})
+
 test('project review renders only on its exact server-reported capability', () => {
   const project = read('app/home/[homeId]/projects/[projectId]/page.tsx')
   assert.match(
