@@ -15,6 +15,8 @@ import {
 import { ROOF_WATCH_GUIDES } from '../roof-watch-guides.ts'
 
 const homepage = readFileSync('apps/web/app/page.tsx', 'utf8')
+const homeRecordDeck = readFileSync('apps/web/components/HomeRecordDeck.tsx', 'utf8')
+const globalCss = readFileSync('apps/web/app/globals.css', 'utf8')
 const agentPage = readFileSync('apps/web/app/for-agents/page.tsx', 'utf8')
 const footer = readFileSync('apps/web/components/SiteFooter.tsx', 'utf8')
 const layout = readFileSync('apps/web/app/layout.tsx', 'utf8')
@@ -62,8 +64,17 @@ test('homepage and navigation present one working whole-home product', () => {
   assert.match(homepage, /Roof Watch is one useful chapter/)
   assert.match(homepage, /Every home has a history\. Keep yours\./)
   assert.match(homepage, /Private by default/)
-  assert.match(homepage, /New construction handoff[\s\S]*Upstairs AC service[\s\S]*Water heater replacement[\s\S]*Kitchen remodel/,
-    'the homepage explains the Home Record as a believable history, not a feature list')
+  for (const card of ['Roof replacement', 'Kitchen remodel', 'Exterior paint', 'Home wish list', 'Insurance & property']) {
+    assert.ok(homeRecordDeck.includes(card), `the illustrative Home Record deck is missing ${card}`)
+  }
+  assert.match(homeRecordDeck, /<ol[\s\S]*home-record-deck__track[\s\S]*tabIndex=\{0\}/)
+  assert.match(homeRecordDeck, /Illustrative cards/)
+  assert.doesNotMatch(homeRecordDeck, /setInterval|autoplay/)
+  assert.doesNotMatch(homeRecordDeck, /home-record-deck__track[^>]*aria-hidden/)
+  assert.match(globalCss, /\.home-record-deck__track\s*\{[\s\S]*overflow-x:\s*auto[\s\S]*scroll-snap-type:\s*inline mandatory/)
+  assert.match(globalCss, /\.home-record-deck__track > li\s*\{[\s\S]*scroll-snap-align:\s*start/)
+  assert.doesNotMatch(globalCss, /\.home-stream::(?:before|after)/,
+    'the fake stacked timeline layers must not return')
 
   for (const roadmapLanguage of [
     /private[- ]beta/i,

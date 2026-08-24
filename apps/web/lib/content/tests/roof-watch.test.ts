@@ -9,6 +9,8 @@ import { ROOF_WATCH_GUIDES } from '../roof-watch-guides.ts'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const RISKY_CLAIMS = /do not call your insurance|look before you file|burn(?:ing)? a claim|strongest thing a claim|always goes first|more roof damage per year than any single storm/i
+const roofWatchHub = readFileSync('apps/web/app/roof-watch/page.tsx', 'utf8')
+const roofWatchGuidesHub = readFileSync('apps/web/app/roof-watch/guides/page.tsx', 'utf8')
 
 function fiveWordShingles(copy: string): Set<string> {
   const words = copy.toLowerCase().match(/[a-z0-9]+/g) ?? []
@@ -22,6 +24,7 @@ function jaccard(left: Set<string>, right: Set<string>): number {
 }
 
 test('Roof Watch city metadata is unique and search-result sized', () => {
+  assert.equal(ROOF_WATCH_CITIES.length, 6, 'only established local routes belong in the city collection')
   assert.equal(new Set(ROOF_WATCH_CITIES.map(city => city.slug)).size, ROOF_WATCH_CITIES.length)
   assert.equal(new Set(ROOF_WATCH_CITIES.map(city => city.metaDescription)).size, ROOF_WATCH_CITIES.length)
   const normalizedDescriptions = ROOF_WATCH_CITIES.map(city => city.metaDescription.toLowerCase().replace(city.name.toLowerCase(), '[city]'))
@@ -42,6 +45,19 @@ test('Roof Watch city metadata is unique and search-result sized', () => {
     )
     for (const source of city.sources) assert.equal(new URL(source.href).protocol, 'https:')
   }
+})
+
+test('Roof Watch checks Texas and Oklahoma without inventing Oklahoma city pages', () => {
+  assert.match(roofWatchHub, /Roof Watch availability in Texas and Oklahoma/)
+  assert.match(roofWatchHub, /participating Texas and Oklahoma addresses/)
+  assert.match(roofWatchHub, /Availability is confirmed address by address/)
+  assert.match(roofWatchHub, /'State', name: 'Texas'/)
+  assert.match(roofWatchHub, /'State', name: 'Oklahoma'/)
+  assert.match(roofWatchHub, /Current detailed Texas city pages/)
+  assert.doesNotMatch(roofWatchHub, /North Texas/)
+  assert.match(roofWatchGuidesHub, /Each guide identifies its region and sources/)
+  assert.doesNotMatch(roofWatchGuidesHub, /Texas and Oklahoma homeowners/)
+  assert.equal(ROOF_WATCH_CITIES.some(city => city.slug.includes('oklahoma') || city.name.includes('Oklahoma')), false)
 })
 
 test('Roof Watch city pages keep distinct local substance', () => {

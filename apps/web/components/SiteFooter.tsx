@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { HOMEOWNER_SIGNIN_URL, ROOF_WATCH_PHONE_DISPLAY, ROOF_WATCH_SMS_URL } from '../lib/site.ts'
+import { BrandMark } from './BrandMark.tsx'
 
 export function SiteFooter() {
   return (
@@ -7,7 +8,7 @@ export function SiteFooter() {
       <div className="shell">
         <div className="footer-grid">
           <div className="footer-brand">
-            <p className="footer-brand__name">homesrolo</p>
+            <p className="footer-brand__name"><BrandMark size={30} /><span>homesrolo</span></p>
             <p>
               A private home workspace for current projects, historical work, seasonal photo checkups, and roof
               proposal notes.

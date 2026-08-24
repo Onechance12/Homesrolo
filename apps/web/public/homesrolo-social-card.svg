@@ -4,10 +4,11 @@
   <rect width="1200" height="630" fill="#071c27"/>
   <circle cx="1100" cy="70" r="250" fill="#0b4f6c" opacity=".35"/>
   <g transform="translate(72 62)">
-    <path d="M0 10h31l8 9h39v47H0z" fill="#dceef4" opacity=".16"/>
-    <path d="M6 0h27l8 9h31v49H6z" fill="none" stroke="#f7faf9" stroke-width="5"/>
-    <path d="m21 30 15-13 15 13M26 28v18h20V28" fill="none" stroke="#c8ef4d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="94" y="46" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.5">homesrolo</text>
+    <g transform="scale(1.08)" fill="none" stroke="#c8ef4d" stroke-width="5.25" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M48.6 53.4A25 25 0 1 1 56.5 34C56.2 40.5 52.2 45.2 45.5 46.5"/>
+      <path d="M18.5 46.5V30.8L30.5 20.4a2.3 2.3 0 0 1 3 0l12 10.4v15.7h-9v-8.8a4.5 4.5 0 0 0-9 0v8.8h-9"/>
+    </g>
+    <text x="92" y="47" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.5">homesrolo</text>
   </g>
   <text x="72" y="238" fill="#c8ef4d" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="3">ONE PRIVATE HOME RECORD</text>
   <text x="72" y="320" fill="#f7faf9" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="-2.5">Every home has</text>

@@ -5,17 +5,17 @@ import { ROOF_WATCH_GUIDES } from '../../../lib/content/roof-watch-guides.ts'
 import { SITE_NAME, SITE_ORIGIN } from '../../../lib/site.ts'
 
 export const metadata: Metadata = {
-  title: 'Roof Watch guides for North Texas homeowners',
-  description: 'Practical, sourced guides to hail response, roof inspection reports, heat, ventilation, contractors, and annual roof maintenance in North Texas.',
+  title: 'Roof Watch homeowner guides',
+  description: 'Practical, sourced guides to hail response, roof inspection reports, heat, ventilation, contractors, and maintenance. Each guide identifies its region and sources.',
   alternates: { canonical: '/roof-watch/guides/' },
   openGraph: {
     type: 'website',
-    title: 'Roof Watch guides for North Texas homeowners',
+    title: 'Roof Watch homeowner guides',
     description: 'Practical, sourced guidance on hail response, useful inspection reports, heat, ventilation, and roof maintenance.',
     url: '/roof-watch/guides/',
     images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', width: 1200, height: 630, alt: 'Close field photo of architectural asphalt shingles' }],
   },
-  twitter: { card: 'summary_large_image', title: 'Roof Watch guides for North Texas homeowners', description: 'Practical, sourced roof guidance for North Texas homeowners.', images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', alt: 'Close field photo of architectural asphalt shingles' }] },
+  twitter: { card: 'summary_large_image', title: 'Roof Watch homeowner guides', description: 'Practical roof guidance with the region and reviewed sources named in each guide.', images: [{ url: '/images/roof-watch/roof-watch-field-photos-social.jpg', alt: 'Close field photo of architectural asphalt shingles' }] },
 }
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' })
@@ -53,7 +53,7 @@ export default function RoofWatchGuidesPage() {
           <PageHeader
             eyebrow="Roof Watch guides"
             title="Roof questions usually arrive before the answers do"
-            lede="Start here after hail, when an inspection report feels vague, or when North Texas heat has you wondering what is happening overhead. Each guide gives you a practical next step and links the safety, insurance, legal, and roof-performance sources behind it."
+            lede="Start here after hail, when an inspection report feels vague, or when heat and ventilation have you wondering what is happening overhead. Each guide names its region and sources, then gives you a practical next step."
           />
           <div className="grid grid--2" style={{ marginTop: '2rem' }}>
             {ROOF_WATCH_GUIDES.map(guide => (
