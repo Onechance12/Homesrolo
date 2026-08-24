@@ -797,6 +797,10 @@ test('the dashboard uses real project history and contains no AI surface', () =>
   assert.match(experience, /Project history/)
   assert.match(progress, /never scores the home's condition, safety, value, or insurability/)
   assert.match(experience, /record progress—not a score of condition, safety, value, or insurability/i)
+  assert.match(experience, /aria-label="Previous cards"[\s\S]*aria-label="Next cards"/,
+    'the swipeable card deck also has explicit controls')
+  assert.doesNotMatch(css, /\.rolo-deck__controls\s*\{\s*display:\s*none/,
+    'phone users are not told to use arrows that the layout hides')
   assert.doesNotMatch(`${dashboard}\n${experience}`, /HomeResearchAssistant|homeResearch|\bAI\b/,
     'no research or chatbot feature is exposed in the authenticated opening flow')
   assert.doesNotMatch(`${dashboard}\n${experience}\n${progress}`, /measurement/i,

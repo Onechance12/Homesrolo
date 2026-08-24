@@ -2090,7 +2090,6 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
   .record-house { width: min(92%, 19rem); }
   .record-section { padding: 1rem 0.85rem; border-radius: 0.9rem; }
   .record-section__head { align-items: center; }
-  .rolo-deck__controls { display: none; }
   .rolo-card { flex-basis: 82vw; }
   .rolo-card > a { min-height: 16.5rem; }
   .record-tracks { grid-template-columns: 1fr; }
