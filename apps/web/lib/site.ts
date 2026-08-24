@@ -54,7 +54,7 @@ export const HOMEOWNER_ROOF_WATCH_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin?i
 export type NavItem = { readonly href: string; readonly label: string }
 
 export const PRIMARY_NAV: readonly NavItem[] = Object.freeze([
-  { href: '/home-care/', label: 'Home care' },
+  { href: '/home-care/', label: 'Home Watch' },
   { href: '/home-projects/', label: 'Home projects' },
   { href: '/home-record/', label: 'Home record' },
   { href: '/guides/', label: 'Guides' },
