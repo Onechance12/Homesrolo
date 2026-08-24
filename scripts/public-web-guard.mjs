@@ -266,7 +266,6 @@ if (!existsSync(OUT)) {
       const firstParty = new Set([
         'homesrolo.com',
         'app.homesrolo.com',
-        'homesrolo-homeowner-v2.onrender.com',
       ]).has(url.hostname)
       if (!synthetic && !firstParty && !reviewedSourceHosts.has(url.hostname)) {
         fail(`${rel(file)}: unreviewed external link ${url.href}`)

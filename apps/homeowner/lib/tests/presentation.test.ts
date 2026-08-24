@@ -89,6 +89,9 @@ test('the shell has a language, a skip link, and a main landmark', () => {
   assert.match(layout, /className="skip-link"/)
   const shell = read('components/AppShell.tsx')
   assert.match(shell, /<main id="main" tabIndex=\{-1\}/)
+  const icons = read('components/icons.tsx')
+  assert.match(icons, /M48\.6 53\.4A25 25 0 1 1 56\.5 34/,
+    'the homeowner app uses the same continuous home-loop mark as Homesrolo.com')
 })
 
 // --- honesty -----------------------------------------------------------------
@@ -103,6 +106,8 @@ test('the demo banner is part of the shell whenever the mode is synthetic', () =
 test('the app never claims to be indexed', () => {
   const layout = read('app/layout.tsx')
   assert.match(layout, /robots:\s*\{\s*index:\s*false/)
+  assert.match(layout, /referrer:\s*'no-referrer'/,
+    'opaque entry context is never sent as a referrer')
 })
 
 test('browser and server-to-server network calls exist only in their sanctioned transports', () => {
@@ -113,6 +118,7 @@ test('browser and server-to-server network calls exist only in their sanctioned 
   // default-off, stateless OpenAI home-research adapter.
   const BROWSER_TRANSPORT = 'lib/port/transport.ts'
   const SERVER_TRANSPORT = 'lib/server/jobrolo-intake-client.ts'
+  const HANDOFF_TRANSPORT = 'lib/server/jobrolo-handoff-client.ts'
   const AI_TRANSPORT = 'lib/server/home-research.ts'
   for (const rel of appSources) {
     const content = read(rel)
@@ -125,6 +131,15 @@ test('browser and server-to-server network calls exist only in their sanctioned 
       assert.match(content, /SignedJobroloIntakeClient/, 'the server transport is explicit and named')
       assert.match(content, /\/api\/integrations\/homesrolo\/v1\/project-intakes/,
         'the server transport pins one exact integration path')
+      continue
+    }
+    if (rel === HANDOFF_TRANSPORT) {
+      assert.match(content, /SignedJobroloHandoffClient/,
+        'the handoff transport is explicit and named')
+      assert.match(content, /project-handoffs\/\$\{shareId\}\/claim/,
+        'the handoff transport pins the reviewed claim path')
+      assert.match(content, /Homesrolo-Handoff-HMAC/,
+        'the handoff transport authenticates every request')
       continue
     }
     if (rel === AI_TRANSPORT) {
@@ -142,6 +157,71 @@ test('browser and server-to-server network calls exist only in their sanctioned 
     assert.doesNotMatch(content, /new\s+(XMLHttpRequest|WebSocket)\s*\(/, `${rel} must not open a connection`)
     assert.doesNotMatch(content, /process\.env\.(DATABASE|SECRET|API_KEY|TOKEN)/, `${rel} must not read secrets`)
   }
+})
+
+test('contractor handoffs stay capability-gated, consented, and free of browser authority', () => {
+  const page = read('app/home/[homeId]/documents/page.tsx')
+  const component = read('components/HomeRecordHandoffs.tsx')
+  const boundary = read('lib/server/home-record-handoff-http.ts')
+  const runtime = read('lib/server/runtime.ts')
+  assert.match(page, /session\.state\.capabilities\.homeRecordHandoffs/)
+  assert.match(page, /handoffsEnabled[\s\S]*<HomeRecordHandoffs homeId=\{homeId\} entryShareId=\{entryShareId\} \/>/)
+  assert.equal((component.match(/claimHomeRecordHandoff/g) ?? []).length, 1,
+    'one explicit handler owns the only claim call')
+  assert.match(component, /async function claimEntryHandoff\(\)[\s\S]*port\.claimHomeRecordHandoff/)
+  assert.match(component, /onClick=\{\(\) => void claimEntryHandoff\(\)\}/,
+    'a deliberate button click is the only claim trigger')
+  for (const effect of component.matchAll(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[[^\]]*\]\)/g)) {
+    assert.doesNotMatch(effect[1] ?? '', /claimHomeRecordHandoff/,
+      'render effects may list received handoffs but never claim a link')
+  }
+  assert.match(component, /active\.acceptanceText/,
+    'the signed acceptance statement is shown beside the consent control')
+  assert.match(component, /const completionRecord = active\?\.items\[0\][\s\S]*selectedArtifactRefs: \[completionRecord\.artifactRef\]/,
+    'acceptance submits only the one decoded completion PDF')
+  assert.match(component, /this exact contractor-issued completion PDF is safety-checked/)
+  assert.match(component, /Completion record details/)
+  assert.match(component, /This PDF cannot be opened before you accept it\./)
+  for (const fixedContent of [
+    'Contractor business display name',
+    'Completed status',
+    'Recorded start date',
+    'Recorded completion date',
+    'Issue date',
+  ]) assert.match(component, new RegExp(fixedContent))
+  assert.match(component,
+    /does not include raw photos, raw documents, invoices, warranties, claims, or measurements/)
+  assert.match(component, /Accept only if you recognize the sender and the link that brought you here/)
+  assert.match(component, /Download accepted completion records/,
+    'the handoff-only ZIP is not mislabeled as the complete Home Record')
+  assert.match(component, /Check whether this one-job record belongs with this Home Record/,
+    'the pre-claim prompt does not claim the link matches a home')
+  const claimHandler = component.slice(
+    component.indexOf('async function claimEntryHandoff'),
+    component.indexOf('async function openHandoff'),
+  )
+  const failedClaim = claimHandler.slice(
+    claimHandler.indexOf('if (!result.ok)'),
+    claimHandler.indexOf('claimedEntry.current'),
+  )
+  assert.doesNotMatch(failedClaim, /clearHandoffFromAddressBar/,
+    'a wrong-home or transient result cannot destroy a valid link')
+  assert.match(claimHandler, /showPreview\(result\.value\)[\s\S]*clearHandoffFromAddressBar\(\)/,
+    'the opaque query is cleared only after the exact preview succeeds')
+  assert.match(component, /Choose a different home/)
+  assert.doesNotMatch(component, /coming soon/i)
+  assert.match(boundary, /claimExactShare/,
+    'the HTTP boundary may activate only one explicit share through its injected controller')
+  assert.doesNotMatch(boundary, /\.claim\(|recipientRef|principalRef/,
+    'the HTTP boundary cannot choose recipient or principal authority')
+  assert.match(runtime,
+    /claimExactShare:[\s\S]*claimForController\([\s\S]*configuredRecipientRef/,
+    'runtime closes over the fixed recipient ref before exposing exact-share activation')
+  assert.match(runtime,
+    /readJobroloIntakeCredentialResidue\(environment\)[\s\S]*state !== 'invalid'[\s\S]*homeRecordHandoffActivationCredentialsSeparated/,
+    'activation checks even disabled or partial prior-intake credential residue')
+  assert.match(runtime, /homeRecordHandoffReleaseEnvironmentAllowed\(environment\.NODE_ENV\)/,
+    'the release-owned production interlock participates in runtime activation')
 })
 
 test('synthetic is the default mode and the only config is the public mode value', () => {
@@ -214,13 +294,34 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts',
     'app/api/v1/homes/[homeRef]/research/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/claim/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/accept/route.ts',
+    'app/api/v1/homes/[homeRef]/handoffs/[shareId]/reject/route.ts',
+    'app/api/v1/homes/[homeRef]/home-record/export/route.ts',
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
     'the route inventory must remain exactly the allowlisted paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    if (rel === 'app/api/v1/auth/callback/route.ts') {
+    if (rel.endsWith('/handoffs/[shareId]/claim/route.ts')
+      || rel.endsWith('/handoffs/[shareId]/accept/route.ts')
+      || rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
+      assert.match(content, /export async function POST/, `${rel} serves one exact decision`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} exposes no decision read`)
+      assert.match(content, /handleHomeRecordHandoffHttp/,
+        `${rel} delegates to the isolated handoff boundary`)
+    } else if (rel.includes('/handoffs/') || rel.endsWith('/handoffs/route.ts')
+      || rel.endsWith('/home-record/export/route.ts')) {
+      assert.match(content, /export async function GET/, `${rel} serves one private handoff read`)
+      assert.doesNotMatch(content, /export (async function|const) POST/,
+        `${rel} exposes no mutation`)
+      assert.match(content, /handleHomeRecordHandoffHttp/,
+        `${rel} delegates to the isolated handoff boundary`)
+    } else if (rel === 'app/api/v1/auth/callback/route.ts') {
       assert.match(content, /export async function GET/, `${rel} completes one magic link`)
       assert.match(content, /completeHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/auth/exchange/route.ts') {
@@ -301,7 +402,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts'
+      && !rel.endsWith('/handoffs/[shareId]/claim/route.ts')
+      && !rel.endsWith('/handoffs/[shareId]/accept/route.ts')
+      && !rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
       assert.doesNotMatch(content, /export (async function|const) POST/,
         `${rel} must not export POST`)
     }
@@ -318,7 +422,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
-      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts') {
+      && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts'
+      && !rel.includes('/handoffs/')
+      && !rel.endsWith('/handoffs/route.ts')
+      && !rel.endsWith('/home-record/export/route.ts')) {
       assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
     }
   }
@@ -482,7 +589,7 @@ test('settings exposes account actions, not an internal capability matrix', () =
 
 test('the authenticated home is a whole-home record, not a roofing dashboard', () => {
   const shell = read('components/AppShell.tsx')
-  const dashboard = read('app/home/[homeId]/page.tsx')
+  const experience = read('components/HomeRecordExperience.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
 
   assert.match(shell, /label: 'Home record', tabLabel: 'Record'/)
@@ -493,28 +600,28 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'account settings remain available without occupying primary navigation')
   assert.doesNotMatch(shell, /label: 'Warranties'|label: 'Events & care'|label: 'Settings'/,
     'primary navigation contains only destinations that work today')
-  assert.match(dashboard, /One record for work across the whole home\./)
-  assert.match(dashboard, /Every part of the home belongs here\./)
+  assert.match(experience, /Every home has a history/)
+  assert.match(experience, /The whole home belongs here\./)
   for (const area of [
     'Roof', 'Interior & remodel', 'Heating & cooling', 'Plumbing', 'Electrical',
     'Exterior & gutters', 'Yard & landscaping', 'Appliances', 'Pest control',
     'Pool', 'New construction', 'Something else',
   ]) {
-    assert.match(dashboard, new RegExp(area.replace('&', '\\&')),
+    assert.match(experience, new RegExp(area.replace('&', '\\&')),
       `${area} is one of the twelve whole-home starting points`)
   }
-  assert.match(dashboard, /const HOME_AREAS = \[\s*'Interior & remodel'/,
+  assert.match(experience, /const HOME_AREAS = \[\s*'Interior & remodel'/,
     'the whole-home inventory must not default to roofing')
   const projects = read('app/home/[homeId]/projects/page.tsx')
   assert.match(projects, /const CATEGORIES:[^=]+?= \[\s*\{ value: 'interior'/,
     'the project category picker must not default to roofing')
-  assert.doesNotMatch(dashboard, /Need roof work\?|Start a roof project|Open roof projects/,
+  assert.doesNotMatch(experience, /Need roof work\?|Start a roof project|Open roof projects/,
     'roofing is never presented as the dashboard default')
-  assert.match(dashboard, /Past work[\s\S]*Add history/,
+  assert.match(experience, /first chapter can be from any year[\s\S]*past work/i,
     'historical projects are a first-class dashboard action')
-  assert.match(dashboard, /Project history/)
-  assert.match(dashboard, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
-  assert.match(dashboard, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
+  assert.match(experience, /Project history/)
+  assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
+  assert.match(experience, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
     'the dashboard never links to a disabled photo workspace')
   assert.match(library, /Your working records/)
   assert.match(library, /Project history/)
@@ -703,11 +810,21 @@ test('home research chat is accessible, link-safe, and frozen while one request 
 
 test('the dashboard uses real project history and contains no AI surface', () => {
   const dashboard = read('app/home/[homeId]/page.tsx')
+  const experience = read('components/HomeRecordExperience.tsx')
+  const progress = read('lib/home-record-progress.ts')
 
   assert.match(dashboard, /port\.listProjects\(homeId\)/)
-  assert.match(dashboard, /Project history/)
-  assert.doesNotMatch(dashboard, /HomeResearchAssistant|homeResearch|\bAI\b/,
+  assert.match(experience, /Project history/)
+  assert.match(progress, /never scores the home's condition, safety, value, or insurability/)
+  assert.match(experience, /record progress—not a score of condition, safety, value, or insurability/i)
+  assert.match(experience, /aria-label="Previous cards"[\s\S]*aria-label="Next cards"/,
+    'the swipeable card deck also has explicit controls')
+  assert.doesNotMatch(css, /\.rolo-deck__controls\s*\{\s*display:\s*none/,
+    'phone users are not told to use arrows that the layout hides')
+  assert.doesNotMatch(`${dashboard}\n${experience}`, /HomeResearchAssistant|homeResearch|\bAI\b/,
     'no research or chatbot feature is exposed in the authenticated opening flow')
+  assert.doesNotMatch(`${dashboard}\n${experience}\n${progress}`, /measurement/i,
+    'measurements are intentionally outside this release')
 })
 
 test('one bounded roofing intent continues through the existing homeowner flow', () => {
@@ -716,12 +833,35 @@ test('one bounded roofing intent continues through the existing homeowner flow',
   const newHome = read('app/homes/new/page.tsx')
   const projects = read('app/home/[homeId]/projects/page.tsx')
   for (const content of [signin, homes, newHome]) {
-    assert.match(content, /withRoofingIntent/)
-    assert.match(content, /roofingIntent/)
+    assert.match(content, /homeownerEntryContext/)
+    assert.match(content, /withHomeownerEntryContext|homeownerEntryDestination/)
   }
   assert.match(projects, /carriedIntent/)
   assert.match(projects, /Nothing is sent to a contractor unless you choose that later\./)
   assert.doesNotMatch([signin, homes, newHome, projects].join('\n'), /insurance_claim/)
+})
+
+test('one opaque handoff context survives auth and home selection without auto-claiming', () => {
+  const signin = read('app/signin/page.tsx')
+  const authComplete = read('app/auth/complete/page.tsx')
+  const homes = read('app/homes/page.tsx')
+  const newHome = read('app/homes/new/page.tsx')
+  const documents = read('app/home/[homeId]/documents/page.tsx')
+  const helper = read('lib/entry-context.ts')
+  const authHttp = read('lib/server/auth-http.ts')
+
+  assert.match(helper, /\^hshr_\[A-Za-z0-9_-\]\{43\}\$/,
+    'only one opaque share reference is accepted')
+  assert.match(signin, /port\.requestMagicLink\(email\.trim\(\), context\.intent, context\.handoff\)/)
+  assert.match(authComplete, /withHomeownerEntryContext\('\/homes', context\)/)
+  assert.match(authHttp, /signInPathForEntryContext\(rawIntent, rawHandoff\)/,
+    'a valid handoff survives an expired provider token so the homeowner can sign in again')
+  assert.match(homes, /homeownerEntryDestination\(home\.homeRef, context\)/)
+  assert.equal((newHome.match(/homeownerEntryDestination\(submit\.homeRef, context\)/g) ?? []).length, 2,
+    'created and partially-created homes both retain the exact entry destination')
+  assert.match(documents, /handoffShareRef\(query\.handoff\)/)
+  assert.match(css, /@media \(max-width: 38rem\)[\s\S]*\.handoff-entry/,
+    'the entry prompt has a phone-safe layout')
 })
 
 test('the inspection entry explains the private boundary before sign in', () => {

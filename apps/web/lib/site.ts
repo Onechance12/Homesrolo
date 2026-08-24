@@ -14,7 +14,7 @@ export const SOCIAL_CARD_ALT = 'Homesrolo — one private record for your home'
 export const SITE_ORIGIN = 'https://homesrolo.com'
 
 /** The separate authenticated homeowner application. */
-export const HOMEOWNER_APP_ORIGIN = 'https://homesrolo-homeowner-v2.onrender.com'
+export const HOMEOWNER_APP_ORIGIN = 'https://app.homesrolo.com'
 export const HOMEOWNER_SIGNIN_URL = `${HOMEOWNER_APP_ORIGIN}/signin`
 
 /**

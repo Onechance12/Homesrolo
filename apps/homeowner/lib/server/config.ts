@@ -1,7 +1,12 @@
 import { z } from 'zod'
 
+const HOMEOWNER_PRODUCTION_APP_ORIGIN = 'https://app.homesrolo.com'
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
 const httpsUrl = z.string().url().transform(value => new URL(value)).refine(
-  value => value.protocol === 'https:' || value.hostname === 'localhost' || value.hostname === '127.0.0.1',
+  value => value.protocol === 'https:'
+    || value.hostname === 'localhost'
+    || value.hostname === '127.0.0.1',
   'must use HTTPS outside local development',
 )
 
@@ -29,6 +34,19 @@ export interface HomeownerRuntimeConfiguration {
   readonly jobroloAttachmentsEnabled: boolean
 }
 
+function homeownerAppOriginAllowed(origin: URL, nodeEnvironment: string | undefined) {
+  if (origin.username || origin.password || origin.search || origin.hash
+    || (origin.pathname !== '/' && origin.pathname !== '')) return false
+  if (origin.origin === HOMEOWNER_PRODUCTION_APP_ORIGIN) return true
+  if (nodeEnvironment === 'production') return false
+  const loopback = LOOPBACK_HOSTS.has(origin.hostname)
+  if (nodeEnvironment === 'development') return loopback
+  if (nodeEnvironment === 'test') {
+    return loopback || (origin.protocol === 'https:' && origin.hostname.endsWith('.test'))
+  }
+  return false
+}
+
 /**
  * Reads only the server-owned integration values. A partial or malformed
  * configuration enables nothing: the caller receives null and the runtime
@@ -37,6 +55,8 @@ export interface HomeownerRuntimeConfiguration {
 export function readHomeownerRuntimeConfiguration(
   environment: Readonly<Record<string, string | undefined>>,
 ): HomeownerRuntimeConfiguration | null {
+  if (environment.NODE_ENV === 'production'
+    && environment.HOMESROLO_APP_ORIGIN !== HOMEOWNER_PRODUCTION_APP_ORIGIN) return null
   const parsed = configurationSchema.safeParse({
     supabaseUrl: environment.HOMESROLO_SUPABASE_URL,
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
@@ -48,6 +68,7 @@ export function readHomeownerRuntimeConfiguration(
     jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
   })
   if (!parsed.success) return null
+  if (!homeownerAppOriginAllowed(parsed.data.appOrigin, environment.NODE_ENV)) return null
   return Object.freeze({
     supabaseUrl: parsed.data.supabaseUrl.origin,
     publishableKey: parsed.data.publishableKey,

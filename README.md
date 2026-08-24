@@ -91,6 +91,7 @@ Chance decides whether and where to distribute it.
 | docs/HOMEOWNER_PHASE1_RUNTIME.md | Implemented homeowner runtime, capability gates, migrations, and remaining launch work |
 | docs/HOMEOWNER_PHOTO_CHECKUPS.md | Default-off private seasonal-photo beta, privacy boundary, hard caps, and release checklist |
 | docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
+| docs/HOME_RECORD_HANDOFF.md | Default-off exact-share Jobrolo → Homesrolo handoff architecture, configuration, canary, rollback, and export runbook |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |

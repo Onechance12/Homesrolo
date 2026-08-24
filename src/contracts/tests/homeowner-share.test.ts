@@ -507,12 +507,28 @@ function filesUnder(directory: string): string[] {
   return files
 }
 
+const defaultOffHandoffRuntime = path.resolve(
+  process.cwd(),
+  'src/homeowner/home-record-handoff.v1.ts',
+)
 for (const sourceFile of filesUnder(path.resolve(process.cwd(), 'src'))) {
   if (sourceFile.startsWith(`${contractDirectory}${path.sep}`)) continue
   const source = readFileSync(sourceFile, 'utf8')
+  if (sourceFile === defaultOffHandoffRuntime) {
+    assert.match(source, /HOME_RECORD_HANDOFF_DEFAULT_ENABLED\s*=\s*false as const/,
+      'the one reviewed runtime consumer must remain default-off')
+    assert.match(source,
+      /from\s*['"]\.\.\/contracts\/homeowner-share\.v1\.ts['"]/,
+      'the reviewed runtime must consume the immutable normative contract directly')
+    assert.match(source, /resolveJobroloAuthorizationKey/,
+      'the reviewed runtime must require a trusted-key lookup')
+    assert.match(source, /resolveRecipientBinding/,
+      'the reviewed runtime must require an exact server-owned recipient binding')
+    continue
+  }
   assert.doesNotMatch(source,
     /(?:from\s*['"][^'"]*homeowner-share|require\([^)]*homeowner-share|import\([^)]*homeowner-share)/,
-    `Phase 0 must not be imported by live source: ${path.relative(process.cwd(), sourceFile)}`)
+    `Only the named default-off handoff runtime may import Phase 0: ${path.relative(process.cwd(), sourceFile)}`)
 }
 // Normative cross-repository wire vector. Homesrolo must reproduce these exact
 // UTF-8 bytes and digests before either side may implement transport.

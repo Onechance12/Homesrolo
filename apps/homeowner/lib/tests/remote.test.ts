@@ -45,6 +45,7 @@ const CAPABILITIES = {
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 }
@@ -201,7 +202,7 @@ test('sessions missing apiVersion, capability keys, or carrying extras are rejec
 
   const { photoCheckups: _photoCheckups, ...nineCaps } = CAPABILITIES
   assert.throws(() => decodeSession({ ...SIGNED_OUT, capabilities: nineCaps }, 'data'),
-    WireError, 'all ten capability booleans are required')
+    WireError, 'all capability booleans are required')
   assert.throws(() => decodeSession(
     { ...SIGNED_OUT, capabilities: { ...CAPABILITIES, surprise: true } }, 'data',
   ), WireError, 'unknown capability keys are rejected')
@@ -1122,6 +1123,7 @@ test('project review uses a server preview and submits only its exact reviewed d
 
 test('magic-link request and sign-out use only their exact same-origin routes', async () => {
   const requests: TransportRequest[] = []
+  const handoff = REF('hshr', 's')
   const port = createRemotePort(async request => {
     requests.push(request)
     if (request.path.endsWith('/magic-link')) {
@@ -1135,9 +1137,15 @@ test('magic-link request and sign-out use only their exact same-origin routes', 
   assert.deepEqual(await port.requestMagicLink(' Person@Example.com ', 'storm_damage'), {
     ok: true, value: { accepted: true },
   })
+  assert.deepEqual(await port.requestMagicLink(' Person@Example.com ', null, handoff), {
+    ok: true, value: { accepted: true },
+  })
   assert.deepEqual(await port.requestMagicLink(
     ' Person@Example.com ',
     'insurance_claim' as 'repair',
+  ), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.requestMagicLink(
+    ' Person@Example.com ', null, 'hshr_short',
   ), { ok: false, error: 'invalid' })
   await port.signOut()
   assert.deepEqual(requests, [
@@ -1146,6 +1154,11 @@ test('magic-link request and sign-out use only their exact same-origin routes', 
       method: 'POST',
       path: '/api/v1/auth/magic-link',
       body: { email: 'person@example.com', intent: 'storm_damage' },
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/magic-link',
+      body: { email: 'person@example.com', handoff },
     },
     { method: 'POST', path: '/api/v1/auth/signout' },
   ])

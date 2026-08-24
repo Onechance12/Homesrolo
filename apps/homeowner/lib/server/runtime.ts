@@ -7,18 +7,38 @@
  * on this side of the boundary.
  */
 
-import { HomeownerApiError, HomeownerApiService } from '../../../../src/homeowner/homeowner-api.v1.ts'
+import {
+  HomeownerApiError,
+  HomeownerApiService,
+  type HomeownerApiRequestContext,
+} from '../../../../src/homeowner/homeowner-api.v1.ts'
 import type {
   HomeownerCommandPort, HomeownerIdentityPort, HomeownerRepositoryPort,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
 import { HomeownerAuthService } from './auth.ts'
 import { HomeownerProjectReviewService } from '../../../../src/homeowner/homeowner-project-review.v1.ts'
+import { HomeRecordHandoffService } from '../../../../src/homeowner/home-record-handoff.v1.ts'
 import {
   readHomeownerRuntimeConfiguration,
   type HomeownerRuntimeConfiguration,
 } from './config.ts'
 import { createSupabaseClients, SupabaseHomeownerProvider } from './supabase-provider.ts'
-import { jobroloIntakeClientForEnvironment } from './jobrolo-intake-client.ts'
+import {
+  SignedJobroloIntakeClient,
+  readJobroloIntakeClientConfiguration,
+  readJobroloIntakeCredentialResidue,
+} from './jobrolo-intake-client.ts'
+import {
+  SignedJobroloHandoffClient,
+  readJobroloHandoffClientConfiguration,
+} from './jobrolo-handoff-client.ts'
+import { SupabaseHomeRecordHandoffProvider } from './supabase-home-record-handoff-provider.ts'
+import {
+  homeRecordHandoffActivationCredentialsSeparated,
+  homeRecordHandoffReleaseEnvironmentAllowed,
+  homeRecordHandoffSecurityProviders,
+  readHomeRecordHandoffSecurityConfiguration,
+} from './home-record-handoff-security.ts'
 import {
   OpenAIHomeResearchClient,
   readHomeResearchConfiguration,
@@ -55,6 +75,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 })
@@ -74,12 +95,41 @@ const auth = configuration && clients
   : null
 
 let service: HomeownerApiService | null = null
-const jobroloIntakeClient = jobroloIntakeClientForEnvironment(environment)
+const jobroloIntakeConfiguration = readJobroloIntakeClientConfiguration(environment)
+const jobroloIntakeCredentialResidue = readJobroloIntakeCredentialResidue(environment)
+const jobroloIntakeClient = jobroloIntakeConfiguration
+  ? new SignedJobroloIntakeClient({ configuration: jobroloIntakeConfiguration })
+  : null
 const homeResearchConfiguration = readHomeResearchConfiguration(environment)
 const homeResearchClient = homeResearchConfiguration
   ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
   : null
 let projectReviewService: HomeownerProjectReviewService | null = null
+const jobroloHandoffConfiguration = readJobroloHandoffClientConfiguration(environment)
+const homeRecordHandoffSecurityConfiguration =
+  readHomeRecordHandoffSecurityConfiguration(environment)
+const homeRecordHandoffCredentialsSeparated = jobroloHandoffConfiguration
+  && homeRecordHandoffSecurityConfiguration
+  && jobroloIntakeCredentialResidue.state !== 'invalid'
+  && homeRecordHandoffReleaseEnvironmentAllowed(environment.NODE_ENV)
+  ? homeRecordHandoffActivationCredentialsSeparated(
+      jobroloHandoffConfiguration,
+      homeRecordHandoffSecurityConfiguration,
+      jobroloIntakeCredentialResidue.credentials,
+    )
+  : false
+const jobroloHandoffClient = jobroloHandoffConfiguration
+  && homeRecordHandoffCredentialsSeparated
+  ? new SignedJobroloHandoffClient({ configuration: jobroloHandoffConfiguration })
+  : null
+const homeRecordHandoffProvider = clients && homeRecordHandoffSecurityConfiguration
+  ? new SupabaseHomeRecordHandoffProvider(clients.service)
+  : null
+const homeRecordHandoffSecurity = homeRecordHandoffSecurityConfiguration
+  && homeRecordHandoffCredentialsSeparated
+  ? homeRecordHandoffSecurityProviders(homeRecordHandoffSecurityConfiguration)
+  : null
+let homeRecordHandoffService: HomeRecordHandoffService | null = null
 
 export function projectReviewCapabilityEnabled(
   providerConfigured: boolean,
@@ -126,6 +176,10 @@ export function homeownerApiService(): HomeownerApiService {
           jobroloIntakeClient !== null,
         ) && configuration?.privateUploadsEnabled === true
           && configuration?.jobroloAttachmentsEnabled === true,
+        homeRecordHandoffs: homeRecordHandoffProvider !== null
+          && jobroloHandoffClient !== null
+          && homeRecordHandoffSecurity !== null
+          && homeRecordHandoffSecurityConfiguration !== null,
         invitations: false,
         sharing: false,
       }) : UNCONFIGURED_CAPABILITIES,
@@ -144,6 +198,49 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
     attachmentsEnabled: configuration?.jobroloAttachmentsEnabled === true,
   })
   return projectReviewService
+}
+
+/**
+ * The handoff remains unavailable unless the code-owned release-environment
+ * interlock, base Supabase runtime, independent handoff gate, signed Jobrolo
+ * transport, pinned keys, separated credentials, and local scanner all allow
+ * it. Routes must use the returned server-owned recipient ref; a browser must
+ * never choose one.
+ */
+export function configuredHomeRecordHandoffService(): {
+  readonly service: HomeRecordHandoffService
+  readonly claimExactShare: (
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedShareId: string,
+  ) => ReturnType<HomeRecordHandoffService['claimForController']>
+} | null {
+  if (!provider || !homeRecordHandoffProvider || !jobroloHandoffClient
+    || !homeRecordHandoffSecurity || !homeRecordHandoffSecurityConfiguration) return null
+  homeRecordHandoffService ??= new HomeRecordHandoffService({
+    enabled: true,
+    identity: provider,
+    repository: provider,
+    recipients: homeRecordHandoffProvider,
+    trust: homeRecordHandoffSecurity.trust,
+    source: jobroloHandoffClient,
+    signer: homeRecordHandoffSecurity.signer,
+    scanner: homeRecordHandoffSecurity.scanner,
+    persistence: homeRecordHandoffProvider,
+    objects: homeRecordHandoffProvider,
+  })
+  const configuredService = homeRecordHandoffService
+  const configuredRecipientRef = homeRecordHandoffSecurityConfiguration.recipientRef
+  return Object.freeze({
+    service: configuredService,
+    claimExactShare: (context, requestedHomeRef, requestedShareId) =>
+      configuredService.claimForController(
+        context,
+        requestedHomeRef,
+        requestedShareId,
+        configuredRecipientRef,
+      ),
+  })
 }
 
 export function configuredHomeResearchClient(): OpenAIHomeResearchClient | null {

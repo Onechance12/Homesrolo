@@ -1,6 +1,11 @@
 import { clearSessionCookie, sessionCookie, sessionHandleFromCookieHeader } from './cookie.ts'
 import { configuredHomeownerAuthService, homeownerRuntimeConfiguration } from './runtime.ts'
-import { homesPathForRoofingIntent, validatedRoofingIntent } from './auth.ts'
+import {
+  homesPathForEntryContext,
+  signInPathForEntryContext,
+  validatedHandoffShareRef,
+  validatedRoofingIntent,
+} from './auth.ts'
 
 const JSON_HEADERS = Object.freeze({
   'cache-control': 'no-store',
@@ -24,13 +29,15 @@ function sameOrigin(request: Request, expected: string): boolean {
 export function validMagicLinkCallbackQuery(searchParams: URLSearchParams): boolean {
   const keys = [...searchParams.keys()]
   const hasIntent = keys.includes('intent')
-  return keys.length === (hasIntent ? 3 : 2)
+  const hasHandoff = keys.includes('handoff')
+  return keys.length === 2 + Number(hasIntent) + Number(hasHandoff)
     && new Set(keys).size === keys.length
-    && keys.every(key => key === 'token_hash' || key === 'type' || key === 'intent')
+    && keys.every(key => key === 'token_hash' || key === 'type' || key === 'intent' || key === 'handoff')
     && keys.includes('token_hash')
     && keys.includes('type')
     && searchParams.get('type') === 'email'
     && (!hasIntent || validatedRoofingIntent(searchParams.get('intent')) !== null)
+    && (!hasHandoff || validatedHandoffShareRef(searchParams.get('handoff')) !== null)
 }
 
 async function boundedJson(request: Request, maximumBytes = 1024): Promise<unknown> {
@@ -59,16 +66,19 @@ export async function requestHomeownerMagicLink(request: Request): Promise<Respo
   }
   const keys = Object.keys(body)
   if (!Object.hasOwn(body, 'email')
-    || keys.some(key => key !== 'email' && key !== 'intent')
-    || keys.length < 1 || keys.length > 2
+    || keys.some(key => key !== 'email' && key !== 'intent' && key !== 'handoff')
+    || keys.length < 1 || keys.length > 3
     || (Object.hasOwn(body, 'intent')
-      && validatedRoofingIntent((body as { intent?: unknown }).intent) === null)) {
+      && validatedRoofingIntent((body as { intent?: unknown }).intent) === null)
+    || (Object.hasOwn(body, 'handoff')
+      && validatedHandoffShareRef((body as { handoff?: unknown }).handoff) === null)) {
     return json(400, { error: { code: 'invalid_request' } })
   }
   try {
     const result = await auth.requestMagicLink(
       (body as { email?: unknown }).email,
       Object.hasOwn(body, 'intent') ? (body as { intent?: unknown }).intent : null,
+      Object.hasOwn(body, 'handoff') ? (body as { handoff?: unknown }).handoff : null,
     )
     if (result === 'rate_limited') return json(429, { error: { code: 'rate_limited' } })
     if (result === 'unavailable') return json(503, { error: { code: 'unavailable' } })
@@ -103,15 +113,20 @@ export async function completeHomeownerMagicLink(request: Request): Promise<Resp
   if (!configuration || !auth) return Response.redirect(new URL('/signin?error=unavailable', request.url), 303)
   const url = new URL(request.url)
   const rawIntent = url.searchParams.get('intent')
+  const rawHandoff = url.searchParams.get('handoff')
   if (!validMagicLinkCallbackQuery(url.searchParams)) {
     return Response.redirect(new URL('/signin?error=link', configuration.appOrigin), 303)
   }
   const handle = await auth.completeMagicLink(url.searchParams.get('token_hash'))
-  if (!handle) return Response.redirect(new URL('/signin?error=link', configuration.appOrigin), 303)
+  if (!handle) {
+    const entryPath = signInPathForEntryContext(rawIntent, rawHandoff)
+    const separator = entryPath.includes('?') ? '&' : '?'
+    return Response.redirect(new URL(`${entryPath}${separator}error=link`, configuration.appOrigin), 303)
+  }
   return new Response(null, {
     status: 303,
     headers: {
-      location: `${configuration.appOrigin}${homesPathForRoofingIntent(rawIntent)}`,
+      location: `${configuration.appOrigin}${homesPathForEntryContext(rawIntent, rawHandoff)}`,
       'cache-control': 'no-store',
       'referrer-policy': 'no-referrer',
       'set-cookie': sessionCookie(handle),

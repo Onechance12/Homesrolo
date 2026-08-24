@@ -8,6 +8,7 @@ export const metadata: Metadata = {
     template: '%s — Homesrolo',
   },
   description: 'Keep private whole-home projects, past work, and seasonal photo checkups connected to one home record.',
+  referrer: 'no-referrer',
   // Private account pages should never appear in search results.
   robots: { index: false, follow: false },
 }

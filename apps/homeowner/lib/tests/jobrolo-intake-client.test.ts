@@ -15,6 +15,7 @@ import {
   JobroloIntakeDeliveryError,
   SignedJobroloIntakeClient,
   readJobroloIntakeClientConfiguration,
+  readJobroloIntakeCredentialResidue,
 } from '../server/jobrolo-intake-client.ts'
 
 const SECRET = 'test-secret-value-with-at-least-thirty-two-bytes'
@@ -75,6 +76,41 @@ test('client configuration is default-off and pins the exact endpoint path', () 
     ...environment,
     HOMESROLO_JOBROLO_INTAKE_ENABLED: 'false',
   }), null)
+})
+
+test('handoff separation sees disabled intake credentials and rejects partial residue', () => {
+  assert.deepEqual(readJobroloIntakeCredentialResidue({}), {
+    state: 'absent',
+    credentials: null,
+  })
+  assert.deepEqual(readJobroloIntakeCredentialResidue({
+    HOMESROLO_JOBROLO_INTAKE_ENABLED: 'false',
+    HOMESROLO_JOBROLO_INTAKE_CLIENT_ID: configuration.clientId,
+    HOMESROLO_JOBROLO_INTAKE_SHARED_SECRET: configuration.sharedSecret,
+  }), {
+    state: 'valid',
+    credentials: {
+      clientId: configuration.clientId,
+      sharedSecret: configuration.sharedSecret,
+    },
+  })
+  for (const residue of [
+    { HOMESROLO_JOBROLO_INTAKE_CLIENT_ID: configuration.clientId },
+    { HOMESROLO_JOBROLO_INTAKE_SHARED_SECRET: configuration.sharedSecret },
+    {
+      HOMESROLO_JOBROLO_INTAKE_CLIENT_ID: 'bad id',
+      HOMESROLO_JOBROLO_INTAKE_SHARED_SECRET: configuration.sharedSecret,
+    },
+    {
+      HOMESROLO_JOBROLO_INTAKE_CLIENT_ID: configuration.clientId,
+      HOMESROLO_JOBROLO_INTAKE_SHARED_SECRET: 'short',
+    },
+  ]) {
+    assert.deepEqual(readJobroloIntakeCredentialResidue(residue), {
+      state: 'invalid',
+      credentials: null,
+    })
+  }
 })
 
 test('signed client accepts only a receipt bound to its exact request', async () => {

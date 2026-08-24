@@ -4,7 +4,12 @@ import { z } from 'zod'
 import type { HomeownerRuntimeConfiguration } from './config.ts'
 import { hashSessionHandle, mintOpaqueRef } from './supabase-provider.ts'
 import { SESSION_LIFETIME_SECONDS } from './cookie.ts'
-import { roofingIntent, withRoofingIntent } from '../roofing-intent.ts'
+import {
+  handoffShareRef,
+  homeownerEntryContext,
+  withHomeownerEntryContext,
+} from '../entry-context.ts'
+import { roofingIntent } from '../roofing-intent.ts'
 import type { RoofingNeed } from '../port/types.ts'
 
 const emailSchema = z.string().trim().email().max(254)
@@ -34,16 +39,19 @@ export class HomeownerAuthService {
   async requestMagicLink(
     rawEmail: unknown,
     rawIntent: unknown = null,
+    rawHandoff: unknown = null,
   ): Promise<MagicLinkRequestResult> {
     const parsed = emailSchema.safeParse(rawEmail)
     if (!parsed.success) throw new Error('invalid_email')
     const intent = rawIntent === null ? null : roofingIntent(rawIntent)
     if (rawIntent !== null && intent === null) throw new Error('invalid_intent')
+    const handoff = rawHandoff === null ? null : handoffShareRef(rawHandoff)
+    if (rawHandoff !== null && handoff === null) throw new Error('invalid_handoff')
     const { error } = await this.#auth.auth.signInWithOtp({
       email: parsed.data.toLowerCase(),
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${this.#configuration.appOrigin}${withRoofingIntent('/auth/complete', intent)}`,
+        emailRedirectTo: `${this.#configuration.appOrigin}${withHomeownerEntryContext('/auth/complete', { intent, handoff })}`,
       },
     })
     if (!error) return 'accepted'
@@ -103,11 +111,29 @@ export class HomeownerAuthService {
 }
 
 export function homesPathForRoofingIntent(rawIntent: unknown): string {
-  return withRoofingIntent('/homes', roofingIntent(rawIntent))
+  return homesPathForEntryContext(rawIntent, null)
+}
+
+export function homesPathForEntryContext(rawIntent: unknown, rawHandoff: unknown): string {
+  return withHomeownerEntryContext('/homes', homeownerEntryContext({
+    intent: rawIntent,
+    handoff: rawHandoff,
+  }))
+}
+
+export function signInPathForEntryContext(rawIntent: unknown, rawHandoff: unknown): string {
+  return withHomeownerEntryContext('/signin', homeownerEntryContext({
+    intent: rawIntent,
+    handoff: rawHandoff,
+  }))
 }
 
 export function validatedRoofingIntent(rawIntent: unknown): RoofingNeed | null {
   return roofingIntent(rawIntent)
+}
+
+export function validatedHandoffShareRef(rawHandoff: unknown): string | null {
+  return handoffShareRef(rawHandoff)
 }
 
 export function magicLinkEmailIsValid(value: unknown): boolean {

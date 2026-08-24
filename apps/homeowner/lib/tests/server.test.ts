@@ -29,6 +29,7 @@ const ALL_FALSE = {
   photoCheckups: false,
   projectReview: false,
   projectReviewAttachments: false,
+  homeRecordHandoffs: false,
   invitations: false,
   sharing: false,
 }
@@ -100,6 +101,11 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/[homeRef]/artifacts/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
     '../../app/api/v1/homes/[homeRef]/research/route.ts',
+    '../../app/api/v1/homes/[homeRef]/handoffs/route.ts',
+    '../../app/api/v1/homes/[homeRef]/handoffs/[shareId]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/handoffs/[shareId]/accept/route.ts',
+    '../../app/api/v1/homes/[homeRef]/handoffs/[shareId]/reject/route.ts',
+    '../../app/api/v1/homes/[homeRef]/home-record/export/route.ts',
   ] as const
   for (const rel of routes) {
     const content = readFileSync(path.join(import.meta.dirname, rel), 'utf8')
