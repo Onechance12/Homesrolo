@@ -186,7 +186,7 @@ query, or obtain a session for Homesrolo.
 To stop new activity, disable the Jobrolo database gate and both products'
 environment gates, then revoke the `hrcp`. Rotate the HMAC secret or signing
 keys if compromise is suspected. Disabling/revoking does not pretend already
-accepted homeowner-owned copies disappeared.
+accepted homeowner-controlled copies disappeared.
 
 An uncertain fetch, scan, object write, or database finalization remains
 quarantined or `reconciliation_required`; it is not blindly retried or exposed.
