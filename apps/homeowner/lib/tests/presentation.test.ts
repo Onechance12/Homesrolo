@@ -89,6 +89,9 @@ test('the shell has a language, a skip link, and a main landmark', () => {
   assert.match(layout, /className="skip-link"/)
   const shell = read('components/AppShell.tsx')
   assert.match(shell, /<main id="main" tabIndex=\{-1\}/)
+  const icons = read('components/icons.tsx')
+  assert.match(icons, /M48\.6 53\.4A25 25 0 1 1 56\.5 34/,
+    'the homeowner app uses the same continuous home-loop mark as Homesrolo.com')
 })
 
 // --- honesty -----------------------------------------------------------------
