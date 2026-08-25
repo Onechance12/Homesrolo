@@ -165,6 +165,7 @@ test('generic project creation records historical work across the home', async (
   assert.deepEqual(capture.commandInput?.command, {
     commandRef: `hcmd_${body('g')}`,
     title: 'Kitchen remodel',
+    workKind: 'project',
     category: 'interior',
     status: 'completed',
     occurredOn: '2024-06-15',
