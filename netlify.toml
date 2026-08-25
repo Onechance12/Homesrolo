@@ -5,6 +5,11 @@
 [build.environment]
   NODE_VERSION = "22"
   NETLIFY_NEXT_SKEW_PROTECTION = "true"
+  NEXT_PUBLIC_HOMESROLO_PORT_MODE = "remote"
+  HOMESROLO_APP_ORIGIN = "https://app.homesrolo.com"
+  HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED = "true"
+  HOMESROLO_PRIVATE_UPLOADS_ENABLED = "false"
+  HOMESROLO_PHOTO_CHECKUPS_ENABLED = "false"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
