@@ -93,7 +93,8 @@ test('the off-Render deployment is reproducible from the repository root', () =>
   assert.match(configuration, /HOMESROLO_APP_ORIGIN = "https:\/\/app\.homesrolo\.com"/)
   assert.match(configuration, /HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED = "true"/)
   assert.match(configuration, /HOMESROLO_SELF_SIGNUP_ENABLED = "false"/)
-  assert.match(configuration, /HOMESROLO_PRIVATE_UPLOADS_ENABLED = "false"/)
+  assert.match(configuration, /HOMESROLO_PRIVATE_UPLOADS_ENABLED = "true"/,
+    'the reviewed private bucket migration is live before this release gate opens')
   assert.match(configuration, /HOMESROLO_PHOTO_CHECKUPS_ENABLED = "false"/)
   assert.match(configuration, /Service-Worker-Allowed = "\/"/)
   assert.doesNotMatch(configuration, /onrender/i)
