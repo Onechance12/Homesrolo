@@ -674,8 +674,8 @@ test('roof proposal comparison is private, neutral, editable, and separate from 
     'the disabled upload capability makes zero artifact-list requests')
   assert.match(project, /session\.state\.capabilities\.projectQuotes/,
     'the proposal vault is gated independently from general persistence')
-  assert.doesNotMatch(project, /project-files-unavailable|roof-quotes-unavailable|Private uploads are unavailable/,
-    'capability-off tools are omitted instead of appearing as dead product surfaces')
+  assert.match(project, /!uploadsEnabled \? \([\s\S]*Uploads are turned off in this build\./,
+    'the project workspace says plainly when its private storage control is off')
   assert.match(vault, /Scope only—not a price score/)
   assert.match(vault, /Homesrolo does not estimate this roof, rank proposals/)
   assert.match(vault, /Not reviewed/)
@@ -888,6 +888,51 @@ test('whole-home project history never invents a category or work date', () => {
   assert.match(wire, /performedOn: decoded\.occurredOn/)
   assert.doesNotMatch(wire, /performedOn:[^\n]*createdAt/,
     'record creation time is never relabeled as the work date')
+})
+
+test('projects open as a compact mobile workspace with working-data controls', () => {
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  const detail = read('app/home/[homeId]/projects/[projectId]/page.tsx')
+
+  assert.match(projects, /Add something/,
+    'project capture starts with one plain-language action')
+  assert.match(projects, /Where is it now\?/)
+  for (const state of ['Planned', 'Happening now', 'Already done']) {
+    assert.match(projects, new RegExp(state), `${state} remains one fast creation state`)
+  }
+  assert.match(projects, /<select[\s\S]*Choose an area[\s\S]*CATEGORIES\.map/,
+    'twelve home categories stay available without twelve oversized cards')
+  assert.match(projects, /<details className="project-more">[\s\S]*Add date or notes/,
+    'optional capture stays progressively disclosed')
+
+  for (const section of [
+    "{ value: 'overview', label: 'Overview' }",
+    "{ value: 'activity', label: 'Updates' }",
+    "{ value: 'files', label: 'Photos & files' }",
+    "{ value: 'decisions', label: 'Decisions' }",
+    "{ value: 'people', label: 'People' }",
+  ]) assert.match(detail, new RegExp(section.replace(/[&{}'()]/g, '\\$&')))
+  assert.match(detail, /role="tablist" aria-label="Project workspace"/)
+  assert.match(detail, /expectedRevision: project\.revision/,
+    'homeowner corrections are revision-safe')
+  assert.match(detail, /occurredOn: editOccurredOn \|\| null/,
+    'clearing an exact date is an explicit saved correction')
+  assert.match(detail, /professionalLabel: editProfessional\.trim\(\) \|\| null/,
+    'clearing a professional label is an explicit saved correction')
+  assert.match(detail, /expectedRevision: editingItem\.revision/,
+    'a saved decision cannot overwrite a newer edit')
+  assert.match(detail, /archived: true/,
+    'archive is a revision-safe state change rather than a hard delete')
+  assert.match(detail, /Archiving keeps its history\. It does not permanently delete the project\./,
+    'the destructive-looking action explains its recoverable behavior before confirmation')
+  assert.match(detail, /workspacePort\.addProjectActivity\(homeId, projectId/,
+    'updates write through the project activity contract')
+  assert.match(detail, /workspacePort\.saveProjectItem\(homeId, projectId/,
+    'materials, decisions, and wish-list items share one bounded project contract')
+  assert.match(detail, /This does not grant account or Home Record access\./,
+    'a named professional is never confused with sharing authority')
+  assert.match(css, /\.project-workspace__tabs\s*\{[^}]*overflow-x:\s*auto/s,
+    'the workspace navigation remains horizontally usable on a phone')
 })
 
 test('the home record avoids disabled routes and old paths remain compatible', () => {
