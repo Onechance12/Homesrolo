@@ -65,17 +65,17 @@ test('new-home setup is a mobile-first progressive form, not a chatbot transcrip
   assert.match(page, /Set up your home/)
   assert.match(page, /Step \{reviewing \? 2 : 1\} of 2/,
     'the short setup and review stages are always visible')
-  assert.match(page, /Home name \(required\)[\s\S]*City, town, or neighborhood \(required\)/,
-    'the form asks for only a familiar name and general area up front')
+  assert.match(page, /Home name \(required\)[\s\S]*Street address \(required\)[\s\S]*ZIP code \(required\)/,
+    'the form starts one private Home Record from an exact property address')
   assert.match(page, /showOptional[\s\S]*Add optional details/,
     'home type, age, and systems stay behind an optional disclosure')
   assert.match(page, /finishOptionalLater\(next\)/,
     'omitting optional answers produces a complete, explicit intake')
   assert.match(page, /Not recorded/,
     'omitted facts are shown honestly instead of being guessed')
-  assert.doesNotMatch(page, /Update it anytime|update it after the file opens|correct it later/,
-    'setup never promises editing that the saved home file does not offer yet')
-  assert.match(page, /<ReviewCard draft=\{draftFrom\(state\)\} \/>/,
+  assert.match(page, /port\.updateHomeRecord\(homeRef/,
+    'the address and saved facts use the revision-backed Home Record command')
+  assert.match(page, /<ReviewCard draft=\{draftFrom\(state\)\} address=\{form\} \/>/,
     'the saved intake draft is rendered for review before creation')
   assert.match(page, /← Edit details/,
     'the review step has one clear route back to the editable form')
@@ -291,6 +291,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/session/route.ts',
     'app/api/v1/homes/route.ts',
     'app/api/v1/homes/[homeRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/record/route.ts',
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
@@ -355,6 +356,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/auth/signout/route.ts') {
       assert.match(content, /export async function POST/, `${rel} revokes one session`)
       assert.match(content, /signOutHomeowner/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/record/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves one revision-backed record update`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} keeps the address inside the exact-home projection`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/intake/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the intake command`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
@@ -431,7 +436,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       // The three explicit authentication routes were checked above.
     } else if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
-    } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
+    } else if (rel !== 'app/api/v1/homes/[homeRef]/record/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts'
@@ -816,6 +822,28 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'the record index does not advertise unbuilt sections')
 })
 
+test('the Home Record exposes one private, editable address and saved home facts', () => {
+  const dashboard = read('app/home/[homeId]/page.tsx')
+  const experience = read('components/HomeRecordExperience.tsx')
+  const details = read('app/home/[homeId]/details/page.tsx')
+  const remote = read('lib/port/remote.ts')
+
+  assert.match(dashboard, /homeRecord=\{file\.source === 'server' \? file\.homeRecord : null\}/)
+  assert.match(experience, /Your private home details/)
+  assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/details`\}/)
+  assert.match(experience, /Your full address stays inside this signed-in Home Record/)
+  assert.match(details, /Property address[\s\S]*Home facts[\s\S]*Major systems/)
+  assert.match(details, /port\.updateHomeRecord\(home\.homeRef/)
+  assert.match(details, /expectedRevision: profile\.revision/,
+    'edits use the exact revision returned by the last Home Record read')
+  assert.match(remote, /path: `\$\{API\}\/homes\/\$\{ref\}\/record`/)
+  assert.doesNotMatch(`${dashboard}\n${experience}\n${details}`, /coming soon|beta/i)
+  assert.doesNotMatch(details, /measurement|square.?foot|roof.?area/i,
+    'measurements stay outside this slice')
+  assert.match(css, /@media \(max-width: 48rem\)[\s\S]*\.home-details-form__fields/,
+    'the edit form collapses to one column on phones')
+})
+
 test('seasonal photo checkups are mobile-first, exact-view, and independently gated', () => {
   const checkupPage = read('app/home/[homeId]/checkups/page.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
@@ -1110,6 +1138,7 @@ test('photo plates are drawn and say so', () => {
 test('every home-scoped screen exists', () => {
   for (const screen of [
     'app/home/[homeId]/page.tsx',
+    'app/home/[homeId]/details/page.tsx',
     'app/home/[homeId]/projects/page.tsx',
     'app/home/[homeId]/projects/[projectId]/page.tsx',
     'app/home/[homeId]/documents/page.tsx',

@@ -10,6 +10,7 @@
  *   GET  /api/v1/homes/{homeRef}  → decodeServerHomeView
  *   POST /api/v1/homes            → 201 decodeServerHomeSummary
  *   POST /api/v1/homes/{homeRef}/intake → 201 decodeRecordedHomeIntake
+ *   POST /api/v1/homes/{homeRef}/record → decodeHomeRecordProfile
  *   POST /api/v1/homes/{homeRef}/research → 200 decodeHomeResearchResult
  *
  * The create body is EXACTLY homeownerApiCreateHomeInputSchema:
@@ -17,8 +18,8 @@
  * one browser-minted identifier (an idempotency ref, command-ref.ts);
  * requestedAt, the principal, and every membership fact are server-derived.
  * homeType, yearBuilt, and systems never enter that create command. They cross
- * only through POST /api/v1/homes/{homeRef}/intake after the server returns
- * the exact homeRef.
+ * only after the server returns the exact homeRef. New setup uses the
+ * revision-backed /record command; /intake remains for older clients.
  *
  * Any port method without a server route returns 'unavailable' without
  * building a request. When the server defines a route, the adapter gains it
@@ -45,7 +46,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeArtifactUploadReservation, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeArtifactUploadReservation, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -423,6 +424,75 @@ export function createRemotePort(
           })),
         },
       }, decodeRecordedHomeIntake, 201)
+      if (result.ok && result.value.homeRef !== ref) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async updateHomeRecord(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      if (!ref || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+        return { ok: false, error: 'invalid' }
+      }
+      const line1 = input.address.line1.trim()
+      const line2 = input.address.line2?.trim() || null
+      const city = input.address.city.trim()
+      const regionCode = input.address.regionCode.trim().toUpperCase()
+      const postalCode = input.address.postalCode.trim()
+      const addressTextIsSafe = (value: string, maximum: number) =>
+        value.length >= 1 && value.length <= maximum
+          && !/[\u0000-\u001f\u007f]/.test(value)
+      const allowedHomeTypes = ['house', 'townhouse', 'condo', 'other', 'unknown'] as const
+      const supportedKinds = [
+        'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+      ] as const
+      const yearIsValid = (year: typeof input.yearBuilt) =>
+        year === null || (Number.isInteger(year.value)
+          && year.value >= 1800
+          && year.value <= 9999
+          && (year.precision === 'exact' || year.precision === 'approximate'))
+      const kinds = input.systems.map(system => system.kind)
+      if (!addressTextIsSafe(line1, 120)
+        || (line2 !== null && !addressTextIsSafe(line2, 120))
+        || !addressTextIsSafe(city, 80)
+        || !/^[A-Z]{2}$/.test(regionCode)
+        || !/^\d{5}(?:-\d{4})?$/.test(postalCode)
+        || input.address.countryCode !== 'US'
+        || !allowedHomeTypes.includes(input.homeType)
+        || !yearIsValid(input.yearBuilt)
+        || input.systems.length !== supportedKinds.length
+        || new Set(kinds).size !== supportedKinds.length
+        || supportedKinds.some(kind => !kinds.includes(kind))
+        || input.systems.some(system => !['yes', 'no', 'unknown'].includes(system.present)
+          || !yearIsValid(system.installedOrReplacedYear)
+          || (system.present !== 'yes' && system.installedOrReplacedYear !== null))) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/record`,
+        body: {
+          commandRef: input.commandRef,
+          expectedRevision: input.expectedRevision,
+          address: {
+            line1,
+            line2,
+            city,
+            regionCode,
+            postalCode,
+            countryCode: 'US',
+          },
+          homeType: input.homeType,
+          yearBuilt: input.yearBuilt,
+          systems: input.systems.map(system => ({
+            kind: system.kind,
+            present: system.present,
+            installedOrReplacedYear: system.installedOrReplacedYear,
+          })),
+        },
+      }, decodeHomeRecordProfile)
       if (result.ok && result.value.homeRef !== ref) {
         return { ok: false, error: 'invalid' }
       }

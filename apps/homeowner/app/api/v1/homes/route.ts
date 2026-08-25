@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/homes — one of exactly three routes this application serves.
+ * GET /api/v1/homes — private home summaries without exact street addresses.
  * All policy lives in the merged homeowner-http.v1 handler; this file only
  * delegates. GET lists homes; POST submits the one strict create-home command.
  */

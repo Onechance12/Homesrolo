@@ -161,6 +161,7 @@ export function homeownerApiService(): HomeownerApiService {
       identity: provider ?? unconfiguredIdentity,
       repository: provider ?? unconfiguredRepository,
       commands: provider ?? unconfiguredCommands,
+      ...(provider ? { homeRecordProfile: provider } : {}),
       ...(provider ? { privateObjects: provider } : {}),
       ...(provider ? { projectWorkspace: provider } : {}),
       ...(provider && configuration?.projectQuotesEnabled === true

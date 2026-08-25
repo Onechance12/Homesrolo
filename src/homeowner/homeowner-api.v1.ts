@@ -69,6 +69,13 @@ import {
   type HomeownerProjectItem,
   type HomeownerProjectWorkspacePort,
 } from './homeowner-project-workspace.v1.ts'
+import {
+  homeownerHomeRecordProfileSchema,
+  updateHomeRecordProfileFieldsSchema,
+  updateHomeRecordProfileInputSchema,
+  type HomeownerHomeRecordProfile,
+  type HomeownerHomeRecordProfilePort,
+} from './home-record-profile.v1.ts'
 
 /**
  * Server application boundary for the private homeowner app.
@@ -171,6 +178,18 @@ export const homeownerApiIntakeViewSchema = z.object({
 
 export type HomeownerApiRecordIntakeInput = z.infer<typeof homeownerApiRecordIntakeInputSchema>
 export type HomeownerApiIntakeView = z.infer<typeof homeownerApiIntakeViewSchema>
+
+/** Exact-home profile update. Authority, provenance, and execution time remain server-owned. */
+export const homeownerApiUpdateHomeRecordInputSchema =
+  updateHomeRecordProfileFieldsSchema.omit({ requestedAt: true })
+
+export const homeownerApiHomeRecordViewSchema =
+  homeownerHomeRecordProfileSchema.omit({ recordVersion: true })
+
+export type HomeownerApiUpdateHomeRecordInput = z.infer<
+  typeof homeownerApiUpdateHomeRecordInputSchema
+>
+export type HomeownerApiHomeRecordView = z.infer<typeof homeownerApiHomeRecordViewSchema>
 
 export const homeownerApiRoofingNeedSchema = z.enum([
   'repair',
@@ -412,6 +431,7 @@ export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   warrantyCount: z.number().int().min(0),
   maintenanceCount: z.number().int().min(0),
   updatedAt: homeownerUtcInstantSchema,
+  homeRecord: homeownerApiHomeRecordViewSchema.nullable(),
 }).strict()
 
 export type HomeownerApiHomeView = z.infer<typeof homeownerApiHomeViewSchema>
@@ -447,6 +467,7 @@ export interface HomeownerApiServiceOptions {
   readonly privateObjects?: HomeownerPrivateObjectPort
   readonly projectQuotes?: HomeownerProjectQuotePort
   readonly projectWorkspace?: HomeownerProjectWorkspacePort
+  readonly homeRecordProfile?: HomeownerHomeRecordProfilePort
   readonly checkupPhotos?: HomeownerCheckupPhotoPort
   readonly now: () => string
   /**
@@ -465,6 +486,20 @@ function safeSummary(
     displayLabel: home.displayLabel,
     privateLocationLabel: home.privateLocationLabel,
     relationshipLabel: membership.relationshipLabel,
+  })
+}
+
+function safeHomeRecord(input: HomeownerHomeRecordProfile): HomeownerApiHomeRecordView {
+  const profile = homeownerHomeRecordProfileSchema.parse(input)
+  return homeownerApiHomeRecordViewSchema.parse({
+    homeRef: profile.homeRef,
+    revision: profile.revision,
+    address: profile.address,
+    homeType: profile.homeType,
+    yearBuilt: profile.yearBuilt,
+    systems: profile.systems,
+    source: profile.source,
+    updatedAt: profile.updatedAt,
   })
 }
 
@@ -596,8 +631,8 @@ const ROOFING_TIMING_LABEL: Readonly<Record<
 })
 
 /**
- * Read-only Phase 2A application service. It intentionally exposes no write,
- * upload, invitation, sharing, provider, or object-storage operation.
+ * Private homeowner application service. Every read and bounded write derives
+ * authority from the server session and a fresh exact-home membership.
  */
 export class HomeownerApiService {
   readonly #identity: HomeownerIdentityPort
@@ -606,6 +641,7 @@ export class HomeownerApiService {
   readonly #privateObjects: HomeownerPrivateObjectPort | null
   readonly #projectQuotes: HomeownerProjectQuotePort | null
   readonly #projectWorkspace: HomeownerProjectWorkspacePort | null
+  readonly #homeRecordProfile: HomeownerHomeRecordProfilePort | null
   readonly #checkupPhotos: HomeownerCheckupPhotoPort | null
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
@@ -617,6 +653,7 @@ export class HomeownerApiService {
     this.#privateObjects = options.privateObjects ?? null
     this.#projectQuotes = options.projectQuotes ?? null
     this.#projectWorkspace = options.projectWorkspace ?? null
+    this.#homeRecordProfile = options.homeRecordProfile ?? null
     this.#checkupPhotos = options.checkupPhotos ?? null
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
@@ -693,11 +730,14 @@ export class HomeownerApiService {
 
     const home = await this.#repository.readHome(decision)
     if (!home) throw new HomeownerApiError('not_found')
-    const [projects, artifacts, warranties, maintenance] = await Promise.all([
+    const [projects, artifacts, warranties, maintenance, homeRecord] = await Promise.all([
       this.#repository.listProjects(decision),
       this.#repository.listArtifactMetadata(decision),
       this.#repository.listWarranties(decision),
       this.#repository.listMaintenance(decision),
+      this.#homeRecordProfile
+        ? this.#homeRecordProfile.readHomeRecordProfile(decision)
+        : Promise.resolve(null),
     ])
 
     return homeownerApiHomeViewSchema.parse({
@@ -706,7 +746,10 @@ export class HomeownerApiService {
       documentCount: artifacts.length,
       warrantyCount: warranties.length + artifacts.filter(item => item.kind === 'warranty').length,
       maintenanceCount: maintenance.length,
-      updatedAt: home.updatedAt,
+      updatedAt: homeRecord && homeRecord.updatedAt > home.updatedAt
+        ? homeRecord.updatedAt
+        : home.updatedAt,
+      homeRecord: homeRecord ? safeHomeRecord(homeRecord) : null,
     })
   }
 
@@ -1643,6 +1686,48 @@ export class HomeownerApiService {
     })
   }
 
+  async updateHomeRecord(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiHomeRecordView> {
+    const parsedInput = homeownerApiUpdateHomeRecordInputSchema.safeParse(input)
+    if (!parsedInput.success) throw new HomeownerApiError('invalid_request')
+
+    const grant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'home_record.update',
+    )
+    if (!this.#capabilities.persistence || !this.#homeRecordProfile) {
+      throw new HomeownerApiError('unavailable')
+    }
+
+    const command = updateHomeRecordProfileInputSchema.safeParse({
+      ...parsedInput.data,
+      requestedAt: this.#now(),
+    })
+    if (!command.success) throw new HomeownerApiError('invalid_request')
+
+    const updated = homeownerHomeRecordProfileSchema.parse(
+      await this.#homeRecordProfile.updateHomeRecordProfile({
+        grant,
+        command: command.data,
+      }),
+    )
+    if (updated.homeRef !== grant.homeRef
+      || updated.revision !== command.data.expectedRevision + 1
+      || updated.source !== 'homeowner_recollection'
+      || stableJson(updated.address) !== stableJson(command.data.address)
+      || updated.homeType !== command.data.homeType
+      || stableJson(updated.yearBuilt) !== stableJson(command.data.yearBuilt)
+      || stableJson([...updated.systems].sort((left, right) => left.kind.localeCompare(right.kind)))
+        !== stableJson([...command.data.systems].sort((left, right) => left.kind.localeCompare(right.kind)))) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return safeHomeRecord(updated)
+  }
+
   async #exactProject(
     grant: AuthorizedHomeownerWorkspace,
     requestedProjectRef: string,
@@ -1694,4 +1779,4 @@ export class HomeownerApiService {
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation, exact-home intake, roofing projects, private quote records, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'
+  'Home creation, exact-home profile and intake, projects, private quote records, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'

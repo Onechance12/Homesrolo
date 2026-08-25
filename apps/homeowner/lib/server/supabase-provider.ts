@@ -3,9 +3,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import {
   HOMEOWNER_RUNTIME_VERSION,
+  HOMEOWNER_SYSTEM_KINDS,
   homeownerArtifactCommandIntent,
   homeownerArtifactMetadataSchema,
   homeownerArtifactUploadReservationSchema,
+  homeownerIntakeCommandIntent,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
   homeownerProjectCommandIntent,
@@ -60,6 +62,13 @@ import {
   type HomeownerProjectItem,
   type HomeownerProjectWorkspacePort,
 } from '../../../../src/homeowner/homeowner-project-workspace.v1.ts'
+import {
+  HOME_RECORD_PROFILE_VERSION,
+  homeRecordProfileCommandIntent,
+  homeownerHomeRecordProfileSchema,
+  type HomeownerHomeRecordProfile,
+  type HomeownerHomeRecordProfilePort,
+} from '../../../../src/homeowner/home-record-profile.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -199,6 +208,53 @@ function systemFromRow(input: unknown): HomeownerSystem {
     revision: requiredNumber(row, 'revision'),
     createdAt: canonicalInstant(row, 'created_at'),
     updatedAt: canonicalInstant(row, 'updated_at'),
+  })
+}
+
+function homeRecordProfileFromRows(
+  homeInput: unknown,
+  facts: ReturnType<typeof propertyFactsFromRow> | null,
+  storedSystems: readonly HomeownerSystem[],
+): HomeownerHomeRecordProfile {
+  const homeRow = record(homeInput)
+  const homeRef = requiredString(homeRow, 'home_ref')
+  if (facts && facts.homeRef !== homeRef) throw new HomeownerApiError('unavailable')
+  if (storedSystems.some(system => system.homeRef !== homeRef)) {
+    throw new HomeownerApiError('unavailable')
+  }
+
+  const line1 = nullableString(homeRow, 'address_line_1')
+  const address = line1 === null ? null : {
+    line1,
+    line2: nullableString(homeRow, 'address_line_2'),
+    city: requiredString(homeRow, 'address_city'),
+    regionCode: requiredString(homeRow, 'address_region_code'),
+    postalCode: requiredString(homeRow, 'address_postal_code'),
+    countryCode: requiredString(homeRow, 'address_country_code'),
+  }
+  const systems = HOMEOWNER_SYSTEM_KINDS.map(kind => {
+    const stored = storedSystems.find(system => system.kind === kind)
+    return stored ? {
+      kind: stored.kind,
+      present: stored.present,
+      installedOrReplacedYear: stored.installedOrReplacedYear,
+    } : {
+      kind,
+      present: 'unknown' as const,
+      installedOrReplacedYear: null,
+    }
+  })
+
+  return homeownerHomeRecordProfileSchema.parse({
+    recordVersion: HOME_RECORD_PROFILE_VERSION,
+    homeRef,
+    revision: requiredNumber(homeRow, 'record_revision'),
+    address,
+    homeType: facts?.homeType ?? 'unknown',
+    yearBuilt: facts?.yearBuilt ?? null,
+    systems,
+    source: 'homeowner_recollection',
+    updatedAt: canonicalInstant(homeRow, 'record_updated_at'),
   })
 }
 
@@ -367,7 +423,8 @@ export function createSupabaseClients(configuration: HomeownerRuntimeConfigurati
 export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
   HomeownerPrivateObjectPort, HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
-  HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort {
+  HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort,
+  HomeownerHomeRecordProfilePort {
   readonly #client: SupabaseClient
   readonly #now: () => string
   readonly #supabaseOrigin: string | null
@@ -442,6 +499,23 @@ export class SupabaseHomeownerProvider implements
       .order('kind', { ascending: true })
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(systemFromRow)
+  }
+
+  async readHomeRecordProfile(grant: AuthorizedHomeownerWorkspace) {
+    const { data, error } = await this.#client.rpc('homesrolo_read_home_record', {
+      p_principal_ref: grant.principalRef,
+      p_home_ref: grant.homeRef,
+      p_membership_ref: grant.membershipRef,
+      p_membership_revision: grant.membershipRevision,
+    })
+    if (error) throw new HomeownerApiError('unavailable')
+    const result = record(data)
+    if (!Array.isArray(result.systems)) throw new HomeownerApiError('unavailable')
+    return homeRecordProfileFromRows(
+      result.home,
+      result.property_facts === null ? null : propertyFactsFromRow(result.property_facts),
+      result.systems.map(systemFromRow),
+    )
   }
 
   async listProjects(grant: AuthorizedHomeownerWorkspace) {
@@ -1082,7 +1156,10 @@ export class SupabaseHomeownerProvider implements
       p_membership_ref: input.grant.membershipRef,
       p_membership_revision: input.grant.membershipRevision,
       p_command_ref: input.command.commandRef,
-      p_command_digest: digest(input.command),
+      p_command_digest: digest(homeownerIntakeCommandIntent(
+        input.grant.homeRef,
+        input.command,
+      )),
       p_property_facts_ref: propertyFactsRef,
       p_home_type: input.command.homeType,
       p_year_built_value: input.command.yearBuilt?.value ?? null,
@@ -1096,13 +1173,75 @@ export class SupabaseHomeownerProvider implements
       })),
       p_requested_at: input.command.requestedAt,
     })
-    if (error) throw new HomeownerApiError('unavailable')
+    if (error) {
+      if (error.message.includes('initial_intake_already_recorded')
+        || error.message.includes('command_digest_mismatch')
+        || error.message.includes('command_scope_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
     const result = record(data)
     if (!Array.isArray(result.systems)) throw new HomeownerApiError('unavailable')
     return {
       propertyFacts: propertyFactsFromRow(result.property_facts),
       systems: result.systems.map(systemFromRow),
     }
+  }
+
+  async updateHomeRecordProfile(
+    input: Parameters<HomeownerHomeRecordProfilePort['updateHomeRecordProfile']>[0],
+  ) {
+    const propertyFactsRef = mintOpaqueRef('hfac')
+    const systems = input.command.systems.map(system => ({
+      ...system,
+      systemRef: mintOpaqueRef('hsys'),
+    }))
+    const { data, error } = await this.#client.rpc('homesrolo_update_home_record', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: digest(homeRecordProfileCommandIntent(
+        input.grant.homeRef,
+        input.command,
+      )),
+      p_expected_revision: input.command.expectedRevision,
+      p_address_line_1: input.command.address.line1,
+      p_address_line_2: input.command.address.line2,
+      p_address_city: input.command.address.city,
+      p_address_region_code: input.command.address.regionCode,
+      p_address_postal_code: input.command.address.postalCode,
+      p_address_country_code: input.command.address.countryCode,
+      p_property_facts_ref: propertyFactsRef,
+      p_home_type: input.command.homeType,
+      p_year_built_value: input.command.yearBuilt?.value ?? null,
+      p_year_built_precision: input.command.yearBuilt?.precision ?? null,
+      p_systems: systems.map(system => ({
+        system_ref: system.systemRef,
+        kind: system.kind,
+        present: system.present,
+        installed_or_replaced_year_value: system.installedOrReplacedYear?.value ?? null,
+        installed_or_replaced_year_precision: system.installedOrReplacedYear?.precision ?? null,
+      })),
+      p_requested_at: input.command.requestedAt,
+    })
+    if (error) {
+      if (error.message.includes('home_record_revision_conflict')
+        || error.message.includes('command_digest_mismatch')
+        || error.message.includes('command_scope_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    const result = record(data)
+    if (!Array.isArray(result.systems)) throw new HomeownerApiError('unavailable')
+    return homeRecordProfileFromRows(
+      result.home,
+      propertyFactsFromRow(result.property_facts),
+      result.systems.map(systemFromRow),
+    )
   }
 
   async reserveArtifactUpload(

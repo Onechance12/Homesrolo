@@ -253,7 +253,7 @@ test('the create command POSTs only the strict home shell; intake uses its own r
   assert.equal(commandRefForAttempt(commandRef), commandRef)
 })
 
-test('the page distinguishes full success from an intake-only partial retry', () => {
+test('the page distinguishes full success from an address-and-facts partial retry', () => {
   const page = readFileSync(path.join(import.meta.dirname, '../../app/homes/new/page.tsx'), 'utf8')
   assert.match(page, /stored as <strong>your recollection<\/strong>/,
     'full success is source-labeled, not described as verified')
@@ -267,7 +267,7 @@ test('the page distinguishes full success from an intake-only partial retry', ()
   const retryStart = page.indexOf('async function retryIntake')
   const createStart = page.indexOf('async function create()', retryStart)
   const retryBody = page.slice(retryStart, createStart)
-  assert.match(retryBody, /saveIntake\(homeRef, draftFrom\(state\)\)/)
+  assert.match(retryBody, /saveHomeRecord\(homeRef, draftFrom\(state\)\)/)
   assert.doesNotMatch(retryBody, /createHome/,
-    'retrying intake must never create a second home shell')
+    'retrying Home Record details must never create a second home shell')
 })

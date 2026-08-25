@@ -24,6 +24,7 @@ import {
   homeownerCheckupPhotoCommandIntent,
   type HomeownerCheckupPhotoPort,
 } from '../homeowner-checkup-photos.v1.ts'
+import type { HomeownerHomeRecordProfilePort } from '../home-record-profile.v1.ts'
 
 const body = (character: string) => character.repeat(43).slice(0, 43)
 const principalRef = `hprn_${body('p')}`
@@ -87,6 +88,29 @@ const propertyFacts = {
   source: 'homeowner_recollection' as const,
   revision: 1,
   createdAt: now,
+  updatedAt: now,
+}
+
+const homeRecordProfile = {
+  recordVersion: 'home-record-profile.v1' as const,
+  homeRef,
+  revision: 2,
+  address: {
+    line1: '123 Main Street',
+    line2: null,
+    city: 'Fort Worth',
+    regionCode: 'TX',
+    postalCode: '76102',
+    countryCode: 'US' as const,
+  },
+  homeType: 'house' as const,
+  yearBuilt: { value: 1988, precision: 'approximate' as const },
+  systems: intakeSystems.map(system => ({
+    kind: system.kind,
+    present: system.present,
+    installedOrReplacedYear: system.installedOrReplacedYear,
+  })),
+  source: 'homeowner_recollection' as const,
   updatedAt: now,
 }
 
@@ -201,6 +225,7 @@ function service(input: {
   privateObjects?: HomeownerPrivateObjectPort
   photoCheckups?: boolean
   checkupPhotos?: HomeownerCheckupPhotoPort
+  homeRecordProfile?: HomeownerHomeRecordProfilePort
 } = {}) {
   return new HomeownerApiService({
     identity: {
@@ -217,6 +242,7 @@ function service(input: {
     },
     ...(input.privateObjects ? { privateObjects: input.privateObjects } : {}),
     ...(input.checkupPhotos ? { checkupPhotos: input.checkupPhotos } : {}),
+    ...(input.homeRecordProfile ? { homeRecordProfile: input.homeRecordProfile } : {}),
     now: () => now,
     capabilities: {
       ...capabilities,
@@ -386,6 +412,94 @@ test('exact home read rechecks membership and projects no authority or storage f
   assert.equal('createdByPrincipalRef' in view, false)
   assert.equal('membershipRef' in view, false)
   assert.equal('storageObjectRef' in view, false)
+})
+
+test('exact home read returns the private address and saved facts only through the profile port', async () => {
+  const profilePort: HomeownerHomeRecordProfilePort = {
+    async readHomeRecordProfile() { return homeRecordProfile },
+    async updateHomeRecordProfile() { throw new Error('not used') },
+  }
+  const view = await service({ homeRecordProfile: profilePort }).readHome(context, homeRef)
+  assert.equal(view.homeRecord?.address?.line1, '123 Main Street')
+  assert.equal(view.homeRecord?.homeType, 'house')
+  assert.equal(view.homeRecord?.systems.length, HOMEOWNER_SYSTEM_KINDS.length)
+  assert.equal(JSON.stringify(view).includes(principalRef), false)
+  assert.equal(JSON.stringify(await service().listHomes(context)).includes('123 Main Street'), false,
+    'the exact address never enters the home-list projection')
+})
+
+test('home record updates are controller-only, revision-backed, and server-timed', async () => {
+  let observed: unknown
+  const profilePort: HomeownerHomeRecordProfilePort = {
+    async readHomeRecordProfile() { return homeRecordProfile },
+    async updateHomeRecordProfile(input) {
+      observed = input
+      return { ...homeRecordProfile, revision: 3 }
+    },
+  }
+  const input = {
+    commandRef: `hcmd_${body('d')}`,
+    expectedRevision: 2,
+    address: homeRecordProfile.address,
+    homeType: homeRecordProfile.homeType,
+    yearBuilt: homeRecordProfile.yearBuilt,
+    systems: homeRecordProfile.systems,
+  }
+  const updated = await service({
+    persistence: true,
+    homeRecordProfile: profilePort,
+  }).updateHomeRecord(context, homeRef, input)
+  assert.equal(updated.revision, 3)
+  assert.deepEqual(observed, {
+    grant: {
+      authorized: true,
+      principalRef,
+      homeRef,
+      membershipRef: membership.membershipRef,
+      membershipRevision: 1,
+      action: 'home_record.update',
+      recheckedAt: now,
+    },
+    command: { ...input, requestedAt: now },
+  })
+
+  const viewerRepository = repository({
+    async readMembership() { return { ...membership, role: 'viewer' } },
+  })
+  await assert.rejects(
+    service({
+      repository: viewerRepository,
+      persistence: true,
+      homeRecordProfile: profilePort,
+    }).updateHomeRecord(context, homeRef, input),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+})
+
+test('home record update rejects an incoherent adapter result', async () => {
+  const input = {
+    commandRef: `hcmd_${body('d')}`,
+    expectedRevision: 2,
+    address: homeRecordProfile.address,
+    homeType: homeRecordProfile.homeType,
+    yearBuilt: homeRecordProfile.yearBuilt,
+    systems: homeRecordProfile.systems,
+  }
+  const profilePort: HomeownerHomeRecordProfilePort = {
+    async readHomeRecordProfile() { return homeRecordProfile },
+    async updateHomeRecordProfile() {
+      return {
+        ...homeRecordProfile,
+        revision: 3,
+        address: { ...homeRecordProfile.address!, city: 'Wrong city' },
+      }
+    },
+  }
+  await assert.rejects(
+    service({ persistence: true, homeRecordProfile: profilePort })
+      .updateHomeRecord(context, homeRef, input),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+  )
 })
 
 test('malformed, cross-home, and revoked reads fail closed without revealing authority', async () => {
@@ -626,6 +740,7 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
     warrantyCount: 0,
     maintenanceCount: 0,
     updatedAt: now,
+    homeRecord: null,
   }
   assert.ok(homeownerApiHomeViewSchema.parse(base))
   for (const extra of [

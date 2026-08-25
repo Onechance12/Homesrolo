@@ -11,6 +11,7 @@ import {
   homeownerProjectCommandIntent,
   createHomeownerProjectInputSchema,
   homeownerArtifactMetadataSchema,
+  homeownerIntakeCommandIntent,
   homeownerMaintenanceSchema,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
@@ -290,6 +291,17 @@ test('initial intake preserves uncertainty and requires every system exactly onc
   assert.deepEqual(parsed.yearBuilt, { value: 1987, precision: 'approximate' })
   assert.deepEqual(parsed.systems[0]?.installedOrReplacedYear,
     { value: 2019, precision: 'approximate' })
+  assert.deepEqual(
+    homeownerIntakeCommandIntent(homeRef, command),
+    homeownerIntakeCommandIntent(homeRef, {
+      ...command,
+      requestedAt: '2026-08-10T12:01:00.000Z',
+    }),
+  )
+  assert.notDeepEqual(
+    homeownerIntakeCommandIntent(homeRef, command),
+    homeownerIntakeCommandIntent(otherHomeRef, command),
+  )
 
   assert.throws(() => recordHomeownerIntakeInputSchema.parse({
     ...command,
@@ -353,7 +365,7 @@ test('persisted home facts and systems remain recollection, never upgraded to pr
   }), /future/i)
 })
 
-test('only a fresh controller grant may record the initial intake', () => {
+test('only a fresh controller grant may record intake or update the private Home Record', () => {
   const controller = authorizeHomeownerWorkspace({
     principal,
     membership,
@@ -371,6 +383,23 @@ test('only a fresh controller grant may record the initial intake', () => {
     recheckedAt: now,
   })
   assert.deepEqual(member, { authorized: false, reason: 'role_denied' })
+
+  const profileUpdate = authorizeHomeownerWorkspace({
+    principal,
+    membership,
+    requestedHomeRef: homeRef,
+    action: 'home_record.update',
+    recheckedAt: now,
+  })
+  assert.equal(requireHomeownerActionGrant(profileUpdate, 'home_record.update')?.action,
+    'home_record.update')
+  assert.deepEqual(authorizeHomeownerWorkspace({
+    principal,
+    membership: { ...membership, role: 'member' },
+    requestedHomeRef: homeRef,
+    action: 'home_record.update',
+    recheckedAt: now,
+  }), { authorized: false, reason: 'role_denied' })
 })
 
 test('project commands use the runtime vocabulary and reject impossible dates', () => {

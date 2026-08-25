@@ -3,8 +3,8 @@
  * remote adapter consumes, and the single HTTP-status-to-PortError map.
  *
  * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8). This release the
- * server defines three reads plus the create-home and exact-home intake
- * responses, and the decoders below mirror those schemas key for key. Speculative decoders for
+ * server defines authenticated reads plus bounded create, intake, and private
+ * Home Record responses. The decoders below mirror those schemas key for key. Speculative decoders for
  * routes the server has not defined were deleted rather than kept "for later":
  * an unsupported route returns unavailable in the adapter and never decodes.
  *
@@ -16,7 +16,7 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -329,6 +329,7 @@ export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
     warrantyCount: countInt,
     maintenanceCount: countInt,
     updatedAt: utcInstant,
+    homeRecord: nullable(decodeHomeRecordProfile),
   })(value, at)
   return { source: 'server', ...decoded }
 }
@@ -350,6 +351,44 @@ export const decodeRecordedHomeIntake: Decoder<RecordedHomeIntake> = (value, at)
     yearBuilt: nullable(decodeApproximateYear),
     source: literal('homeowner_recollection'),
     systems: array(decodeRecordedSystem),
+    updatedAt: utcInstant,
+  })(value, at)
+  const kinds = decoded.systems.map(system => system.kind)
+  if (kinds.length !== SYSTEM_KINDS.length
+    || new Set(kinds).size !== SYSTEM_KINDS.length
+    || SYSTEM_KINDS.some(kind => !kinds.includes(kind))) {
+    return fail(`${at}.systems`, 'each supported system exactly once')
+  }
+  for (const [index, system] of decoded.systems.entries()) {
+    if (system.present !== 'yes' && system.installedOrReplacedYear !== null) {
+      fail(`${at}.systems[${index}].installedOrReplacedYear`, 'null unless present is yes')
+    }
+  }
+  return decoded
+}
+
+const decodePrivateAddress = object<NonNullable<HomeRecordProfile['address']>>({
+  line1: boundedLabel(120),
+  line2: nullable(boundedLabel(120)),
+  city: boundedLabel(80),
+  regionCode: (value, at) => typeof value === 'string' && /^[A-Z]{2}$/.test(value)
+    ? value
+    : fail(at, 'a two-letter uppercase region code'),
+  postalCode: (value, at) => typeof value === 'string' && /^\d{5}(?:-\d{4})?$/.test(value)
+    ? value
+    : fail(at, 'a US postal code'),
+  countryCode: literal('US'),
+})
+
+export const decodeHomeRecordProfile: Decoder<HomeRecordProfile> = (value, at) => {
+  const decoded = object<HomeRecordProfile>({
+    homeRef: opaqueRef('hhom'),
+    revision: positiveInt,
+    address: nullable(decodePrivateAddress),
+    homeType: oneOf(['house', 'townhouse', 'condo', 'other', 'unknown'] as const),
+    yearBuilt: nullable(decodeApproximateYear),
+    systems: array(decodeRecordedSystem),
+    source: literal('homeowner_recollection'),
     updatedAt: utcInstant,
   })(value, at)
   const kinds = decoded.systems.map(system => system.kind)

@@ -122,6 +122,7 @@ export interface ServerHomeView extends Omit<ServerHomeSummary, 'source'> {
   readonly warrantyCount: number
   readonly maintenanceCount: number
   readonly updatedAt: string
+  readonly homeRecord: HomeRecordProfile | null
 }
 
 export type HomeListEntry = ({ readonly source: 'synthetic' } & HomeSummary) | ServerHomeSummary
@@ -201,6 +202,35 @@ export interface RecordedHomeIntake {
   readonly source: 'homeowner_recollection'
   readonly systems: RecordHomeIntakeInput['systems']
   readonly updatedAt: string
+}
+
+export interface HomeRecordAddress {
+  readonly line1: string
+  readonly line2: string | null
+  readonly city: string
+  readonly regionCode: string
+  readonly postalCode: string
+  readonly countryCode: 'US'
+}
+
+export interface HomeRecordProfile {
+  readonly homeRef: string
+  readonly revision: number
+  readonly address: HomeRecordAddress | null
+  readonly homeType: RecordHomeIntakeInput['homeType']
+  readonly yearBuilt: HomeownerApproximateYear | null
+  readonly systems: RecordHomeIntakeInput['systems']
+  readonly source: 'homeowner_recollection'
+  readonly updatedAt: string
+}
+
+export interface UpdateHomeRecordInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+  readonly address: HomeRecordAddress
+  readonly homeType: RecordHomeIntakeInput['homeType']
+  readonly yearBuilt: HomeownerApproximateYear | null
+  readonly systems: RecordHomeIntakeInput['systems']
 }
 
 // --- private home research ---------------------------------------------------
@@ -726,6 +756,10 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: RecordHomeIntakeInput,
   ): Promise<PortResult<RecordedHomeIntake>>
+  updateHomeRecord(
+    homeRef: string,
+    input: UpdateHomeRecordInput,
+  ): Promise<PortResult<HomeRecordProfile>>
   researchHome(
     homeRef: string,
     input: HomeResearchInput,

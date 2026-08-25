@@ -33,7 +33,7 @@ function navHref(homeId: string, segment: string) {
 
 function isCurrent(pathname: string, homeId: string, segment: string) {
   const href = navHref(homeId, segment)
-  if (segment === '') return pathname === href
+  if (segment === '') return pathname === href || pathname === `${href}/details`
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

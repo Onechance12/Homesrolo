@@ -85,6 +85,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
       label={homeLabel(file)}
       locality={homeLocality(file)}
       progress={progress}
+      homeRecord={file.source === 'server' ? file.homeRecord : null}
       uploadsEnabled={uploadsEnabled}
       checkupsEnabled={checkupsEnabled}
       synthetic={mode === 'synthetic'}

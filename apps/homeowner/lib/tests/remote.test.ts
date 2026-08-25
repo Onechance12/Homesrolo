@@ -89,6 +89,18 @@ const HOME_VIEW = {
   warrantyCount: 2,
   maintenanceCount: 4,
   updatedAt: '2026-08-10T16:00:00.000Z',
+  homeRecord: {
+    homeRef: HOME,
+    revision: 2,
+    address: null,
+    homeType: 'house',
+    yearBuilt: { value: 1987, precision: 'approximate' },
+    systems: [
+      'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
+    ].map(kind => ({ kind, present: 'unknown', installedOrReplacedYear: null })),
+    source: 'homeowner_recollection',
+    updatedAt: '2026-08-10T16:00:00.000Z',
+  },
 }
 
 const PROJECT = REF('hprj', 'r')
@@ -347,6 +359,7 @@ test('the home view accepts exactly HomeownerApiHomeView', async () => {
   if (result.value.source !== 'server') return
   assert.equal(result.value.projectCount, 3)
   assert.equal(result.value.maintenanceCount, 4)
+  assert.equal(result.value.homeRecord?.homeType, 'house')
   assert.equal(result.value.updatedAt, '2026-08-10T16:00:00.000Z')
 
   const rejected: readonly unknown[] = [
@@ -558,6 +571,79 @@ test('intake accepts only a 201 exact-home, six-system, source-labeled projectio
     assert.deepEqual(await port.recordInitialIntake(HOME, INTAKE_INPUT),
       { ok: false, error }, `status ${status}`)
   }
+})
+
+// --- private address-first Home Record ---------------------------------------
+
+const HOME_RECORD_INPUT = {
+  commandRef: REF('hcmd', 'd'),
+  expectedRevision: 2,
+  address: {
+    line1: '123 Main Street',
+    line2: null,
+    city: 'Fort Worth',
+    regionCode: 'tx',
+    postalCode: '76102',
+    countryCode: 'US' as const,
+  },
+  homeType: INTAKE_INPUT.homeType,
+  yearBuilt: INTAKE_INPUT.yearBuilt,
+  systems: INTAKE_INPUT.systems,
+}
+
+const HOME_RECORD_VIEW = {
+  homeRef: HOME,
+  revision: 3,
+  address: { ...HOME_RECORD_INPUT.address, regionCode: 'TX' },
+  homeType: HOME_RECORD_INPUT.homeType,
+  yearBuilt: HOME_RECORD_INPUT.yearBuilt,
+  systems: HOME_RECORD_INPUT.systems,
+  source: 'homeowner_recollection' as const,
+  updatedAt: '2026-08-11T17:00:00.000Z',
+}
+
+test('updateHomeRecord sends one normalized exact-home revision command', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    return { kind: 'reply', status: 200, body: { data: HOME_RECORD_VIEW } }
+  })
+  const result = await port.updateHomeRecord(HOME, HOME_RECORD_INPUT)
+  assert.ok(result.ok)
+  assert.deepEqual(requests, [{
+    method: 'POST',
+    path: `/api/v1/homes/${HOME}/record`,
+    body: {
+      ...HOME_RECORD_INPUT,
+      address: { ...HOME_RECORD_INPUT.address, regionCode: 'TX' },
+    },
+  }])
+  assert.doesNotMatch(JSON.stringify(requests), /principal|membership|controller|provider|storage/i)
+})
+
+test('updateHomeRecord rejects malformed address, scope, and stale output before rendering', async () => {
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  assert.deepEqual(await port.updateHomeRecord('hhom_short', HOME_RECORD_INPUT),
+    { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.updateHomeRecord(HOME, {
+    ...HOME_RECORD_INPUT,
+    address: { ...HOME_RECORD_INPUT.address, postalCode: 'not-a-zip' },
+  }), { ok: false, error: 'invalid' })
+  assert.deepEqual(await port.updateHomeRecord(HOME, {
+    ...HOME_RECORD_INPUT,
+    systems: HOME_RECORD_INPUT.systems.map(system => ({ ...system, kind: 'roof' as const })),
+  }), { ok: false, error: 'invalid' })
+  assert.equal(requests.length, 0)
+
+  const wrongHome = createRemotePort(transportReturning(200, {
+    data: { ...HOME_RECORD_VIEW, homeRef: REF('hhom', 'x') },
+  }))
+  assert.deepEqual(await wrongHome.updateHomeRecord(HOME, HOME_RECORD_INPUT),
+    { ok: false, error: 'invalid' })
+  const conflict = createRemotePort(transportReturning(409, { error: { code: 'conflict' } }))
+  assert.deepEqual(await conflict.updateHomeRecord(HOME, HOME_RECORD_INPUT),
+    { ok: false, error: 'conflict' })
 })
 
 // --- consent-bound home research ---------------------------------------------

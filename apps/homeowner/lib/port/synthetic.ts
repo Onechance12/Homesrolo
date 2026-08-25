@@ -20,7 +20,7 @@ import {
 import {
   NO_CAPABILITIES,
   type AddProjectInput, type CreateHomeInput, type HomeFile, type HomeListEntry,
-  type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
+  type HomeRecordProfile, type HomeViewEntry, type HomeownerDataPort, type HomeownerSession,
   type PortResult, type Project, type ProjectSummary, type SessionState,
 } from './types.ts'
 
@@ -140,6 +140,32 @@ export const syntheticPort: HomeownerDataPort = {
 
   async recordInitialIntake() {
     return err('unavailable')
+  },
+
+  async updateHomeRecord(homeRef, input) {
+    await wait()
+    const gate = requireSession<HomeRecordProfile>()
+    if (gate) return gate
+    const homeIndex = memory.createdHomes.findIndex(candidate => candidate.homeRef === homeRef)
+    if (homeIndex < 0) return err('not_found')
+    const home = memory.createdHomes[homeIndex]
+    if (!home) return err('not_found')
+    memory.createdHomes[homeIndex] = {
+      ...home,
+      locality: `${input.address.city}, ${input.address.regionCode}`,
+      homeType: input.homeType === 'unknown' ? 'other' : input.homeType,
+      yearBuilt: input.yearBuilt?.value ?? null,
+    }
+    return ok({
+      homeRef,
+      revision: input.expectedRevision + 1,
+      address: input.address,
+      homeType: input.homeType,
+      yearBuilt: input.yearBuilt,
+      systems: input.systems,
+      source: 'homeowner_recollection',
+      updatedAt: new Date().toISOString(),
+    })
   },
 
   async researchHome() {

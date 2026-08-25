@@ -12,6 +12,7 @@ import {
   type HomeownerPrincipal,
   type HomeownerRepositoryPort,
 } from '../homeowner-runtime.v1.ts'
+import type { HomeownerHomeRecordProfilePort } from '../home-record-profile.v1.ts'
 
 const body = (character: string) => character.repeat(43)
 const principalRef = `hprn_${body('p')}`
@@ -110,6 +111,39 @@ const commands: HomeownerCommandPort = {
   },
 }
 
+const homeRecordProfile: HomeownerHomeRecordProfilePort = {
+  async readHomeRecordProfile() {
+    return {
+      recordVersion: 'home-record-profile.v1',
+      homeRef,
+      revision: 1,
+      address: null,
+      homeType: 'unknown',
+      yearBuilt: null,
+      systems: HOMEOWNER_SYSTEM_KINDS.map(kind => ({
+        kind,
+        present: 'unknown' as const,
+        installedOrReplacedYear: null,
+      })),
+      source: 'homeowner_recollection',
+      updatedAt: now,
+    }
+  },
+  async updateHomeRecordProfile(input) {
+    return {
+      recordVersion: 'home-record-profile.v1',
+      homeRef: input.grant.homeRef,
+      revision: input.command.expectedRevision + 1,
+      address: input.command.address,
+      homeType: input.command.homeType,
+      yearBuilt: input.command.yearBuilt,
+      systems: input.command.systems,
+      source: 'homeowner_recollection',
+      updatedAt: input.command.requestedAt,
+    }
+  },
+}
+
 function handler() {
   const service = new HomeownerApiService({
     identity: {
@@ -119,6 +153,7 @@ function handler() {
     },
     repository,
     commands,
+    homeRecordProfile,
     now: () => now,
     capabilities: {
       emailCodeSignIn: false,
@@ -305,6 +340,53 @@ test('POST exact-home intake accepts only a complete recollection command', asyn
     const rejected = await handle(request({
       method: 'POST',
       pathname: `/api/v1/homes/${homeRef}/intake`,
+      hasBody: true,
+      jsonBody: rejectedBody,
+    }))
+    assert.equal(rejected.status, 400)
+  }
+})
+
+test('POST exact-home record accepts only a revision-backed private address and facts command', async () => {
+  const handle = handler()
+  const jsonBody = {
+    commandRef: `hcmd_${body('d')}`,
+    expectedRevision: 1,
+    address: {
+      line1: '123 Main Street',
+      line2: null,
+      city: 'Fort Worth',
+      regionCode: 'TX',
+      postalCode: '76102',
+      countryCode: 'US',
+    },
+    homeType: 'house',
+    yearBuilt: { value: 1988, precision: 'approximate' },
+    systems: HOMEOWNER_SYSTEM_KINDS.map(kind => ({
+      kind,
+      present: 'unknown',
+      installedOrReplacedYear: null,
+    })),
+  }
+  const response = await handle(request({
+    method: 'POST',
+    pathname: `/api/v1/homes/${homeRef}/record`,
+    hasBody: true,
+    jsonBody,
+  }))
+  assert.equal(response.status, 200)
+  assert.equal((response.body as { data: { revision: number } }).data.revision, 2)
+  assert.equal(JSON.stringify(response.body).includes(principalRef), false)
+
+  for (const rejectedBody of [
+    { ...jsonBody, expectedRevision: 0 },
+    { ...jsonBody, role: 'workspace_controller' },
+    { ...jsonBody, address: { ...jsonBody.address, postalCode: 'bad' } },
+    { ...jsonBody, systems: jsonBody.systems.slice(0, -1) },
+  ]) {
+    const rejected = await handle(request({
+      method: 'POST',
+      pathname: `/api/v1/homes/${homeRef}/record`,
       hasBody: true,
       jsonBody: rejectedBody,
     }))

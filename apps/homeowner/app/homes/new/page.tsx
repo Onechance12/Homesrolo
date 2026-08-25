@@ -27,8 +27,8 @@ import {
  * everything it records is marked as the homeowner's own recollection.
  *
  * The draft lives in memory until the remote path completes two exact
- * commands: create the private home shell, then attach the homeowner-recalled
- * profile and systems to the returned homeRef. Partial completion is shown
+ * commands: create the private home shell, then attach the private address and
+ * homeowner-recalled profile/systems to the returned homeRef. Partial completion is shown
  * honestly and retries only the second command.
  */
 
@@ -50,7 +50,11 @@ type SystemFormValue = {
 
 type SetupForm = {
   displayLabel: string
-  privateLocationLabel: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  regionCode: string
+  postalCode: string
   homeType: HomeTypeAnswer | 'unknown'
   yearBuilt: string
   yearBuiltApproximate: boolean
@@ -76,7 +80,11 @@ function systemDisplayName(system: SystemKind): string {
 function emptySetupForm(): SetupForm {
   return {
     displayLabel: '',
-    privateLocationLabel: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    regionCode: '',
+    postalCode: '',
     homeType: 'unknown',
     yearBuilt: '',
     yearBuiltApproximate: false,
@@ -91,9 +99,11 @@ function emptySetupForm(): SetupForm {
 function validateSetupForm(form: SetupForm, currentYear: number): SetupErrors {
   const errors: SetupErrors = {}
   const name = validateLabel(form.displayLabel, 80)
-  const location = validateLabel(form.privateLocationLabel, 200)
   if (!name.ok) errors.displayLabel = name.error ?? 'Add a short name for this home.'
-  if (!location.ok) errors.privateLocationLabel = location.error ?? 'Add a general area for this home.'
+  if (!form.addressLine1.trim()) errors.addressLine1 = 'Add the street address.'
+  if (!form.city.trim()) errors.city = 'Add the city.'
+  if (!/^[A-Za-z]{2}$/.test(form.regionCode.trim())) errors.regionCode = 'Use a two-letter state.'
+  if (!/^\d{5}(?:-\d{4})?$/.test(form.postalCode.trim())) errors.postalCode = 'Use a five-digit ZIP code.'
 
   if (form.yearBuilt.trim()) {
     const result = validateYear(Number(form.yearBuilt), currentYear)
@@ -109,6 +119,10 @@ function validateSetupForm(form: SetupForm, currentYear: number): SetupErrors {
   return errors
 }
 
+function locationFromForm(form: SetupForm): string {
+  return `${form.city.trim()}, ${form.regionCode.trim().toUpperCase()}`
+}
+
 function accepted(state: IntakeState): IntakeState {
   if (state.error) throw new Error(state.error)
   return state
@@ -118,7 +132,7 @@ function accepted(state: IntakeState): IntakeState {
 function intakeStateFromForm(form: SetupForm, currentYear: number): IntakeState {
   let next = initialIntake(currentYear)
   next = accepted(answer(next, { kind: 'text', value: form.displayLabel }))
-  next = accepted(answer(next, { kind: 'text', value: form.privateLocationLabel }))
+  next = accepted(answer(next, { kind: 'text', value: locationFromForm(form) }))
   next = accepted(finishOptionalLater(next))
 
   if (form.homeType !== 'unknown') {
@@ -154,8 +168,10 @@ function intakeStateFromForm(form: SetupForm, currentYear: number): IntakeState 
 
 function ReviewCard({
   draft,
+  address,
 }: {
   draft: IntakeDraft
+  address: SetupForm
 }) {
   const recordedSystems = draft.systems.filter(system => system.present !== 'unknown')
   return (
@@ -172,9 +188,11 @@ function ReviewCard({
           </dd>
         </div>
         <div>
-          <dt>Area</dt>
+          <dt>Address</dt>
           <dd>
-            <span>{draft.home.privateLocationLabel}</span>
+            <span>{address.addressLine1.trim()}</span>
+            {address.addressLine2.trim() ? <small>{address.addressLine2.trim()}</small> : null}
+            <small>{locationFromForm(address)} {address.postalCode.trim()}</small>
           </dd>
         </div>
         <div>
@@ -281,13 +299,15 @@ export default function NewHomePage({
     const errors = validateSetupForm(form, state.currentYear)
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) {
-      const first = errors.displayLabel
-        ? 'home-display-label'
-        : errors.privateLocationLabel
-          ? 'home-location-label'
-          : errors.yearBuilt
-            ? 'home-year-built'
-            : Object.keys(errors)[0]?.replace(/^system-/, 'home-system-')
+      const first = [
+        ['displayLabel', 'home-display-label'],
+        ['addressLine1', 'home-address-line-1'],
+        ['city', 'home-address-city'],
+        ['regionCode', 'home-address-region'],
+        ['postalCode', 'home-address-postal'],
+        ['yearBuilt', 'home-year-built'],
+      ].find(([key]) => key && errors[key])?.[1]
+        ?? Object.keys(errors)[0]?.replace(/^system-/, 'home-system-')
       if (first) requestAnimationFrame(() => document.getElementById(first)?.focus())
       return
     }
@@ -310,12 +330,21 @@ export default function NewHomePage({
     requestAnimationFrame(() => document.getElementById('home-display-label')?.focus())
   }
 
-  async function saveIntake(homeRef: string, draft: IntakeDraft) {
+  async function saveHomeRecord(homeRef: string, draft: IntakeDraft) {
     const commandRef = commandRefForAttempt(intakeAttemptRef.current)
     intakeAttemptRef.current = commandRef
     setSubmit({ kind: 'saving_intake', homeRef })
-    const result = await port.recordInitialIntake(homeRef, {
+    const result = await port.updateHomeRecord(homeRef, {
       commandRef,
+      expectedRevision: 1,
+      address: {
+        line1: form.addressLine1.trim(),
+        line2: form.addressLine2.trim() || null,
+        city: form.city.trim(),
+        regionCode: form.regionCode.trim().toUpperCase(),
+        postalCode: form.postalCode.trim(),
+        countryCode: 'US',
+      },
       homeType: draft.profile.homeType,
       yearBuilt: draft.profile.yearBuilt,
       systems: draft.systems.map(system => ({
@@ -333,7 +362,7 @@ export default function NewHomePage({
 
   async function retryIntake(homeRef: string) {
     if (!complete) return
-    await saveIntake(homeRef, draftFrom(state))
+    await saveHomeRecord(homeRef, draftFrom(state))
   }
 
   async function create() {
@@ -345,8 +374,8 @@ export default function NewHomePage({
     const result = await port.createHome({
       commandRef,
       alias: draft.home.displayLabel,
-      locality: draft.home.privateLocationLabel,
-      // The remote create adapter omits these; saveIntake sends their typed
+      locality: locationFromForm(form),
+      // The remote create adapter omits these; saveHomeRecord sends their typed
       // values only after the server returns the exact homeRef.
       homeType: draft.profile.homeType === 'unknown' ? 'other' : draft.profile.homeType,
       yearBuilt: draft.profile.yearBuilt?.value ?? null,
@@ -362,7 +391,7 @@ export default function NewHomePage({
       return
     }
     if (mode === 'remote') {
-      await saveIntake(result.value.homeRef, draft)
+      await saveHomeRecord(result.value.homeRef, draft)
       return
     }
     router.push(homeownerEntryDestination(result.value.homeRef, context))
@@ -385,8 +414,8 @@ export default function NewHomePage({
                 <h1>Set up your home</h1>
                 <p>
                   {handoff
-                    ? 'Start with a name and general area. Once the Home Record is open, you can check the completion record against it.'
-                    : 'Start with a name and general area. That is enough to open the file; optional details are best entered now only when you know them.'}
+                    ? 'Start with the property address. Once the Home Record is open, you can check the completion record against the right home.'
+                    : 'Start with the property address so every project, photo, and document stays connected to the right home.'}
                 </p>
                 <div className="setup-head__notes" aria-label="Setup details">
                   <span>About 1 minute</span>
@@ -412,7 +441,7 @@ export default function NewHomePage({
                     <div className="setup-panel__question">
                       <p className="setup-panel__status">Required</p>
                       <h2 id="setup-basics-title">Home basics</h2>
-                      <p>A familiar name and general area are all you need to open the file.</p>
+                      <p>The exact address stays private inside your signed-in Home Record.</p>
                     </div>
                     <div className="cardgrid cardgrid--2">
                       <div className="field">
@@ -440,28 +469,71 @@ export default function NewHomePage({
                         ) : null}
                       </div>
                       <div className="field">
-                        <label htmlFor="home-location-label">City, town, or neighborhood (required)</label>
+                        <label htmlFor="home-address-line-1">Street address (required)</label>
                         <input
-                          id="home-location-label"
+                          id="home-address-line-1"
                           type="text"
-                          value={form.privateLocationLabel}
+                          value={form.addressLine1}
                           onChange={event => {
-                            setForm(current => ({ ...current, privateLocationLabel: event.target.value }))
-                            clearFormError('privateLocationLabel')
+                            setForm(current => ({ ...current, addressLine1: event.target.value }))
+                            clearFormError('addressLine1')
                           }}
-                          placeholder="Frisco, Texas"
-                          maxLength={200}
-                          autoComplete="address-level2"
-                          aria-invalid={Boolean(formErrors.privateLocationLabel)}
-                          aria-describedby={formErrors.privateLocationLabel ? 'home-location-label-error' : undefined}
+                          placeholder="123 Main Street"
+                          maxLength={120}
+                          autoComplete="address-line1"
+                          aria-invalid={Boolean(formErrors.addressLine1)}
+                          aria-describedby={formErrors.addressLine1 ? 'home-address-line-1-error' : undefined}
                           required
                         />
-                        <span className="field__hint">Keep it general if you prefer.</span>
-                        {formErrors.privateLocationLabel ? (
-                          <span id="home-location-label-error" className="form-error" role="alert">
-                            {formErrors.privateLocationLabel}
+                        {formErrors.addressLine1 ? (
+                          <span id="home-address-line-1-error" className="form-error" role="alert">
+                            {formErrors.addressLine1}
                           </span>
                         ) : null}
+                      </div>
+                      <div className="field">
+                        <label htmlFor="home-address-line-2">Unit, suite, or building</label>
+                        <input id="home-address-line-2" type="text" value={form.addressLine2}
+                          onChange={event => setForm(current => ({ ...current, addressLine2: event.target.value }))}
+                          placeholder="Optional" maxLength={120} autoComplete="address-line2" />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="home-address-city">City (required)</label>
+                        <input id="home-address-city" type="text" value={form.city}
+                          onChange={event => {
+                            setForm(current => ({ ...current, city: event.target.value }))
+                            clearFormError('city')
+                          }}
+                          maxLength={80} autoComplete="address-level2" required
+                          aria-invalid={Boolean(formErrors.city)}
+                          aria-describedby={formErrors.city ? 'home-address-city-error' : undefined} />
+                        {formErrors.city ? <span id="home-address-city-error" className="form-error" role="alert">{formErrors.city}</span> : null}
+                      </div>
+                      <div className="field">
+                        <label htmlFor="home-address-region">State (required)</label>
+                        <input id="home-address-region" type="text" value={form.regionCode}
+                          onChange={event => {
+                            setForm(current => ({ ...current, regionCode: event.target.value.toUpperCase() }))
+                            clearFormError('regionCode')
+                          }}
+                          placeholder="TX" maxLength={2} autoCapitalize="characters"
+                          autoComplete="address-level1" required
+                          aria-invalid={Boolean(formErrors.regionCode)}
+                          aria-describedby={formErrors.regionCode ? 'home-address-region-error' : undefined} />
+                        {formErrors.regionCode ? <span id="home-address-region-error" className="form-error" role="alert">{formErrors.regionCode}</span> : null}
+                      </div>
+                      <div className="field">
+                        <label htmlFor="home-address-postal">ZIP code (required)</label>
+                        <input id="home-address-postal" type="text" inputMode="numeric"
+                          value={form.postalCode}
+                          onChange={event => {
+                            setForm(current => ({ ...current, postalCode: event.target.value }))
+                            clearFormError('postalCode')
+                          }}
+                          placeholder="75001" maxLength={10} autoComplete="postal-code" required
+                          aria-invalid={Boolean(formErrors.postalCode)}
+                          aria-describedby={formErrors.postalCode ? 'home-address-postal-error' : undefined} />
+                        {formErrors.postalCode ? <span id="home-address-postal-error" className="form-error" role="alert">{formErrors.postalCode}</span> : null}
                       </div>
                     </div>
                   </section>
@@ -652,13 +724,13 @@ export default function NewHomePage({
                       <h2 id="setup-review-title" tabIndex={-1}>Review your home file</h2>
                       <p>Nothing below is treated as verified. Check it before opening the file.</p>
                     </div>
-                    <ReviewCard draft={draftFrom(state)} />
+                    <ReviewCard draft={draftFrom(state)} address={form} />
                   </section>
                   {submit.kind === 'created' ? (
                     <div className="state setup-result" role="status">
                       <h3>Home file and starting history saved</h3>
                       <p>
-                        The home shell and the profile and system answers above are
+                        The property address, profile, and system answers above are
                         stored as <strong>your recollection</strong>. They are not a
                         contractor verification or legal proof of ownership.
                       </p>
@@ -676,7 +748,7 @@ export default function NewHomePage({
                       <h3>The home is saved; its starting details still need saving</h3>
                       <p>
                         The server stored the home shell, but did not confirm the
-                        profile and systems ({submit.error}). The draft is still here.
+                        private address, profile, and systems ({submit.error}). The draft is still here.
                         Retrying below sends only those details to this same home.
                       </p>
                       <div className="setup-submit">
@@ -743,7 +815,7 @@ export default function NewHomePage({
                       ) : (
                         <p className="mono" style={{ marginTop: '0.8rem' }}>
                           Remote saving creates the private home first, then records
-                          these answers as your recollection against that exact home.
+                          the private address and these recollections against that exact home.
                         </p>
                       )}
                     </>

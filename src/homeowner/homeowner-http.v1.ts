@@ -33,6 +33,7 @@ const JSON_HEADERS = Object.freeze({
 })
 
 const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
+const HOME_RECORD_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/record$/
 const HOME_INTAKE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/intake$/
 const HOME_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects$/
 const HOME_PROJECT_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})$/
@@ -69,8 +70,9 @@ function mappedError(error: unknown): HomeownerHttpResponse {
 }
 
 /**
- * Serves the three read routes plus the one exact create-home command. No
- * redirect, upload, generic mutation, or guessed fallback exists here.
+ * Serves the bounded private homeowner routes, including the revision-backed
+ * exact-home record command. No redirect, generic mutation, or guessed
+ * fallback exists here.
  */
 export function createHomeownerHttpHandler(service: HomeownerApiService) {
   return async function handle(request: HomeownerHttpRequest): Promise<HomeownerHttpResponse> {
@@ -144,6 +146,17 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const homeRecordMatch = HOME_RECORD_PATH.exec(request.pathname)
+        if (homeRecordMatch?.[1]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.updateHomeRecord(
+            context,
+            homeRecordMatch[1],
+            request.jsonBody,
+          ))
+        }
         const projectUpdateMatch = HOME_PROJECT_UPDATE_PATH.exec(request.pathname)
         if (projectUpdateMatch?.[1] && projectUpdateMatch[2]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -244,6 +257,7 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       if (request.pathname === '/api/v1/session'
          || request.pathname === '/api/v1/homes'
          || HOME_PATH.test(request.pathname)
+         || HOME_RECORD_PATH.test(request.pathname)
          || HOME_INTAKE_PATH.test(request.pathname)
          || HOME_PROJECTS_PATH.test(request.pathname)
          || HOME_PROJECT_PATH.test(request.pathname)
@@ -265,4 +279,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines authenticated home, project, activity, item, quote, artifact-metadata, and sanitized checkup-photo metadata reads plus exact home, intake, revision-backed project workspace, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'
+  'This boundary defines authenticated home, Home Record profile, project, activity, item, quote, artifact-metadata, and sanitized checkup-photo metadata reads plus exact-home profile, intake, revision-backed project workspace, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'

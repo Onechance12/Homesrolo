@@ -86,6 +86,7 @@ export function parseHomeownerMembership(input: unknown): HomeownerMembership {
 export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'workspace.read',
   'workspace.update',
+  'home_record.update',
   'intake.record',
   'project.create',
   'project.update',
@@ -501,6 +502,16 @@ export const recordHomeownerIntakeInputSchema = z.object({
 export type CreateHomeWorkspaceInput = z.infer<typeof createHomeWorkspaceInputSchema>
 export type CreateHomeownerProjectInput = z.infer<typeof createHomeownerProjectInputSchema>
 export type RecordHomeownerIntakeInput = z.infer<typeof recordHomeownerIntakeInputSchema>
+
+/** Stable, exact-home receipt intent for the compatibility intake command. */
+export function homeownerIntakeCommandIntent(
+  homeRef: string,
+  input: RecordHomeownerIntakeInput,
+) {
+  const command = recordHomeownerIntakeInputSchema.parse(input)
+  const { requestedAt: _requestedAt, ...intent } = command
+  return { homeRef: privateHomeProfileSchema.shape.homeRef.parse(homeRef), ...intent }
+}
 
 /**
  * Stable user intent for receipt hashing. Server execution time is deliberately
