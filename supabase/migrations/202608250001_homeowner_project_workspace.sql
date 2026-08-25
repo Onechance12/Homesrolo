@@ -140,13 +140,17 @@ begin
   if p_set_title and (p_title is null or length(btrim(p_title)) not between 1 and 120) then
     raise exception 'invalid_project_title';
   end if;
-  if p_set_category and p_category not in (
-    'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
-    'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other'
+  if p_set_category and (
+    p_category is null or p_category not in (
+      'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
+      'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other'
+    )
   ) then
     raise exception 'invalid_project_category';
   end if;
-  if p_set_status and p_status not in ('planned', 'in_progress', 'completed', 'cancelled') then
+  if p_set_status and (
+    p_status is null or p_status not in ('planned', 'in_progress', 'completed', 'cancelled')
+  ) then
     raise exception 'invalid_project_status';
   end if;
   if p_set_occurred_on and p_occurred_on is not null
@@ -160,21 +164,16 @@ begin
     and length(btrim(p_professional_label)) not between 1 and 160 then
     raise exception 'invalid_professional_label';
   end if;
+  if p_set_archived and p_archived is null then
+    raise exception 'invalid_archived_state';
+  end if;
+  if p_expected_revision is null or p_expected_revision < 1 then
+    raise exception 'invalid_expected_revision';
+  end if;
 
   perform pg_advisory_xact_lock(
     hashtextextended(p_principal_ref || ':' || p_command_ref || ':project.update', 0)
   );
-  select * into v_receipt from public.homesrolo_homeowner_command_receipts
-  where principal_ref = p_principal_ref
-    and command_ref = p_command_ref
-    and action = 'project.update';
-  if found then
-    if v_receipt.command_digest <> p_command_digest then
-      raise exception 'command_digest_mismatch';
-    end if;
-    return v_receipt.result;
-  end if;
-
   if not exists (
     select 1 from public.homesrolo_homeowner_memberships
     where membership_ref = p_membership_ref
@@ -187,10 +186,36 @@ begin
     raise exception 'membership_not_authorized';
   end if;
 
+  select * into v_receipt from public.homesrolo_homeowner_command_receipts
+  where principal_ref = p_principal_ref
+    and command_ref = p_command_ref
+    and action = 'project.update';
+  if found then
+    if v_receipt.command_digest <> p_command_digest then
+      raise exception 'command_digest_mismatch';
+    end if;
+    return v_receipt.result;
+  end if;
+
   select * into v_project from public.homesrolo_homeowner_projects
   where project_ref = p_project_ref and home_ref = p_home_ref
   for update;
   if not found then raise exception 'project_not_found'; end if;
+  if p_set_category
+    and v_project.category = 'roofing'
+    and p_category <> 'roofing'
+    and (
+      exists (
+        select 1 from public.homesrolo_homeowner_project_quotes
+        where project_ref = p_project_ref and home_ref = p_home_ref
+      )
+      or exists (
+        select 1 from public.homesrolo_homeowner_project_submissions
+        where project_ref = p_project_ref and home_ref = p_home_ref
+      )
+    ) then
+    raise exception 'project_category_has_roof_records';
+  end if;
   if v_project.revision <> p_expected_revision then
     raise exception 'project_revision_conflict';
   end if;
@@ -268,6 +293,16 @@ begin
   perform pg_advisory_xact_lock(
     hashtextextended(p_principal_ref || ':' || p_command_ref || ':project.activity.append', 0)
   );
+  if not exists (
+    select 1 from public.homesrolo_homeowner_memberships
+    where membership_ref = p_membership_ref
+      and principal_ref = p_principal_ref
+      and home_ref = p_home_ref
+      and revision = p_membership_revision
+      and state = 'active'
+      and role in ('workspace_controller', 'member')
+  ) then raise exception 'membership_not_authorized'; end if;
+
   select * into v_receipt from public.homesrolo_homeowner_command_receipts
   where principal_ref = p_principal_ref
     and command_ref = p_command_ref
@@ -279,15 +314,6 @@ begin
     return v_receipt.result;
   end if;
 
-  if not exists (
-    select 1 from public.homesrolo_homeowner_memberships
-    where membership_ref = p_membership_ref
-      and principal_ref = p_principal_ref
-      and home_ref = p_home_ref
-      and revision = p_membership_revision
-      and state = 'active'
-      and role in ('workspace_controller', 'member')
-  ) then raise exception 'membership_not_authorized'; end if;
   if not exists (
     select 1 from public.homesrolo_homeowner_projects
     where project_ref = p_project_ref and home_ref = p_home_ref
@@ -352,6 +378,16 @@ begin
   perform pg_advisory_xact_lock(
     hashtextextended(p_principal_ref || ':' || p_command_ref || ':project.item.save', 0)
   );
+  if not exists (
+    select 1 from public.homesrolo_homeowner_memberships
+    where membership_ref = p_membership_ref
+      and principal_ref = p_principal_ref
+      and home_ref = p_home_ref
+      and revision = p_membership_revision
+      and state = 'active'
+      and role in ('workspace_controller', 'member')
+  ) then raise exception 'membership_not_authorized'; end if;
+
   select * into v_receipt from public.homesrolo_homeowner_command_receipts
   where principal_ref = p_principal_ref
     and command_ref = p_command_ref
@@ -363,15 +399,6 @@ begin
     return v_receipt.result;
   end if;
 
-  if not exists (
-    select 1 from public.homesrolo_homeowner_memberships
-    where membership_ref = p_membership_ref
-      and principal_ref = p_principal_ref
-      and home_ref = p_home_ref
-      and revision = p_membership_revision
-      and state = 'active'
-      and role in ('workspace_controller', 'member')
-  ) then raise exception 'membership_not_authorized'; end if;
   if not exists (
     select 1 from public.homesrolo_homeowner_projects
     where project_ref = p_project_ref and home_ref = p_home_ref

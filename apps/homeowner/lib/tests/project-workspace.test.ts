@@ -388,6 +388,9 @@ test('project workspace migration is exact-home, receipt-backed, and append-only
   assert.match(migration, /grant select, insert on table public\.homesrolo_homeowner_project_activity to service_role/i)
   assert.doesNotMatch(migration, /grant[^;]*update[^;]*homesrolo_homeowner_project_activity/i)
   assert.doesNotMatch(migration, /delete from public\.homesrolo_homeowner_projects/i)
+  assert.match(migration, /p_expected_revision is null or p_expected_revision < 1[\s\S]+invalid_expected_revision/i)
+  assert.match(migration, /project_category_has_roof_records/i)
+  assert.match(migration, /homesrolo_homeowner_project_quotes[\s\S]+homesrolo_homeowner_project_submissions/i)
   assert.match(migration, /revision <> p_expected_revision[\s\S]+project_revision_conflict/i)
   assert.match(migration, /v_item\.revision <> p_expected_revision[\s\S]+project_item_revision_conflict/i)
   assert.match(migration, /project_ref = p_project_ref and home_ref = p_home_ref/gi)
@@ -396,6 +399,16 @@ test('project workspace migration is exact-home, receipt-backed, and append-only
     assert.match(migration, new RegExp(`action = '${action.replaceAll('.', '\\.')}'`, 'i'))
     assert.match(migration, new RegExp(`:${action.replaceAll('.', '\\.')}'`, 'i'))
   }
+  assert.equal(
+    [...migration.matchAll(/membership_not_authorized/gi)].length,
+    3,
+    'every workspace mutation must re-check current membership before receipt replay',
+  )
+  assert.equal([...migration.matchAll(/select \* into v_receipt/gi)].length, 3)
+  assert.ok(
+    migration.indexOf('membership_not_authorized') < migration.indexOf('select * into v_receipt'),
+    'project update must not replay a receipt after membership is revoked',
+  )
   assert.match(migration, /command_digest_mismatch/gi)
   assert.doesNotMatch(migration, /create policy|to (anon|authenticated)/i)
 })
