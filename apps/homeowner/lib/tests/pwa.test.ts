@@ -60,6 +60,7 @@ test('the off-Render deployment is reproducible from the repository root', () =>
   assert.match(configuration, /npm --prefix apps\/homeowner run build/)
   assert.match(configuration, /publish = "apps\/homeowner\/\.next"/)
   assert.match(configuration, /NODE_VERSION = "22"/)
+  assert.match(configuration, /package = "@netlify\/plugin-nextjs"/)
   assert.match(configuration, /Service-Worker-Allowed = "\/"/)
   assert.doesNotMatch(configuration, /onrender/i)
 })
