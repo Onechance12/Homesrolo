@@ -1,5 +1,5 @@
 /* Homesrolo PWA shell — private Home Record responses are intentionally never cached. */
-const CACHE_NAME = 'homesrolo-shell-v1'
+const CACHE_NAME = 'homesrolo-shell-v2'
 const SHELL_ASSETS = new Set([
   '/offline',
   '/icon.svg',

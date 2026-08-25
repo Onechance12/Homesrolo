@@ -69,6 +69,9 @@ test('the complete maskable mark stays inside the platform safe zone', async () 
 
 test('offline support caches only the public shell and never a private Home Record response', () => {
   const worker = read('public/sw.js')
+  assert.match(worker, /const CACHE_NAME = 'homesrolo-shell-v2'/,
+    'a new shell version retires installed-client caches containing the previous icons')
+  assert.doesNotMatch(worker, /homesrolo-shell-v1/)
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)\) return/,
     'every private API response bypasses the service worker')
   assert.match(worker, /request\.mode === 'navigate'[\s\S]*fetch\(request\)\.catch\(\(\) => caches\.match\('\/offline'\)\)/,
@@ -96,6 +99,11 @@ test('the off-Render deployment is reproducible from the repository root', () =>
   assert.match(configuration, /HOMESROLO_PRIVATE_UPLOADS_ENABLED = "true"/,
     'the reviewed private bucket migration is live before this release gate opens')
   assert.match(configuration, /HOMESROLO_PHOTO_CHECKUPS_ENABLED = "false"/)
+  assert.match(configuration, /for = "\/\*"[\s\S]*X-Content-Type-Options = "nosniff"/)
+  assert.match(configuration, /X-Frame-Options = "DENY"/)
+  assert.match(configuration, /Referrer-Policy = "strict-origin-when-cross-origin"/)
+  assert.match(configuration,
+    /Permissions-Policy = "camera=\(self\), geolocation=\(self\), microphone=\(self\), payment=\(\), usb=\(\)"/)
   assert.match(configuration, /Service-Worker-Allowed = "\/"/)
   assert.doesNotMatch(configuration, /onrender/i)
 })
