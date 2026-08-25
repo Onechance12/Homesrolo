@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev --port 3100",
     "build": "next build",
+    "generate:maskable-icon": "node scripts/generate-maskable-icon.mjs",
     "start": "next start --port 3100",
     "lint": "eslint app lib components",
     "typecheck": "tsc --noEmit",

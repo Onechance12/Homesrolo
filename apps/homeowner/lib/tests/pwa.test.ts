@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import sharp from 'sharp'
 
 const APP = path.resolve(import.meta.dirname, '../..')
 const read = (relative: string) => readFileSync(path.join(APP, relative), 'utf8')
@@ -37,6 +38,33 @@ test('the homeowner origin is an installable Homesrolo PWA, not a wrapper around
   assert.deepEqual(pngDimensions('public/icon-512.png'), { width: 512, height: 512 })
   assert.deepEqual(pngDimensions('public/icon-maskable-512.png'), { width: 512, height: 512 })
   assert.deepEqual(pngDimensions('app/apple-icon.png'), { width: 180, height: 180 })
+})
+
+test('the complete maskable mark stays inside the platform safe zone', async () => {
+  const { data, info } = await sharp(path.join(APP, 'public/icon-maskable-512.png'))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const background = [data[0]!, data[1]!, data[2]!] as const
+  const center = (info.width - 1) / 2
+  let coloredPixels = 0
+  let farthestPixel = 0
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const offset = (y * info.width + x) * info.channels
+      const difference = Math.abs(data[offset]! - background[0])
+        + Math.abs(data[offset + 1]! - background[1])
+        + Math.abs(data[offset + 2]! - background[2])
+      if (difference <= 20) continue
+      coloredPixels += 1
+      farthestPixel = Math.max(farthestPixel, Math.hypot(x - center, y - center))
+    }
+  }
+
+  assert.ok(coloredPixels > 10_000, 'the Homesrolo mark must be present')
+  assert.ok(farthestPixel <= 200,
+    `the maskable mark exceeds its safe radius: ${farthestPixel.toFixed(1)}px`)
 })
 
 test('offline support caches only the public shell and never a private Home Record response', () => {
