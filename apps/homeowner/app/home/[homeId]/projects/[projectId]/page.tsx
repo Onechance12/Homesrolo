@@ -85,7 +85,10 @@ export default function ProjectPage({
   const { state: itemsState, retry: retryItems } = usePortCall(() =>
     port.listProjectItems(homeId, projectId),
   )
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>('overview')
+  const requestedSection = searchParams.get('section')
+  const activeSection: WorkspaceSection = WORKSPACE_SECTIONS.some(section => section.value === requestedSection)
+    ? requestedSection as WorkspaceSection
+    : 'overview'
   const [savedProject, setSavedProject] = useState<Project | null>(null)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -127,17 +130,7 @@ export default function ProjectPage({
     retryFiles()
   }, [uploadsEnabled, retryFiles])
 
-  useEffect(() => {
-    const requested = searchParams.get('section')
-    if (WORKSPACE_SECTIONS.some(section => section.value === requested)) {
-      setActiveSection(requested as WorkspaceSection)
-    } else {
-      setActiveSection('overview')
-    }
-  }, [searchParams])
-
   function chooseWorkspaceSection(section: WorkspaceSection) {
-    setActiveSection(section)
     const next = new URLSearchParams(searchParams.toString())
     if (section === 'overview') next.delete('section')
     else next.set('section', section)
@@ -701,7 +694,7 @@ export default function ProjectPage({
             <div><p className="mono">People connected to this work</p><h2>Homeowner &amp; professionals</h2></div>
             {editingSupported ? (
               <button type="button" className="btn btn--quiet btn--compact" onClick={() => {
-                setActiveSection('overview')
+                chooseWorkspaceSection('overview')
                 beginEditing(project)
               }}>Edit people</button>
             ) : null}

@@ -18,6 +18,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   const home = usePortCall(() => port.getHome(homeId))
   const homeRecord = usePortCall(() => port.getHomeRecord(homeId))
   const projects = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
+  const retryProjects = projects.retry
   const uploadsEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.uploads
   const recordsReadable = mode === 'synthetic' || uploadsEnabled
@@ -53,13 +54,13 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
     const refreshChangedHome = (event: Event) => {
       const changedHomeId = (event as CustomEvent<{ homeId?: string }>).detail?.homeId
       if (changedHomeId !== homeId) return
-      projects.retry()
+      retryProjects()
       if (recordsReadable) retryDocuments()
       if (checkupsEnabled) retryCheckups()
     }
     window.addEventListener('homesrolo:data-changed', refreshChangedHome)
     return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
-  }, [checkupsEnabled, homeId, projects.retry, recordsReadable, retryCheckups, retryDocuments])
+  }, [checkupsEnabled, homeId, recordsReadable, retryCheckups, retryDocuments, retryProjects])
 
   if (home.state.status === 'loading' || projects.state.status === 'loading'
     || (mode === 'remote' && homeRecord.state.status === 'loading')) {

@@ -92,24 +92,26 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
   const files = usePortCall<readonly DocumentSummary[]>(() => filesReadable
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
+  const retryProjects = projects.retry
+  const retryFiles = files.retry
   const previousFilesReadable = useRef(filesReadable)
   const [filter, setFilter] = useState<ActivityFilter>('all')
 
   useEffect(() => {
     if (previousFilesReadable.current === filesReadable) return
     previousFilesReadable.current = filesReadable
-    files.retry()
-  }, [filesReadable, files.retry])
+    retryFiles()
+  }, [filesReadable, retryFiles])
 
   useEffect(() => {
     const refreshChangedHome = (event: Event) => {
       if ((event as CustomEvent<{ homeId?: string }>).detail?.homeId !== homeId) return
-      projects.retry()
-      if (filesReadable) files.retry()
+      retryProjects()
+      if (filesReadable) retryFiles()
     }
     window.addEventListener('homesrolo:data-changed', refreshChangedHome)
     return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
-  }, [files.retry, filesReadable, homeId, projects.retry])
+  }, [filesReadable, homeId, retryFiles, retryProjects])
 
   const entries = useMemo<readonly ActivityEntry[]>(() => {
     const work: ActivityEntry[] = (projects.state.status === 'ready' ? projects.state.value : [])

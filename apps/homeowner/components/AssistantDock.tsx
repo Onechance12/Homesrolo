@@ -103,7 +103,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const port = usePort()
   const { state: session } = useSession()
   const [open, setOpen] = useState(false)
-  const [thread, setThread] = useState<ThreadMessage[]>([])
+  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredThread(homeId))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -118,8 +118,6 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
-
-  useEffect(() => setThread(readStoredThread(homeId)), [homeId])
 
   useEffect(() => {
     try {

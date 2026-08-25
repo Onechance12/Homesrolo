@@ -161,7 +161,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           </Link>
         ))}
       </nav>
-      <AssistantDock homeId={homeId} />
+      <AssistantDock key={homeId} homeId={homeId} />
     </div>
   )
 }

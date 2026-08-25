@@ -49,14 +49,6 @@ const SYSTEM_LABEL: Readonly<Record<HomeSystemKind, string>> = {
   water_heater: 'Water heater',
   gutters: 'Gutters',
   foundation: 'Foundation',
-  plumbing: 'Plumbing',
-  hvac: 'HVAC',
-  landscaping: 'Landscaping',
-  appliances: 'Appliances',
-  pest: 'Pest control',
-  pool: 'Pool',
-  new_construction: 'New construction',
-  other: 'Other',
 }
 
 const CATEGORY_LABEL: Readonly<Record<ProjectCategory, string>> = {
@@ -118,6 +110,9 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
   const files = usePortCall<readonly DocumentSummary[]>(() => filesReadable
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
+  const retryProjects = projects.retry
+  const retryRecord = record.retry
+  const retryFiles = files.retry
   const previousFilesReadable = useRef(filesReadable)
   const [filter, setFilter] = useState<RoloFilter>('all')
   const [query, setQuery] = useState('')
@@ -125,19 +120,19 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
   useEffect(() => {
     if (previousFilesReadable.current === filesReadable) return
     previousFilesReadable.current = filesReadable
-    files.retry()
-  }, [filesReadable, files.retry])
+    retryFiles()
+  }, [filesReadable, retryFiles])
 
   useEffect(() => {
     const refreshChangedHome = (event: Event) => {
       if ((event as CustomEvent<{ homeId?: string }>).detail?.homeId !== homeId) return
-      projects.retry()
-      record.retry()
-      if (filesReadable) files.retry()
+      retryProjects()
+      retryRecord()
+      if (filesReadable) retryFiles()
     }
     window.addEventListener('homesrolo:data-changed', refreshChangedHome)
     return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
-  }, [files.retry, filesReadable, homeId, projects.retry, record.retry])
+  }, [filesReadable, homeId, retryFiles, retryProjects, retryRecord])
 
   const entries = useMemo<readonly RoloEntry[]>(() => {
     const projectRecords = projects.state.status === 'ready' ? projects.state.value : []
