@@ -75,9 +75,8 @@ alter table public.homesrolo_homeowner_command_receipts
     'quote.save', 'photo_checkup.upload'
   ));
 
--- Home Record receipts intentionally retain the exact replay result. Scope
--- them to the home so reuse across homes fails closed and deleting the home
--- also removes this secondary copy of its private address.
+-- Home Record receipts retain only opaque replay metadata. Scope them to the
+-- home so reuse across homes fails closed and deleting the home removes them.
 alter table public.homesrolo_homeowner_command_receipts
   add column if not exists home_ref text
     references public.homesrolo_private_homes(home_ref) on delete cascade;
@@ -265,17 +264,18 @@ begin
   perform pg_advisory_xact_lock(
     hashtextextended('homesrolo:home-record:' || p_home_ref, 0)
   );
-  if not exists (
-    select 1 from public.homesrolo_homeowner_memberships
+  perform 1
+  from public.homesrolo_homeowner_memberships
     where membership_ref = p_membership_ref
       and principal_ref = p_principal_ref
       and home_ref = p_home_ref
       and revision = p_membership_revision
       and state = 'active'
       and role = 'workspace_controller'
-  ) then raise exception 'membership_not_authorized'; end if;
+  for share;
+  if not found then raise exception 'membership_not_authorized'; end if;
 
-  -- Exact-address replay receipts are useful only for short retry windows.
+  -- Replay receipts are useful only for short retry windows.
   -- Keep at most 63 older rows before this command inserts its receipt, and
   -- prune rows older than 30 days whenever this home is updated.
   delete from public.homesrolo_homeowner_command_receipts receipt
@@ -307,7 +307,40 @@ begin
       or v_receipt.result->>'homeRef' is distinct from p_home_ref then
       raise exception 'command_scope_mismatch';
     end if;
-    return v_receipt.result;
+    -- The digest binds these retry inputs to the first execution. Rebuild the
+    -- browser response without retaining the address or profile in a receipt.
+    select jsonb_agg(jsonb_build_object(
+      'kind', item->>'kind',
+      'present', item->>'present',
+      'installedOrReplacedYear', case
+        when item->>'installed_or_replaced_year_value' is null then null
+        else jsonb_build_object(
+          'value', (item->>'installed_or_replaced_year_value')::integer,
+          'precision', item->>'installed_or_replaced_year_precision'
+        )
+      end
+    ) order by item->>'kind') into v_system_rows
+    from jsonb_array_elements(p_systems) item;
+    return jsonb_build_object(
+      'homeRef', p_home_ref,
+      'revision', (v_receipt.result->>'revision')::integer,
+      'address', jsonb_build_object(
+        'line1', btrim(p_address_line_1),
+        'line2', nullif(btrim(coalesce(p_address_line_2, '')), ''),
+        'city', btrim(p_address_city),
+        'regionCode', p_address_region_code,
+        'postalCode', p_address_postal_code,
+        'countryCode', p_address_country_code
+      ),
+      'homeType', p_home_type,
+      'yearBuilt', case when p_year_built_value is null then null else jsonb_build_object(
+        'value', p_year_built_value,
+        'precision', p_year_built_precision
+      ) end,
+      'systems', v_system_rows,
+      'source', 'homeowner_recollection',
+      'updatedAt', v_receipt.result->>'updatedAt'
+    );
   end if;
 
   select * into v_home from public.homesrolo_private_homes
@@ -408,7 +441,11 @@ begin
     principal_ref, command_ref, action, command_digest, result, created_at, home_ref
   ) values (
     p_principal_ref, p_command_ref, 'home_record.update',
-    p_command_digest, v_result, p_requested_at, p_home_ref
+    p_command_digest, jsonb_build_object(
+      'homeRef', v_home.home_ref,
+      'revision', v_home.record_revision,
+      'updatedAt', v_home.record_updated_at
+    ), p_requested_at, p_home_ref
   );
   return v_result;
 end;
@@ -443,15 +480,16 @@ begin
   perform pg_advisory_xact_lock(
     hashtextextended('homesrolo:home-record:' || p_home_ref, 0)
   );
-  if not exists (
-    select 1 from public.homesrolo_homeowner_memberships
+  perform 1
+  from public.homesrolo_homeowner_memberships
     where membership_ref = p_membership_ref
       and principal_ref = p_principal_ref
       and home_ref = p_home_ref
       and revision = p_membership_revision
       and state = 'active'
       and role = 'workspace_controller'
-  ) then raise exception 'membership_not_authorized'; end if;
+  for share;
+  if not found then raise exception 'membership_not_authorized'; end if;
 
   select * into v_receipt from public.homesrolo_homeowner_command_receipts
   where principal_ref = p_principal_ref

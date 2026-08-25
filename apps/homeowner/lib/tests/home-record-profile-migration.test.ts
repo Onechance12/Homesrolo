@@ -45,11 +45,30 @@ test('Home Record update is exact-controller, receipt-backed, and optimistic', (
   assert.match(functionBody, /p_address_country_code is null/)
   assert.match(functionBody, /p_systems is null/)
   assert.match(functionBody, /record_revision = record_revision \+ 1/)
+  assert.match(functionBody,
+    /perform pg_advisory_xact_lock[\s\S]*perform 1[\s\S]*role = 'workspace_controller'[\s\S]*for share;[\s\S]*if not found/,
+    'the exact membership row is locked after the home lock and before replay or mutation')
   assert.match(functionBody, /interval '30 days'/)
   assert.match(functionBody, /offset 63/,
-    'a home retains at most 64 exact-address update receipts after insertion')
-  assert.match(functionBody, /'homeRef', v_home\.home_ref[\s\S]*'updatedAt', v_home\.record_updated_at/,
-    'the receipt contains only the browser-safe Home Record v1 result')
+    'a home retains at most 64 update receipts after insertion')
+  const replay = functionBody.slice(
+    functionBody.indexOf('if found then'),
+    functionBody.indexOf('select * into v_home'),
+  )
+  assert.match(replay, /p_address_line_1/)
+  assert.match(replay, /jsonb_array_elements\(p_systems\)/)
+  assert.match(replay, /v_receipt\.result->>'revision'/)
+  assert.match(replay, /v_receipt\.result->>'updatedAt'/)
+  assert.doesNotMatch(replay, /'updatedAt', p_requested_at/,
+    'a retry preserves the first execution time')
+  const receiptInsert = functionBody.slice(
+    functionBody.lastIndexOf('insert into public.homesrolo_homeowner_command_receipts'),
+    functionBody.lastIndexOf('return v_result'),
+  )
+  assert.match(receiptInsert,
+    /jsonb_build_object\([\s\S]*'homeRef', v_home\.home_ref,[\s\S]*'revision', v_home\.record_revision,[\s\S]*'updatedAt', v_home\.record_updated_at[\s\S]*\)/)
+  assert.doesNotMatch(receiptInsert, /'address'|'homeType'|'yearBuilt'|'systems'|'source'/,
+    'the receipt retains no exact address or profile data')
   assert.doesNotMatch(functionBody, /to_jsonb\s*\(/,
     'rowtype expansion must not make future private columns enter a receipt')
   assert.ok(
@@ -72,6 +91,8 @@ test('Home Record reads use one database snapshot with a fresh membership check'
   assert.match(readFunction, /revision = p_membership_revision/)
   assert.match(readFunction, /state = 'active'/)
   assert.match(readFunction, /role = 'workspace_controller'/)
+  assert.doesNotMatch(readFunction, /for share/,
+    'the stable, side-effect-free read does not attempt a row lock')
   assert.doesNotMatch(readFunction, /role in \([^)]*member|role in \([^)]*viewer/,
     'the database repeats the controller-only read check')
   assert.doesNotMatch(readFunction, /to_jsonb\s*\(/,
@@ -112,6 +133,9 @@ test('legacy intake participates in the same aggregate revision fence', () => {
   assert.match(legacy, /record_revision = record_revision \+ 1/)
   assert.match(legacy, /initial_intake_already_recorded/)
   assert.match(legacy, /v_receipt\.result #>> '\{property_facts,home_ref\}'/)
+  assert.match(legacy,
+    /perform pg_advisory_xact_lock[\s\S]*perform 1[\s\S]*role = 'workspace_controller'[\s\S]*for share;[\s\S]*if not found/,
+    'initial intake uses the same home-then-membership lock order')
   assert.ok(
     legacy.indexOf("role = 'workspace_controller'")
       < legacy.indexOf("action = 'intake.record'"),

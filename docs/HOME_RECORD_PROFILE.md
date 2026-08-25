@@ -20,11 +20,13 @@ an active workspace controller by `GET /api/v1/homes/{homeRef}/record`.
 address-free v1 projections, so invited members/viewers and older clients never
 receive the exact address as part of routine workspace reads.
 
-The update receipt keeps the exact replay result in the same service-role-only
-table. Its JSON is an explicit projection of the eight v1 response fields, not
-a database row expansion. It is keyed and indexed by `home_ref` with `ON DELETE
-CASCADE`, so deleting the home also removes this secondary address copy. Update
-traffic prunes receipts older than 30 days and caps retained update receipts at
+The update receipt stores only `homeRef`, the resulting revision, and the first
+execution time in the service-role-only table. It never duplicates the address
+or profile. On a digest-matched retry, the RPC rebuilds the browser response
+from the retry inputs bound by that digest and the stored revision/time. The
+receipt is keyed and indexed by `home_ref` with `ON DELETE CASCADE`. As
+opportunistic abuse hygiene (not a scheduled retention guarantee), subsequent
+updates prune receipts older than 30 days and cap retained update receipts at
 64 per home. The read RPC rechecks the exact active controller membership and
 returns the home, facts, and systems from one database snapshot.
 
@@ -42,7 +44,8 @@ time.
 The database function:
 
 1. serializes all Home Record writes for one exact home;
-2. rechecks an active `workspace_controller` membership before receipt replay;
+2. locks and rechecks the exact active `workspace_controller` membership before
+   receipt replay, so a concurrent revoke serializes before or after the write;
 3. binds the receipt digest and stored result to the exact home;
 4. rejects a stale `record_revision`;
 5. updates address, facts, and systems atomically; and
