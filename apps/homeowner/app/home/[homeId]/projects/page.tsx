@@ -33,14 +33,14 @@ const MODES: readonly {
 ]
 
 const CATEGORIES: readonly { value: ProjectCategory; label: string }[] = [
-  { value: 'interior', label: 'Interior / remodel' },
+  { value: 'interior', label: 'Interior & remodel' },
   { value: 'hvac', label: 'Heating & cooling' },
   { value: 'plumbing', label: 'Plumbing' },
   { value: 'electrical', label: 'Electrical' },
   { value: 'appliances', label: 'Appliances' },
-  { value: 'exterior', label: 'Exterior / gutters' },
+  { value: 'exterior', label: 'Exterior & gutters' },
   { value: 'roofing', label: 'Roof' },
-  { value: 'landscaping', label: 'Yard / landscaping' },
+  { value: 'landscaping', label: 'Yard & landscaping' },
   { value: 'pest', label: 'Pest control' },
   { value: 'pool', label: 'Pool' },
   { value: 'new_construction', label: 'New construction' },
@@ -123,26 +123,35 @@ export default function ProjectsPage({
     <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
       <div className="project-list-head">
         <div>
-          <p className="mono">Your Home Record</p>
-          <h1>Projects</h1>
-          <p>Repairs, maintenance, upgrades, and ideas—all in one home history.</p>
+          <p className="mono">Work around this home</p>
+          <h1>Work</h1>
+          <p>Projects, repairs, one-time service, issues, and past work—without forcing everything into the same story.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          aria-expanded={recordMode !== null}
-          aria-controls="add-project"
-          onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
-        >
-          <IconPlus /> {recordMode === null ? 'Add something' : 'Close'}
-        </button>
+        <div className="project-list-head__actions">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))}
+          >
+            Tell Rolo about it
+          </button>
+          <button
+            type="button"
+            className="btn btn--quiet"
+            aria-expanded={recordMode !== null}
+            aria-controls="add-work"
+            onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
+          >
+            <IconPlus /> {recordMode === null ? 'Add manually' : 'Close form'}
+          </button>
+        </div>
       </div>
 
       {recordMode ? (
-        <section id="add-project" className="panel project-composer" aria-labelledby="project-details-title">
+        <section id="add-work" className="panel project-composer" aria-labelledby="project-details-title">
           <div className="panel__head">
             <div>
-              <p className="mono">Add to this home</p>
+              <p className="mono">Manual entry</p>
               <h2 id="project-details-title">What should your home remember?</h2>
             </div>
           </div>
@@ -245,7 +254,7 @@ export default function ProjectsPage({
                   ? 'Your sign-in expired. Sign in again before saving.'
                   : failed === 'conflict'
                     ? 'This record changed during a retry. Review it and save again.'
-                    : 'The project was not saved. Check the details and try again.'}
+                    : 'The work record was not saved. Check the details and try again.'}
               </p>
             ) : null}
 
@@ -264,15 +273,15 @@ export default function ProjectsPage({
         <div className="panel__head">
           <div>
             <p className="mono">One history</p>
-            <h2 id="saved-projects">Work on this home</h2>
+            <h2 id="saved-projects">Saved work</h2>
           </div>
         </div>
         {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading projects" /></div>}
         {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
         {state.status === 'empty' && (
           <EmptyState
-            title="No work recorded yet"
-            body="Add something completed, underway, or still being considered. The home history can start anywhere."
+            title="Nothing recorded here yet"
+            body="Tell Rolo what happened or add it manually. You can begin with work from years ago, something underway, or an idea you are still considering."
           />
         )}
         {state.status === 'ready' && (

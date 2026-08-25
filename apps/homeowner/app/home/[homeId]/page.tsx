@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { use, useEffect, useRef } from 'react'
-import { HomeRecordExperience } from '../../../components/HomeRecordExperience.tsx'
+import { RoloHomeDashboard } from '../../../components/RoloHomeDashboard.tsx'
 import { EmptyState, ErrorState, Skeleton } from '../../../components/states.tsx'
 import { buildHomeRecordProgress } from '../../../lib/home-record-progress.ts'
 import { usePortCall } from '../../../lib/port/hooks.ts'
@@ -49,6 +49,18 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
     retryCheckups()
   }, [checkupsEnabled, retryCheckups])
 
+  useEffect(() => {
+    const refreshChangedHome = (event: Event) => {
+      const changedHomeId = (event as CustomEvent<{ homeId?: string }>).detail?.homeId
+      if (changedHomeId !== homeId) return
+      projects.retry()
+      if (recordsReadable) retryDocuments()
+      if (checkupsEnabled) retryCheckups()
+    }
+    window.addEventListener('homesrolo:data-changed', refreshChangedHome)
+    return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
+  }, [checkupsEnabled, homeId, projects.retry, recordsReadable, retryCheckups, retryDocuments])
+
   if (home.state.status === 'loading' || projects.state.status === 'loading'
     || (mode === 'remote' && homeRecord.state.status === 'loading')) {
     return <div className="panel"><Skeleton lines={7} label="Opening the Home Record" /></div>
@@ -82,7 +94,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   })
 
   return (
-    <HomeRecordExperience
+    <RoloHomeDashboard
       homeId={homeId}
       label={homeLabel(file)}
       locality={homeLocality(file)}
@@ -90,6 +102,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
       homeRecord={mode === 'remote' && homeRecord.state.status === 'ready'
         ? homeRecord.state.value
         : null}
+      projects={projectRecords}
+      documents={documentRecords}
       uploadsEnabled={uploadsEnabled}
       checkupsEnabled={checkupsEnabled}
       synthetic={mode === 'synthetic'}

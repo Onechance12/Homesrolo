@@ -178,6 +178,11 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async askRolo() {
+    await wait()
+    return err('unavailable')
+  },
+
   async listProjects(homeRef) {
     await wait()
     const gate = requireSession<readonly ProjectSummary[]>()

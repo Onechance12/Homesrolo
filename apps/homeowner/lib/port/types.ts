@@ -287,6 +287,48 @@ export interface HomeResearchResult {
   readonly disclosure: 'Research is a draft. Confirm proposed facts before adding them to your home record.'
 }
 
+// --- Rolo assistant ----------------------------------------------------------
+
+/** A short app-owned conversation turn. OpenAI is never the transcript store. */
+export interface RoloAssistantTurn {
+  readonly role: 'user' | 'assistant'
+  readonly text: string
+}
+
+export type RoloDestination = 'home' | 'rolo' | 'activity' | 'library' | 'details' | 'work'
+
+/**
+ * A reviewable work-record draft. This deliberately maps to the existing
+ * project command instead of creating a second chatbot-owned data system.
+ */
+export interface RoloWorkDraft {
+  readonly kind: 'project' | 'issue' | 'repair' | 'service' | 'incident'
+  readonly title: string
+  readonly category: ProjectCategory
+  readonly status: ProjectStatus
+  readonly occurredOn: string | null
+  readonly summary: string
+  readonly professionalLabel: string | null
+  readonly firstUpdate: string | null
+}
+
+export interface AskRoloInput {
+  readonly message: string
+  readonly history: readonly RoloAssistantTurn[]
+  readonly destination: Exclude<RoloDestination, 'work'>
+  readonly projectRef?: string
+}
+
+export interface AskRoloResult {
+  readonly requestRef: string
+  readonly answer: string
+  readonly proposedWork: RoloWorkDraft | null
+  readonly destination: RoloDestination | null
+  readonly projectRef: string | null
+  readonly followUpQuestions: readonly string[]
+  readonly disclosure: 'Nothing is saved until you review and approve it.'
+}
+
 // --- projects -----------------------------------------------------------------
 
 /** Mirrors homeownerProjectSchema.status in homeowner-runtime.v1 exactly. */
@@ -764,6 +806,7 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: HomeResearchInput,
   ): Promise<PortResult<HomeResearchResult>>
+  askRolo(homeRef: string, input: AskRoloInput): Promise<PortResult<AskRoloResult>>
 
   listProjects(homeRef: string): Promise<PortResult<readonly ProjectSummary[]>>
   getProject(homeRef: string, projectRef: string): Promise<PortResult<Project>>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { use, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { usePort, useSession } from '../../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../../lib/port/hooks.ts'
@@ -64,6 +65,9 @@ export default function ProjectPage({
   params: Promise<{ homeId: string; projectId: string }>
 }) {
   const { homeId, projectId } = use(params)
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const port = usePort()
   const session = useSession()
   const sessionReady = session.state.kind !== 'loading'
@@ -123,6 +127,24 @@ export default function ProjectPage({
     retryFiles()
   }, [uploadsEnabled, retryFiles])
 
+  useEffect(() => {
+    const requested = searchParams.get('section')
+    if (WORKSPACE_SECTIONS.some(section => section.value === requested)) {
+      setActiveSection(requested as WorkspaceSection)
+    } else {
+      setActiveSection('overview')
+    }
+  }, [searchParams])
+
+  function chooseWorkspaceSection(section: WorkspaceSection) {
+    setActiveSection(section)
+    const next = new URLSearchParams(searchParams.toString())
+    if (section === 'overview') next.delete('section')
+    else next.set('section', section)
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
   function moveWorkspaceTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next = index
     if (event.key === 'ArrowRight') next = (index + 1) % WORKSPACE_SECTIONS.length
@@ -133,7 +155,7 @@ export default function ProjectPage({
     event.preventDefault()
     const section = WORKSPACE_SECTIONS[next]
     if (!section) return
-    setActiveSection(section.value)
+    chooseWorkspaceSection(section.value)
     requestAnimationFrame(() => document.getElementById(`project-tab-${section.value}`)?.focus())
   }
 
@@ -353,7 +375,7 @@ export default function ProjectPage({
             aria-selected={activeSection === section.value}
             aria-controls={`project-panel-${section.value}`}
             tabIndex={activeSection === section.value ? 0 : -1}
-            onClick={() => setActiveSection(section.value)}
+            onClick={() => chooseWorkspaceSection(section.value)}
             onKeyDown={event => moveWorkspaceTab(event, index)}
           >
             {section.label}

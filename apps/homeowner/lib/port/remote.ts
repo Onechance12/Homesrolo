@@ -47,7 +47,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeArtifactUploadReservation, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeArtifactUploadReservation, decodeAskRoloResult, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -559,6 +559,43 @@ export function createRemotePort(
         path: `${API}/homes/${ref}/research`,
         body,
       }, decodeHomeResearchResult)
+    },
+
+    async askRolo(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      if (!input || typeof input !== 'object') return { ok: false, error: 'invalid' }
+      const message = typeof input.message === 'string'
+        ? boundedResearchText(input.message, 1_600)
+        : null
+      const destinations = ['home', 'rolo', 'activity', 'library', 'details'] as const
+      const history = Array.isArray(input.history) ? input.history : []
+      const normalizedHistory = history.map(turn => ({
+        role: turn?.role === 'user' || turn?.role === 'assistant' ? turn.role : null,
+        text: typeof turn?.text === 'string' ? boundedResearchText(turn.text, 700) : null,
+      }))
+      const totalCharacters = (message?.length ?? 0)
+        + normalizedHistory.reduce((total, turn) => total + (turn.text?.length ?? 0), 0)
+      if (!ref || !message
+        || !destinations.includes(input.destination)
+        || (input.projectRef !== undefined && !PROJECT_REF.test(input.projectRef))
+        || history.length > 8
+        || normalizedHistory.some(turn => turn.role === null || turn.text === null)
+        || totalCharacters > 6_000) {
+        return { ok: false, error: 'invalid' }
+      }
+      return call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/assistant`,
+        body: {
+          message,
+          history: normalizedHistory.map(turn => ({
+            role: turn.role as 'user' | 'assistant',
+            text: turn.text as string,
+          })),
+          destination: input.destination,
+          ...(input.projectRef ? { projectRef: input.projectRef } : {}),
+        },
+      }, decodeAskRoloResult)
     },
 
     async requestMagicLink(email, requestedIntent = null, requestedHandoff = null) {

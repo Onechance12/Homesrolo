@@ -16,7 +16,7 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type AskRoloResult, type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel, type RoloWorkDraft,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -874,6 +874,31 @@ export const decodeHomeResearchResult: Decoder<HomeResearchResult> = (value, at)
   }
   return decoded
 }
+
+const decodeRoloWorkDraft = object<RoloWorkDraft>({
+  kind: oneOf(['project', 'issue', 'repair', 'service', 'incident'] as const),
+  title: boundedResearchText(120),
+  category: oneOf(PROJECT_CATEGORIES),
+  status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+  occurredOn: nullable(calendarDate),
+  summary: trimmedText(2_000),
+  professionalLabel: nullable(boundedResearchText(160)),
+  firstUpdate: nullable(boundedResearchText(2_000)),
+})
+
+/** Strict, citation-free response for the private in-app organizer. */
+export const decodeAskRoloResult: Decoder<AskRoloResult> = object<AskRoloResult>({
+  requestRef: matching(
+    /^hask_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    'a canonical lowercase hask_ UUIDv4 request ref',
+  ),
+  answer: boundedResearchText(1_400),
+  proposedWork: nullable(decodeRoloWorkDraft),
+  destination: nullable(oneOf(['home', 'rolo', 'activity', 'library', 'details', 'work'] as const)),
+  projectRef: nullable(opaqueRef('hprj')),
+  followUpQuestions: boundedArray(boundedResearchText(240), 0, 4),
+  disclosure: literal('Nothing is saved until you review and approve it.'),
+})
 
 export const decodeList = array
 

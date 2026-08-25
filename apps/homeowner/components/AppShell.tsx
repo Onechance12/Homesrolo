@@ -13,18 +13,16 @@ import { usePort, usePortMode, useSession } from '../lib/port/provider.tsx'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { Skeleton, UnauthorizedState } from './states.tsx'
 import {
-  HouseMark, IconCamera, IconDocs, IconGear, IconHome, IconProjects,
+  HouseMark, IconDocs, IconGear, IconHome, IconThread,
 } from './icons.tsx'
 import { SignOutButton } from './SignOutButton.tsx'
+import { AssistantDock } from './AssistantDock.tsx'
 
 const NAV = [
   { segment: '', label: 'Home', tabLabel: 'Home', icon: IconHome },
-  { segment: 'projects', label: 'Projects', tabLabel: 'Projects', icon: IconProjects },
-  { segment: 'documents', label: 'Home record', tabLabel: 'Record', icon: IconDocs },
-  {
-    segment: 'checkups', label: 'Checkups', tabLabel: 'Checkups', icon: IconCamera,
-    requiresPhotoCheckups: true,
-  },
+  { segment: 'rolo', label: 'My Rolo', tabLabel: 'Rolo', icon: HouseMark },
+  { segment: 'timeline', label: 'Activity', tabLabel: 'Activity', icon: IconThread },
+  { segment: 'documents', label: 'Library', tabLabel: 'Library', icon: IconDocs },
 ] as const
 
 function navHref(homeId: string, segment: string) {
@@ -65,8 +63,11 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
   }
 
   const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
-  const checkupsEnabled = mode === 'remote' && session.capabilities.photoCheckups
-  const visibleNav = NAV.filter(item => !('requiresPhotoCheckups' in item) || checkupsEnabled)
+  const visibleNav = NAV
+
+  function openAssistant() {
+    window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))
+  }
 
   return (
     <div className="shell">
@@ -89,7 +90,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         </Link>
       </header>
 
-      <nav className="rail" aria-label="Home Record">
+      <nav className="rail" aria-label="This home">
         <Link href="/homes" className="rail__brand">
           <HouseMark /> <span>homesrolo</span>
         </Link>
@@ -108,6 +109,9 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
               <Icon /> {label}
             </Link>
           ))}
+          <button type="button" className="rail__ask" onClick={openAssistant}>
+            <HouseMark size={20} /> <span><strong>Ask Rolo</strong><small>Talk about this home</small></span>
+          </button>
         </div>
         <div className="rail__foot">
           <span className="mono">
@@ -133,8 +137,21 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         {children}
       </main>
 
-      <nav className="tabbar" aria-label="Home Record sections">
-        {visibleNav.map(({ segment, tabLabel, icon: Icon }) => (
+      <nav className="tabbar" aria-label="This home">
+        {visibleNav.slice(0, 2).map(({ segment, tabLabel, icon: Icon }) => (
+          <Link
+            key={segment}
+            href={navHref(homeId, segment)}
+            aria-current={isCurrent(pathname, homeId, segment) ? 'page' : undefined}
+          >
+            <Icon size={22} /> {tabLabel}
+          </Link>
+        ))}
+        <button type="button" className="tabbar__ask" onClick={openAssistant} aria-haspopup="dialog">
+          <span><HouseMark size={25} /></span>
+          Ask
+        </button>
+        {visibleNav.slice(2).map(({ segment, tabLabel, icon: Icon }) => (
           <Link
             key={segment}
             href={navHref(homeId, segment)}
@@ -144,6 +161,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           </Link>
         ))}
       </nav>
+      <AssistantDock homeId={homeId} />
     </div>
   )
 }
