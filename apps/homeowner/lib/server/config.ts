@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 const HOMEOWNER_PRODUCTION_APP_ORIGINS = new Set([
   'https://app.homesrolo.com',
-  'https://homesrolo-homeowner-v2.onrender.com',
 ])
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
