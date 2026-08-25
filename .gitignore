@@ -7,3 +7,6 @@ node_modules/
 apps/web/.next/
 apps/web/out/
 apps/web/tsconfig.tsbuildinfo
+
+# Local Netlify folder
+.netlify
