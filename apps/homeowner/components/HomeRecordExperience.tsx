@@ -115,57 +115,57 @@ export function HomeRecordExperience({
         </div>
       </section>
 
-      <section className="record-section home-profile-card" aria-labelledby="home-profile-title">
-        <div className="record-section__head home-profile-card__head">
-          <div>
-            <p className="record-kicker">The home itself</p>
-            <h2 id="home-profile-title">Your private home details</h2>
+      {homeRecord ? (
+        <section className="record-section home-profile-card" aria-labelledby="home-profile-title">
+          <div className="record-section__head home-profile-card__head">
+            <div>
+              <p className="record-kicker">The home itself</p>
+              <h2 id="home-profile-title">Your private home details</h2>
+            </div>
+            <Link className="record-text-link" href={`/home/${homeId}/details`}>
+              {homeRecord.address ? 'Edit details →' : 'Add address →'}
+            </Link>
           </div>
-          <Link className="record-text-link" href={`/home/${homeId}/details`}>
-            {homeRecord?.address ? 'Edit details →' : 'Add address →'}
-          </Link>
-        </div>
-        <div className="home-profile-card__grid">
-          <div className="home-profile-card__address">
-            <span>Property address</span>
-            {homeRecord?.address ? (
-              <address>
-                <strong>{homeRecord.address.line1}</strong>
-                {homeRecord.address.line2 ? <span>{homeRecord.address.line2}</span> : null}
-                <span>
-                  {homeRecord.address.city}, {homeRecord.address.regionCode}{' '}
-                  {homeRecord.address.postalCode}
-                </span>
-              </address>
-            ) : (
-              <p>Add the exact address so this history stays attached to the right home.</p>
-            )}
+          <div className="home-profile-card__grid">
+            <div className="home-profile-card__address">
+              <span>Property address</span>
+              {homeRecord.address ? (
+                <address>
+                  <strong>{homeRecord.address.line1}</strong>
+                  {homeRecord.address.line2 ? <span>{homeRecord.address.line2}</span> : null}
+                  <span>
+                    {homeRecord.address.city}, {homeRecord.address.regionCode}{' '}
+                    {homeRecord.address.postalCode}
+                  </span>
+                </address>
+              ) : (
+                <p>Add the exact address so this history stays attached to the right home.</p>
+              )}
+            </div>
+            <dl className="home-profile-card__facts">
+              <div>
+                <dt>Home type</dt>
+                <dd>{homeRecord.homeType !== 'unknown'
+                  ? homeRecord.homeType.replace('_', ' ')
+                  : 'Not recorded'}</dd>
+              </div>
+              <div>
+                <dt>Year built</dt>
+                <dd>{homeRecord.yearBuilt
+                  ? `${homeRecord.yearBuilt.precision === 'approximate' ? 'About ' : ''}${homeRecord.yearBuilt.value}`
+                  : 'Not recorded'}</dd>
+              </div>
+              <div>
+                <dt>Systems noted</dt>
+                <dd>{`${homeRecord.systems.filter(system => system.present !== 'unknown').length} of ${homeRecord.systems.length}`}</dd>
+              </div>
+            </dl>
           </div>
-          <dl className="home-profile-card__facts">
-            <div>
-              <dt>Home type</dt>
-              <dd>{homeRecord?.homeType && homeRecord.homeType !== 'unknown'
-                ? homeRecord.homeType.replace('_', ' ')
-                : 'Not recorded'}</dd>
-            </div>
-            <div>
-              <dt>Year built</dt>
-              <dd>{homeRecord?.yearBuilt
-                ? `${homeRecord.yearBuilt.precision === 'approximate' ? 'About ' : ''}${homeRecord.yearBuilt.value}`
-                : 'Not recorded'}</dd>
-            </div>
-            <div>
-              <dt>Systems noted</dt>
-              <dd>{homeRecord
-                ? `${homeRecord.systems.filter(system => system.present !== 'unknown').length} of ${homeRecord.systems.length}`
-                : 'Not recorded'}</dd>
-            </div>
-          </dl>
-        </div>
-        <p className="home-profile-card__privacy">
-          Your full address stays inside this signed-in Home Record. It is not shown on your public profile because there is no public home profile.
-        </p>
-      </section>
+          <p className="home-profile-card__privacy">
+            Your full address stays inside this signed-in Home Record. It is not shown on your public profile because there is no public home profile.
+          </p>
+        </section>
+      ) : null}
 
       <section className="record-section record-section--deck" aria-labelledby="rolo-deck-title">
         <div className="record-section__head">

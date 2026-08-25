@@ -81,6 +81,8 @@ alter table public.homesrolo_homeowner_command_receipts
 alter table public.homesrolo_homeowner_command_receipts
   add column if not exists home_ref text
     references public.homesrolo_private_homes(home_ref) on delete cascade;
+create index if not exists homesrolo_homeowner_command_receipts_home_ref_idx
+  on public.homesrolo_homeowner_command_receipts(home_ref);
 alter table public.homesrolo_homeowner_command_receipts
   drop constraint if exists homesrolo_homeowner_command_receipts_home_record_scope_check;
 alter table public.homesrolo_homeowner_command_receipts
@@ -100,7 +102,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_home public.homesrolo_private_homes%rowtype;
-  v_facts jsonb;
+  v_facts public.homesrolo_homeowner_property_facts%rowtype;
   v_system_rows jsonb;
 begin
   if not exists (
@@ -110,25 +112,53 @@ begin
       and home_ref = p_home_ref
       and revision = p_membership_revision
       and state = 'active'
-      and role in ('workspace_controller', 'member', 'viewer')
+      and role = 'workspace_controller'
   ) then raise exception 'membership_not_authorized'; end if;
 
   select * into v_home from public.homesrolo_private_homes
   where home_ref = p_home_ref;
   if not found then raise exception 'home_not_found'; end if;
 
-  select to_jsonb(f) into v_facts
+  select * into v_facts
   from public.homesrolo_homeowner_property_facts f
   where f.home_ref = p_home_ref;
-  select coalesce(jsonb_agg(to_jsonb(s) order by s.kind), '[]'::jsonb)
+  select jsonb_agg(jsonb_build_object(
+    'kind', supported.kind,
+    'present', coalesce(s.present, 'unknown'),
+    'installedOrReplacedYear', case
+      when s.installed_or_replaced_year_value is null then null
+      else jsonb_build_object(
+        'value', s.installed_or_replaced_year_value,
+        'precision', s.installed_or_replaced_year_precision
+      )
+    end
+  ) order by supported.kind)
   into v_system_rows
-  from public.homesrolo_homeowner_systems s
-  where s.home_ref = p_home_ref;
+  from (values
+    ('roof'), ('heating'), ('cooling'), ('water_heater'), ('gutters'), ('foundation')
+  ) as supported(kind)
+  left join public.homesrolo_homeowner_systems s
+    on s.home_ref = p_home_ref and s.kind = supported.kind;
 
   return jsonb_build_object(
-    'home', to_jsonb(v_home),
-    'property_facts', v_facts,
-    'systems', v_system_rows
+    'homeRef', v_home.home_ref,
+    'revision', v_home.record_revision,
+    'address', case when v_home.address_line_1 is null then null else jsonb_build_object(
+      'line1', v_home.address_line_1,
+      'line2', v_home.address_line_2,
+      'city', v_home.address_city,
+      'regionCode', v_home.address_region_code,
+      'postalCode', v_home.address_postal_code,
+      'countryCode', v_home.address_country_code
+    ) end,
+    'homeType', coalesce(v_facts.home_type, 'unknown'),
+    'yearBuilt', case when v_facts.year_built_value is null then null else jsonb_build_object(
+      'value', v_facts.year_built_value,
+      'precision', v_facts.year_built_precision
+    ) end,
+    'systems', v_system_rows,
+    'source', 'homeowner_recollection',
+    'updatedAt', v_home.record_updated_at
   );
 end;
 $$;
@@ -245,6 +275,26 @@ begin
       and role = 'workspace_controller'
   ) then raise exception 'membership_not_authorized'; end if;
 
+  -- Exact-address replay receipts are useful only for short retry windows.
+  -- Keep at most 63 older rows before this command inserts its receipt, and
+  -- prune rows older than 30 days whenever this home is updated.
+  delete from public.homesrolo_homeowner_command_receipts receipt
+  where receipt.action = 'home_record.update'
+    and receipt.home_ref = p_home_ref
+    and receipt.created_at < p_requested_at - interval '30 days';
+  delete from public.homesrolo_homeowner_command_receipts receipt
+  using (
+    select principal_ref, command_ref, action
+    from public.homesrolo_homeowner_command_receipts
+    where action = 'home_record.update'
+      and home_ref = p_home_ref
+    order by created_at desc, principal_ref, command_ref
+    offset 63
+  ) stale
+  where receipt.principal_ref = stale.principal_ref
+    and receipt.command_ref = stale.command_ref
+    and receipt.action = stale.action;
+
   select * into v_receipt from public.homesrolo_homeowner_command_receipts
   where principal_ref = p_principal_ref
     and command_ref = p_command_ref
@@ -254,7 +304,7 @@ begin
       raise exception 'command_digest_mismatch';
     end if;
     if v_receipt.home_ref is distinct from p_home_ref
-      or v_receipt.result #>> '{home,home_ref}' is distinct from p_home_ref then
+      or v_receipt.result->>'homeRef' is distinct from p_home_ref then
       raise exception 'command_scope_mismatch';
     end if;
     return v_receipt.result;
@@ -321,13 +371,38 @@ begin
   where home_ref = p_home_ref
   returning * into v_home;
 
-  select jsonb_agg(to_jsonb(s) order by s.kind) into v_system_rows
+  select jsonb_agg(jsonb_build_object(
+    'kind', s.kind,
+    'present', s.present,
+    'installedOrReplacedYear', case
+      when s.installed_or_replaced_year_value is null then null
+      else jsonb_build_object(
+        'value', s.installed_or_replaced_year_value,
+        'precision', s.installed_or_replaced_year_precision
+      )
+    end
+  ) order by s.kind) into v_system_rows
   from public.homesrolo_homeowner_systems s
   where s.home_ref = p_home_ref;
   v_result := jsonb_build_object(
-    'home', to_jsonb(v_home),
-    'property_facts', to_jsonb(v_facts),
-    'systems', v_system_rows
+    'homeRef', v_home.home_ref,
+    'revision', v_home.record_revision,
+    'address', jsonb_build_object(
+      'line1', v_home.address_line_1,
+      'line2', v_home.address_line_2,
+      'city', v_home.address_city,
+      'regionCode', v_home.address_region_code,
+      'postalCode', v_home.address_postal_code,
+      'countryCode', v_home.address_country_code
+    ),
+    'homeType', v_facts.home_type,
+    'yearBuilt', case when v_facts.year_built_value is null then null else jsonb_build_object(
+      'value', v_facts.year_built_value,
+      'precision', v_facts.year_built_precision
+    ) end,
+    'systems', v_system_rows,
+    'source', 'homeowner_recollection',
+    'updatedAt', v_home.record_updated_at
   );
   insert into public.homesrolo_homeowner_command_receipts (
     principal_ref, command_ref, action, command_digest, result, created_at, home_ref
@@ -468,11 +543,34 @@ begin
       updated_at = greatest(updated_at, p_requested_at)
   where home_ref = p_home_ref;
 
-  select jsonb_agg(to_jsonb(s) order by s.kind) into v_system_rows
+  select jsonb_agg(jsonb_build_object(
+    'system_ref', s.system_ref,
+    'home_ref', s.home_ref,
+    'controller_principal_ref', s.controller_principal_ref,
+    'kind', s.kind,
+    'present', s.present,
+    'installed_or_replaced_year_value', s.installed_or_replaced_year_value,
+    'installed_or_replaced_year_precision', s.installed_or_replaced_year_precision,
+    'source', s.source,
+    'revision', s.revision,
+    'created_at', s.created_at,
+    'updated_at', s.updated_at
+  ) order by s.kind) into v_system_rows
   from public.homesrolo_homeowner_systems s
   where s.home_ref = p_home_ref;
   v_result := jsonb_build_object(
-    'property_facts', to_jsonb(v_facts),
+    'property_facts', jsonb_build_object(
+      'property_facts_ref', v_facts.property_facts_ref,
+      'home_ref', v_facts.home_ref,
+      'controller_principal_ref', v_facts.controller_principal_ref,
+      'home_type', v_facts.home_type,
+      'year_built_value', v_facts.year_built_value,
+      'year_built_precision', v_facts.year_built_precision,
+      'source', v_facts.source,
+      'revision', v_facts.revision,
+      'created_at', v_facts.created_at,
+      'updated_at', v_facts.updated_at
+    ),
     'systems', v_system_rows
   );
   insert into public.homesrolo_homeowner_command_receipts (

@@ -1,8 +1,12 @@
-/** POST one revision-backed private address and home-facts update. */
+/** GET/POST one controller-only private address and home-facts aggregate. */
 
 import { handleHomeownerRequest } from '../../../../../../lib/server/adapter.ts'
 
 export const dynamic = 'force-dynamic'
+
+export async function GET(request: Request): Promise<Response> {
+  return handleHomeownerRequest(request)
+}
 
 export async function POST(request: Request): Promise<Response> {
   return handleHomeownerRequest(request)

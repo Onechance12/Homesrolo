@@ -97,6 +97,7 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/session/route.ts',
     '../../app/api/v1/homes/route.ts',
     '../../app/api/v1/homes/[homeRef]/route.ts',
+    '../../app/api/v1/homes/[homeRef]/record/route.ts',
     '../../app/api/v1/homes/[homeRef]/intake/route.ts',
     '../../app/api/v1/homes/[homeRef]/projects/route.ts',
     '../../app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
@@ -150,6 +151,7 @@ test('protected reads are bounded 401 signed_out, cookie or not', async () => {
   for (const path of [
     '/api/v1/homes',
     `/api/v1/homes/${HOME}`,
+    `/api/v1/homes/${HOME}/record`,
     `/api/v1/homes/${HOME}/projects`,
     `/api/v1/homes/${HOME}/projects/hprj_${'r'.repeat(43)}`,
     `/api/v1/homes/${HOME}/artifacts`,

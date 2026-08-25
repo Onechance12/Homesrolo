@@ -357,9 +357,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function POST/, `${rel} revokes one session`)
       assert.match(content, /signOutHomeowner/, `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/record/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves one controller-only record read`)
       assert.match(content, /export async function POST/, `${rel} serves one revision-backed record update`)
-      assert.doesNotMatch(content, /export (async function|const) GET/,
-        `${rel} keeps the address inside the exact-home projection`)
+      assert.match(content, /handleHomeownerRequest/,
+        `${rel} delegates both methods to the exact authorization boundary`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/intake/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the intake command`)
       assert.doesNotMatch(content, /export (async function|const) GET/,
@@ -828,12 +829,20 @@ test('the Home Record exposes one private, editable address and saved home facts
   const details = read('app/home/[homeId]/details/page.tsx')
   const remote = read('lib/port/remote.ts')
 
-  assert.match(dashboard, /homeRecord=\{file\.source === 'server' \? file\.homeRecord : null\}/)
+  assert.match(dashboard, /port\.getHomeRecord\(homeId\)/)
+  assert.match(dashboard, /mode === 'remote' && homeRecord\.state\.status === 'ready'/,
+    'only an authorized dedicated read can expose the profile card')
   assert.match(experience, /Your private home details/)
+  assert.match(experience, /\{homeRecord \? \(/,
+    'synthetic and unauthorized records expose no private-details affordance')
   assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/details`\}/)
   assert.match(experience, /Your full address stays inside this signed-in Home Record/)
   assert.match(details, /Property address[\s\S]*Home facts[\s\S]*Major systems/)
-  assert.match(details, /port\.updateHomeRecord\(home\.homeRef/)
+  assert.match(details, /port\.getHomeRecord\(homeId\)/,
+    'a direct edit URL must first pass the controller-only record read')
+  assert.match(details, /Home details are controller-only/)
+  assert.match(details, /sample record does not include an editable address/)
+  assert.match(details, /port\.updateHomeRecord\(profile\.homeRef/)
   assert.match(details, /expectedRevision: profile\.revision/,
     'edits use the exact revision returned by the last Home Record read')
   assert.match(remote, /path: `\$\{API\}\/homes\/\$\{ref\}\/record`/)

@@ -8,6 +8,7 @@
  *   GET  /api/v1/session          → decodeSession
  *   GET  /api/v1/homes            → decodeServerHomeSummary[]
  *   GET  /api/v1/homes/{homeRef}  → decodeServerHomeView
+ *   GET  /api/v1/homes/{homeRef}/record → decodeHomeRecordProfile
  *   POST /api/v1/homes            → 201 decodeServerHomeSummary
  *   POST /api/v1/homes/{homeRef}/intake → 201 decodeRecordedHomeIntake
  *   POST /api/v1/homes/{homeRef}/record → decodeHomeRecordProfile
@@ -360,6 +361,19 @@ export function createRemotePort(
       const ref = homeRefSegment(homeRef)
       if (!ref) return { ok: false, error: 'not_found' }
       return call({ method: 'GET', path: `${API}/homes/${ref}` }, decodeServerHomeView)
+    },
+
+    async getHomeRecord(homeRef) {
+      const ref = homeRefSegment(homeRef)
+      if (!ref) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${ref}/record` },
+        decodeHomeRecordProfile,
+      )
+      if (result.ok && result.value.homeRef !== ref) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
     },
 
     async createHome(input) {

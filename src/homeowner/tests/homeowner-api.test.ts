@@ -414,18 +414,51 @@ test('exact home read rechecks membership and projects no authority or storage f
   assert.equal('storageObjectRef' in view, false)
 })
 
-test('exact home read returns the private address and saved facts only through the profile port', async () => {
+test('generic exact-home read preserves the address-free v1 projection', async () => {
+  let profileReads = 0
   const profilePort: HomeownerHomeRecordProfilePort = {
-    async readHomeRecordProfile() { return homeRecordProfile },
+    async readHomeRecordProfile() { profileReads += 1; return homeRecordProfile },
     async updateHomeRecordProfile() { throw new Error('not used') },
   }
   const view = await service({ homeRecordProfile: profilePort }).readHome(context, homeRef)
-  assert.equal(view.homeRecord?.address?.line1, '123 Main Street')
-  assert.equal(view.homeRecord?.homeType, 'house')
-  assert.equal(view.homeRecord?.systems.length, HOMEOWNER_SYSTEM_KINDS.length)
+  assert.equal('homeRecord' in view, false)
+  assert.equal(profileReads, 0, 'the compatibility read does not retrieve exact address data')
   assert.equal(JSON.stringify(view).includes(principalRef), false)
+  assert.equal(JSON.stringify(view).includes('123 Main Street'), false)
   assert.equal(JSON.stringify(await service().listHomes(context)).includes('123 Main Street'), false,
     'the exact address never enters the home-list projection')
+})
+
+test('dedicated Home Record read is controller-only and returns the private profile', async () => {
+  let observedAction: string | null = null
+  const profilePort: HomeownerHomeRecordProfilePort = {
+    async readHomeRecordProfile(grant) {
+      observedAction = grant.action
+      return homeRecordProfile
+    },
+    async updateHomeRecordProfile() { throw new Error('not used') },
+  }
+  const profile = await service({ persistence: true, homeRecordProfile: profilePort })
+    .readHomeRecord(context, homeRef)
+  assert.equal(profile.address?.line1, '123 Main Street')
+  assert.equal(profile.homeType, 'house')
+  assert.equal(profile.systems.length, HOMEOWNER_SYSTEM_KINDS.length)
+  assert.equal(observedAction, 'home_record.read')
+
+  for (const role of ['member', 'viewer'] as const) {
+    const deniedRepository = repository({
+      async readMembership() { return { ...membership, role } },
+    })
+    await assert.rejects(
+      service({
+        repository: deniedRepository,
+        persistence: true,
+        homeRecordProfile: profilePort,
+      })
+        .readHomeRecord(context, homeRef),
+      (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+    )
+  }
 })
 
 test('home record updates are controller-only, revision-backed, and server-timed', async () => {
@@ -740,7 +773,6 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
     warrantyCount: 0,
     maintenanceCount: 0,
     updatedAt: now,
-    homeRecord: null,
   }
   assert.ok(homeownerApiHomeViewSchema.parse(base))
   for (const extra of [
@@ -749,6 +781,7 @@ test('strict browser projections reject raw URLs, provider ids, and extra author
     { publicUrl: 'https://example.com/private.pdf' },
     { verifiedOwner: true },
     { controllerPrincipalRef: principalRef },
+    { homeRecord: homeRecordProfile },
   ]) {
     assert.throws(() => homeownerApiHomeViewSchema.parse({ ...base, ...extra }))
   }

@@ -41,9 +41,17 @@ test('Home Record update is exact-controller, receipt-backed, and optimistic', (
   assert.match(functionBody, /home_record_revision_conflict/)
   assert.match(functionBody, /action = 'home_record\.update'/)
   assert.match(functionBody, /v_receipt\.home_ref is distinct from p_home_ref/)
+  assert.match(functionBody, /v_receipt\.result->>'homeRef' is distinct from p_home_ref/)
   assert.match(functionBody, /p_address_country_code is null/)
   assert.match(functionBody, /p_systems is null/)
   assert.match(functionBody, /record_revision = record_revision \+ 1/)
+  assert.match(functionBody, /interval '30 days'/)
+  assert.match(functionBody, /offset 63/,
+    'a home retains at most 64 exact-address update receipts after insertion')
+  assert.match(functionBody, /'homeRef', v_home\.home_ref[\s\S]*'updatedAt', v_home\.record_updated_at/,
+    'the receipt contains only the browser-safe Home Record v1 result')
+  assert.doesNotMatch(functionBody, /to_jsonb\s*\(/,
+    'rowtype expansion must not make future private columns enter a receipt')
   assert.ok(
     functionBody.indexOf("role = 'workspace_controller'")
       < functionBody.indexOf("action = 'home_record.update'"),
@@ -63,7 +71,11 @@ test('Home Record reads use one database snapshot with a fresh membership check'
   assert.match(readFunction, /home_ref = p_home_ref/)
   assert.match(readFunction, /revision = p_membership_revision/)
   assert.match(readFunction, /state = 'active'/)
-  assert.match(readFunction, /role in \('workspace_controller', 'member', 'viewer'\)/)
+  assert.match(readFunction, /role = 'workspace_controller'/)
+  assert.doesNotMatch(readFunction, /role in \([^)]*member|role in \([^)]*viewer/,
+    'the database repeats the controller-only read check')
+  assert.doesNotMatch(readFunction, /to_jsonb\s*\(/,
+    'future database columns cannot silently enter the browser projection')
   assert.match(migration, /revoke all on function public\.homesrolo_read_home_record[\s\S]*from public, anon, authenticated/)
   assert.match(migration, /grant execute on function public\.homesrolo_read_home_record[\s\S]*to service_role/)
 
@@ -74,6 +86,22 @@ test('Home Record reads use one database snapshot with a fresh membership check'
   assert.match(providerRead, /rpc\('homesrolo_read_home_record'/)
   assert.doesNotMatch(providerRead, /Promise\.all|\.from\(/,
     'the aggregate must not be assembled from separately committed reads')
+
+  const providerHomeRead = provider.slice(
+    provider.indexOf('async readHome(grant'),
+    provider.indexOf('async readPropertyFacts'),
+  )
+  assert.match(providerHomeRead,
+    /\.select\('home_ref,created_by_principal_ref,display_label,private_location_label,created_at,updated_at'\)/)
+  assert.doesNotMatch(providerHomeRead, /\.select\('\*'\)|address_line_/,
+    'generic home summaries never retrieve the exact address')
+})
+
+test('Home Record receipt storage is indexed, bounded, and explicitly projected', () => {
+  assert.match(migration,
+    /create index if not exists homesrolo_homeowner_command_receipts_home_ref_idx[\s\S]*\(home_ref\)/)
+  assert.doesNotMatch(migration, /to_jsonb\s*\(/,
+    'all affected RPC receipts use explicit field projections')
 })
 
 test('legacy intake participates in the same aggregate revision fence', () => {

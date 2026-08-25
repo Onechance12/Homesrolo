@@ -3,7 +3,6 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import {
   HOMEOWNER_RUNTIME_VERSION,
-  HOMEOWNER_SYSTEM_KINDS,
   homeownerArtifactCommandIntent,
   homeownerArtifactMetadataSchema,
   homeownerArtifactUploadReservationSchema,
@@ -211,50 +210,52 @@ function systemFromRow(input: unknown): HomeownerSystem {
   })
 }
 
-function homeRecordProfileFromRows(
-  homeInput: unknown,
-  facts: ReturnType<typeof propertyFactsFromRow> | null,
-  storedSystems: readonly HomeownerSystem[],
-): HomeownerHomeRecordProfile {
-  const homeRow = record(homeInput)
-  const homeRef = requiredString(homeRow, 'home_ref')
-  if (facts && facts.homeRef !== homeRef) throw new HomeownerApiError('unavailable')
-  if (storedSystems.some(system => system.homeRef !== homeRef)) {
+function homeRecordApproximateYear(input: unknown) {
+  if (input === null) return null
+  const row = record(input)
+  const precision = requiredString(row, 'precision')
+  if (precision !== 'exact' && precision !== 'approximate') {
     throw new HomeownerApiError('unavailable')
   }
+  return { value: requiredNumber(row, 'value'), precision }
+}
 
-  const line1 = nullableString(homeRow, 'address_line_1')
-  const address = line1 === null ? null : {
-    line1,
-    line2: nullableString(homeRow, 'address_line_2'),
-    city: requiredString(homeRow, 'address_city'),
-    regionCode: requiredString(homeRow, 'address_region_code'),
-    postalCode: requiredString(homeRow, 'address_postal_code'),
-    countryCode: requiredString(homeRow, 'address_country_code'),
-  }
-  const systems = HOMEOWNER_SYSTEM_KINDS.map(kind => {
-    const stored = storedSystems.find(system => system.kind === kind)
-    return stored ? {
-      kind: stored.kind,
-      present: stored.present,
-      installedOrReplacedYear: stored.installedOrReplacedYear,
-    } : {
-      kind,
-      present: 'unknown' as const,
-      installedOrReplacedYear: null,
+/** Parse only the explicit browser-safe v1 projection returned by the profile RPCs. */
+function homeRecordProfileFromResult(input: unknown): HomeownerHomeRecordProfile {
+  const row = record(input)
+  const addressInput = row.address
+  const address = addressInput === null ? null : (() => {
+    const value = record(addressInput)
+    return {
+      line1: requiredString(value, 'line1'),
+      line2: nullableString(value, 'line2'),
+      city: requiredString(value, 'city'),
+      regionCode: requiredString(value, 'regionCode'),
+      postalCode: requiredString(value, 'postalCode'),
+      countryCode: requiredString(value, 'countryCode'),
+    }
+  })()
+  if (!Array.isArray(row.systems)) throw new HomeownerApiError('unavailable')
+  const systems = row.systems.map(inputSystem => {
+    const system = record(inputSystem)
+    return {
+      kind: requiredString(system, 'kind'),
+      present: requiredString(system, 'present'),
+      installedOrReplacedYear: homeRecordApproximateYear(
+        system.installedOrReplacedYear,
+      ),
     }
   })
-
   return homeownerHomeRecordProfileSchema.parse({
     recordVersion: HOME_RECORD_PROFILE_VERSION,
-    homeRef,
-    revision: requiredNumber(homeRow, 'record_revision'),
+    homeRef: requiredString(row, 'homeRef'),
+    revision: requiredNumber(row, 'revision'),
     address,
-    homeType: facts?.homeType ?? 'unknown',
-    yearBuilt: facts?.yearBuilt ?? null,
+    homeType: requiredString(row, 'homeType'),
+    yearBuilt: homeRecordApproximateYear(row.yearBuilt),
     systems,
-    source: 'homeowner_recollection',
-    updatedAt: canonicalInstant(homeRow, 'record_updated_at'),
+    source: requiredString(row, 'source'),
+    updatedAt: canonicalInstant(row, 'updatedAt'),
   })
 }
 
@@ -474,7 +475,7 @@ export class SupabaseHomeownerProvider implements
   async readHome(grant: AuthorizedHomeownerWorkspace) {
     const { data, error } = await this.#client
       .from('homesrolo_private_homes')
-      .select('*')
+      .select('home_ref,created_by_principal_ref,display_label,private_location_label,created_at,updated_at')
       .eq('home_ref', grant.homeRef)
       .maybeSingle()
     if (error) throw new HomeownerApiError('unavailable')
@@ -501,7 +502,9 @@ export class SupabaseHomeownerProvider implements
     return data.map(systemFromRow)
   }
 
-  async readHomeRecordProfile(grant: AuthorizedHomeownerWorkspace) {
+  async readHomeRecordProfile(
+    grant: Parameters<HomeownerHomeRecordProfilePort['readHomeRecordProfile']>[0],
+  ) {
     const { data, error } = await this.#client.rpc('homesrolo_read_home_record', {
       p_principal_ref: grant.principalRef,
       p_home_ref: grant.homeRef,
@@ -509,13 +512,7 @@ export class SupabaseHomeownerProvider implements
       p_membership_revision: grant.membershipRevision,
     })
     if (error) throw new HomeownerApiError('unavailable')
-    const result = record(data)
-    if (!Array.isArray(result.systems)) throw new HomeownerApiError('unavailable')
-    return homeRecordProfileFromRows(
-      result.home,
-      result.property_facts === null ? null : propertyFactsFromRow(result.property_facts),
-      result.systems.map(systemFromRow),
-    )
+    return homeRecordProfileFromResult(data)
   }
 
   async listProjects(grant: AuthorizedHomeownerWorkspace) {
@@ -1235,13 +1232,7 @@ export class SupabaseHomeownerProvider implements
       }
       throw new HomeownerApiError('unavailable')
     }
-    const result = record(data)
-    if (!Array.isArray(result.systems)) throw new HomeownerApiError('unavailable')
-    return homeRecordProfileFromRows(
-      result.home,
-      propertyFactsFromRow(result.property_facts),
-      result.systems.map(systemFromRow),
-    )
+    return homeRecordProfileFromResult(data)
   }
 
   async reserveArtifactUpload(

@@ -3321,9 +3321,10 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
   color: var(--ink);
   font-style: normal;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .home-profile-card__address address strong { font-size: 1.05rem; }
-.home-profile-card__address p { margin: 0; color: var(--ink-muted); line-height: 1.6; }
+.home-profile-card__address p { margin: 0; color: var(--ink-soft); line-height: 1.6; }
 .home-profile-card__facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3348,7 +3349,7 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
 .home-details-page { display: grid; gap: 1rem; }
 .home-details-lead { display: grid; gap: 0.45rem; }
 .home-details-lead h1 { margin: 0; }
-.home-details-lead p { margin: 0; color: var(--ink-muted); line-height: 1.65; }
+.home-details-lead p { margin: 0; color: var(--ink-soft); line-height: 1.65; }
 .home-details-form { display: grid; gap: 1rem; }
 .home-details-form__section {
   display: grid;
@@ -3361,7 +3362,7 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
 .home-details-form__section header { display: grid; gap: 0.25rem; }
 .home-details-form__section h2,
 .home-details-form__section h3 { margin: 0; }
-.home-details-form__section header p { margin: 0; color: var(--ink-muted); font-size: 0.8rem; line-height: 1.55; }
+.home-details-form__section header p { margin: 0; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.55; }
 .home-details-form__fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3388,7 +3389,7 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
   border-radius: 0.55rem;
   background: var(--brand-soft);
   padding: 0.75rem 0.85rem;
-  color: var(--ink-muted);
+  color: var(--ink-soft);
   font-size: 0.75rem;
   line-height: 1.55;
 }

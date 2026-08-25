@@ -14,16 +14,19 @@ Measurements are intentionally outside this slice.
 ## Privacy boundary
 
 The exact address is stored on `homesrolo_private_homes`, which already has RLS
-enabled and grants table access only to `service_role`. It is returned only by
-the exact-home authenticated read. `GET /api/v1/homes` continues to return the
-homeowner-chosen name and general city/state label; it never returns the exact
-address.
+enabled and grants table access only to `service_role`. It is returned only to
+an active workspace controller by `GET /api/v1/homes/{homeRef}/record`.
+`GET /api/v1/homes` and `GET /api/v1/homes/{homeRef}` keep their original
+address-free v1 projections, so invited members/viewers and older clients never
+receive the exact address as part of routine workspace reads.
 
 The update receipt keeps the exact replay result in the same service-role-only
-table. It is explicitly keyed to `home_ref` with `ON DELETE CASCADE`, so deleting
-the home also removes this secondary address copy. The read RPC rechecks the
-exact active membership and returns the home, facts, and systems from one
-database snapshot.
+table. Its JSON is an explicit projection of the eight v1 response fields, not
+a database row expansion. It is keyed and indexed by `home_ref` with `ON DELETE
+CASCADE`, so deleting the home also removes this secondary address copy. Update
+traffic prunes receipts older than 30 days and caps retained update receipts at
+64 per home. The read RPC rechecks the exact active controller membership and
+returns the home, facts, and systems from one database snapshot.
 
 The address and facts remain homeowner-entered recollection. They do not prove
 ownership, property condition, value, code compliance, or insurance coverage.

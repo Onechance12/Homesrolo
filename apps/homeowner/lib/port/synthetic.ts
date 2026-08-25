@@ -113,6 +113,11 @@ export const syntheticPort: HomeownerDataPort = {
     return home ? ok({ source: 'synthetic' as const, ...home }) : err('not_found')
   },
 
+  async getHomeRecord() {
+    await wait()
+    return err('unavailable')
+  },
+
   async createHome(input: CreateHomeInput) {
     await wait()
     const gate = requireSession<HomeListEntry>()

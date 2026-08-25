@@ -122,7 +122,6 @@ export interface ServerHomeView extends Omit<ServerHomeSummary, 'source'> {
   readonly warrantyCount: number
   readonly maintenanceCount: number
   readonly updatedAt: string
-  readonly homeRecord: HomeRecordProfile | null
 }
 
 export type HomeListEntry = ({ readonly source: 'synthetic' } & HomeSummary) | ServerHomeSummary
@@ -751,6 +750,7 @@ export interface HomeownerDataPort {
 
   listHomes(): Promise<PortResult<readonly HomeListEntry[]>>
   getHome(homeRef: string): Promise<PortResult<HomeViewEntry>>
+  getHomeRecord(homeRef: string): Promise<PortResult<HomeRecordProfile>>
   createHome(input: CreateHomeInput): Promise<PortResult<HomeListEntry>>
   recordInitialIntake(
     homeRef: string,

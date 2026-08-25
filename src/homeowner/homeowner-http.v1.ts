@@ -91,6 +91,10 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
         if (request.pathname === '/api/v1/homes') {
           return success(await service.listHomes(context))
         }
+        const homeRecordMatch = HOME_RECORD_PATH.exec(request.pathname)
+        if (homeRecordMatch?.[1]) {
+          return success(await service.readHomeRecord(context, homeRecordMatch[1]))
+        }
         const homeMatch = HOME_PATH.exec(request.pathname)
         if (homeMatch?.[1]) {
           return success(await service.readHome(context, homeMatch[1]))

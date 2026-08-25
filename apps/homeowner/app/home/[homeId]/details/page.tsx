@@ -2,15 +2,11 @@
 
 import Link from 'next/link'
 import { use, useRef, useState, type FormEvent } from 'react'
-import { ErrorState, Skeleton } from '../../../../components/states.tsx'
+import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
-import { usePort } from '../../../../lib/port/provider.tsx'
-import type {
-  HomeRecordProfile,
-  HomeSystemKind,
-  ServerHomeView,
-} from '../../../../lib/port/types.ts'
+import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
+import type { HomeRecordProfile, HomeSystemKind } from '../../../../lib/port/types.ts'
 
 const SYSTEMS: readonly { readonly kind: HomeSystemKind; readonly label: string }[] = [
   { kind: 'roof', label: 'Roof' },
@@ -45,23 +41,6 @@ type SaveState =
   | { readonly kind: 'saved' }
   | { readonly kind: 'error'; readonly error: string }
 
-function emptyProfile(homeRef: string, updatedAt: string): HomeRecordProfile {
-  return {
-    homeRef,
-    revision: 1,
-    address: null,
-    homeType: 'unknown',
-    yearBuilt: null,
-    systems: SYSTEMS.map(system => ({
-      kind: system.kind,
-      present: 'unknown',
-      installedOrReplacedYear: null,
-    })),
-    source: 'homeowner_recollection',
-    updatedAt,
-  }
-}
-
 function draftFromProfile(profile: HomeRecordProfile): DetailsDraft {
   return {
     line1: profile.address?.line1 ?? '',
@@ -91,9 +70,8 @@ function validYear(value: string, currentYear: number): boolean {
   return Number.isInteger(year) && year >= 1800 && year <= currentYear
 }
 
-function HomeDetailsForm({ home }: { readonly home: ServerHomeView }) {
+function HomeDetailsForm({ initial }: { readonly initial: HomeRecordProfile }) {
   const port = usePort()
-  const initial = home.homeRecord ?? emptyProfile(home.homeRef, home.updatedAt)
   const [profile, setProfile] = useState(initial)
   const [draft, setDraft] = useState(() => draftFromProfile(initial))
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
@@ -139,7 +117,7 @@ function HomeDetailsForm({ home }: { readonly home: ServerHomeView }) {
     const commandRef = commandRefForAttempt(attemptRef.current)
     attemptRef.current = commandRef
     setSave({ kind: 'saving' })
-    const result = await port.updateHomeRecord(home.homeRef, {
+    const result = await port.updateHomeRecord(profile.homeRef, {
       commandRef,
       expectedRevision: profile.revision,
       address: {
@@ -323,7 +301,7 @@ function HomeDetailsForm({ home }: { readonly home: ServerHomeView }) {
         <button className="btn btn--primary" type="submit" disabled={save.kind === 'saving'}>
           {save.kind === 'saving' ? 'Saving…' : 'Save home details'}
         </button>
-        <Link className="btn btn--quiet" href={`/home/${home.homeRef}`}>Back to Home Record</Link>
+        <Link className="btn btn--quiet" href={`/home/${profile.homeRef}`}>Back to Home Record</Link>
       </div>
     </form>
   )
@@ -332,16 +310,42 @@ function HomeDetailsForm({ home }: { readonly home: ServerHomeView }) {
 export default function HomeDetailsPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
-  const home = usePortCall(() => port.getHome(homeId))
+  const mode = usePortMode()
+  const record = usePortCall(() => mode === 'remote'
+    ? port.getHomeRecord(homeId)
+    : Promise.resolve({ ok: false as const, error: 'unavailable' as const }))
 
-  if (home.state.status === 'loading') {
+  if (mode !== 'remote') {
+    return (
+      <div className="home-details-page">
+        <Link className="backlink" href={`/home/${homeId}`}>← Home Record</Link>
+        <EmptyState
+          title="Home details are private"
+          body="The sample record does not include an editable address or private home details."
+          action={<Link className="btn btn--quiet" href={`/home/${homeId}`}>Back to Home Record</Link>}
+        />
+      </div>
+    )
+  }
+  if (record.state.status === 'loading') {
     return <div className="panel"><Skeleton lines={7} label="Opening home details" /></div>
   }
-  if (home.state.status === 'error') return <ErrorState retry={home.retry} error={home.state.error} />
-  if (home.state.status !== 'ready') return null
-  if (home.state.value.source !== 'server') {
-    return <ErrorState retry={home.retry} error="unavailable" />
+  if (record.state.status === 'error' && record.state.error === 'forbidden') {
+    return (
+      <div className="home-details-page">
+        <Link className="backlink" href={`/home/${homeId}`}>← Home Record</Link>
+        <EmptyState
+          title="Home details are controller-only"
+          body="Only the current workspace controller can view or edit the exact address and private home profile."
+          action={<Link className="btn btn--quiet" href={`/home/${homeId}`}>Back to Home Record</Link>}
+        />
+      </div>
+    )
   }
+  if (record.state.status === 'error') {
+    return <ErrorState retry={record.retry} error={record.state.error} />
+  }
+  if (record.state.status !== 'ready') return null
 
   return (
     <div className="home-details-page">
@@ -351,7 +355,7 @@ export default function HomeDetailsPage({ params }: { params: Promise<{ homeId: 
         <h1>Home details</h1>
         <p>Keep the address, basic facts, and major systems attached to this home’s history.</p>
       </header>
-      <HomeDetailsForm home={home.state.value} />
+      <HomeDetailsForm initial={record.state.value} />
     </div>
   )
 }

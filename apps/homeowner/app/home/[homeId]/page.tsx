@@ -16,6 +16,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   const port = usePort()
   const session = useSession()
   const home = usePortCall(() => port.getHome(homeId))
+  const homeRecord = usePortCall(() => port.getHomeRecord(homeId))
   const projects = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
   const uploadsEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.uploads
@@ -48,7 +49,8 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
     retryCheckups()
   }, [checkupsEnabled, retryCheckups])
 
-  if (home.state.status === 'loading' || projects.state.status === 'loading') {
+  if (home.state.status === 'loading' || projects.state.status === 'loading'
+    || (mode === 'remote' && homeRecord.state.status === 'loading')) {
     return <div className="panel"><Skeleton lines={7} label="Opening the Home Record" /></div>
   }
   if (home.state.status === 'error') {
@@ -85,7 +87,9 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
       label={homeLabel(file)}
       locality={homeLocality(file)}
       progress={progress}
-      homeRecord={file.source === 'server' ? file.homeRecord : null}
+      homeRecord={mode === 'remote' && homeRecord.state.status === 'ready'
+        ? homeRecord.state.value
+        : null}
       uploadsEnabled={uploadsEnabled}
       checkupsEnabled={checkupsEnabled}
       synthetic={mode === 'synthetic'}

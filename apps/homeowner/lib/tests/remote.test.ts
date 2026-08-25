@@ -89,18 +89,6 @@ const HOME_VIEW = {
   warrantyCount: 2,
   maintenanceCount: 4,
   updatedAt: '2026-08-10T16:00:00.000Z',
-  homeRecord: {
-    homeRef: HOME,
-    revision: 2,
-    address: null,
-    homeType: 'house',
-    yearBuilt: { value: 1987, precision: 'approximate' },
-    systems: [
-      'roof', 'heating', 'cooling', 'water_heater', 'gutters', 'foundation',
-    ].map(kind => ({ kind, present: 'unknown', installedOrReplacedYear: null })),
-    source: 'homeowner_recollection',
-    updatedAt: '2026-08-10T16:00:00.000Z',
-  },
 }
 
 const PROJECT = REF('hprj', 'r')
@@ -359,7 +347,6 @@ test('the home view accepts exactly HomeownerApiHomeView', async () => {
   if (result.value.source !== 'server') return
   assert.equal(result.value.projectCount, 3)
   assert.equal(result.value.maintenanceCount, 4)
-  assert.equal(result.value.homeRecord?.homeType, 'house')
   assert.equal(result.value.updatedAt, '2026-08-10T16:00:00.000Z')
 
   const rejected: readonly unknown[] = [
@@ -367,6 +354,7 @@ test('the home view accepts exactly HomeownerApiHomeView', async () => {
     { ...HOME_VIEW, yearBuilt: 1987 },                             // pre-PR#8 field
     { ...HOME_VIEW, keyFacts: [] },                                // pre-PR#8 field
     { ...HOME_VIEW, homeType: 'house' },                           // pre-PR#8 field
+    { ...HOME_VIEW, homeRecord: { homeRef: HOME } },               // private profile has its own route
     { ...HOME_VIEW, projectCount: -1 },                            // negative count
     { ...HOME_VIEW, updatedAt: '2026-08-10T16:00:00+02:00' },      // offset not allowed
     { ...HOME_VIEW, updatedAt: '2026-08-10' },                     // date is not a datetime
@@ -601,6 +589,24 @@ const HOME_RECORD_VIEW = {
   source: 'homeowner_recollection' as const,
   updatedAt: '2026-08-11T17:00:00.000Z',
 }
+
+test('getHomeRecord uses the dedicated exact-home read and rejects cross-home output', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    return { kind: 'reply', status: 200, body: { data: HOME_RECORD_VIEW } }
+  })
+  assert.deepEqual(await port.getHomeRecord(HOME), { ok: true, value: HOME_RECORD_VIEW })
+  assert.deepEqual(requests, [{ method: 'GET', path: `/api/v1/homes/${HOME}/record` }])
+
+  assert.deepEqual(await port.getHomeRecord('hhom_short'), { ok: false, error: 'not_found' })
+  const wrongHome = createRemotePort(transportReturning(200, {
+    data: { ...HOME_RECORD_VIEW, homeRef: REF('hhom', 'x') },
+  }))
+  assert.deepEqual(await wrongHome.getHomeRecord(HOME), { ok: false, error: 'invalid' })
+  const forbidden = createRemotePort(transportReturning(403, { error: { code: 'forbidden' } }))
+  assert.deepEqual(await forbidden.getHomeRecord(HOME), { ok: false, error: 'forbidden' })
+})
 
 test('updateHomeRecord sends one normalized exact-home revision command', async () => {
   const requests: TransportRequest[] = []

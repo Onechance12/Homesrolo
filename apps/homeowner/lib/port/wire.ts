@@ -329,7 +329,6 @@ export const decodeServerHomeView: Decoder<ServerHomeView> = (value, at) => {
     warrantyCount: countInt,
     maintenanceCount: countInt,
     updatedAt: utcInstant,
-    homeRecord: nullable(decodeHomeRecordProfile),
   })(value, at)
   return { source: 'server', ...decoded }
 }

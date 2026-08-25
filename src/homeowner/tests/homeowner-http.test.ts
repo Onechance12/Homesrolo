@@ -183,20 +183,24 @@ const request = (overrides: Partial<Parameters<ReturnType<typeof handler>>[0]> =
   ...overrides,
 })
 
-test('browser reads, including exact-home artifact metadata, use one safe no-store envelope', async () => {
+test('browser reads, including the controller-only Home Record, use one safe no-store envelope', async () => {
   const handle = handler()
   const session = await handle(request())
   const homes = await handle(request({ pathname: '/api/v1/homes' }))
   const home = await handle(request({ pathname: `/api/v1/homes/${homeRef}` }))
+  const record = await handle(request({ pathname: `/api/v1/homes/${homeRef}/record` }))
   const artifacts = await handle(request({ pathname: `/api/v1/homes/${homeRef}/artifacts` }))
 
-  for (const response of [session, homes, home, artifacts]) {
+  for (const response of [session, homes, home, record, artifacts]) {
     assert.equal(response.status, 200)
     assert.deepEqual(Object.keys(response.body as object), ['data'])
     assert.equal(response.headers['cache-control'], 'no-store')
     assert.equal(response.headers['x-content-type-options'], 'nosniff')
   }
   assert.equal((home.body as { data: { homeRef: string } }).data.homeRef, homeRef)
+  assert.equal(JSON.stringify(home.body).includes('homeRecord'), false,
+    'the generic v1 home response remains backward-compatible and address-free')
+  assert.equal((record.body as { data: { homeRef: string } }).data.homeRef, homeRef)
 })
 
 test('missing or invalid server session is signed out without leaking a principal', async () => {
@@ -216,6 +220,11 @@ test('browser identity claims in query or body are rejected before service acces
   for (const attemptedClaim of [
     request({ pathname: '/api/v1/homes', search: `?principalRef=${principalRef}` }),
     request({ pathname: '/api/v1/homes', hasBody: true }),
+    request({
+      pathname: `/api/v1/homes/${homeRef}/record`,
+      search: `?principalRef=${principalRef}`,
+    }),
+    request({ pathname: `/api/v1/homes/${homeRef}/record`, hasBody: true }),
   ]) {
     const response = await handle(attemptedClaim)
     assert.equal(response.status, 400)

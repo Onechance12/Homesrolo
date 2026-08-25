@@ -6,7 +6,6 @@ import {
   homeownerSystemKindSchema,
   homeownerUtcInstantSchema,
   type AuthorizedHomeownerAction,
-  type AuthorizedHomeownerWorkspace,
 } from './homeowner-runtime.v1.ts'
 
 export const HOME_RECORD_PROFILE_VERSION = 'home-record-profile.v1' as const
@@ -121,7 +120,7 @@ export function homeRecordProfileCommandIntent(
 
 export interface HomeownerHomeRecordProfilePort {
   readHomeRecordProfile(
-    grant: AuthorizedHomeownerWorkspace,
+    grant: AuthorizedHomeownerAction<'home_record.read'>,
   ): Promise<HomeownerHomeRecordProfile>
   updateHomeRecordProfile(input: {
     readonly grant: AuthorizedHomeownerAction<'home_record.update'>

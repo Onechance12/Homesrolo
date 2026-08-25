@@ -431,7 +431,6 @@ export const homeownerApiHomeViewSchema = homeownerApiHomeSummarySchema.extend({
   warrantyCount: z.number().int().min(0),
   maintenanceCount: z.number().int().min(0),
   updatedAt: homeownerUtcInstantSchema,
-  homeRecord: homeownerApiHomeRecordViewSchema.nullable(),
 }).strict()
 
 export type HomeownerApiHomeView = z.infer<typeof homeownerApiHomeViewSchema>
@@ -730,14 +729,11 @@ export class HomeownerApiService {
 
     const home = await this.#repository.readHome(decision)
     if (!home) throw new HomeownerApiError('not_found')
-    const [projects, artifacts, warranties, maintenance, homeRecord] = await Promise.all([
+    const [projects, artifacts, warranties, maintenance] = await Promise.all([
       this.#repository.listProjects(decision),
       this.#repository.listArtifactMetadata(decision),
       this.#repository.listWarranties(decision),
       this.#repository.listMaintenance(decision),
-      this.#homeRecordProfile
-        ? this.#homeRecordProfile.readHomeRecordProfile(decision)
-        : Promise.resolve(null),
     ])
 
     return homeownerApiHomeViewSchema.parse({
@@ -746,11 +742,26 @@ export class HomeownerApiService {
       documentCount: artifacts.length,
       warrantyCount: warranties.length + artifacts.filter(item => item.kind === 'warranty').length,
       maintenanceCount: maintenance.length,
-      updatedAt: homeRecord && homeRecord.updatedAt > home.updatedAt
-        ? homeRecord.updatedAt
-        : home.updatedAt,
-      homeRecord: homeRecord ? safeHomeRecord(homeRecord) : null,
+      updatedAt: home.updatedAt,
     })
+  }
+
+  /** Controller-only exact address and homeowner-recalled profile projection. */
+  async readHomeRecord(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+  ): Promise<HomeownerApiHomeRecordView> {
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'home_record.read')
+    if (!this.#capabilities.persistence || !this.#homeRecordProfile) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const profile = homeownerHomeRecordProfileSchema.parse(
+      await this.#homeRecordProfile.readHomeRecordProfile(grant),
+    )
+    if (profile.homeRef !== grant.homeRef || profile.source !== 'homeowner_recollection') {
+      throw new HomeownerApiError('unavailable')
+    }
+    return safeHomeRecord(profile)
   }
 
   async listProjects(

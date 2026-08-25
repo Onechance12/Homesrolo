@@ -86,6 +86,7 @@ export function parseHomeownerMembership(input: unknown): HomeownerMembership {
 export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'workspace.read',
   'workspace.update',
+  'home_record.read',
   'home_record.update',
   'intake.record',
   'project.create',
