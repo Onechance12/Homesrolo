@@ -5,6 +5,7 @@ import path from 'node:path'
 
 const APP = path.resolve(import.meta.dirname, '../..')
 const read = (relative: string) => readFileSync(path.join(APP, relative), 'utf8')
+const readRepository = (relative: string) => readFileSync(path.join(APP, '../..', relative), 'utf8')
 
 function pngDimensions(relative: string) {
   const image = readFileSync(path.join(APP, relative))
@@ -54,8 +55,8 @@ test('offline support caches only the public shell and never a private Home Reco
   assert.match(installer, /Your private records still stay on the secure server—not in an offline browser cache\./)
 })
 
-test('the off-Render deployment is reproducible from the homeowner package', () => {
-  const configuration = read('netlify.toml')
+test('the off-Render deployment is reproducible from the repository root', () => {
+  const configuration = readRepository('netlify.toml')
   assert.match(configuration, /npm --prefix apps\/homeowner run build/)
   assert.match(configuration, /publish = "apps\/homeowner\/\.next"/)
   assert.match(configuration, /NODE_VERSION = "22"/)
