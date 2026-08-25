@@ -62,6 +62,7 @@ const project: HomeownerProject = {
   category: 'roofing',
   status: 'planned',
   summary: 'Comparing written proposals.',
+  revision: 1,
   createdAt: now,
   updatedAt: now,
 }

@@ -281,10 +281,15 @@ export interface ProjectSummary {
   readonly projectRef: string
   readonly homeRef: string
   readonly title: string
+  readonly category: ProjectCategory
   readonly trade: string
   /** Exact work date supplied by the homeowner, or null when it is not known. */
   readonly performedOn: string | null
   readonly status: ProjectStatus
+  readonly professionalLabel: string
+  readonly revision: number
+  readonly archived: boolean
+  readonly archivedAt: string | null
   readonly photoCount: number
   readonly documentCount: number
   readonly isSynthetic: boolean
@@ -327,6 +332,66 @@ export interface CreateProjectInput {
   readonly status: ProjectStatus
   readonly occurredOn?: string
   readonly summary: string
+}
+
+export interface UpdateProjectInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+  readonly title?: string
+  readonly category?: ProjectCategory
+  readonly status?: ProjectStatus
+  /** Null clears the known work date; omission preserves it. */
+  readonly occurredOn?: string | null
+  /** Null or an empty string clears homeowner-entered notes. */
+  readonly summary?: string | null
+  /** Null clears the homeowner-entered professional/company label. */
+  readonly professionalLabel?: string | null
+  readonly archived?: boolean
+}
+
+export type ProjectActivityKind = 'note' | 'milestone'
+
+export interface ProjectActivity {
+  readonly activityRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly kind: ProjectActivityKind
+  readonly body: string
+  readonly source: 'homeowner_entry'
+  readonly createdAt: string
+}
+
+export interface AddProjectActivityInput {
+  readonly commandRef: string
+  readonly kind: ProjectActivityKind
+  readonly body: string
+}
+
+export type ProjectItemKind = 'material' | 'decision' | 'wishlist'
+export type ProjectItemState = 'considering' | 'chosen' | 'purchased' | 'declined'
+
+export interface ProjectItem {
+  readonly itemRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly kind: ProjectItemKind
+  readonly label: string
+  readonly detail: string
+  readonly state: ProjectItemState
+  readonly source: 'homeowner_entry'
+  readonly revision: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface SaveProjectItemInput {
+  readonly commandRef: string
+  readonly itemRef?: string
+  readonly expectedRevision?: number
+  readonly kind: ProjectItemKind
+  readonly label: string
+  readonly detail?: string
+  readonly state: ProjectItemState
 }
 
 export type RoofingNeed = 'repair' | 'replacement' | 'inspection' | 'storm_damage' | 'not_sure'
@@ -672,6 +737,29 @@ export interface HomeownerDataPort {
     homeRef: string,
     input: CreateProjectInput,
   ): Promise<PortResult<ProjectSummary>>
+  updateProject(
+    homeRef: string,
+    projectRef: string,
+    input: UpdateProjectInput,
+  ): Promise<PortResult<Project>>
+  listProjectActivity(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<PortResult<readonly ProjectActivity[]>>
+  addProjectActivity(
+    homeRef: string,
+    projectRef: string,
+    input: AddProjectActivityInput,
+  ): Promise<PortResult<ProjectActivity>>
+  listProjectItems(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<PortResult<readonly ProjectItem[]>>
+  saveProjectItem(
+    homeRef: string,
+    projectRef: string,
+    input: SaveProjectItemInput,
+  ): Promise<PortResult<ProjectItem>>
   startRoofingProject(
     homeRef: string,
     input: StartRoofingProjectInput,

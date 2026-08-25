@@ -2,8 +2,8 @@
  * REMOTE ADAPTER — HomeownerDataPort over the same-origin /api/v1 JSON wire.
  *
  * Source of truth: src/homeowner/homeowner-api.v1.ts (PR #8 + PR #15). The
- * server defines authenticated home/project reads and three exact writes, and this adapter operates exactly
- * those:
+ * server defines authenticated home/project reads and bounded same-origin
+ * writes, and this adapter operates exactly those:
  *
  *   GET  /api/v1/session          → decodeSession
  *   GET  /api/v1/homes            → decodeServerHomeSummary[]
@@ -20,10 +20,9 @@
  * only through POST /api/v1/homes/{homeRef}/intake after the server returns
  * the exact homeRef.
  *
- * Every other port method — documents, warranties, timeline, and maintenance — returns 'unavailable' WITHOUT building
- * a request, because the server has not defined those routes and this client
- * does not decode guessed DTOs. When the server defines a route, the adapter
- * gains it together with its decoder.
+ * Any port method without a server route returns 'unavailable' without
+ * building a request. When the server defines a route, the adapter gains it
+ * together with its decoder.
  *
  * Enabled only when the runtime mode resolves to 'remote' (mode.ts; default
  * synthetic, unknown values fail closed). The adapter holds no state, invents
@@ -46,7 +45,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -59,6 +58,7 @@ const API = '/api/v1'
  */
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF = /^hprj_[A-Za-z0-9_-]{43}$/
+const PROJECT_ITEM_REF = /^hpit_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 const PHOTO_REF = /^hpho_[A-Za-z0-9_-]{43}$/
 const QUOTE_REF = /^hquo_[A-Za-z0-9_-]{43}$/
@@ -98,6 +98,98 @@ function boundedResearchText(value: string, maximum: number): string | null {
 
 function projectRefSegment(candidate: string): string | null {
   return PROJECT_REF.test(candidate) ? candidate : null
+}
+
+const PROJECT_CATEGORIES = [
+  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
+  'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
+] as const
+const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+
+function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>[2]) {
+  const body: Record<string, unknown> = {
+    commandRef: input.commandRef,
+    expectedRevision: input.expectedRevision,
+  }
+  if (!COMMAND_REF_PATTERN.test(input.commandRef)
+    || !Number.isInteger(input.expectedRevision)
+    || input.expectedRevision < 1) return null
+  let editableFieldCount = 0
+  if (Object.hasOwn(input, 'title')) {
+    if (typeof input.title !== 'string') return null
+    const title = input.title.trim()
+    if (title.length < 1 || title.length > 120) return null
+    body.title = title
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'category')) {
+    if (!input.category || !PROJECT_CATEGORIES.includes(input.category)) return null
+    body.category = input.category
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'status')) {
+    if (!input.status || !PROJECT_STATUSES.includes(input.status)) return null
+    body.status = input.status
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'occurredOn')) {
+    if (input.occurredOn !== null
+      && (typeof input.occurredOn !== 'string' || !validCalendarDate(input.occurredOn))) {
+      return null
+    }
+    body.occurredOn = input.occurredOn
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'summary')) {
+    if (input.summary !== null && typeof input.summary !== 'string') return null
+    const summary = input.summary?.trim() ?? null
+    if (summary !== null && summary.length > 2000) return null
+    body.summary = summary
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'professionalLabel')) {
+    if (input.professionalLabel !== null && typeof input.professionalLabel !== 'string') return null
+    const professionalLabel = input.professionalLabel?.trim() ?? null
+    if (professionalLabel !== null
+      && (professionalLabel.length < 1 || professionalLabel.length > 160)) return null
+    body.professionalLabel = professionalLabel
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'archived')) {
+    if (typeof input.archived !== 'boolean') return null
+    body.archived = input.archived
+    editableFieldCount += 1
+  }
+  return editableFieldCount > 0 ? body : null
+}
+
+function projectItemBody(input: Parameters<HomeownerDataPort['saveProjectItem']>[2]) {
+  const label = input.label.trim()
+  const detail = input.detail?.trim()
+  const itemRefSupplied = input.itemRef !== undefined
+  const revisionSupplied = input.expectedRevision !== undefined
+  if (!COMMAND_REF_PATTERN.test(input.commandRef)
+    || itemRefSupplied !== revisionSupplied
+    || (input.itemRef !== undefined && !PROJECT_ITEM_REF.test(input.itemRef))
+    || (input.expectedRevision !== undefined
+      && (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1))
+    || !['material', 'decision', 'wishlist'].includes(input.kind)
+    || !['considering', 'chosen', 'purchased', 'declined'].includes(input.state)
+    || label.length < 1 || label.length > 160
+    || (detail !== undefined && (detail.length < 1 || detail.length > 2000))) {
+    return null
+  }
+  return {
+    commandRef: input.commandRef,
+    ...(input.itemRef ? { itemRef: input.itemRef } : {}),
+    ...(input.expectedRevision === undefined
+      ? {}
+      : { expectedRevision: input.expectedRevision }),
+    kind: input.kind,
+    label,
+    ...(detail ? { detail } : {}),
+    state: input.state,
+  }
 }
 
 function quoteInputBody(input: {
@@ -506,6 +598,99 @@ export function createRemotePort(
         || result.value.trade !== trade[input.category]
         || result.value.status !== input.status
         || result.value.performedOn !== (occurredOn || null))) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async updateProject(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const body = projectUpdateBody(input)
+      if (!home || !project || !body) return { ok: false, error: 'invalid' }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/update`,
+        body,
+      }, decodeProject)
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project
+        || result.value.revision !== input.expectedRevision + 1)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProjectActivity(homeRef, projectRef) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/projects/${project}/activity` },
+        decodeList(decodeProjectActivity),
+      )
+      if (result.ok && result.value.some(entry => entry.homeRef !== home
+        || entry.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async addProjectActivity(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const body = input.body.trim()
+      if (!home || !project
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !['note', 'milestone'].includes(input.kind)
+        || body.length < 1 || body.length > 2000) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/activity`,
+        body: { commandRef: input.commandRef, kind: input.kind, body },
+      }, decodeProjectActivity, 201)
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project
+        || result.value.kind !== input.kind
+        || result.value.body !== body)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProjectItems(homeRef, projectRef) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project) return { ok: false, error: 'not_found' }
+      const result = await call(
+        { method: 'GET', path: `${API}/homes/${home}/projects/${project}/items` },
+        decodeList(decodeProjectItem),
+      )
+      if (result.ok && result.value.some(item => item.homeRef !== home
+        || item.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async saveProjectItem(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const body = projectItemBody(input)
+      if (!home || !project || !body) return { ok: false, error: 'invalid' }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/items`,
+        body,
+      }, decodeProjectItem, input.itemRef ? 200 : 201)
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project
+        || (input.itemRef !== undefined && result.value.itemRef !== input.itemRef)
+        || result.value.revision !== (input.expectedRevision === undefined
+          ? 1
+          : input.expectedRevision + 1))) {
         return { ok: false, error: 'invalid' }
       }
       return result

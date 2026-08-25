@@ -21,6 +21,7 @@ import {
   type HomeownerCommandPort,
   type HomeownerIdentityPort,
   type HomeownerPrivateObjectPort,
+  type AuthorizedHomeownerWorkspace,
   type HomeownerMembership,
   type HomeownerProject,
   type HomeownerRepositoryPort,
@@ -52,6 +53,18 @@ import {
   type HomeownerProjectQuote,
   type HomeownerProjectQuotePort,
 } from './homeowner-project-quotes.v1.ts'
+import {
+  appendHomeownerProjectActivityInputSchema,
+  homeownerProjectActivitySchema,
+  homeownerProjectItemSchema,
+  saveHomeownerProjectItemFieldsSchema,
+  saveHomeownerProjectItemInputSchema,
+  updateHomeownerProjectFieldsSchema,
+  updateHomeownerProjectInputSchema,
+  type HomeownerProjectActivity,
+  type HomeownerProjectItem,
+  type HomeownerProjectWorkspacePort,
+} from './homeowner-project-workspace.v1.ts'
 
 /**
  * Server application boundary for the private homeowner app.
@@ -181,6 +194,34 @@ export const homeownerApiStartRoofingProjectInputSchema = z.object({
 export const homeownerApiCreateProjectInputSchema =
   createHomeownerProjectInputSchema.omit({ requestedAt: true })
 
+export const homeownerApiUpdateProjectInputSchema =
+  updateHomeownerProjectFieldsSchema
+    .omit({ projectRef: true, requestedAt: true })
+    .superRefine((command, context) => {
+      const editableKeys = [
+        'title', 'category', 'status', 'occurredOn', 'summary', 'professionalLabel', 'archived',
+      ] as const
+      if (!editableKeys.some(key => Object.hasOwn(command, key))) {
+        context.addIssue({ code: 'custom', message: 'at least one project field must be supplied' })
+      }
+    })
+
+export const homeownerApiAppendProjectActivityInputSchema =
+  appendHomeownerProjectActivityInputSchema.omit({ projectRef: true, requestedAt: true })
+
+export const homeownerApiSaveProjectItemInputSchema =
+  saveHomeownerProjectItemFieldsSchema
+    .omit({ projectRef: true, requestedAt: true })
+    .superRefine((command, context) => {
+      if ((command.itemRef === undefined) !== (command.expectedRevision === undefined)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['expectedRevision'],
+          message: 'itemRef and expectedRevision must be supplied together',
+        })
+      }
+    })
+
 export const homeownerApiProjectViewSchema = z.object({
   projectRef: opaqueRef('hprj'),
   homeRef: opaqueRef('hhom'),
@@ -189,8 +230,44 @@ export const homeownerApiProjectViewSchema = z.object({
   status: homeownerProjectSchema.shape.status,
   occurredOn: homeownerProjectSchema.shape.occurredOn.nullable(),
   summary: z.string().trim().max(2000),
+  professionalLabel: z.string().trim().min(1).max(160).nullable(),
+  revision: z.number().int().min(1),
+  archived: z.boolean(),
+  archivedAt: homeownerUtcInstantSchema.nullable(),
   createdAt: homeownerUtcInstantSchema,
   updatedAt: homeownerUtcInstantSchema,
+}).strict().superRefine((project, context) => {
+  if (project.archived !== (project.archivedAt !== null)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['archivedAt'],
+      message: 'archived must match archivedAt',
+    })
+  }
+})
+
+export const homeownerApiProjectActivityViewSchema = z.object({
+  activityRef: homeownerProjectActivitySchema.shape.activityRef,
+  homeRef: homeownerProjectActivitySchema.shape.homeRef,
+  projectRef: homeownerProjectActivitySchema.shape.projectRef,
+  kind: homeownerProjectActivitySchema.shape.kind,
+  body: homeownerProjectActivitySchema.shape.body,
+  source: homeownerProjectActivitySchema.shape.source,
+  createdAt: homeownerProjectActivitySchema.shape.createdAt,
+}).strict()
+
+export const homeownerApiProjectItemViewSchema = z.object({
+  itemRef: homeownerProjectItemSchema.shape.itemRef,
+  homeRef: homeownerProjectItemSchema.shape.homeRef,
+  projectRef: homeownerProjectItemSchema.shape.projectRef,
+  kind: homeownerProjectItemSchema.shape.kind,
+  label: homeownerProjectItemSchema.shape.label,
+  detail: z.string().trim().max(2000),
+  state: homeownerProjectItemSchema.shape.state,
+  source: homeownerProjectItemSchema.shape.source,
+  revision: homeownerProjectItemSchema.shape.revision,
+  createdAt: homeownerProjectItemSchema.shape.createdAt,
+  updatedAt: homeownerProjectItemSchema.shape.updatedAt,
 }).strict()
 
 export type HomeownerApiStartRoofingProjectInput = z.infer<
@@ -200,6 +277,17 @@ export type HomeownerApiCreateProjectInput = z.infer<
   typeof homeownerApiCreateProjectInputSchema
 >
 export type HomeownerApiProjectView = z.infer<typeof homeownerApiProjectViewSchema>
+export type HomeownerApiUpdateProjectInput = z.infer<typeof homeownerApiUpdateProjectInputSchema>
+export type HomeownerApiAppendProjectActivityInput = z.infer<
+  typeof homeownerApiAppendProjectActivityInputSchema
+>
+export type HomeownerApiSaveProjectItemInput = z.infer<
+  typeof homeownerApiSaveProjectItemInputSchema
+>
+export type HomeownerApiProjectActivityView = z.infer<
+  typeof homeownerApiProjectActivityViewSchema
+>
+export type HomeownerApiProjectItemView = z.infer<typeof homeownerApiProjectItemViewSchema>
 
 export const homeownerApiArtifactViewSchema = z.object({
   artifactRef: opaqueRef('hart'),
@@ -338,6 +426,7 @@ export interface HomeownerApiServiceOptions {
   readonly commands: HomeownerCommandPort
   readonly privateObjects?: HomeownerPrivateObjectPort
   readonly projectQuotes?: HomeownerProjectQuotePort
+  readonly projectWorkspace?: HomeownerProjectWorkspacePort
   readonly checkupPhotos?: HomeownerCheckupPhotoPort
   readonly now: () => string
   /**
@@ -368,8 +457,42 @@ function safeProject(project: HomeownerProject): HomeownerApiProjectView {
     status: project.status,
     occurredOn: project.occurredOn ?? null,
     summary: project.summary ?? '',
+    professionalLabel: project.professionalLabel ?? null,
+    revision: project.revision,
+    archived: project.archivedAt !== undefined,
+    archivedAt: project.archivedAt ?? null,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+  })
+}
+
+function safeProjectActivity(input: HomeownerProjectActivity): HomeownerApiProjectActivityView {
+  const activity = homeownerProjectActivitySchema.parse(input)
+  return homeownerApiProjectActivityViewSchema.parse({
+    activityRef: activity.activityRef,
+    homeRef: activity.homeRef,
+    projectRef: activity.projectRef,
+    kind: activity.kind,
+    body: activity.body,
+    source: activity.source,
+    createdAt: activity.createdAt,
+  })
+}
+
+function safeProjectItem(input: HomeownerProjectItem): HomeownerApiProjectItemView {
+  const item = homeownerProjectItemSchema.parse(input)
+  return homeownerApiProjectItemViewSchema.parse({
+    itemRef: item.itemRef,
+    homeRef: item.homeRef,
+    projectRef: item.projectRef,
+    kind: item.kind,
+    label: item.label,
+    detail: item.detail ?? '',
+    state: item.state,
+    source: item.source,
+    revision: item.revision,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
   })
 }
 
@@ -462,6 +585,7 @@ export class HomeownerApiService {
   readonly #commands: HomeownerCommandPort
   readonly #privateObjects: HomeownerPrivateObjectPort | null
   readonly #projectQuotes: HomeownerProjectQuotePort | null
+  readonly #projectWorkspace: HomeownerProjectWorkspacePort | null
   readonly #checkupPhotos: HomeownerCheckupPhotoPort | null
   readonly #now: () => string
   readonly #capabilities: HomeownerApiCapabilities
@@ -472,6 +596,7 @@ export class HomeownerApiService {
     this.#commands = options.commands
     this.#privateObjects = options.privateObjects ?? null
     this.#projectQuotes = options.projectQuotes ?? null
+    this.#projectWorkspace = options.projectWorkspace ?? null
     this.#checkupPhotos = options.checkupPhotos ?? null
     this.#now = options.now
     this.#capabilities = homeownerApiCapabilitiesSchema.parse(options.capabilities)
@@ -581,10 +706,199 @@ export class HomeownerApiService {
   ): Promise<HomeownerApiProjectView> {
     const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
     if (!parsedProjectRef.success) throw new HomeownerApiError('invalid_request')
-    const projects = await this.listProjects(context, requestedHomeRef)
-    const project = projects.find(candidate => candidate.projectRef === parsedProjectRef.data)
-    if (!project) throw new HomeownerApiError('not_found')
-    return project
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    const project = await this.#exactProject(grant, parsedProjectRef.data)
+    return safeProject(project)
+  }
+
+  async updateProject(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    const parsedInput = homeownerApiUpdateProjectInputSchema.safeParse(input)
+    if (!parsedProjectRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const requestedAt = this.#now()
+    if (parsedInput.data.occurredOn
+      && parsedInput.data.occurredOn > requestedAt.slice(0, 10)) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'project.update')
+    if (!this.#capabilities.persistence || !this.#projectWorkspace) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const current = await this.#exactProject(grant, parsedProjectRef.data)
+    if (current.revision !== parsedInput.data.expectedRevision) {
+      throw new HomeownerApiError('conflict')
+    }
+    const command = updateHomeownerProjectInputSchema.parse({
+      ...parsedInput.data,
+      projectRef: parsedProjectRef.data,
+      requestedAt,
+    })
+    const updated = homeownerProjectSchema.parse(
+      await this.#projectWorkspace.updateProject({ grant, command }),
+    )
+
+    const expectedOccurredOn = Object.hasOwn(command, 'occurredOn')
+      ? command.occurredOn ?? undefined
+      : current.occurredOn
+    const expectedSummary = Object.hasOwn(command, 'summary')
+      ? command.summary || undefined
+      : current.summary
+    const expectedProfessionalLabel = Object.hasOwn(command, 'professionalLabel')
+      ? command.professionalLabel || undefined
+      : current.professionalLabel
+    const expectedArchivedAt = Object.hasOwn(command, 'archived')
+      ? command.archived
+        ? current.archivedAt ?? requestedAt
+        : undefined
+      : current.archivedAt
+    const coherent = updated.homeRef === grant.homeRef
+      && updated.projectRef === parsedProjectRef.data
+      && updated.controllerPrincipalRef === current.controllerPrincipalRef
+      && updated.title === (command.title ?? current.title)
+      && updated.category === (command.category ?? current.category)
+      && updated.status === (command.status ?? current.status)
+      && updated.occurredOn === expectedOccurredOn
+      && updated.summary === expectedSummary
+      && updated.professionalLabel === expectedProfessionalLabel
+      && updated.archivedAt === expectedArchivedAt
+      && updated.revision === current.revision + 1
+      && updated.createdAt === current.createdAt
+      && updated.updatedAt === requestedAt
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProject(updated)
+  }
+
+  async listProjectActivity(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+  ): Promise<readonly HomeownerApiProjectActivityView[]> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    if (!parsedProjectRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.persistence || !this.#projectWorkspace) {
+      throw new HomeownerApiError('unavailable')
+    }
+    await this.#exactProject(grant, parsedProjectRef.data)
+    const activity = await this.#projectWorkspace.listProjectActivity(
+      grant,
+      parsedProjectRef.data,
+    )
+    return activity.map(input => {
+      const entry = homeownerProjectActivitySchema.parse(input)
+      if (entry.homeRef !== grant.homeRef || entry.projectRef !== parsedProjectRef.data) {
+        throw new HomeownerApiError('unavailable')
+      }
+      return safeProjectActivity(entry)
+    })
+  }
+
+  async appendProjectActivity(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectActivityView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    const parsedInput = homeownerApiAppendProjectActivityInputSchema.safeParse(input)
+    if (!parsedProjectRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'project.activity.append',
+    )
+    if (!this.#capabilities.persistence || !this.#projectWorkspace) {
+      throw new HomeownerApiError('unavailable')
+    }
+    await this.#exactProject(grant, parsedProjectRef.data)
+    const command = appendHomeownerProjectActivityInputSchema.parse({
+      ...parsedInput.data,
+      projectRef: parsedProjectRef.data,
+      requestedAt: this.#now(),
+    })
+    const activity = homeownerProjectActivitySchema.parse(
+      await this.#projectWorkspace.appendProjectActivity({ grant, command }),
+    )
+    if (activity.homeRef !== grant.homeRef
+      || activity.projectRef !== parsedProjectRef.data
+      || activity.actorPrincipalRef !== grant.principalRef
+      || activity.kind !== command.kind
+      || activity.body !== command.body
+      || activity.createdAt !== command.requestedAt) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return safeProjectActivity(activity)
+  }
+
+  async listProjectItems(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+  ): Promise<readonly HomeownerApiProjectItemView[]> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    if (!parsedProjectRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'workspace.read')
+    if (!this.#capabilities.persistence || !this.#projectWorkspace) {
+      throw new HomeownerApiError('unavailable')
+    }
+    await this.#exactProject(grant, parsedProjectRef.data)
+    const items = await this.#projectWorkspace.listProjectItems(grant, parsedProjectRef.data)
+    return items.map(input => {
+      const item = homeownerProjectItemSchema.parse(input)
+      if (item.homeRef !== grant.homeRef || item.projectRef !== parsedProjectRef.data) {
+        throw new HomeownerApiError('unavailable')
+      }
+      return safeProjectItem(item)
+    })
+  }
+
+  async saveProjectItem(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedProjectRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiProjectItemView> {
+    const parsedProjectRef = opaqueRef('hprj').safeParse(requestedProjectRef)
+    const parsedInput = homeownerApiSaveProjectItemInputSchema.safeParse(input)
+    if (!parsedProjectRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'project.item.save')
+    if (!this.#capabilities.persistence || !this.#projectWorkspace) {
+      throw new HomeownerApiError('unavailable')
+    }
+    await this.#exactProject(grant, parsedProjectRef.data)
+    const command = saveHomeownerProjectItemInputSchema.parse({
+      ...parsedInput.data,
+      projectRef: parsedProjectRef.data,
+      requestedAt: this.#now(),
+    })
+    const item = homeownerProjectItemSchema.parse(
+      await this.#projectWorkspace.saveProjectItem({ grant, command }),
+    )
+    const coherent = item.homeRef === grant.homeRef
+      && item.projectRef === parsedProjectRef.data
+      && (command.itemRef === undefined || item.itemRef === command.itemRef)
+      && item.kind === command.kind
+      && item.label === command.label
+      && item.detail === command.detail
+      && item.state === command.state
+      && item.revision === (command.expectedRevision === undefined
+        ? 1
+        : command.expectedRevision + 1)
+      && item.updatedAt === command.requestedAt
+      && (command.itemRef !== undefined || item.createdByPrincipalRef === grant.principalRef)
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeProjectItem(item)
   }
 
   async listProjectQuotes(
@@ -1226,6 +1540,24 @@ export class HomeownerApiService {
       })),
       updatedAt: [propertyFacts.updatedAt, ...systems.map(system => system.updatedAt)].sort().at(-1),
     })
+  }
+
+  async #exactProject(
+    grant: AuthorizedHomeownerWorkspace,
+    requestedProjectRef: string,
+  ): Promise<HomeownerProject> {
+    const project = this.#projectWorkspace
+      ? await this.#projectWorkspace.readProject(grant, requestedProjectRef)
+      : (await this.#repository.listProjects(grant)).find(
+          candidate => candidate.projectRef === requestedProjectRef
+            && candidate.homeRef === grant.homeRef,
+        ) ?? null
+    if (!project) throw new HomeownerApiError('not_found')
+    const parsed = homeownerProjectSchema.parse(project)
+    if (parsed.homeRef !== grant.homeRef || parsed.projectRef !== requestedProjectRef) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return parsed
   }
 
   async #workspaceGrant<Action extends HomeownerWorkspaceAction>(

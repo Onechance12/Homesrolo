@@ -291,6 +291,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
@@ -394,6 +397,14 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function GET/, `${rel} serves the project list`)
       assert.match(content, /export async function POST/, `${rel} serves generic project creation`)
       assert.match(content, /handleHomeownerRequest/, `${rel} delegates both methods to the adapter`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves one revision-backed update`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose a duplicate read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts'
+      || rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the exact-project list`)
+      assert.match(content, /export async function POST/, `${rel} serves the bounded command`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the private quote list`)
       assert.match(content, /export async function POST/, `${rel} serves strict quote creation`)
@@ -411,6 +422,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'

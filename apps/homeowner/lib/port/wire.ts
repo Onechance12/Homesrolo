@@ -16,7 +16,7 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -123,6 +123,11 @@ const countInt: Decoder<number> = (value, at) =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0
     ? value
     : fail(at, 'a non-negative integer')
+
+const positiveInt: Decoder<number> = (value, at) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : fail(at, 'a positive integer')
 
 function literal<const T extends string>(expected: T): Decoder<T> {
   return (value, at) => (value === expected ? expected : fail(at, JSON.stringify(expected)))
@@ -369,6 +374,10 @@ type WireProject = {
   status: Project['status']
   occurredOn: string | null
   summary: string
+  professionalLabel: string | null
+  revision: number
+  archived: boolean
+  archivedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -402,19 +411,31 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
     occurredOn: nullable(calendarDate),
     summary: trimmedText(2000),
+    professionalLabel: nullable(boundedLabel(160)),
+    revision: positiveInt,
+    archived: boolean,
+    archivedAt: nullable(utcInstant),
     createdAt: utcInstant,
     updatedAt: utcInstant,
   })(value, at)
   if (decoded.updatedAt < decoded.createdAt) {
     return fail(`${at}.updatedAt`, 'a time on or after createdAt')
   }
+  if (decoded.archived !== (decoded.archivedAt !== null)) {
+    return fail(`${at}.archivedAt`, 'an instant exactly when archived is true')
+  }
   return {
     projectRef: decoded.projectRef,
     homeRef: decoded.homeRef,
     title: decoded.title,
+    category: decoded.category,
     trade: PROJECT_CATEGORY_LABEL[decoded.category],
     performedOn: decoded.occurredOn,
     status: decoded.status,
+    professionalLabel: decoded.professionalLabel ?? '',
+    revision: decoded.revision,
+    archived: decoded.archived,
+    archivedAt: decoded.archivedAt,
     photoCount: 0,
     documentCount: 0,
     isSynthetic: false,
@@ -425,6 +446,36 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     documents: [],
     warranty: null,
   }
+}
+
+export const decodeProjectActivity: Decoder<ProjectActivity> = object<ProjectActivity>({
+  activityRef: opaqueRef('hact'),
+  homeRef: opaqueRef('hhom'),
+  projectRef: opaqueRef('hprj'),
+  kind: oneOf(['note', 'milestone'] as const),
+  body: boundedLabel(2000),
+  source: literal('homeowner_entry'),
+  createdAt: utcInstant,
+})
+
+export const decodeProjectItem: Decoder<ProjectItem> = (value, at) => {
+  const item = object<ProjectItem>({
+    itemRef: opaqueRef('hpit'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: opaqueRef('hprj'),
+    kind: oneOf(['material', 'decision', 'wishlist'] as const),
+    label: boundedLabel(160),
+    detail: trimmedText(2000),
+    state: oneOf(['considering', 'chosen', 'purchased', 'declined'] as const),
+    source: literal('homeowner_entry'),
+    revision: positiveInt,
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (item.updatedAt < item.createdAt) {
+    return fail(`${at}.updatedAt`, 'a time on or after createdAt')
+  }
+  return item
 }
 
 type WireArtifact = {

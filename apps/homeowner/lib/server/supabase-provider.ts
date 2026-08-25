@@ -44,6 +44,15 @@ import {
   type HomeownerCheckupPhotoMetadata,
   type HomeownerCheckupPhotoPort,
 } from '../../../../src/homeowner/homeowner-checkup-photos.v1.ts'
+import {
+  HOMEOWNER_PROJECT_WORKSPACE_VERSION,
+  homeownerProjectActivitySchema,
+  homeownerProjectItemSchema,
+  homeownerProjectWorkspaceCommandIntent,
+  type HomeownerProjectActivity,
+  type HomeownerProjectItem,
+  type HomeownerProjectWorkspacePort,
+} from '../../../../src/homeowner/homeowner-project-workspace.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -194,6 +203,45 @@ function projectFromRow(input: unknown): HomeownerProject {
     status: requiredString(row, 'status'),
     ...(row.occurred_on === null ? {} : { occurredOn: requiredString(row, 'occurred_on') }),
     ...(row.summary === null ? {} : { summary: requiredString(row, 'summary') }),
+    ...(row.professional_label === null
+      ? {}
+      : { professionalLabel: requiredString(row, 'professional_label') }),
+    revision: requiredNumber(row, 'revision'),
+    ...(row.archived_at === null ? {} : { archivedAt: canonicalInstant(row, 'archived_at') }),
+    createdAt: canonicalInstant(row, 'created_at'),
+    updatedAt: canonicalInstant(row, 'updated_at'),
+  })
+}
+
+function projectActivityFromRow(input: unknown): HomeownerProjectActivity {
+  const row = record(input)
+  return homeownerProjectActivitySchema.parse({
+    recordVersion: HOMEOWNER_PROJECT_WORKSPACE_VERSION,
+    activityRef: requiredString(row, 'activity_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    projectRef: requiredString(row, 'project_ref'),
+    actorPrincipalRef: requiredString(row, 'actor_principal_ref'),
+    kind: requiredString(row, 'kind'),
+    body: requiredString(row, 'body'),
+    source: requiredString(row, 'source'),
+    createdAt: canonicalInstant(row, 'created_at'),
+  })
+}
+
+function projectItemFromRow(input: unknown): HomeownerProjectItem {
+  const row = record(input)
+  return homeownerProjectItemSchema.parse({
+    recordVersion: HOMEOWNER_PROJECT_WORKSPACE_VERSION,
+    itemRef: requiredString(row, 'item_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    projectRef: requiredString(row, 'project_ref'),
+    createdByPrincipalRef: requiredString(row, 'created_by_principal_ref'),
+    kind: requiredString(row, 'kind'),
+    label: requiredString(row, 'label'),
+    ...(row.detail === null ? {} : { detail: requiredString(row, 'detail') }),
+    state: requiredString(row, 'state'),
+    source: requiredString(row, 'source'),
+    revision: requiredNumber(row, 'revision'),
     createdAt: canonicalInstant(row, 'created_at'),
     updatedAt: canonicalInstant(row, 'updated_at'),
   })
@@ -294,7 +342,7 @@ export function createSupabaseClients(configuration: HomeownerRuntimeConfigurati
 /** One server-only adapter implements identity, exact-home reads, and commands. */
 export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
-  HomeownerPrivateObjectPort, HomeownerProjectQuotePort,
+  HomeownerPrivateObjectPort, HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
   HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort {
   readonly #client: SupabaseClient
   readonly #now: () => string
@@ -377,9 +425,40 @@ export class SupabaseHomeownerProvider implements
       .from('homesrolo_homeowner_projects')
       .select('*')
       .eq('home_ref', grant.homeRef)
+      .is('archived_at', null)
       .order('updated_at', { ascending: false })
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(projectFromRow)
+  }
+  async readProject(grant: AuthorizedHomeownerWorkspace, projectRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_projects')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .eq('project_ref', projectRef)
+      .maybeSingle()
+    if (error) throw new HomeownerApiError('unavailable')
+    return data === null ? null : projectFromRow(data)
+  }
+  async listProjectActivity(grant: AuthorizedHomeownerWorkspace, projectRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_project_activity')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .eq('project_ref', projectRef)
+      .order('created_at', { ascending: true })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(projectActivityFromRow)
+  }
+  async listProjectItems(grant: AuthorizedHomeownerWorkspace, projectRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_project_items')
+      .select('*')
+      .eq('home_ref', grant.homeRef)
+      .eq('project_ref', projectRef)
+      .order('created_at', { ascending: true })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(projectItemFromRow)
   }
   async listProjectQuotes(grant: AuthorizedHomeownerWorkspace, projectRef: string) {
     const { data, error } = await this.#client
@@ -787,6 +866,122 @@ export class SupabaseHomeownerProvider implements
       throw new HomeownerApiError('unavailable')
     }
     return projectFromRow(data)
+  }
+
+  async updateProject(input: Parameters<HomeownerProjectWorkspacePort['updateProject']>[0]) {
+    const command = input.command
+    const { data, error } = await this.#client.rpc('homesrolo_update_homeowner_project', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_project_ref: command.projectRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: command.commandRef,
+      p_command_digest: digest(homeownerProjectWorkspaceCommandIntent(command)),
+      p_expected_revision: command.expectedRevision,
+      p_set_title: Object.hasOwn(command, 'title'),
+      p_title: command.title ?? null,
+      p_set_category: Object.hasOwn(command, 'category'),
+      p_category: command.category ?? null,
+      p_set_status: Object.hasOwn(command, 'status'),
+      p_status: command.status ?? null,
+      p_set_occurred_on: Object.hasOwn(command, 'occurredOn'),
+      p_occurred_on: command.occurredOn ?? null,
+      p_set_summary: Object.hasOwn(command, 'summary'),
+      p_summary: command.summary ?? null,
+      p_set_professional_label: Object.hasOwn(command, 'professionalLabel'),
+      p_professional_label: command.professionalLabel ?? null,
+      p_set_archived: Object.hasOwn(command, 'archived'),
+      p_archived: command.archived ?? false,
+      p_requested_at: command.requestedAt,
+    })
+    if (error) {
+      if (error.message.includes('command_digest_mismatch')
+        || error.message.includes('project_revision_conflict')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('project_not_found')
+        || error.message.includes('membership_not_authorized')) {
+        throw new HomeownerApiError('not_found')
+      }
+      if (error.message.includes('invalid_') || error.message.includes('empty_project_update')) {
+        throw new HomeownerApiError('invalid_request')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return projectFromRow(data)
+  }
+
+  async appendProjectActivity(
+    input: Parameters<HomeownerProjectWorkspacePort['appendProjectActivity']>[0],
+  ) {
+    const activityRef = mintOpaqueRef('hact')
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_append_homeowner_project_activity',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_project_ref: input.command.projectRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: digest(homeownerProjectWorkspaceCommandIntent(input.command)),
+        p_activity_ref: activityRef,
+        p_kind: input.command.kind,
+        p_body: input.command.body,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) {
+      if (error.message.includes('command_digest_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('project_not_found')
+        || error.message.includes('membership_not_authorized')) {
+        throw new HomeownerApiError('not_found')
+      }
+      if (error.message.includes('invalid_project_activity')) {
+        throw new HomeownerApiError('invalid_request')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return projectActivityFromRow(data)
+  }
+
+  async saveProjectItem(input: Parameters<HomeownerProjectWorkspacePort['saveProjectItem']>[0]) {
+    const itemRef = input.command.itemRef ?? mintOpaqueRef('hpit')
+    const { data, error } = await this.#client.rpc('homesrolo_save_homeowner_project_item', {
+      p_principal_ref: input.grant.principalRef,
+      p_home_ref: input.grant.homeRef,
+      p_project_ref: input.command.projectRef,
+      p_membership_ref: input.grant.membershipRef,
+      p_membership_revision: input.grant.membershipRevision,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: digest(homeownerProjectWorkspaceCommandIntent(input.command)),
+      p_item_ref: itemRef,
+      p_expected_revision: input.command.expectedRevision ?? null,
+      p_kind: input.command.kind,
+      p_label: input.command.label,
+      p_detail: input.command.detail ?? null,
+      p_state: input.command.state,
+      p_requested_at: input.command.requestedAt,
+    })
+    if (error) {
+      if (error.message.includes('command_digest_mismatch')
+        || error.message.includes('project_item_revision_conflict')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('project_not_found')
+        || error.message.includes('project_item_not_found')
+        || error.message.includes('membership_not_authorized')) {
+        throw new HomeownerApiError('not_found')
+      }
+      if (error.message.includes('invalid_project_item')) {
+        throw new HomeownerApiError('invalid_request')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return projectItemFromRow(data)
   }
 
   async createProjectQuote(input: Parameters<HomeownerProjectQuotePort['createProjectQuote']>[0]) {

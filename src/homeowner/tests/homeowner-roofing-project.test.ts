@@ -52,6 +52,7 @@ const project: HomeownerProject = {
   category: 'roofing',
   status: 'planned',
   summary: 'Timing: As soon as possible\n\nLeak above the back room.',
+  revision: 1,
   createdAt: now,
   updatedAt: now,
 }

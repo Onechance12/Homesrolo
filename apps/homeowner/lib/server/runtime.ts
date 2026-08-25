@@ -162,6 +162,7 @@ export function homeownerApiService(): HomeownerApiService {
       repository: provider ?? unconfiguredRepository,
       commands: provider ?? unconfiguredCommands,
       ...(provider ? { privateObjects: provider } : {}),
+      ...(provider ? { projectWorkspace: provider } : {}),
       ...(provider && configuration?.projectQuotesEnabled === true
         ? { projectQuotes: provider }
         : {}),

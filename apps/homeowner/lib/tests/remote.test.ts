@@ -87,6 +87,10 @@ const PROJECT_VIEW = {
   status: 'planned',
   occurredOn: null,
   summary: 'Timing: As soon as possible\n\nLeak above the back room.',
+  professionalLabel: null,
+  revision: 1,
+  archived: false,
+  archivedAt: null,
   createdAt: '2026-08-12T16:00:00.000Z',
   updatedAt: '2026-08-12T16:00:00.000Z',
 }

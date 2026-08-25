@@ -75,6 +75,7 @@ const project = {
   category: 'roofing',
   status: 'planned',
   summary: 'Roof is near the end of its useful life.',
+  revision: 1,
   createdAt: now,
   updatedAt: now,
 } as const

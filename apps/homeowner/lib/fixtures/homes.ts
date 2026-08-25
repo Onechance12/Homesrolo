@@ -60,9 +60,14 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: ROOF_REF,
     homeRef: BIRCH_REF,
     title: 'Roof replacement',
+    category: 'roofing',
     trade: 'Roofing',
     performedOn: '2026-05-18',
     status: 'completed',
+    professionalLabel: 'Aspen Sample Roofworks (synthetic)',
+    revision: 1,
+    archived: false,
+    archivedAt: null,
     photoCount: 3,
     documentCount: 3,
     summary: 'Full tear-off and replacement after hail damage. Decking inspected, two sheets replaced, '
@@ -100,9 +105,14 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: GUTTER_REF,
     homeRef: BIRCH_REF,
     title: 'Gutter and downspout rerun',
+    category: 'exterior',
     trade: 'Gutters',
     performedOn: '2026-06-02',
     status: 'completed',
+    professionalLabel: 'Demo Exteriors (synthetic)',
+    revision: 1,
+    archived: false,
+    archivedAt: null,
     photoCount: 1,
     documentCount: 1,
     summary: 'Seamless 6-inch gutters on the north and west runs, two downspouts relocated to move '
@@ -134,9 +144,14 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: WINDOW_REF,
     homeRef: BIRCH_REF,
     title: 'Basement egress window',
+    category: 'exterior',
     trade: 'Windows',
     performedOn: '2026-07-21',
     status: 'in_progress',
+    professionalLabel: 'Sample Windowcraft (synthetic)',
+    revision: 1,
+    archived: false,
+    archivedAt: null,
     photoCount: 1,
     documentCount: 2,
     summary: 'Cutting and framing a code-compliant egress window in the south basement wall. '
@@ -178,8 +193,10 @@ function warranties(): readonly Warranty[] {
 export const FIXTURE_WARRANTIES: readonly Warranty[] = warranties()
 
 export function projectSummaries(): readonly ProjectSummary[] {
-  return FIXTURE_PROJECTS.map(({ projectRef, homeRef, title, trade, performedOn, status, photoCount, documentCount }) => ({
-    projectRef, homeRef, title, trade, performedOn, status, photoCount, documentCount, isSynthetic: true,
+  return FIXTURE_PROJECTS.map(({ projectRef, homeRef, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
+    projectRef, homeRef, title, category, trade, performedOn, status,
+    professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
+    isSynthetic: true,
   }))
 }
 
