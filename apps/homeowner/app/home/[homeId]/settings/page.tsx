@@ -9,6 +9,7 @@ import { ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { RELATIONSHIP_COPY } from '../../../../components/relationship.ts'
 import { homeLabel, homeLocality } from '../../../../lib/port/types.ts'
 import { InstallHomesrolo } from '../../../../components/PwaRegistrar.tsx'
+import { clearRoloThreadsForPrincipal } from '../../../../lib/rolo-thread-storage.ts'
 
 /** Account controls and truthful, read-only context for the currently open home. */
 export default function SettingsPage({ params }: { params: Promise<{ homeId: string }> }) {
@@ -24,6 +25,9 @@ export default function SettingsPage({ params }: { params: Promise<{ homeId: str
 
   async function signOut() {
     await port.signOut()
+    if (session.kind === 'signed_in') {
+      clearRoloThreadsForPrincipal(session.session.principalRef)
+    }
     await refresh()
     router.push('/signin')
   }

@@ -60,6 +60,7 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: ROOF_REF,
     homeRef: BIRCH_REF,
     title: 'Roof replacement',
+    workKind: 'project',
     category: 'roofing',
     trade: 'Roofing',
     performedOn: '2026-05-18',
@@ -105,6 +106,7 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: GUTTER_REF,
     homeRef: BIRCH_REF,
     title: 'Gutter and downspout rerun',
+    workKind: 'repair',
     category: 'exterior',
     trade: 'Gutters',
     performedOn: '2026-06-02',
@@ -144,6 +146,7 @@ export const FIXTURE_PROJECTS: readonly Project[] = [
     projectRef: WINDOW_REF,
     homeRef: BIRCH_REF,
     title: 'Basement egress window',
+    workKind: 'project',
     category: 'exterior',
     trade: 'Windows',
     performedOn: '2026-07-21',
@@ -193,8 +196,8 @@ function warranties(): readonly Warranty[] {
 export const FIXTURE_WARRANTIES: readonly Warranty[] = warranties()
 
 export function projectSummaries(): readonly ProjectSummary[] {
-  return FIXTURE_PROJECTS.map(({ projectRef, homeRef, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
-    projectRef, homeRef, title, category, trade, performedOn, status,
+  return FIXTURE_PROJECTS.map(({ projectRef, homeRef, title, workKind, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
+    projectRef, homeRef, title, workKind, category, trade, performedOn, status,
     professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
     isSynthetic: true,
   }))

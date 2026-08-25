@@ -36,7 +36,8 @@
 import { COMMAND_REF_PATTERN } from './command-ref.ts'
 import {
   NO_CAPABILITIES,
-  type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
+  type HomeownerDataPort, type HomeownerSession, type HomeownerWorkKind, type PortResult,
+  type SessionState,
 } from './types.ts'
 import {
   fetchArtifactUploadTransport,
@@ -47,7 +48,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeArtifactUploadReservation, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeArtifactUploadReservation, decodeAskRoloResult, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -144,6 +145,9 @@ const PROJECT_CATEGORIES = [
   'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
 ] as const
 const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+const PROJECT_WORK_KINDS = new Set<HomeownerWorkKind>([
+  'project', 'issue', 'repair', 'service', 'incident',
+])
 
 function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>[2]) {
   const body: Record<string, unknown> = {
@@ -159,6 +163,11 @@ function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>
     const title = input.title.trim()
     if (title.length < 1 || title.length > 120) return null
     body.title = title
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'workKind')) {
+    if (!input.workKind || !PROJECT_WORK_KINDS.has(input.workKind)) return null
+    body.workKind = input.workKind
     editableFieldCount += 1
   }
   if (Object.hasOwn(input, 'category')) {
@@ -561,6 +570,43 @@ export function createRemotePort(
       }, decodeHomeResearchResult)
     },
 
+    async askRolo(homeRef, input) {
+      const ref = homeRefSegment(homeRef)
+      if (!input || typeof input !== 'object') return { ok: false, error: 'invalid' }
+      const message = typeof input.message === 'string'
+        ? boundedResearchText(input.message, 1_600)
+        : null
+      const destinations = ['home', 'rolo', 'activity', 'library', 'details'] as const
+      const history = Array.isArray(input.history) ? input.history : []
+      const normalizedHistory = history.map(turn => ({
+        role: turn?.role === 'user' || turn?.role === 'assistant' ? turn.role : null,
+        text: typeof turn?.text === 'string' ? boundedResearchText(turn.text, 700) : null,
+      }))
+      const totalCharacters = (message?.length ?? 0)
+        + normalizedHistory.reduce((total, turn) => total + (turn.text?.length ?? 0), 0)
+      if (!ref || !message
+        || !destinations.includes(input.destination)
+        || (input.projectRef !== undefined && !PROJECT_REF.test(input.projectRef))
+        || history.length > 8
+        || normalizedHistory.some(turn => turn.role === null || turn.text === null)
+        || totalCharacters > 6_000) {
+        return { ok: false, error: 'invalid' }
+      }
+      return call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/assistant`,
+        body: {
+          message,
+          history: normalizedHistory.map(turn => ({
+            role: turn.role as 'user' | 'assistant',
+            text: turn.text as string,
+          })),
+          destination: input.destination,
+          ...(input.projectRef ? { projectRef: input.projectRef } : {}),
+        },
+      }, decodeAskRoloResult)
+    },
+
     async requestMagicLink(email, requestedIntent = null, requestedHandoff = null) {
       const normalized = email.trim().toLowerCase()
       if (normalized.length < 3 || normalized.length > 254
@@ -687,8 +733,10 @@ export function createRemotePort(
       const title = input.title.trim()
       const summary = input.summary.trim()
       const occurredOn = input.occurredOn?.trim()
+      const workKind = input.workKind ?? 'project'
       if (!ref
         || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !PROJECT_WORK_KINDS.has(workKind)
         || !categories.includes(input.category)
         || !statuses.includes(input.status)
         || title.length < 1
@@ -703,6 +751,7 @@ export function createRemotePort(
         body: {
           commandRef: input.commandRef,
           title,
+          workKind,
           category: input.category,
           status: input.status,
           ...(occurredOn ? { occurredOn } : {}),
@@ -716,6 +765,7 @@ export function createRemotePort(
         pool: 'Pool', new_construction: 'New construction', other: 'Other',
       } as const
       if (result.ok && (result.value.homeRef !== ref
+        || result.value.workKind !== workKind
         || result.value.trade !== trade[input.category]
         || result.value.status !== input.status
         || result.value.performedOn !== (occurredOn || null))) {

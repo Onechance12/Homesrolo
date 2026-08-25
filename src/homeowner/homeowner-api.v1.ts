@@ -11,6 +11,7 @@ import {
   homeownerSignedUploadGrantSchema,
   homeownerHomeTypeSchema,
   homeownerProjectSchema,
+  homeownerProjectWorkKindSchema,
   homeownerSystemKindSchema,
   homeownerUtcInstantSchema,
   parseHomeownerPropertyFacts,
@@ -222,7 +223,8 @@ export const homeownerApiUpdateProjectInputSchema =
     .omit({ projectRef: true, requestedAt: true })
     .superRefine((command, context) => {
       const editableKeys = [
-        'title', 'category', 'status', 'occurredOn', 'summary', 'professionalLabel', 'archived',
+        'title', 'workKind', 'category', 'status', 'occurredOn', 'summary',
+        'professionalLabel', 'archived',
       ] as const
       if (!editableKeys.some(key => Object.hasOwn(command, key))) {
         context.addIssue({ code: 'custom', message: 'at least one project field must be supplied' })
@@ -249,6 +251,7 @@ export const homeownerApiProjectViewSchema = z.object({
   projectRef: opaqueRef('hprj'),
   homeRef: opaqueRef('hhom'),
   title: z.string().trim().min(1).max(120),
+  workKind: homeownerProjectWorkKindSchema,
   category: homeownerProjectSchema.shape.category,
   status: homeownerProjectSchema.shape.status,
   occurredOn: homeownerProjectSchema.shape.occurredOn.nullable(),
@@ -507,6 +510,7 @@ function safeProject(project: HomeownerProject): HomeownerApiProjectView {
     projectRef: project.projectRef,
     homeRef: project.homeRef,
     title: project.title,
+    workKind: project.workKind,
     category: project.category,
     status: project.status,
     occurredOn: project.occurredOn ?? null,
@@ -836,6 +840,7 @@ export class HomeownerApiService {
       && updated.projectRef === parsedProjectRef.data
       && updated.controllerPrincipalRef === current.controllerPrincipalRef
       && updated.title === (command.title ?? current.title)
+      && updated.workKind === (command.workKind ?? current.workKind)
       && updated.category === (command.category ?? current.category)
       && updated.status === (command.status ?? current.status)
       && updated.occurredOn === expectedOccurredOn
@@ -1554,6 +1559,7 @@ export class HomeownerApiService {
     const coherent = created.homeRef === grant.homeRef
       && created.controllerPrincipalRef === grant.principalRef
       && created.title === title
+      && created.workKind === 'project'
       && created.category === 'roofing'
       && created.status === 'planned'
       && created.summary === summary
@@ -1588,6 +1594,7 @@ export class HomeownerApiService {
     const coherent = created.homeRef === grant.homeRef
       && created.controllerPrincipalRef === grant.principalRef
       && created.title === command.title
+      && created.workKind === command.workKind
       && created.category === command.category
       && created.status === command.status
       && created.occurredOn === command.occurredOn

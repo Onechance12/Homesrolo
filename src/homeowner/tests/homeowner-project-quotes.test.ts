@@ -59,6 +59,7 @@ const project: HomeownerProject = {
   homeRef,
   controllerPrincipalRef: principalRef,
   title: 'Roof replacement',
+  workKind: 'project',
   category: 'roofing',
   status: 'planned',
   summary: 'Comparing written proposals.',

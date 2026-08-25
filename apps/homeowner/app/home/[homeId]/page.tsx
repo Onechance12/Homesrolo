@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { use, useEffect, useRef } from 'react'
-import { HomeRecordExperience } from '../../../components/HomeRecordExperience.tsx'
+import { RoloHomeDashboard } from '../../../components/RoloHomeDashboard.tsx'
 import { EmptyState, ErrorState, Skeleton } from '../../../components/states.tsx'
 import { buildHomeRecordProgress } from '../../../lib/home-record-progress.ts'
 import { usePortCall } from '../../../lib/port/hooks.ts'
@@ -18,6 +18,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   const home = usePortCall(() => port.getHome(homeId))
   const homeRecord = usePortCall(() => port.getHomeRecord(homeId))
   const projects = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
+  const retryProjects = projects.retry
   const uploadsEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.uploads
   const recordsReadable = mode === 'synthetic' || uploadsEnabled
@@ -48,6 +49,18 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
     previousCheckupsEnabled.current = checkupsEnabled
     retryCheckups()
   }, [checkupsEnabled, retryCheckups])
+
+  useEffect(() => {
+    const refreshChangedHome = (event: Event) => {
+      const changedHomeId = (event as CustomEvent<{ homeId?: string }>).detail?.homeId
+      if (changedHomeId !== homeId) return
+      retryProjects()
+      if (recordsReadable) retryDocuments()
+      if (checkupsEnabled) retryCheckups()
+    }
+    window.addEventListener('homesrolo:data-changed', refreshChangedHome)
+    return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
+  }, [checkupsEnabled, homeId, recordsReadable, retryCheckups, retryDocuments, retryProjects])
 
   if (home.state.status === 'loading' || projects.state.status === 'loading'
     || (mode === 'remote' && homeRecord.state.status === 'loading')) {
@@ -82,7 +95,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
   })
 
   return (
-    <HomeRecordExperience
+    <RoloHomeDashboard
       homeId={homeId}
       label={homeLabel(file)}
       locality={homeLocality(file)}
@@ -90,8 +103,11 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
       homeRecord={mode === 'remote' && homeRecord.state.status === 'ready'
         ? homeRecord.state.value
         : null}
+      projects={projectRecords}
+      documents={documentRecords}
       uploadsEnabled={uploadsEnabled}
       checkupsEnabled={checkupsEnabled}
+      assistantEnabled={session.state.kind === 'signed_in' && session.state.capabilities.homeResearch}
       synthetic={mode === 'synthetic'}
     />
   )

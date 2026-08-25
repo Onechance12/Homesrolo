@@ -3,13 +3,17 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { use, useRef, useState } from 'react'
-import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconPlus, IconProjects } from '../../../../components/icons.tsx'
-import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
-import type { ProjectCategory, ProjectStatus } from '../../../../lib/port/types.ts'
+import {
+  STATUS_LABEL, STATUS_PILL, WORK_KIND_LABEL, WORK_KIND_OPTIONS,
+} from '../../../../components/projectStatus.ts'
+import type {
+  HomeownerWorkKind, ProjectCategory, ProjectStatus,
+} from '../../../../lib/port/types.ts'
 import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
 
 type RecordMode = 'planned' | 'active' | 'past'
@@ -33,14 +37,14 @@ const MODES: readonly {
 ]
 
 const CATEGORIES: readonly { value: ProjectCategory; label: string }[] = [
-  { value: 'interior', label: 'Interior / remodel' },
+  { value: 'interior', label: 'Interior & remodel' },
   { value: 'hvac', label: 'Heating & cooling' },
   { value: 'plumbing', label: 'Plumbing' },
   { value: 'electrical', label: 'Electrical' },
   { value: 'appliances', label: 'Appliances' },
-  { value: 'exterior', label: 'Exterior / gutters' },
+  { value: 'exterior', label: 'Exterior & gutters' },
   { value: 'roofing', label: 'Roof' },
-  { value: 'landscaping', label: 'Yard / landscaping' },
+  { value: 'landscaping', label: 'Yard & landscaping' },
   { value: 'pest', label: 'Pest control' },
   { value: 'pool', label: 'Pool' },
   { value: 'new_construction', label: 'New construction' },
@@ -73,9 +77,12 @@ export default function ProjectsPage({
   const carriedIntent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
   const router = useRouter()
   const mode = usePortMode()
+  const { state: session } = useSession()
+  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
   const [recordMode, setRecordMode] = useState<RecordMode | null>(() => carriedIntent ? 'planned' : null)
+  const [workKind, setWorkKind] = useState<HomeownerWorkKind>('project')
   const [category, setCategory] = useState<ProjectCategory | null>(() => carriedIntent ? 'roofing' : null)
   const [title, setTitle] = useState(() => carriedIntent ? ROOF_TITLE[carriedIntent] : '')
   const [occurredOn, setOccurredOn] = useState('')
@@ -105,6 +112,7 @@ export default function ProjectsPage({
     const result = await port.createProject(homeId, {
       commandRef,
       title,
+      workKind,
       category,
       status: STATUS_FOR_MODE[recordMode],
       ...(recordMode === 'past' && occurredOn ? { occurredOn } : {}),
@@ -123,26 +131,37 @@ export default function ProjectsPage({
     <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
       <div className="project-list-head">
         <div>
-          <p className="mono">Your Home Record</p>
-          <h1>Projects</h1>
-          <p>Repairs, maintenance, upgrades, and ideas—all in one home history.</p>
+          <p className="mono">Work around this home</p>
+          <h1>Work</h1>
+          <p>Projects, repairs, one-time service, issues, and past work—without forcing everything into the same story.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          aria-expanded={recordMode !== null}
-          aria-controls="add-project"
-          onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
-        >
-          <IconPlus /> {recordMode === null ? 'Add something' : 'Close'}
-        </button>
+        <div className="project-list-head__actions">
+          {assistantEnabled ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))}
+            >
+              Tell Rolo about it
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn--quiet"
+            aria-expanded={recordMode !== null}
+            aria-controls="add-work"
+            onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
+          >
+            <IconPlus /> {recordMode === null ? 'Add manually' : 'Close form'}
+          </button>
+        </div>
       </div>
 
       {recordMode ? (
-        <section id="add-project" className="panel project-composer" aria-labelledby="project-details-title">
+        <section id="add-work" className="panel project-composer" aria-labelledby="project-details-title">
           <div className="panel__head">
             <div>
-              <p className="mono">Add to this home</p>
+              <p className="mono">Manual entry</p>
               <h2 id="project-details-title">What should your home remember?</h2>
             </div>
           </div>
@@ -172,6 +191,21 @@ export default function ProjectsPage({
             </fieldset>
 
             <div className="project-composer__primary">
+              <label className="field" style={{ marginTop: 0 }}>
+                <span>What kind of work is this?</span>
+                <select
+                  value={workKind}
+                  onChange={event => {
+                    resetAttempt()
+                    setWorkKind(event.target.value as HomeownerWorkKind)
+                  }}
+                >
+                  {WORK_KIND_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
               <label className="field" style={{ marginTop: 0 }}>
                 <span>Part of the home</span>
                 <select
@@ -245,7 +279,7 @@ export default function ProjectsPage({
                   ? 'Your sign-in expired. Sign in again before saving.'
                   : failed === 'conflict'
                     ? 'This record changed during a retry. Review it and save again.'
-                    : 'The project was not saved. Check the details and try again.'}
+                    : 'The work record was not saved. Check the details and try again.'}
               </p>
             ) : null}
 
@@ -264,15 +298,15 @@ export default function ProjectsPage({
         <div className="panel__head">
           <div>
             <p className="mono">One history</p>
-            <h2 id="saved-projects">Work on this home</h2>
+            <h2 id="saved-projects">Saved work</h2>
           </div>
         </div>
         {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading projects" /></div>}
         {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
         {state.status === 'empty' && (
           <EmptyState
-            title="No work recorded yet"
-            body="Add something completed, underway, or still being considered. The home history can start anywhere."
+            title="Nothing recorded here yet"
+            body="Tell Rolo what happened or add it manually. You can begin with work from years ago, something underway, or an idea you are still considering."
           />
         )}
         {state.status === 'ready' && (
@@ -283,7 +317,7 @@ export default function ProjectsPage({
                   <span className="row__glyph"><IconProjects /></span>
                   <span className="row__body">
                     <span className="row__title">{project.title}</span>
-                    <span className="row__sub">{project.trade}</span>
+                    <span className="row__sub">{WORK_KIND_LABEL[project.workKind]} · {project.trade}</span>
                   </span>
                   <span className="row__end">
                     <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>

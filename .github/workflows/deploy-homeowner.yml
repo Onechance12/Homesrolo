@@ -1,0 +1,60 @@
+name: Deploy homeowner app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/homeowner/**'
+      - 'src/constitution/**'
+      - 'src/contracts/**'
+      - 'src/homeowner/**'
+      - 'netlify.toml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-homeowner.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homesrolo-homeowner-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Verify and deploy app.homesrolo.com
+    if: github.repository == 'Onechance12/Homesrolo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/homeowner/package-lock.json
+
+      - name: Install shared contract dependencies
+        run: npm ci
+
+      - name: Install homeowner app dependencies
+        run: npm --prefix apps/homeowner ci
+
+      - name: Verify homeowner app
+        run: |
+          npm --prefix apps/homeowner run lint
+          npm --prefix apps/homeowner run typecheck
+          npm --prefix apps/homeowner test
+
+      - name: Build and deploy to Netlify production
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: >-
+          npx --yes netlify-cli@27.3.0 deploy
+          --build
+          --prod
+          --site "$NETLIFY_SITE_ID"
+          --message "Homesrolo ${GITHUB_SHA}"

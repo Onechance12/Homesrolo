@@ -103,6 +103,7 @@ test('Supabase workspace commands preserve exact grant fields and stable receipt
           data: {
             ...projectRow,
             title: input.p_title,
+            work_kind: input.p_work_kind,
             professional_label: input.p_professional_label,
             revision: 2,
             archived_at: input.p_requested_at,
@@ -155,17 +156,21 @@ test('Supabase workspace commands preserve exact grant fields and stable receipt
     projectRef,
     expectedRevision: 1,
     title: 'Kitchen remodel',
+    workKind: 'service',
     professionalLabel: 'Sample Cabinets',
     archived: true,
     requestedAt,
   }
   const updated = await provider.updateProject({ grant: updateGrant, command: update })
   assert.equal(updated.revision, 2)
+  assert.equal(updated.workKind, 'service')
   assert.equal(updated.archivedAt, requestedAt)
   assert.equal(calls[0]?.input.p_membership_revision, 4)
   assert.equal(calls[0]?.input.p_home_ref, homeRef)
   assert.equal(calls[0]?.input.p_project_ref, projectRef)
   assert.equal(calls[0]?.input.p_set_title, true)
+  assert.equal(calls[0]?.input.p_set_work_kind, true)
+  assert.equal(calls[0]?.input.p_work_kind, 'service')
   assert.equal(calls[0]?.input.p_set_status, false)
 
   await provider.updateProject({
@@ -414,4 +419,17 @@ test('project workspace migration is exact-home, receipt-backed, and append-only
   )
   assert.match(migration, /command_digest_mismatch/gi)
   assert.doesNotMatch(migration, /create policy|to (anon|authenticated)/i)
+})
+
+test('work kind migration reuses the project table and keeps old callers compatible', () => {
+  const migration = readFileSync(path.resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/202608250004_homeowner_project_work_kind.sql',
+  ), 'utf8')
+  assert.match(migration, /add column if not exists work_kind text not null default 'project'/i)
+  assert.match(migration, /work_kind in \('project', 'issue', 'repair', 'service', 'incident'\)/i)
+  assert.match(migration, /p_work_kind text/i)
+  assert.match(migration, /p_set_work_kind boolean/i)
+  assert.match(migration, /work_kind = case when p_set_work_kind then p_work_kind else work_kind end/i)
+  assert.doesNotMatch(migration, /create table[^;]*work_kind/i)
 })

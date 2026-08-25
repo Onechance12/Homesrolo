@@ -3,10 +3,11 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { usePort, useSession } from '../lib/port/provider.tsx'
+import { clearRoloThreadsForPrincipal } from '../lib/rolo-thread-storage.ts'
 
 export function SignOutButton({ compact = false }: { readonly compact?: boolean }) {
   const port = usePort()
-  const { refresh } = useSession()
+  const { state: session, refresh } = useSession()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
@@ -14,6 +15,9 @@ export function SignOutButton({ compact = false }: { readonly compact?: boolean 
     setBusy(true)
     try {
       await port.signOut()
+      if (session.kind === 'signed_in') {
+        clearRoloThreadsForPrincipal(session.session.principalRef)
+      }
       await refresh()
       router.push('/signin')
     } finally {

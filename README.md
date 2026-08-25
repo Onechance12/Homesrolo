@@ -46,17 +46,21 @@ contractor recommendation. The proposal comparison has its own default-off
 `HOMESROLO_PROJECT_QUOTES_ENABLED` release gate, and migration `202608210001`
 must be applied and verified before that gate is enabled.
 
-A default-off OpenAI home-research foundation is implemented at
-`POST /api/v1/homes/{homeRef}/research` and is surfaced on the authenticated
-home dashboard only when its exact capability is enabled. With explicit consent, it can send one street address, a
-bounded question, and limited recent context to OpenAI, search public sources,
-and return cited answers and proposed facts. It never silently researches an
-address, never saves a proposed fact, and has no mutation path into the home
-record. It is not production-enabled by this branch: the session capability
-stays false unless the private homeowner runtime is configured and the server
-also has `HOMESROLO_AI_ENABLED=true` plus a server-only `OPENAI_API_KEY`. See
-`docs/HOME_RESEARCH.md` for the privacy, source, rate-limit, and deployment
-boundaries.
+The authenticated shell now includes Rolo, a private conversational organizer
+at `POST /api/v1/homes/{homeRef}/assistant`. Rolo receives a bounded home index,
+uses the stateless OpenAI Responses API, and can prepare one typed work-record
+draft. It cannot write, share, hire, purchase, or contact anyone. The homeowner
+must review and approve the draft, after which the browser uses the existing
+receipt-backed project/update APIs. The app keeps recent conversation in the
+browser session; OpenAI response storage is disabled.
+
+Public home research remains a separate, stricter path at
+`POST /api/v1/homes/{homeRef}/research`. With explicit consent, it can send one
+street address, a bounded question, and limited recent context to OpenAI,
+search public sources, and return cited proposed facts. It never silently
+researches or saves a fact. Both paths fail closed unless the server has
+`HOMESROLO_AI_ENABLED=true` plus a server-only `OPENAI_API_KEY`. See
+`docs/HOME_RESEARCH.md` for the public-research privacy and source boundaries.
 
 Private PDF/JPEG/PNG storage remains separately gated. A signed-in development
 lane now supports a bounded private bucket without routing bytes through
@@ -64,18 +68,17 @@ Netlify, but public signup remains off and malware scanning is explicitly
 deferred. Its permanent quota accounting and rollout steps are documented in
 `docs/HOMEOWNER_DEV_PRIVATE_UPLOADS.md`. The Home Library shows an honest unavailable
 state when that capability is off; it does not simulate an upload. Controller
-verification, invitations, public sharing, payments, analytics, automatic
-professional routing, and production-ready assistant operations are also still
-unavailable.
+verification, invitations, public sharing, payments, analytics, and automatic
+professional routing remain outside this release.
 
-A separate seasonal-photo beta is implemented without opening that generic
+A separate seasonal-photo workspace is implemented without opening that generic
 uploader. A homeowner records the date, a home area, and a repeatable spot name
 such as “hall ceiling by vent,” then adds one JPEG or PNG. The server decodes
 the image and stores only fresh, resized private JPEG derivatives; it never
 stores the submitted filename or raw input and strips embedded location and
 device metadata. Saved views can be compared by the same area and spot, but
-Homesrolo does not diagnose damage or claim that a condition changed. The beta
-has its own default-off `HOMESROLO_PHOTO_CHECKUPS_ENABLED` gate and requires
+Homesrolo does not diagnose damage or claim that a condition changed. The workspace
+has its own `HOMESROLO_PHOTO_CHECKUPS_ENABLED` gate and requires
 migration `202608210003`. It has hard storage, request, and egress ceilings for
 the existing free infrastructure, per-photo deletion, and no path to Jobrolo.
 See `docs/HOMEOWNER_PHOTO_CHECKUPS.md` before enabling it.

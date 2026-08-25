@@ -326,12 +326,28 @@ export function parseHomeownerSystem(input: unknown) {
   return system
 }
 
+/**
+ * The kind of home work represented by the existing project record. This is
+ * deliberately a discriminator on that record, not a second persistence
+ * model: projects, issues, repairs, services, and incidents share one durable
+ * workspace and evidence history.
+ */
+export const homeownerProjectWorkKindSchema = z.enum([
+  'project',
+  'issue',
+  'repair',
+  'service',
+  'incident',
+])
+
 export const homeownerProjectSchema = z.object({
   recordVersion: z.literal(HOMEOWNER_RUNTIME_VERSION),
   projectRef: opaqueRef('hprj'),
   homeRef: opaqueRef('hhom'),
   controllerPrincipalRef: opaqueRef('hprn'),
   title: z.string().trim().min(1).max(120),
+  /** Older persisted rows and payloads are canonical projects. */
+  workKind: homeownerProjectWorkKindSchema.default('project'),
   category: z.enum([
     'roofing',
     'exterior',
@@ -447,6 +463,8 @@ export const createHomeWorkspaceInputSchema = z.object({
 export const createHomeownerProjectInputSchema = z.object({
   commandRef: opaqueRef('hcmd'),
   title: z.string().trim().min(1).max(120),
+  /** Omission preserves the behavior of every pre-discriminator client. */
+  workKind: homeownerProjectWorkKindSchema.default('project'),
   category: homeownerProjectSchema.shape.category,
   status: homeownerProjectSchema.shape.status,
   occurredOn: calendarDate.optional(),
@@ -518,10 +536,17 @@ export function homeownerIntakeCommandIntent(
  * Stable user intent for receipt hashing. Server execution time is deliberately
  * excluded so a lost-response retry can reuse the same commandRef safely.
  */
-export function homeownerProjectCommandIntent(input: CreateHomeownerProjectInput) {
+export function homeownerProjectCommandIntent(
+  input: z.input<typeof createHomeownerProjectInputSchema>,
+) {
   const command = createHomeownerProjectInputSchema.parse(input)
-  const { requestedAt: _requestedAt, ...intent } = command
-  return intent
+  const { requestedAt: _requestedAt, workKind, ...legacyIntent } = command
+  // Preserve the receipt digest produced before workKind existed. A rolling
+  // deploy can therefore retry an in-flight ordinary project command without
+  // turning the schema default into an idempotency conflict.
+  return workKind === 'project'
+    ? legacyIntent
+    : { ...legacyIntent, workKind }
 }
 
 export const storeHomeownerArtifactInputSchema = z.object({

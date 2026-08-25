@@ -44,6 +44,7 @@ import {
   OpenAIHomeResearchClient,
   readHomeResearchConfiguration,
 } from './home-research.ts'
+import { OpenAIHomeAssistantClient } from './home-assistant.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -108,6 +109,9 @@ const jobroloIntakeClient = jobroloIntakeConfiguration
 const homeResearchConfiguration = readHomeResearchConfiguration(environment)
 const homeResearchClient = homeResearchConfiguration
   ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
+  : null
+const homeAssistantClient = homeResearchConfiguration
+  ? new OpenAIHomeAssistantClient({ configuration: homeResearchConfiguration })
   : null
 let projectReviewService: HomeownerProjectReviewService | null = null
 const jobroloHandoffConfiguration = readJobroloHandoffClientConfiguration(environment)
@@ -259,4 +263,8 @@ export function configuredHomeRecordHandoffService(): {
 
 export function configuredHomeResearchClient(): OpenAIHomeResearchClient | null {
   return homeResearchClient
+}
+
+export function configuredHomeAssistantClient(): OpenAIHomeAssistantClient | null {
+  return homeAssistantClient
 }

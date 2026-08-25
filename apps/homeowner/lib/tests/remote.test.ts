@@ -849,6 +849,7 @@ test('createProject records bounded all-home work without browser authority fiel
   const completed = {
     ...PROJECT_VIEW,
     title: 'Kitchen remodel',
+    workKind: 'repair',
     category: 'interior',
     status: 'completed',
     occurredOn: '2024-06-15',
@@ -862,6 +863,7 @@ test('createProject records bounded all-home work without browser authority fiel
   const result = await port.createProject(HOME, {
     commandRef: REF('hcmd', 'g'),
     title: '  Kitchen remodel  ',
+    workKind: 'repair',
     category: 'interior',
     status: 'completed',
     occurredOn: '2024-06-15',
@@ -874,12 +876,14 @@ test('createProject records bounded all-home work without browser authority fiel
     body: {
       commandRef: REF('hcmd', 'g'),
       title: 'Kitchen remodel',
+      workKind: 'repair',
       category: 'interior',
       status: 'completed',
       occurredOn: '2024-06-15',
       summary: 'Cabinets, counters, and lighting replaced.',
     },
   }])
+  assert.equal(result.ok && result.value.workKind, 'repair')
   assert.doesNotMatch(JSON.stringify(requests), /principal|membership|role|provider/i)
 
   const blocked = recordingTransport({})

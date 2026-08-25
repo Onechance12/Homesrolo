@@ -61,6 +61,7 @@ const project: HomeownerProject = {
   homeRef,
   controllerPrincipalRef: principalRef,
   title: 'Kitchen update',
+  workKind: 'project',
   category: 'interior',
   status: 'planned',
   summary: 'Choose cabinets and counters.',
@@ -139,6 +140,7 @@ function workspace(overrides: Partial<HomeownerProjectWorkspacePort> = {}): Home
       return {
         ...project,
         ...(command.title === undefined ? {} : { title: command.title }),
+        ...(command.workKind === undefined ? {} : { workKind: command.workKind }),
         ...(command.category === undefined ? {} : { category: command.category }),
         ...(command.status === undefined ? {} : { status: command.status }),
         ...(Object.hasOwn(command, 'occurredOn')
@@ -236,6 +238,12 @@ test('workspace command contracts are strict, revisioned, and idempotency-stable
   assert.equal(updateHomeownerProjectInputSchema.safeParse({
     commandRef, projectRef, expectedRevision: 1, requestedAt: now,
   }).success, false, 'an empty update is rejected')
+  assert.equal(updateHomeownerProjectInputSchema.parse({
+    commandRef, projectRef, expectedRevision: 1, workKind: 'service', requestedAt: now,
+  }).workKind, 'service')
+  assert.equal(updateHomeownerProjectInputSchema.safeParse({
+    commandRef, projectRef, expectedRevision: 1, workKind: 'appointment', requestedAt: now,
+  }).success, false)
   assert.equal(saveHomeownerProjectItemInputSchema.safeParse({
     commandRef, projectRef, itemRef, kind: 'material', label: 'Tile',
     state: 'chosen', requestedAt: now,
@@ -288,10 +296,12 @@ test('project workspace commands enforce authentication, home scope, roles, and 
     commandRef,
     expectedRevision: 1,
     title: 'Kitchen remodel',
+    workKind: 'repair',
     professionalLabel: 'Sample Cabinet Company',
     archived: true,
   })
   assert.equal(archived.revision, 2)
+  assert.equal(archived.workKind, 'repair')
   assert.equal(archived.archived, true)
   assert.equal(archived.professionalLabel, 'Sample Cabinet Company')
 })
