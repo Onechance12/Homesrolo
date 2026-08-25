@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { use, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { usePort, useSession } from '../../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../../lib/port/hooks.ts'
@@ -11,97 +10,16 @@ import { IconDocs } from '../../../../../components/icons.tsx'
 import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
 import { mintCommandRef } from '../../../../../lib/port/command-ref.ts'
 import type {
-  HomeownerDataPort,
-  PortResult,
   Project,
+  ProjectActivity,
   ProjectCategory,
+  ProjectItem,
   ProjectReviewPreview,
   ProjectStatus,
 } from '../../../../../lib/port/types.ts'
 import { RoofQuoteVault } from '../../../../../components/RoofQuoteVault.tsx'
 
 type WorkspaceSection = 'overview' | 'activity' | 'files' | 'decisions' | 'people'
-
-type WorkspaceProject = Project & {
-  readonly revision: number
-  readonly category: ProjectCategory
-  readonly professionalLabel: string
-  readonly archived: boolean
-  readonly archivedAt: string | null
-}
-
-type ProjectActivity = {
-  readonly activityRef: string
-  readonly kind: 'note' | 'milestone'
-  readonly body: string
-  readonly occurredAt?: string
-  readonly createdAt?: string
-  readonly authorLabel?: string
-}
-
-type ProjectItem = {
-  readonly itemRef: string
-  readonly homeRef: string
-  readonly projectRef: string
-  readonly kind: 'material' | 'decision' | 'wishlist'
-  readonly label: string
-  readonly detail: string
-  readonly state: 'considering' | 'chosen' | 'purchased' | 'declined'
-  readonly source: string
-  readonly revision: number
-  readonly createdAt: string
-  readonly updatedAt: string
-}
-
-type UpdateProjectInput = {
-  readonly commandRef: string
-  readonly expectedRevision: number
-  readonly title?: string
-  readonly category?: ProjectCategory
-  readonly status?: ProjectStatus
-  readonly occurredOn?: string | null
-  readonly summary?: string | null
-  readonly professionalLabel?: string | null
-  readonly archived?: boolean
-}
-
-type ProjectWorkspacePort = {
-  updateProject(
-    homeRef: string,
-    projectRef: string,
-    input: UpdateProjectInput,
-  ): Promise<PortResult<WorkspaceProject>>
-  listProjectActivity(
-    homeRef: string,
-    projectRef: string,
-  ): Promise<PortResult<readonly ProjectActivity[]>>
-  addProjectActivity(
-    homeRef: string,
-    projectRef: string,
-    input: {
-      readonly commandRef: string
-      readonly kind: ProjectActivity['kind']
-      readonly body: string
-    },
-  ): Promise<PortResult<ProjectActivity>>
-  listProjectItems(
-    homeRef: string,
-    projectRef: string,
-  ): Promise<PortResult<readonly ProjectItem[]>>
-  saveProjectItem(
-    homeRef: string,
-    projectRef: string,
-    input: {
-      readonly commandRef: string
-      readonly itemRef?: string
-      readonly expectedRevision?: number
-      readonly kind: ProjectItem['kind']
-      readonly label: string
-      readonly detail?: string
-      readonly state: ProjectItem['state']
-    },
-  ): Promise<PortResult<ProjectItem>>
-}
 
 const WORKSPACE_SECTIONS: readonly { value: WorkspaceSection; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -127,16 +45,12 @@ const CATEGORIES: readonly { value: ProjectCategory; label: string; trade: strin
 ]
 
 function categoryFor(project: Project): ProjectCategory {
-  const declared = (project as WorkspaceProject).category
-  if (declared) return declared
-  return CATEGORIES.find(option => option.trade.toLowerCase() === project.trade.toLowerCase())?.value ?? 'other'
+  return project.category
 }
 
 function activityDate(activity: ProjectActivity): string {
-  const value = activity.occurredAt ?? activity.createdAt
-  if (!value) return 'Saved update'
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString()
+  const parsed = new Date(activity.createdAt)
+  return Number.isNaN(parsed.getTime()) ? activity.createdAt : parsed.toLocaleDateString()
 }
 
 /**
@@ -149,9 +63,7 @@ export default function ProjectPage({
   params: Promise<{ homeId: string; projectId: string }>
 }) {
   const { homeId, projectId } = use(params)
-  const router = useRouter()
   const port = usePort()
-  const workspacePort = port as HomeownerDataPort & Partial<ProjectWorkspacePort>
   const session = useSession()
   const sessionReady = session.state.kind !== 'loading'
   const uploadsEnabled = session.state.kind === 'signed_in'
@@ -162,20 +74,14 @@ export default function ProjectPage({
   const { state: filesState, retry: retryFiles } = usePortCall(() => uploadsEnabled
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
-  const activitySupported = typeof workspacePort.listProjectActivity === 'function'
-    && typeof workspacePort.addProjectActivity === 'function'
-  const itemsSupported = typeof workspacePort.listProjectItems === 'function'
-    && typeof workspacePort.saveProjectItem === 'function'
   const { state: activityState, retry: retryActivity } = usePortCall(() =>
-    workspacePort.listProjectActivity?.(homeId, projectId)
-      ?? Promise.resolve({ ok: true as const, value: [] as readonly ProjectActivity[] }),
+    port.listProjectActivity(homeId, projectId),
   )
   const { state: itemsState, retry: retryItems } = usePortCall(() =>
-    workspacePort.listProjectItems?.(homeId, projectId)
-      ?? Promise.resolve({ ok: true as const, value: [] as readonly ProjectItem[] }),
+    port.listProjectItems(homeId, projectId),
   )
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('overview')
-  const [savedProject, setSavedProject] = useState<WorkspaceProject | null>(null)
+  const [savedProject, setSavedProject] = useState<Project | null>(null)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editSummary, setEditSummary] = useState('')
@@ -199,9 +105,6 @@ export default function ProjectPage({
   const [savingItem, setSavingItem] = useState(false)
   const [itemError, setItemError] = useState<string | null>(null)
   const itemAttempt = useRef<string | null>(null)
-  const [confirmingArchive, setConfirmingArchive] = useState(false)
-  const [archiving, setArchiving] = useState(false)
-  const [archiveError, setArchiveError] = useState<string | null>(null)
   const [uploadKind, setUploadKind] = useState<'photo' | 'document' | 'warranty'>('photo')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -245,19 +148,19 @@ export default function ProjectPage({
     setEditStatus(project.status)
     setEditCategory(categoryFor(project))
     setEditOccurredOn(project.performedOn ?? '')
-    setEditProfessional((project as WorkspaceProject).professionalLabel || project.contractor || '')
+    setEditProfessional(project.professionalLabel || project.contractor || '')
     setEditError(null)
     editAttempt.current = null
     setEditing(true)
   }
 
-  async function saveProjectChanges(event: FormEvent<HTMLFormElement>, project: WorkspaceProject) {
+  async function saveProjectChanges(event: FormEvent<HTMLFormElement>, project: Project) {
     event.preventDefault()
-    if (!workspacePort.updateProject || savingProject || !editTitle.trim()) return
+    if (savingProject || !editTitle.trim()) return
     editAttempt.current ??= mintCommandRef()
     setSavingProject(true)
     setEditError(null)
-    const result = await workspacePort.updateProject(homeId, projectId, {
+    const result = await port.updateProject(homeId, projectId, {
       commandRef: editAttempt.current,
       expectedRevision: project.revision,
       title: editTitle.trim(),
@@ -269,9 +172,14 @@ export default function ProjectPage({
     })
     setSavingProject(false)
     if (!result.ok) {
-      setEditError(result.error === 'conflict'
-        ? 'This project changed in another session. Reopen it before saving your edits.'
-        : 'Homesrolo could not save these changes. Your existing project is unchanged.')
+      if (result.error === 'conflict') {
+        setSavedProject(null)
+        editAttempt.current = null
+        retry()
+        setEditError('This project changed somewhere else. Homesrolo is reloading the latest version; review your draft before saving again.')
+        return
+      }
+      setEditError('Homesrolo could not save these changes. Your existing project is unchanged.')
       return
     }
     setSavedProject(result.value)
@@ -281,11 +189,11 @@ export default function ProjectPage({
 
   async function addActivity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!workspacePort.addProjectActivity || addingActivity || !activityBody.trim()) return
+    if (addingActivity || !activityBody.trim()) return
     activityAttempt.current ??= mintCommandRef()
     setAddingActivity(true)
     setActivityError(null)
-    const result = await workspacePort.addProjectActivity(homeId, projectId, {
+    const result = await port.addProjectActivity(homeId, projectId, {
       commandRef: activityAttempt.current,
       kind: activityKind,
       body: activityBody.trim(),
@@ -302,11 +210,11 @@ export default function ProjectPage({
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!workspacePort.saveProjectItem || savingItem || !itemLabel.trim()) return
+    if (savingItem || !itemLabel.trim()) return
     itemAttempt.current ??= mintCommandRef()
     setSavingItem(true)
     setItemError(null)
-    const result = await workspacePort.saveProjectItem(homeId, projectId, {
+    const result = await port.saveProjectItem(homeId, projectId, {
       commandRef: itemAttempt.current,
       ...(editingItem ? {
         itemRef: editingItem.itemRef,
@@ -314,11 +222,21 @@ export default function ProjectPage({
       } : {}),
       kind: itemKind,
       label: itemLabel.trim(),
-      detail: itemDetail.trim(),
+      detail: itemDetail.trim() || undefined,
       state: itemState,
     })
     setSavingItem(false)
     if (!result.ok) {
+      if (result.error === 'conflict') {
+        itemAttempt.current = null
+        setEditingItem(null)
+        setItemLabel('')
+        setItemDetail('')
+        setItemState('considering')
+        retryItems()
+        setItemError('This item changed somewhere else. Homesrolo reloaded the latest list; choose Edit again to review it.')
+        return
+      }
       setItemError('This item was not saved. Check the details and try again.')
       return
     }
@@ -337,26 +255,6 @@ export default function ProjectPage({
     setItemDetail(item.detail)
     setItemState(item.state)
     setItemError(null)
-  }
-
-  async function archiveProject(project: WorkspaceProject) {
-    if (!workspacePort.updateProject || archiving || project.archived) return
-    setArchiving(true)
-    setArchiveError(null)
-    const result = await workspacePort.updateProject(homeId, projectId, {
-      commandRef: mintCommandRef(),
-      expectedRevision: project.revision,
-      archived: true,
-    })
-    setArchiving(false)
-    if (!result.ok) {
-      setArchiveError(result.error === 'conflict'
-        ? 'This project changed in another session. Reopen it before archiving.'
-        : 'Homesrolo could not archive this project. It is still in your project list.')
-      return
-    }
-    router.replace(`/home/${homeId}/projects`)
-    router.refresh()
   }
 
   function resetPreparedReview() {
@@ -452,9 +350,8 @@ export default function ProjectPage({
       : <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />
   }
   if (state.status !== 'ready') return null
-  const project = savedProject ?? state.value as WorkspaceProject
-  const editingSupported = typeof workspacePort.updateProject === 'function'
-    && Number.isInteger(project.revision)
+  const project = savedProject ?? state.value
+  const editingSupported = Number.isInteger(project.revision)
   const projectFiles = filesState.status === 'ready'
     ? filesState.value.filter(file => file.projectRef === project.projectRef)
     : []
@@ -519,31 +416,6 @@ export default function ProjectPage({
                 <div><dt>Work date</dt><dd>{project.performedOn ?? 'Not recorded'}</dd></div>
                 <div><dt>Professional</dt><dd>{project.professionalLabel || project.contractor || 'Not added'}</dd></div>
               </dl>
-              {project.archivedAt ? <div className="notice">This project was archived on {project.archivedAt}.</div> : null}
-              {editingSupported && !project.archived ? (
-                <div className="project-archive">
-                  {!confirmingArchive ? (
-                    <button type="button" onClick={() => {
-                      setArchiveError(null)
-                      setConfirmingArchive(true)
-                    }}>Archive project</button>
-                  ) : (
-                    <div role="group" aria-label="Confirm archive project">
-                      <div>
-                        <strong>Remove this project from your active list?</strong>
-                        <p>Archiving keeps its history. It does not permanently delete the project.</p>
-                      </div>
-                      <span>
-                        <button type="button" className="btn btn--quiet btn--compact" onClick={() => setConfirmingArchive(false)}>Cancel</button>
-                        <button type="button" className="btn btn--danger btn--compact" disabled={archiving} onClick={() => void archiveProject(project)}>
-                          {archiving ? 'Archiving…' : 'Archive project'}
-                        </button>
-                      </span>
-                    </div>
-                  )}
-                  {archiveError ? <div className="notice" role="alert">{archiveError}</div> : null}
-                </div>
-              ) : null}
             </div>
           ) : (
             <form className="project-edit" onSubmit={event => saveProjectChanges(event, project)}>
@@ -621,7 +493,7 @@ export default function ProjectPage({
           <div className="project-overview__head">
             <div><p className="mono">A running record</p><h2>Updates</h2></div>
           </div>
-          {activitySupported && !project.isSynthetic ? (
+          {!project.isSynthetic ? (
             <form className="project-quick-entry" onSubmit={addActivity}>
               <label className="field" style={{ marginTop: 0 }}>
                 <span>Type</span>
@@ -658,7 +530,6 @@ export default function ProjectPage({
                   <div>
                     <span className="mono">{activity.kind === 'milestone' ? 'Milestone' : 'Note'} · {activityDate(activity)}</span>
                     <p>{activity.body}</p>
-                    {activity.authorLabel ? <span className="project-activity__by">Added by {activity.authorLabel}</span> : null}
                   </div>
                 </li>
               ))}
@@ -669,7 +540,7 @@ export default function ProjectPage({
         </section>
       ) : null}
 
-      {activeSection === 'files' && project.isSynthetic ? <section className="project-workspace__panel" aria-labelledby="project-photos">
+      {activeSection === 'files' && project.isSynthetic ? <section id="project-panel-files" role="tabpanel" className="project-workspace__panel" aria-labelledby="project-tab-files">
         <div className="panel__head"><h2 id="project-photos">Photos</h2></div>
         {project.photos.length === 0 ? (
           <EmptyState title="No photos in this sample" body="This sample project has no saved photo records." />
@@ -760,7 +631,7 @@ export default function ProjectPage({
           <div className="project-overview__head">
             <div><p className="mono">Choices worth remembering</p><h2>Decisions, materials &amp; wish list</h2></div>
           </div>
-          {itemsSupported && !project.isSynthetic ? (
+          {!project.isSynthetic ? (
             <form className="project-item-form" onSubmit={addItem}>
               {editingItem ? (
                 <div className="project-item-form__mode">
@@ -836,7 +707,7 @@ export default function ProjectPage({
                     <span className={item.state === 'chosen' || item.state === 'purchased' ? 'pill pill--recorded' : 'pill pill--muted'}>
                       {item.state === 'purchased' ? 'Purchased' : item.state === 'chosen' ? 'Chosen' : item.state === 'declined' ? 'Not using' : 'Considering'}
                     </span>
-                    {itemsSupported && !project.isSynthetic ? (
+                    {!project.isSynthetic ? (
                       <button type="button" onClick={() => beginItemEdit(item)}>Edit</button>
                     ) : null}
                   </div>

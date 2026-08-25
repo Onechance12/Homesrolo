@@ -935,13 +935,13 @@ test('projects open as a compact mobile workspace with working-data controls', (
     'clearing a professional label is an explicit saved correction')
   assert.match(detail, /expectedRevision: editingItem\.revision/,
     'a saved decision cannot overwrite a newer edit')
-  assert.match(detail, /archived: true/,
-    'archive is a revision-safe state change rather than a hard delete')
-  assert.match(detail, /Archiving keeps its history\. It does not permanently delete the project\./,
-    'the destructive-looking action explains its recoverable behavior before confirmation')
-  assert.match(detail, /workspacePort\.addProjectActivity\(homeId, projectId/,
+  assert.match(detail, /detail: itemDetail\.trim\(\) \|\| undefined/,
+    'an optional blank item detail stays valid and can clear an older detail')
+  assert.doesNotMatch(detail, /Archive project|deleteProject/,
+    'the UI does not strand or delete projects before a restore surface exists')
+  assert.match(detail, /port\.addProjectActivity\(homeId, projectId/,
     'updates write through the project activity contract')
-  assert.match(detail, /workspacePort\.saveProjectItem\(homeId, projectId/,
+  assert.match(detail, /port\.saveProjectItem\(homeId, projectId/,
     'materials, decisions, and wish-list items share one bounded project contract')
   assert.match(detail, /This does not grant account or Home Record access\./,
     'a named professional is never confused with sharing authority')

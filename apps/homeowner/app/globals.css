@@ -1759,40 +1759,6 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
 .project-facts dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .project-edit__grid { display: grid; gap: 0.8rem; }
 .project-edit > .btn { justify-self: start; }
-.project-archive {
-  display: grid;
-  gap: 0.65rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid var(--rule);
-}
-.project-archive > button {
-  justify-self: start;
-  min-height: 44px;
-  padding: 0.35rem 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-faint);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 0.16em;
-}
-.project-archive > div[role='group'] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.9rem;
-  padding: 0.8rem;
-  border: 1px solid #e5b9b3;
-  border-radius: var(--radius-sm);
-  background: var(--brick-wash);
-}
-.project-archive > div[role='group'] > div { display: grid; gap: 0.12rem; }
-.project-archive > div[role='group'] p { color: var(--ink-soft); font-size: 0.82rem; }
-.project-archive > div[role='group'] > span { display: flex; gap: 0.45rem; flex: none; }
-
 .project-quick-entry,
 .project-item-form {
   display: grid;
@@ -1948,13 +1914,26 @@ a.thread__title:hover { color: var(--clay-deep); text-decoration: underline; }
   .project-facts > div:last-child { border-bottom: 0; }
   .project-overview__head { align-items: stretch; flex-direction: column; }
   .project-overview__head .btn { width: 100%; }
-  .project-archive > div[role='group'] { align-items: stretch; flex-direction: column; }
-  .project-archive > div[role='group'] > span { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-edit > .btn,
   .project-quick-entry .btn,
   .project-item-form > .btn { width: 100%; }
   .project-items li { align-items: stretch; flex-direction: column; }
   .project-items li > .pill { align-self: flex-start; }
+}
+
+@media (max-width: 34rem) {
+  .project-list-row { flex-wrap: wrap; }
+  .project-list-row .row__glyph { display: none; }
+  .project-list-row .row__end {
+    width: 100%;
+    max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    padding-left: 0;
+    text-align: left;
+  }
 }
 
 .jobdoc {

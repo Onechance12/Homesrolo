@@ -279,7 +279,7 @@ export default function ProjectsPage({
           <ul className="rows panel panel--flush" style={{ display: 'block' }}>
             {state.value.map(project => (
               <li key={project.projectRef}>
-                <Link className="row" href={`/home/${homeId}/projects/${project.projectRef}`}>
+                <Link className="row project-list-row" href={`/home/${homeId}/projects/${project.projectRef}`}>
                   <span className="row__glyph"><IconProjects /></span>
                   <span className="row__body">
                     <span className="row__title">{project.title}</span>
