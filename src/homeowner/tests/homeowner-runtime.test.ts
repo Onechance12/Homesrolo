@@ -428,7 +428,8 @@ test('project commands use the runtime vocabulary and reject impossible dates', 
     occurredOn: '2026-05-12',
     requestedAt: now,
   }
-  assert.ok(createHomeownerProjectInputSchema.parse(command))
+  const parsed = createHomeownerProjectInputSchema.parse(command)
+  assert.equal(parsed.workKind, 'project', 'older create payloads default to project')
   assert.deepEqual(
     homeownerProjectCommandIntent(command),
     {
@@ -444,6 +445,25 @@ test('project commands use the runtime vocabulary and reject impossible dates', 
     homeownerProjectCommandIntent({ ...command, requestedAt: '2026-08-10T12:05:00.000Z' }),
     homeownerProjectCommandIntent(command),
   )
+  assert.equal(createHomeownerProjectInputSchema.parse({
+    ...command,
+    workKind: 'service',
+  }).workKind, 'service')
+  assert.deepEqual(homeownerProjectCommandIntent({
+    ...command,
+    workKind: 'service',
+  }), {
+    commandRef: command.commandRef,
+    title: command.title,
+    category: command.category,
+    status: command.status,
+    occurredOn: command.occurredOn,
+    workKind: 'service',
+  })
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    workKind: 'appointment',
+  }))
   assert.throws(() => createHomeownerProjectInputSchema.parse({
     ...command,
     status: 'recorded',

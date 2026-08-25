@@ -302,7 +302,7 @@ export type RoloDestination = 'home' | 'rolo' | 'activity' | 'library' | 'detail
  * project command instead of creating a second chatbot-owned data system.
  */
 export interface RoloWorkDraft {
-  readonly kind: 'project' | 'issue' | 'repair' | 'service' | 'incident'
+  readonly kind: HomeownerWorkKind
   readonly title: string
   readonly category: ProjectCategory
   readonly status: ProjectStatus
@@ -334,6 +334,9 @@ export interface AskRoloResult {
 /** Mirrors homeownerProjectSchema.status in homeowner-runtime.v1 exactly. */
 export type ProjectStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
 
+/** One durable work record model, with a homeowner-readable discriminator. */
+export type HomeownerWorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident'
+
 export type ProjectCategory =
   | 'roofing'
   | 'exterior'
@@ -352,6 +355,7 @@ export interface ProjectSummary {
   readonly projectRef: string
   readonly homeRef: string
   readonly title: string
+  readonly workKind: HomeownerWorkKind
   readonly category: ProjectCategory
   readonly trade: string
   /** Exact work date supplied by the homeowner, or null when it is not known. */
@@ -399,6 +403,8 @@ export interface AddProjectInput {
 export interface CreateProjectInput {
   readonly commandRef: string
   readonly title: string
+  /** Omitted by older callers; the server canonicalizes omission to project. */
+  readonly workKind?: HomeownerWorkKind
   readonly category: ProjectCategory
   readonly status: ProjectStatus
   readonly occurredOn?: string
@@ -409,6 +415,7 @@ export interface UpdateProjectInput {
   readonly commandRef: string
   readonly expectedRevision: number
   readonly title?: string
+  readonly workKind?: HomeownerWorkKind
   readonly category?: ProjectCategory
   readonly status?: ProjectStatus
   /** Null clears the known work date; omission preserves it. */

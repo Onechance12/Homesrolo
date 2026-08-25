@@ -72,6 +72,7 @@ const project = {
   homeRef,
   controllerPrincipalRef: principalRef,
   title: 'Roof replacement',
+  workKind: 'project',
   category: 'roofing',
   status: 'planned',
   summary: 'Roof is near the end of its useful life.',

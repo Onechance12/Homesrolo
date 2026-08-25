@@ -20,6 +20,7 @@ export interface RoloHomeDashboardProps {
   readonly documents: readonly DocumentSummary[] | null
   readonly uploadsEnabled: boolean
   readonly checkupsEnabled: boolean
+  readonly assistantEnabled: boolean
   readonly synthetic: boolean
 }
 
@@ -92,6 +93,7 @@ export function RoloHomeDashboard({
   documents,
   uploadsEnabled,
   checkupsEnabled,
+  assistantEnabled,
   synthetic,
 }: RoloHomeDashboardProps) {
   const cardDeck = useRef<HTMLUListElement | null>(null)
@@ -218,14 +220,23 @@ export function RoloHomeDashboard({
           </div>
           <h1 id="rolo-home-title">What does {label} need today?</h1>
           <p>
-            Tell Rolo about a repair, service visit, purchase, idea, or project.
-            Or open the exact part of the home you need.
+            {assistantEnabled
+              ? 'Tell Rolo about a repair, service visit, purchase, idea, or project. Or open the exact part of the home you need.'
+              : 'Add a repair, service visit, purchase, idea, or project—or open the exact part of the home you need.'}
           </p>
-          <button className={styles.askButton} type="button" onClick={openAssistant}>
-            <span className={styles.askGlyph} aria-hidden="true">R</span>
-            <span><strong>Ask Rolo</strong><small>Talk it through naturally</small></span>
-            <span className={styles.askArrow} aria-hidden="true">↗</span>
-          </button>
+          {assistantEnabled ? (
+            <button className={styles.askButton} type="button" onClick={openAssistant}>
+              <span className={styles.askGlyph} aria-hidden="true">R</span>
+              <span><strong>Ask Rolo</strong><small>Talk it through naturally</small></span>
+              <span className={styles.askArrow} aria-hidden="true">↗</span>
+            </button>
+          ) : (
+            <Link className={styles.askButton} href={`/home/${homeId}/projects`}>
+              <span className={styles.askGlyph} aria-hidden="true">+</span>
+              <span><strong>Add work</strong><small>Record it manually</small></span>
+              <span className={styles.askArrow} aria-hidden="true">↗</span>
+            </Link>
+          )}
           <span className={styles.privacyLine}>Private by default. You approve what gets saved.</span>
         </div>
 

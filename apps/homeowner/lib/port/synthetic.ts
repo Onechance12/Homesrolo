@@ -190,8 +190,8 @@ export const syntheticPort: HomeownerDataPort = {
     if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
     const created = memory.createdProjects
       .filter(p => p.homeRef === homeRef && !p.archived)
-      .map(({ projectRef, homeRef: hr, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
-        projectRef, homeRef: hr, title, category, trade, performedOn, status,
+      .map(({ projectRef, homeRef: hr, title, workKind, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
+        projectRef, homeRef: hr, title, workKind, category, trade, performedOn, status,
         professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
         isSynthetic: true as const,
       }))
@@ -217,6 +217,7 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: input.title.trim() || 'Untitled project',
+      workKind: 'project',
       category: 'other',
       trade: input.trade.trim() || 'General',
       performedOn: input.performedOn,
@@ -236,9 +237,9 @@ export const syntheticPort: HomeownerDataPort = {
       isSynthetic: true,
     }
     memory.createdProjects.push(project)
-    const { projectRef, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount } = project
+    const { projectRef, title, workKind, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount } = project
     return ok({
-      projectRef, homeRef, title, category, trade, performedOn, status,
+      projectRef, homeRef, title, workKind, category, trade, performedOn, status,
       professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
       isSynthetic: true as const,
     })
@@ -259,6 +260,7 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: input.title.trim(),
+      workKind: input.workKind ?? 'project',
       category: input.category,
       trade: trade[input.category],
       performedOn: input.occurredOn ?? null,
@@ -328,6 +330,7 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: titles[input.need],
+      workKind: 'project',
       category: 'roofing',
       trade: 'Roofing',
       performedOn: null,

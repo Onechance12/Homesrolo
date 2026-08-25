@@ -1,4 +1,4 @@
-import type { ProjectStatus } from '../lib/port/types.ts'
+import type { HomeownerWorkKind, ProjectStatus } from '../lib/port/types.ts'
 
 /** One vocabulary for the four runtime-aligned statuses, shared by list and detail. */
 
@@ -15,3 +15,17 @@ export const STATUS_PILL: Record<ProjectStatus, string> = {
   completed: 'pill pill--recorded',
   cancelled: 'pill pill--muted',
 }
+
+/** Human labels for the discriminator on the one existing work-record model. */
+export const WORK_KIND_LABEL: Record<HomeownerWorkKind, string> = {
+  project: 'Project',
+  issue: 'Issue',
+  repair: 'Repair',
+  service: 'Service visit',
+  incident: 'Home event',
+}
+
+export const WORK_KIND_OPTIONS = (Object.entries(WORK_KIND_LABEL) as [
+  HomeownerWorkKind,
+  string,
+][]).map(([value, label]) => ({ value, label }))

@@ -36,7 +36,8 @@
 import { COMMAND_REF_PATTERN } from './command-ref.ts'
 import {
   NO_CAPABILITIES,
-  type HomeownerDataPort, type HomeownerSession, type PortResult, type SessionState,
+  type HomeownerDataPort, type HomeownerSession, type HomeownerWorkKind, type PortResult,
+  type SessionState,
 } from './types.ts'
 import {
   fetchArtifactUploadTransport,
@@ -144,6 +145,9 @@ const PROJECT_CATEGORIES = [
   'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
 ] as const
 const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+const PROJECT_WORK_KINDS = new Set<HomeownerWorkKind>([
+  'project', 'issue', 'repair', 'service', 'incident',
+])
 
 function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>[2]) {
   const body: Record<string, unknown> = {
@@ -159,6 +163,11 @@ function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>
     const title = input.title.trim()
     if (title.length < 1 || title.length > 120) return null
     body.title = title
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'workKind')) {
+    if (!input.workKind || !PROJECT_WORK_KINDS.has(input.workKind)) return null
+    body.workKind = input.workKind
     editableFieldCount += 1
   }
   if (Object.hasOwn(input, 'category')) {
@@ -724,8 +733,10 @@ export function createRemotePort(
       const title = input.title.trim()
       const summary = input.summary.trim()
       const occurredOn = input.occurredOn?.trim()
+      const workKind = input.workKind ?? 'project'
       if (!ref
         || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !PROJECT_WORK_KINDS.has(workKind)
         || !categories.includes(input.category)
         || !statuses.includes(input.status)
         || title.length < 1
@@ -740,6 +751,7 @@ export function createRemotePort(
         body: {
           commandRef: input.commandRef,
           title,
+          workKind,
           category: input.category,
           status: input.status,
           ...(occurredOn ? { occurredOn } : {}),
@@ -753,6 +765,7 @@ export function createRemotePort(
         pool: 'Pool', new_construction: 'New construction', other: 'Other',
       } as const
       if (result.ok && (result.value.homeRef !== ref
+        || result.value.workKind !== workKind
         || result.value.trade !== trade[input.category]
         || result.value.status !== input.status
         || result.value.performedOn !== (occurredOn || null))) {

@@ -64,6 +64,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
 
   const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
   const visibleNav = NAV
+  const assistantEnabled = session.capabilities.homeResearch
 
   function openAssistant() {
     window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))
@@ -109,9 +110,13 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
               <Icon /> {label}
             </Link>
           ))}
-          <button type="button" className="rail__ask" onClick={openAssistant}>
-            <HouseMark size={20} /> <span><strong>Ask Rolo</strong><small>Talk about this home</small></span>
-          </button>
+          {assistantEnabled ? (
+            <button type="button" className="rail__ask" onClick={openAssistant}>
+              <HouseMark size={20} /> <span><strong>Ask Rolo</strong><small>Talk about this home</small></span>
+            </button>
+          ) : (
+            <Link href={`/home/${homeId}/projects`}><IconThread size={20} /> Work</Link>
+          )}
         </div>
         <div className="rail__foot">
           <span className="mono">
@@ -147,10 +152,14 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
             <Icon size={22} /> {tabLabel}
           </Link>
         ))}
-        <button type="button" className="tabbar__ask" onClick={openAssistant} aria-haspopup="dialog">
-          <span><HouseMark size={25} /></span>
-          Ask
-        </button>
+        {assistantEnabled ? (
+          <button type="button" className="tabbar__ask" onClick={openAssistant} aria-haspopup="dialog">
+            <span><HouseMark size={25} /></span>
+            Ask
+          </button>
+        ) : (
+          <Link href={`/home/${homeId}/projects`}><IconThread size={22} /> Work</Link>
+        )}
         {visibleNav.slice(2).map(({ segment, tabLabel, icon: Icon }) => (
           <Link
             key={segment}
@@ -161,7 +170,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
           </Link>
         ))}
       </nav>
-      <AssistantDock key={homeId} homeId={homeId} />
+      {assistantEnabled ? <AssistantDock key={homeId} homeId={homeId} /> : null}
     </div>
   )
 }

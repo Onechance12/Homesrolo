@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { isRealCalendarDate } from '../contracts/home-file-record.v1.ts'
-import type {
-  AuthorizedHomeownerAction,
-  AuthorizedHomeownerWorkspace,
-  HomeownerProject,
+import {
+  homeownerProjectWorkKindSchema,
+  type AuthorizedHomeownerAction,
+  type AuthorizedHomeownerWorkspace,
+  type HomeownerProject,
 } from './homeowner-runtime.v1.ts'
 
 export const HOMEOWNER_PROJECT_WORKSPACE_VERSION = 'homeowner-project-workspace.v1' as const
@@ -50,6 +51,7 @@ export const updateHomeownerProjectFieldsSchema = z.object({
   projectRef: opaqueRef('hprj'),
   expectedRevision: z.number().int().min(1),
   title: z.string().trim().min(1).max(120).optional(),
+  workKind: homeownerProjectWorkKindSchema.optional(),
   category: homeownerProjectCategorySchema.optional(),
   status: homeownerProjectStatusSchema.optional(),
   occurredOn: calendarDate.nullable().optional(),
@@ -63,6 +65,7 @@ export const updateHomeownerProjectInputSchema =
   updateHomeownerProjectFieldsSchema.superRefine((command, context) => {
     const editableKeys = [
       'title',
+      'workKind',
       'category',
       'status',
       'occurredOn',

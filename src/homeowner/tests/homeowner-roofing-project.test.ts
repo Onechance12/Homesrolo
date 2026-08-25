@@ -49,6 +49,7 @@ const project: HomeownerProject = {
   homeRef,
   controllerPrincipalRef: principalRef,
   title: 'Roof repair',
+  workKind: 'project',
   category: 'roofing',
   status: 'planned',
   summary: 'Timing: As soon as possible\n\nLeak above the back room.',
@@ -123,6 +124,7 @@ test('roofing project creation derives scope, trade, status, title, summary, and
   assert.deepEqual(commandInput.command, {
     commandRef: `hcmd_${body('c')}`,
     title: 'Roof repair',
+    workKind: 'project',
     category: 'roofing',
     status: 'planned',
     summary: 'Timing: As soon as possible\n\nLeak above the back room.',
@@ -154,6 +156,7 @@ test('generic project creation records historical work across the home', async (
   const result = await service({ commands }).createProject(context, homeRef, {
     commandRef: `hcmd_${body('g')}`,
     title: 'Kitchen remodel',
+    workKind: 'project',
     category: 'interior',
     status: 'completed',
     occurredOn: '2024-06-15',

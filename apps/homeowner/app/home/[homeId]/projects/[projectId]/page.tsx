@@ -8,7 +8,9 @@ import { usePortCall } from '../../../../../lib/port/hooks.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../../components/states.tsx'
 import { PhotoPlate } from '../../../../../components/PhotoPlate.tsx'
 import { IconDocs } from '../../../../../components/icons.tsx'
-import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
+import {
+  STATUS_LABEL, WORK_KIND_LABEL, WORK_KIND_OPTIONS,
+} from '../../../../../components/projectStatus.ts'
 import { mintCommandRef } from '../../../../../lib/port/command-ref.ts'
 import { PrivateArtifactCollection, PrivateArtifactUploader } from '../../../../../components/PrivateArtifacts.tsx'
 import type {
@@ -18,6 +20,7 @@ import type {
   ProjectItem,
   ProjectReviewPreview,
   ProjectStatus,
+  HomeownerWorkKind,
 } from '../../../../../lib/port/types.ts'
 import { RoofQuoteVault } from '../../../../../components/RoofQuoteVault.tsx'
 
@@ -92,6 +95,7 @@ export default function ProjectPage({
   const [savedProject, setSavedProject] = useState<Project | null>(null)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
+  const [editWorkKind, setEditWorkKind] = useState<HomeownerWorkKind>('project')
   const [editSummary, setEditSummary] = useState('')
   const [editStatus, setEditStatus] = useState<ProjectStatus>('planned')
   const [editCategory, setEditCategory] = useState<ProjectCategory>('other')
@@ -154,6 +158,7 @@ export default function ProjectPage({
 
   function beginEditing(project: Project) {
     setEditTitle(project.title)
+    setEditWorkKind(project.workKind)
     setEditSummary(project.summary)
     setEditStatus(project.status)
     setEditCategory(categoryFor(project))
@@ -174,6 +179,7 @@ export default function ProjectPage({
       commandRef: editAttempt.current,
       expectedRevision: project.revision,
       title: editTitle.trim(),
+      workKind: editWorkKind,
       summary: editSummary.trim() || null,
       status: editStatus,
       category: editCategory,
@@ -349,7 +355,7 @@ export default function ProjectPage({
 
       <header className="project-workspace__head">
         <div>
-          <p className="mono">{project.trade} · Project record</p>
+          <p className="mono">{project.trade} · {WORK_KIND_LABEL[project.workKind]} record</p>
           <h1>{project.title}</h1>
           <p>{project.summary || 'Add notes, photos, decisions, and people as this work takes shape.'}</p>
         </div>
@@ -389,7 +395,7 @@ export default function ProjectPage({
               <div className="project-overview__head">
                 <div>
                   <p className="mono">The basics</p>
-                  <h2>Project overview</h2>
+                  <h2>Work overview</h2>
                 </div>
                 {editingSupported ? (
                   <button type="button" className="btn btn--quiet btn--compact" onClick={() => beginEditing(project)}>
@@ -398,6 +404,7 @@ export default function ProjectPage({
                 ) : null}
               </div>
               <dl className="project-facts">
+                <div><dt>Type</dt><dd>{WORK_KIND_LABEL[project.workKind]}</dd></div>
                 <div><dt>Status</dt><dd>{STATUS_LABEL[project.status]}</dd></div>
                 <div><dt>Area</dt><dd>{project.trade}</dd></div>
                 <div><dt>Work date</dt><dd>{project.performedOn ?? 'Not recorded'}</dd></div>
@@ -412,11 +419,22 @@ export default function ProjectPage({
               </div>
               <div className="project-edit__grid">
                 <label className="field" style={{ marginTop: 0 }}>
-                  <span>Project name</span>
+                  <span>Work name</span>
                   <input value={editTitle} required maxLength={120} onChange={event => {
                     editAttempt.current = null
                     setEditTitle(event.target.value)
                   }} />
+                </label>
+                <label className="field" style={{ marginTop: 0 }}>
+                  <span>Type</span>
+                  <select value={editWorkKind} onChange={event => {
+                    editAttempt.current = null
+                    setEditWorkKind(event.target.value as HomeownerWorkKind)
+                  }}>
+                    {WORK_KIND_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </label>
                 <label className="field" style={{ marginTop: 0 }}>
                   <span>Part of the home</span>
@@ -463,7 +481,7 @@ export default function ProjectPage({
               </label>
               {editError ? <div className="notice" role="alert">{editError}</div> : null}
               <button className="btn btn--primary" type="submit" disabled={savingProject || !editTitle.trim()}>
-                {savingProject ? 'Saving changes…' : 'Save project'}
+                {savingProject ? 'Saving changes…' : 'Save work record'}
               </button>
             </form>
           )}

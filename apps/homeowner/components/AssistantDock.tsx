@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { commandRefForAttempt, mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePort, useSession } from '../lib/port/provider.tsx'
+import { roloThreadStorageKey } from '../lib/rolo-thread-storage.ts'
 import type {
   AskRoloResult,
   RoloAssistantTurn,
@@ -67,9 +68,9 @@ function destinationHref(homeId: string, destination: RoloDestination, projectRe
   return `/home/${homeId}`
 }
 
-function readStoredThread(homeId: string): ThreadMessage[] {
+function readStoredThread(storageKey: string): ThreadMessage[] {
   try {
-    const raw = sessionStorage.getItem(`homesrolo:rolo-thread:${homeId}`)
+    const raw = sessionStorage.getItem(storageKey)
     if (!raw) return []
     const decoded = JSON.parse(raw) as unknown
     if (!Array.isArray(decoded)) return []
@@ -103,8 +104,10 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const pathname = usePathname()
   const port = usePort()
   const { state: session } = useSession()
+  const principalRef = session.kind === 'signed_in' ? session.session.principalRef : 'signed-out'
+  const storageKey = roloThreadStorageKey(homeId, principalRef)
   const [open, setOpen] = useState(false)
-  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredThread(homeId))
+  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredThread(storageKey))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -114,22 +117,34 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const [followUps, setFollowUps] = useState<readonly string[]>([])
   const [savedProject, setSavedProject] = useState<{ ref: string; title: string; partial: boolean } | null>(null)
   const saveAttempt = useRef<string | null>(null)
+  const sendInFlight = useRef(false)
+  const saveInFlight = useRef(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
+  const drawerRef = useRef<HTMLElement | null>(null)
+  const launchRef = useRef<HTMLElement | null>(null)
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
 
+  const closeAssistant = useCallback(() => {
+    setOpen(false)
+    requestAnimationFrame(() => launchRef.current?.focus())
+  }, [])
+
   useEffect(() => {
     try {
-      sessionStorage.setItem(`homesrolo:rolo-thread:${homeId}`, JSON.stringify(thread.slice(-12)))
+      sessionStorage.setItem(storageKey, JSON.stringify(thread.slice(-12)))
     } catch {
       // Conversation persistence is a convenience only; the app still works.
     }
-  }, [homeId, thread])
+  }, [storageKey, thread])
 
   useEffect(() => {
-    const show = () => setOpen(true)
+    const show = () => {
+      if (document.activeElement instanceof HTMLElement) launchRef.current = document.activeElement
+      setOpen(true)
+    }
     window.addEventListener('homesrolo:open-assistant', show)
     return () => window.removeEventListener('homesrolo:open-assistant', show)
   }, [])
@@ -137,15 +152,43 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeAssistant()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = [...(drawerRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [])]
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
-    const timer = window.setTimeout(() => inputRef.current?.focus(), 80)
+    const background = [...document.querySelectorAll<HTMLElement>('.topbar, .rail, .main, .tabbar')]
+    const previousInert = background.map(node => node.inert)
+    background.forEach(node => { node.inert = true })
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const timer = window.setTimeout(() => {
+      if (assistantEnabled) inputRef.current?.focus()
+      else drawerRef.current?.querySelector<HTMLElement>('button')?.focus()
+    }, 80)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.clearTimeout(timer)
+      background.forEach((node, index) => { node.inert = previousInert[index] ?? false })
+      document.body.style.overflow = previousOverflow
     }
-  }, [open])
+  }, [assistantEnabled, closeAssistant, open])
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' })
@@ -158,7 +201,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
 
   async function sendMessage(message: string) {
     const clean = message.trim()
-    if (!clean || busy || !assistantEnabled) return
+    if (!clean || busy || sendInFlight.current || !assistantEnabled) return
+    sendInFlight.current = true
     const userMessage: ThreadMessage = { id: `user-${crypto.randomUUID()}`, role: 'user', text: clean }
     setThread(current => [...current, userMessage].slice(-12))
     setInput('')
@@ -169,13 +213,22 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setFollowUps([])
     setSavedProject(null)
     saveAttempt.current = null
-    const result = await port.askRolo(homeId, {
-      message: clean,
-      history,
-      destination,
-      ...(currentProjectRef ? { projectRef: currentProjectRef } : {}),
-    })
+    let result: Awaited<ReturnType<typeof port.askRolo>>
+    try {
+      result = await port.askRolo(homeId, {
+        message: clean,
+        history,
+        destination,
+        ...(currentProjectRef ? { projectRef: currentProjectRef } : {}),
+      })
+    } catch {
+      setBusy(false)
+      sendInFlight.current = false
+      setError('Rolo could not answer right now. Your home information was not changed.')
+      return
+    }
     setBusy(false)
+    sendInFlight.current = false
     if (!result.ok) {
       setError(assistantError(result.error))
       return
@@ -192,59 +245,66 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   }
 
   async function saveProposal() {
-    if (!proposal || saveBusy) return
+    if (!proposal || saveBusy || saveInFlight.current) return
+    saveInFlight.current = true
     const commandRef = commandRefForAttempt(saveAttempt.current)
     saveAttempt.current = commandRef
     setSaveBusy(true)
     setError(null)
-    const created = await port.createProject(homeId, {
-      commandRef,
-      title: proposal.title,
-      category: proposal.category,
-      status: proposal.status,
-      ...(proposal.occurredOn ? { occurredOn: proposal.occurredOn } : {}),
-      summary: proposal.summary,
-    })
-    if (!created.ok) {
-      setSaveBusy(false)
-      setError('That work record was not saved. Review it and try again; Rolo will not make a duplicate.')
-      return
-    }
+    try {
+      const created = await port.createProject(homeId, {
+        commandRef,
+        title: proposal.title,
+        workKind: proposal.kind,
+        category: proposal.category,
+        status: proposal.status,
+        ...(proposal.occurredOn ? { occurredOn: proposal.occurredOn } : {}),
+        summary: proposal.summary,
+      })
+      if (!created.ok) {
+        setError('That work record was not saved. Review it and try again; Rolo will not make a duplicate.')
+        return
+      }
 
-    let revision = created.value.revision
-    let partial = false
-    if (proposal.professionalLabel) {
-      const updated = await port.updateProject(homeId, created.value.projectRef, {
-        commandRef: mintCommandRef(),
-        expectedRevision: revision,
-        professionalLabel: proposal.professionalLabel,
-      })
-      if (updated.ok) revision = updated.value.revision
-      else partial = true
+      let revision = created.value.revision
+      let partial = false
+      if (proposal.professionalLabel) {
+        const updated = await port.updateProject(homeId, created.value.projectRef, {
+          commandRef: mintCommandRef(),
+          expectedRevision: revision,
+          professionalLabel: proposal.professionalLabel,
+        })
+        if (updated.ok) revision = updated.value.revision
+        else partial = true
+      }
+      if (proposal.firstUpdate) {
+        const update = await port.addProjectActivity(homeId, created.value.projectRef, {
+          commandRef: mintCommandRef(),
+          kind: 'note',
+          body: proposal.firstUpdate,
+        })
+        if (!update.ok) partial = true
+      }
+      setProposal(null)
+      saveAttempt.current = null
+      setSavedProject({ ref: created.value.projectRef, title: created.value.title, partial })
+      const savedMessage: ThreadMessage = {
+        id: `saved-${created.value.projectRef}`,
+        role: 'assistant',
+        text: partial
+          ? `I saved ${created.value.title}. One extra detail did not attach, so open the record to review it.`
+          : `Saved. ${created.value.title} is now part of this home's work history.`,
+      }
+      setThread(current => [...current, savedMessage].slice(-12))
+      window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
+        detail: { homeId, projectRef: created.value.projectRef },
+      }))
+    } catch {
+      setError('That work record was not saved. Review it and try again; Rolo will not make a duplicate.')
+    } finally {
+      setSaveBusy(false)
+      saveInFlight.current = false
     }
-    if (proposal.firstUpdate) {
-      const update = await port.addProjectActivity(homeId, created.value.projectRef, {
-        commandRef: mintCommandRef(),
-        kind: 'note',
-        body: proposal.firstUpdate,
-      })
-      if (!update.ok) partial = true
-    }
-    setSaveBusy(false)
-    setProposal(null)
-    saveAttempt.current = null
-    setSavedProject({ ref: created.value.projectRef, title: created.value.title, partial })
-    const savedMessage: ThreadMessage = {
-      id: `saved-${created.value.projectRef}`,
-      role: 'assistant',
-      text: partial
-        ? `I saved ${created.value.title}. One extra detail did not attach, so open the record to review it.`
-        : `Saved. ${created.value.title} is now part of this home's work history.`,
-    }
-    setThread(current => [...current, savedMessage].slice(-12))
-    window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
-      detail: { homeId, projectRef: created.value.projectRef },
-    }))
   }
 
   function clearConversation() {
@@ -254,32 +314,22 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setFollowUps([])
     setSavedProject(null)
     setError(null)
-    try { sessionStorage.removeItem(`homesrolo:rolo-thread:${homeId}`) } catch {}
+    try { sessionStorage.removeItem(storageKey) } catch {}
   }
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.floatingTrigger}
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-      >
-        <HouseMark size={22} />
-        <span>Ask Rolo</span>
-      </button>
-
       {open ? (
         <div className={styles.layer}>
-          <button className={styles.backdrop} type="button" aria-label="Close Rolo" onClick={() => setOpen(false)} />
-          <aside className={styles.drawer} role="dialog" aria-modal="true" aria-labelledby="rolo-assistant-title">
+          <button className={styles.backdrop} type="button" aria-label="Close Rolo" onClick={closeAssistant} />
+          <aside ref={drawerRef} className={styles.drawer} role="dialog" aria-modal="true" aria-labelledby="rolo-assistant-title">
             <header className={styles.header}>
               <span className={styles.mark}><HouseMark size={28} /></span>
               <div>
                 <p>Inside this home</p>
                 <h2 id="rolo-assistant-title">Ask Rolo</h2>
               </div>
-              <button type="button" className={styles.close} onClick={() => setOpen(false)} aria-label="Close Rolo">×</button>
+              <button type="button" className={styles.close} onClick={closeAssistant} aria-label="Close Rolo">×</button>
             </header>
 
             <div className={styles.thread} ref={threadRef} role="log" aria-live="polite">
@@ -342,7 +392,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
               {savedProject ? (
                 <div className={styles.saved} role="status">
                   <span>Saved to this home</span>
-                  <Link href={`/home/${homeId}/projects/${savedProject.ref}`} onClick={() => setOpen(false)}>
+                  <Link href={`/home/${homeId}/projects/${savedProject.ref}`} onClick={closeAssistant}>
                     Open {savedProject.title} →
                   </Link>
                 </div>
@@ -352,7 +402,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 <Link
                   className={styles.destination}
                   href={destinationHref(homeId, suggestion.destination, suggestion.projectRef)}
-                  onClick={() => setOpen(false)}
+                  onClick={closeAssistant}
                 >
                   Open {suggestion.destination === 'library' ? 'Library' : suggestion.destination === 'activity' ? 'Activity' : suggestion.destination === 'rolo' ? 'the Rolo' : suggestion.destination === 'details' ? 'Home details' : 'that record'} →
                 </Link>
@@ -360,9 +410,9 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
 
               {followUps.length > 0 ? (
                 <div className={styles.followUps} aria-label="Continue the conversation">
-                  {followUps.map(question => (
-                    <button key={question} type="button" onClick={() => setInput(question)}>{question}</button>
-                  ))}
+                  <span>Rolo still needs:</span>
+                  <ul>{followUps.map(question => <li key={question}>{question}</li>)}</ul>
+                  <button type="button" onClick={() => { setInput(''); inputRef.current?.focus() }}>Answer Rolo</button>
                 </div>
               ) : null}
 
@@ -400,7 +450,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 <button type="submit" disabled={!assistantEnabled || busy || !input.trim()} aria-label="Send to Rolo">↑</button>
               </div>
               <span>
-                Your message and a short index of saved labels are processed by OpenAI. File and photo contents are not sent.
+                Your message and a limited index of this home—including locality, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. Street address and file or photo contents are not sent.
                 Rolo does not diagnose, price, hire, or save without approval.
               </span>
             </form>

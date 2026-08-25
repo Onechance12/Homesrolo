@@ -311,6 +311,9 @@ export class OpenAIHomeAssistantClient implements HomeAssistantClient {
     const projectRef = output.projectRef && knownProjectRefs.has(output.projectRef)
       ? output.projectRef
       : null
+    const destination = output.destination === 'work' && !projectRef
+      ? null
+      : output.destination
     const today = new Date().toISOString().slice(0, 10)
     const proposedWork = output.proposedWork
       ? {
@@ -336,7 +339,7 @@ export class OpenAIHomeAssistantClient implements HomeAssistantClient {
       requestRef,
       answer: output.answer,
       proposedWork,
-      destination: output.destination,
+      destination,
       projectRef,
       followUpQuestions: Object.freeze(output.followUpQuestions),
       disclosure: 'Nothing is saved until you review and approve it.',

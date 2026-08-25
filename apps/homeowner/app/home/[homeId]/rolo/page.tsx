@@ -220,7 +220,7 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
         : 'Filed with this home',
       meta: `Added ${readableDate(document.addedOn)}`,
       href: document.projectRef
-        ? `/home/${homeId}/projects/${document.projectRef}`
+        ? `/home/${homeId}/projects/${document.projectRef}?section=files`
         : `/home/${homeId}/documents`,
       tab: document.kind === 'photo_set' ? 'PHOTO' : 'FILE',
       mark: document.kind === 'photo_set' ? '▣' : '≡',

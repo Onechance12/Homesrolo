@@ -137,7 +137,7 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
         detail: 'Added to this home',
         context: document.projectRef ? 'Filed with saved work' : 'Home library',
         href: document.projectRef
-          ? `/home/${homeId}/projects/${document.projectRef}`
+          ? `/home/${homeId}/projects/${document.projectRef}?section=files`
           : `/home/${homeId}/documents`,
       }))
 

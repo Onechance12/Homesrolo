@@ -86,7 +86,11 @@ function rateLimitKey(sessionHandle: string, homeRef: string) {
 export interface HomeAssistantHttpDependencies {
   readonly appOrigin: string | null
   readonly client: HomeAssistantClient | null
-  readonly readContext: (sessionHandle: string, homeRef: string) => Promise<HomeAssistantContext>
+  readonly readContext: (
+    sessionHandle: string,
+    homeRef: string,
+    requestedProjectRef?: string,
+  ) => Promise<HomeAssistantContext>
   readonly rateLimiter: HomeResearchRateLimiter
 }
 
@@ -124,7 +128,7 @@ export async function handleHomeAssistantRequestWithDependencies(
         'retry-after': String(allowance.retryAfterSeconds),
       })
     }
-    const context = await dependencies.readContext(sessionHandle, homeRef)
+    const context = await dependencies.readContext(sessionHandle, homeRef, parsed.data.projectRef)
     const result = await dependencies.client.answer(parsed.data, context)
     return response(200, { data: result })
   } catch (error) {
@@ -138,7 +142,7 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
   return handleHomeAssistantRequestWithDependencies(request, homeRef, {
     appOrigin: configuration?.appOrigin ?? null,
     client: runtime.configuredHomeAssistantClient(),
-    async readContext(sessionHandle, requestedHomeRef) {
+    async readContext(sessionHandle, requestedHomeRef, requestedProjectRef) {
       const service = runtime.homeownerApiService()
       const requestContext = { sessionHandle }
       const home = await service.readHome(requestContext, requestedHomeRef)
@@ -160,6 +164,13 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
       } catch (error) {
         if (!(error instanceof HomeownerApiError) || error.code !== 'unavailable') throw error
       }
+      const visibleProjects = projects.filter(project => !project.archived)
+      const requestedProject = requestedProjectRef
+        ? visibleProjects.find(project => project.projectRef === requestedProjectRef)
+        : undefined
+      const assistantProjects = requestedProject
+        ? [requestedProject, ...visibleProjects.filter(project => project.projectRef !== requestedProjectRef)].slice(0, 24)
+        : visibleProjects.slice(0, 24)
       return {
         home: {
           label: home.displayLabel,
@@ -167,7 +178,7 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
           projectCount: home.projectCount,
           documentCount: home.documentCount,
         },
-        projects: projects.filter(project => !project.archived).slice(0, 24).map(project => ({
+        projects: assistantProjects.map(project => ({
           projectRef: project.projectRef,
           title: project.title,
           category: project.category,

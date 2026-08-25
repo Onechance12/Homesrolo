@@ -16,7 +16,7 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type AskRoloResult, type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel, type RoloWorkDraft,
+  type AskRoloResult, type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeownerWorkKind, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel, type RoloWorkDraft,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -408,6 +408,8 @@ type WireProject = {
   projectRef: string
   homeRef: string
   title: string
+  /** Optional only for rolling compatibility with pre-discriminator servers. */
+  workKind?: HomeownerWorkKind
   category: 'roofing' | 'exterior' | 'interior' | 'electrical' | 'plumbing' | 'hvac' | 'landscaping' | 'appliances' | 'pest' | 'pool' | 'new_construction' | 'other'
   status: Project['status']
   occurredOn: string | null
@@ -424,6 +426,10 @@ const PROJECT_CATEGORIES = [
   'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac', 'landscaping',
   'appliances', 'pest', 'pool', 'new_construction', 'other',
 ] as const
+
+const PROJECT_WORK_KINDS = [
+  'project', 'issue', 'repair', 'service', 'incident',
+] as const satisfies readonly HomeownerWorkKind[]
 
 const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> = Object.freeze({
   roofing: 'Roofing',
@@ -445,6 +451,7 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     projectRef: opaqueRef('hprj'),
     homeRef: opaqueRef('hhom'),
     title: boundedLabel(120),
+    workKind: optional(oneOf(PROJECT_WORK_KINDS)),
     category: oneOf(PROJECT_CATEGORIES),
     status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
     occurredOn: nullable(calendarDate),
@@ -466,6 +473,7 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     projectRef: decoded.projectRef,
     homeRef: decoded.homeRef,
     title: decoded.title,
+    workKind: decoded.workKind ?? 'project',
     category: decoded.category,
     trade: PROJECT_CATEGORY_LABEL[decoded.category],
     performedOn: decoded.occurredOn,

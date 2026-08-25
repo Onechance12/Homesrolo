@@ -3,13 +3,17 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { use, useRef, useState } from 'react'
-import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
+import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { IconPlus, IconProjects } from '../../../../components/icons.tsx'
-import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
-import type { ProjectCategory, ProjectStatus } from '../../../../lib/port/types.ts'
+import {
+  STATUS_LABEL, STATUS_PILL, WORK_KIND_LABEL, WORK_KIND_OPTIONS,
+} from '../../../../components/projectStatus.ts'
+import type {
+  HomeownerWorkKind, ProjectCategory, ProjectStatus,
+} from '../../../../lib/port/types.ts'
 import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
 
 type RecordMode = 'planned' | 'active' | 'past'
@@ -73,9 +77,12 @@ export default function ProjectsPage({
   const carriedIntent = roofingIntent(Array.isArray(query.intent) ? null : query.intent)
   const router = useRouter()
   const mode = usePortMode()
+  const { state: session } = useSession()
+  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
   const [recordMode, setRecordMode] = useState<RecordMode | null>(() => carriedIntent ? 'planned' : null)
+  const [workKind, setWorkKind] = useState<HomeownerWorkKind>('project')
   const [category, setCategory] = useState<ProjectCategory | null>(() => carriedIntent ? 'roofing' : null)
   const [title, setTitle] = useState(() => carriedIntent ? ROOF_TITLE[carriedIntent] : '')
   const [occurredOn, setOccurredOn] = useState('')
@@ -105,6 +112,7 @@ export default function ProjectsPage({
     const result = await port.createProject(homeId, {
       commandRef,
       title,
+      workKind,
       category,
       status: STATUS_FOR_MODE[recordMode],
       ...(recordMode === 'past' && occurredOn ? { occurredOn } : {}),
@@ -128,13 +136,15 @@ export default function ProjectsPage({
           <p>Projects, repairs, one-time service, issues, and past work—without forcing everything into the same story.</p>
         </div>
         <div className="project-list-head__actions">
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))}
-          >
-            Tell Rolo about it
-          </button>
+          {assistantEnabled ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))}
+            >
+              Tell Rolo about it
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn--quiet"
@@ -181,6 +191,21 @@ export default function ProjectsPage({
             </fieldset>
 
             <div className="project-composer__primary">
+              <label className="field" style={{ marginTop: 0 }}>
+                <span>What kind of work is this?</span>
+                <select
+                  value={workKind}
+                  onChange={event => {
+                    resetAttempt()
+                    setWorkKind(event.target.value as HomeownerWorkKind)
+                  }}
+                >
+                  {WORK_KIND_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
               <label className="field" style={{ marginTop: 0 }}>
                 <span>Part of the home</span>
                 <select
@@ -292,7 +317,7 @@ export default function ProjectsPage({
                   <span className="row__glyph"><IconProjects /></span>
                   <span className="row__body">
                     <span className="row__title">{project.title}</span>
-                    <span className="row__sub">{project.trade}</span>
+                    <span className="row__sub">{WORK_KIND_LABEL[project.workKind]} · {project.trade}</span>
                   </span>
                   <span className="row__end">
                     <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>

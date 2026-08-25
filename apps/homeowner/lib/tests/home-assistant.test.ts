@@ -106,6 +106,35 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   assert.equal(result.disclosure, 'Nothing is saved until you review and approve it.')
 })
 
+test('Rolo never exposes a work link unless the referenced project survives validation', async () => {
+  const configuration = readHomeResearchConfiguration({
+    HOMESROLO_AI_ENABLED: 'true',
+    OPENAI_API_KEY: API_KEY,
+  })
+  assert.ok(configuration)
+  const unknownProject = `hprj_${'x'.repeat(43)}`
+  const client = new OpenAIHomeAssistantClient({
+    configuration,
+    async fetchImpl() {
+      return new Response(JSON.stringify({
+        output: [{ type: 'message', content: [{
+          type: 'output_text',
+          text: JSON.stringify({
+            answer: 'I could not find that saved record.',
+            proposedWork: null,
+            destination: 'work',
+            projectRef: unknownProject,
+            followUpQuestions: [],
+          }),
+        }] }],
+      }), { headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const result = await client.answer(VALID_BODY, CONTEXT)
+  assert.equal(result.projectRef, null)
+  assert.equal(result.destination, null)
+})
+
 const RESULT: AskRoloResult = {
   requestRef: 'hask_00000000-0000-4000-8000-000000000000',
   answer: 'I found the saved work record.',
@@ -176,4 +205,19 @@ test('Rolo HTTP returns a private envelope and rate-limits duplicate turns', asy
   const second = await handleHomeAssistantRequestWithDependencies(request(), HOME, deps)
   assert.equal(second.status, 429)
   assert.equal(assistantCalls, 1)
+})
+
+test('Rolo context loading receives the exact current project reference', async () => {
+  let requestedProjectRef: string | undefined
+  const deps = dependencies({
+    async readContext(_sessionHandle, _homeRef, projectRef) {
+      requestedProjectRef = projectRef
+      return CONTEXT
+    },
+  })
+  const response = await handleHomeAssistantRequestWithDependencies(
+    request({ ...VALID_BODY, projectRef: PROJECT }), HOME, deps,
+  )
+  assert.equal(response.status, 200)
+  assert.equal(requestedProjectRef, PROJECT)
 })
