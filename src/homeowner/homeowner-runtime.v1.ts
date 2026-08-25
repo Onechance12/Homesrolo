@@ -117,6 +117,7 @@ const MEMBER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
   'project.activity.append',
   'project.item.save',
   'artifact.create_metadata',
+  'artifact.upload',
   'artifact.read_metadata',
   'warranty.create',
   'warranty.update',
@@ -524,6 +525,44 @@ export const storeHomeownerArtifactInputSchema = z.object({
 
 export type StoreHomeownerArtifactInput = z.infer<typeof storeHomeownerArtifactInputSchema>
 
+/** Stable idempotency intent; server execution time is deliberately excluded. */
+export function homeownerArtifactCommandIntent(input: StoreHomeownerArtifactInput) {
+  const command = storeHomeownerArtifactInputSchema.parse(input)
+  const { requestedAt: _requestedAt, ...intent } = command
+  return intent
+}
+
+export const homeownerSignedUploadGrantSchema = z.object({
+  signedUrl: z.string().url().max(4096),
+  path: z.string().min(1).max(512).regex(/^[A-Za-z0-9_\/-]+$/),
+  token: z.string().min(32).max(4096).regex(/^\S+$/),
+  expiresAt: utcInstant,
+}).strict()
+
+export type HomeownerSignedUploadGrant = z.infer<typeof homeownerSignedUploadGrantSchema>
+
+export const homeownerArtifactUploadReservationSchema = z.object({
+  artifactRef: opaqueRef('hart'),
+  homeRef: opaqueRef('hhom'),
+  uploaderPrincipalRef: opaqueRef('hprn'),
+  commandRef: opaqueRef('hcmd'),
+  commandDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  storageObjectRef: opaqueRef('hobj'),
+  storageKey: z.string().regex(/^hhom_[A-Za-z0-9_-]{43}\/hobj_[A-Za-z0-9_-]{43}$/),
+}).strict()
+
+export type HomeownerArtifactUploadReservation = z.infer<
+  typeof homeownerArtifactUploadReservationSchema
+>
+
+export type HomeownerArtifactReserveResult =
+  | { readonly state: 'available'; readonly artifact: HomeownerArtifactMetadata }
+  | {
+      readonly state: 'upload_required'
+      readonly reservation: HomeownerArtifactUploadReservation
+      readonly upload: HomeownerSignedUploadGrant
+    }
+
 export type HomeCreationDecision =
   | { readonly authorized: true; readonly principalRef: string }
   | {
@@ -599,6 +638,15 @@ export interface HomeownerPrivateObjectPort {
     readonly expectedSha256: string
     readonly maximumBytes: number
   }): Promise<Uint8Array>
+  reserveArtifactUpload?(input: {
+    readonly grant: AuthorizedHomeownerAction<'artifact.upload'>
+    readonly command: StoreHomeownerArtifactInput
+  }): Promise<HomeownerArtifactReserveResult>
+  completeArtifactUpload?(input: {
+    readonly grant: AuthorizedHomeownerAction<'artifact.upload'>
+    readonly artifactRef: string
+    readonly commandRef: string
+  }): Promise<HomeownerArtifactMetadata>
 }
 
 export interface HomeownerAuditPort {

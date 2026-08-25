@@ -476,6 +476,7 @@ export interface DocumentSummary {
   readonly mediaType?: 'application/pdf' | 'image/jpeg' | 'image/png'
   readonly byteLength?: number
   readonly downloadHref?: string
+  readonly previewHref?: string
   readonly isSynthetic: boolean
 }
 

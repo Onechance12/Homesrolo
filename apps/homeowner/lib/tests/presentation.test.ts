@@ -264,13 +264,16 @@ test('no raw storage URLs or provider identifiers are projected into the UI', ()
   for (const rel of appSources) {
     if (rel.startsWith('lib/tests')) continue // the tripwire may name its own targets
     if (rel.startsWith('lib/server') || rel.startsWith('app/api/')) continue
+    if (['lib/port/transport.ts', 'lib/port/remote.ts', 'lib/port/wire.ts'].includes(rel)) continue
     const content = read(rel)
     assert.doesNotMatch(content, /storageObjectRef|storageUrl|signedUrl|s3:|gs:\/\//i,
       `${rel} must not project storage internals`)
   }
   const wire = read('lib/port/wire.ts')
-  assert.doesNotMatch(wire, /storageUrl|signedUrl|providerObjectId/i,
-    'the browser decoder accepts no provider URL or object identifier')
+  assert.match(wire, /homesrolo-homeowner-dev-uploads[\s\S]*url\.pathname !== expectedPath/,
+    'the transient upload ticket is accepted only for the exact private bucket and key')
+  assert.doesNotMatch(read('lib/port/types.ts'), /signedUrl|storageObjectRef|providerObjectId/i,
+    'no signed URL or provider identifier enters the public UI data port')
   assert.match(wire, /downloadHref:\s*`\/api\/v1\/homes\//,
     'artifact download links are derived from opaque refs and stay same-origin')
 })
@@ -299,7 +302,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
@@ -365,6 +370,13 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves one private download`)
       assert.match(content, /handleArtifactDownload/, `${rel} delegates download policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves one private image preview`)
+      assert.match(content, /handleArtifactPreview/, `${rel} delegates preview policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} completes one reserved upload`)
+      assert.match(content, /handleArtifactUploadCompletion/,
+        `${rel} delegates completion policy to the server seam`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the bounded photo list`)
       assert.match(content, /export async function POST/, `${rel} serves one raw image upload`)
@@ -426,6 +438,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
@@ -446,6 +459,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     }
     if (!rel.startsWith('app/api/v1/auth/')
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'

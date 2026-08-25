@@ -3,13 +3,16 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import {
   HOMEOWNER_RUNTIME_VERSION,
+  homeownerArtifactCommandIntent,
   homeownerArtifactMetadataSchema,
+  homeownerArtifactUploadReservationSchema,
   homeownerMembershipSchema,
   homeownerPrincipalSchema,
   homeownerProjectCommandIntent,
   homeownerProjectSchema,
   homeownerPropertyFactsSchema,
   homeownerSystemSchema,
+  homeownerSignedUploadGrantSchema,
   privateHomeProfileSchema,
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
@@ -23,6 +26,10 @@ import {
   type HomeownerSystem,
   type PrivateHomeProfile,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
+import {
+  HOMEOWNER_ARTIFACT_MAX_BYTES,
+  validateReservedHomeownerArtifactPayload,
+} from '../../../../src/homeowner/homeowner-artifacts.v1.ts'
 import type { HomeownerRuntimeConfiguration } from './config.ts'
 import {
   type HomeownerProjectReviewPersistencePort,
@@ -55,6 +62,10 @@ import {
 } from '../../../../src/homeowner/homeowner-project-workspace.v1.ts'
 
 type JsonRecord = Record<string, unknown>
+
+const LEGACY_PRIVATE_STORAGE_BUCKET = 'homesrolo-homeowner-private'
+const DEV_PRIVATE_UPLOAD_BUCKET = 'homesrolo-homeowner-dev-uploads'
+const SIGNED_UPLOAD_LIFETIME_MS = 2 * 60 * 60 * 1_000
 
 function record(value: unknown): JsonRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -263,6 +274,19 @@ function artifactFromRow(input: unknown) {
     storageObjectRef: requiredString(row, 'storage_object_ref'),
     contentClass: requiredString(row, 'content_class'),
     createdAt: canonicalInstant(row, 'created_at'),
+  })
+}
+
+function artifactUploadReservationFromRow(input: unknown) {
+  const row = record(input)
+  return homeownerArtifactUploadReservationSchema.parse({
+    artifactRef: requiredString(row, 'artifact_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    uploaderPrincipalRef: requiredString(row, 'uploader_principal_ref'),
+    commandRef: requiredString(row, 'command_ref'),
+    commandDigest: requiredString(row, 'command_digest'),
+    storageObjectRef: requiredString(row, 'storage_object_ref'),
+    storageKey: requiredString(row, 'storage_key'),
   })
 }
 
@@ -677,7 +701,7 @@ export class SupabaseHomeownerProvider implements
       throw new HomeownerApiError('unavailable')
     }
 
-    const bucket = this.#client.storage.from('homesrolo-homeowner-private')
+    const bucket = this.#client.storage.from(LEGACY_PRIVATE_STORAGE_BUCKET)
     for (const [key, bytes] of [
       [fullKey, input.photo.fullBytes],
       [thumbnailKey, input.photo.thumbnailBytes],
@@ -771,8 +795,15 @@ export class SupabaseHomeownerProvider implements
     const expectedHash = input.variant === 'full'
       ? photo.fullPayloadSha256
       : photo.thumbnailPayloadSha256
+    const storageBucket = row.storage_bucket === undefined
+      ? LEGACY_PRIVATE_STORAGE_BUCKET
+      : requiredString(row, 'storage_bucket')
+    if (storageBucket !== LEGACY_PRIVATE_STORAGE_BUCKET
+      && storageBucket !== DEV_PRIVATE_UPLOAD_BUCKET) {
+      throw new HomeownerApiError('unavailable')
+    }
     const download = await this.#client.storage
-      .from('homesrolo-homeowner-private')
+      .from(storageBucket)
       .download(storageKey)
     if (download.error || !download.data) throw new HomeownerApiError('unavailable')
     const bytes = new Uint8Array(await download.data.arrayBuffer())
@@ -1074,6 +1105,261 @@ export class SupabaseHomeownerProvider implements
     }
   }
 
+  async reserveArtifactUpload(
+    input: Parameters<NonNullable<HomeownerPrivateObjectPort['reserveArtifactUpload']>>[0],
+  ) {
+    if (!this.#supabaseOrigin) throw new HomeownerApiError('unavailable')
+    const commandDigest = digest(homeownerArtifactCommandIntent(input.command))
+    const artifactRef = mintOpaqueRef('hart')
+    const storageObjectRef = mintOpaqueRef('hobj')
+    const storageKey = `${input.grant.homeRef}/${storageObjectRef}`
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_reserve_dev_homeowner_artifact_upload',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: commandDigest,
+        p_artifact_ref: artifactRef,
+        p_project_ref: input.command.projectRef ?? null,
+        p_kind: input.command.kind,
+        p_display_name: input.command.displayName,
+        p_media_type: input.command.mediaType,
+        p_byte_length: input.command.byteLength,
+        p_payload_sha256: input.command.payloadSha256,
+        p_storage_object_ref: storageObjectRef,
+        p_storage_key: storageKey,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) {
+      if (error.message.includes('upload_quota_exceeded')
+        || error.message.includes('command_digest_mismatch')
+        || error.message.includes('command_scope_mismatch')
+        || error.message.includes('upload_rejected')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('completion_in_progress')) {
+        throw new HomeownerApiError('rate_limited')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    const row = record(data)
+    const state = requiredString(row, 'state')
+    const reservation = artifactUploadReservationFromRow(row)
+    const coherent = reservation.homeRef === input.grant.homeRef
+      && reservation.uploaderPrincipalRef === input.grant.principalRef
+      && reservation.commandRef === input.command.commandRef
+      && reservation.commandDigest === commandDigest
+      && reservation.storageKey === `${reservation.homeRef}/${reservation.storageObjectRef}`
+      && (row.project_ref === null ? undefined : requiredString(row, 'project_ref'))
+        === input.command.projectRef
+      && requiredString(row, 'kind') === input.command.kind
+      && requiredString(row, 'display_name') === input.command.displayName
+      && requiredString(row, 'declared_media_type') === input.command.mediaType
+      && requiredNumber(row, 'declared_byte_length') === input.command.byteLength
+      && requiredString(row, 'declared_payload_sha256') === input.command.payloadSha256
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    if (state === 'available') {
+      const { data: artifactData, error: artifactError } = await this.#client
+        .from('homesrolo_homeowner_artifacts')
+        .select('*')
+        .eq('artifact_ref', reservation.artifactRef)
+        .eq('home_ref', input.grant.homeRef)
+        .eq('state', 'available')
+        .maybeSingle()
+      if (artifactError || !artifactData) throw new HomeownerApiError('unavailable')
+      return { state: 'available' as const, artifact: artifactFromRow(artifactData) }
+    }
+    if (state !== 'reserved') throw new HomeownerApiError('conflict')
+
+    const issuedAt = this.#now()
+    const expiresAt = new Date(Date.parse(issuedAt) + SIGNED_UPLOAD_LIFETIME_MS).toISOString()
+    // Issuance is charged transactionally before provider mint. An ambiguous
+    // provider result therefore consumes one of the three bounded attempts.
+    const { error: issuanceError } = await this.#client.rpc(
+      'homesrolo_issue_dev_homeowner_artifact_token',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: reservation.artifactRef,
+        p_command_ref: reservation.commandRef,
+        p_expires_at: expiresAt,
+      },
+    )
+    if (issuanceError) {
+      if (issuanceError.message.includes('issuance_exhausted')
+        || issuanceError.message.includes('not_issuable')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    const { data: uploadData, error: uploadError } = await this.#client.storage
+      .from(DEV_PRIVATE_UPLOAD_BUCKET)
+      .createSignedUploadUrl(reservation.storageKey, { upsert: false })
+    if (uploadError || !uploadData?.signedUrl || !uploadData.token
+      || uploadData.path !== reservation.storageKey) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const url = new URL(uploadData.signedUrl, this.#supabaseOrigin)
+    const localProvider = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+    const expectedPath =
+      `/storage/v1/object/upload/sign/${DEV_PRIVATE_UPLOAD_BUCKET}/${reservation.storageKey}`
+    const tokens = url.searchParams.getAll('token')
+    if (url.origin !== this.#supabaseOrigin
+      || (!localProvider && url.protocol !== 'https:')
+      || (localProvider && !['http:', 'https:'].includes(url.protocol))
+      || url.username || url.password || url.hash || url.pathname !== expectedPath
+      || [...url.searchParams.keys()].length !== 1
+      || tokens.length !== 1 || tokens[0] !== uploadData.token) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return {
+      state: 'upload_required' as const,
+      reservation,
+      upload: homeownerSignedUploadGrantSchema.parse({
+        signedUrl: url.href,
+        path: reservation.storageKey,
+        token: uploadData.token,
+        expiresAt,
+      }),
+    }
+  }
+
+  async completeArtifactUpload(
+    input: Parameters<NonNullable<HomeownerPrivateObjectPort['completeArtifactUpload']>>[0],
+  ) {
+    const leaseToken = mintOpaqueRef('hles')
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_claim_dev_homeowner_artifact_completion',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: input.artifactRef,
+        p_command_ref: input.commandRef,
+        p_lease_token: leaseToken,
+      },
+    )
+    if (error) {
+      if (error.message.includes('completion_in_progress')
+        || error.message.includes('completion_retry_not_ready')
+        || error.message.includes('completion_capacity_limited')) {
+        throw new HomeownerApiError('rate_limited')
+      }
+      if (error.message.includes('completion_attempt_not_issued')
+        || error.message.includes('upload_rejected')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('reservation_not_found')) throw new HomeownerApiError('not_found')
+      throw new HomeownerApiError('unavailable')
+    }
+    const row = record(data)
+    if (requiredString(row, 'state') === 'available') {
+      const { data: artifactData, error: artifactError } = await this.#client
+        .from('homesrolo_homeowner_artifacts')
+        .select('*')
+        .eq('artifact_ref', input.artifactRef)
+        .eq('home_ref', input.grant.homeRef)
+        .eq('state', 'available')
+        .maybeSingle()
+      if (artifactError || !artifactData) throw new HomeownerApiError('unavailable')
+      return artifactFromRow(artifactData)
+    }
+    if (requiredString(row, 'state') !== 'processing'
+      || requiredString(row, 'completion_lease_token') !== leaseToken) {
+      throw new HomeownerApiError('conflict')
+    }
+    const reservation = artifactUploadReservationFromRow(row)
+    const descriptor = {
+      commandRef: reservation.commandRef,
+      ...(row.project_ref === null ? {} : { projectRef: requiredString(row, 'project_ref') }),
+      kind: requiredString(row, 'kind') as 'photo' | 'document' | 'warranty',
+      displayName: requiredString(row, 'display_name'),
+      mediaType: requiredString(row, 'declared_media_type') as
+        'application/pdf' | 'image/jpeg' | 'image/png',
+      byteLength: requiredNumber(row, 'declared_byte_length'),
+      payloadSha256: requiredString(row, 'declared_payload_sha256'),
+    }
+    const downloaded = await this.#client.storage
+      .from(DEV_PRIVATE_UPLOAD_BUCKET)
+      .download(reservation.storageKey)
+    if (downloaded.error || !downloaded.data) {
+      await this.#client.rpc('homesrolo_release_dev_homeowner_artifact_completion', {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: reservation.artifactRef,
+        p_command_ref: reservation.commandRef,
+        p_lease_token: leaseToken,
+      })
+      throw new HomeownerApiError('unavailable')
+    }
+    if (downloaded.data.size < 1
+      || downloaded.data.size > HOMEOWNER_ARTIFACT_MAX_BYTES
+      || downloaded.data.size !== descriptor.byteLength) {
+      await this.#client.rpc('homesrolo_reject_dev_homeowner_artifact_upload', {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: reservation.artifactRef,
+        p_command_ref: reservation.commandRef,
+        p_lease_token: leaseToken,
+        p_rejection_reason: 'descriptor_mismatch',
+      })
+      throw new HomeownerApiError('invalid_request')
+    }
+    const bytes = new Uint8Array(await downloaded.data.arrayBuffer())
+    let payload
+    try {
+      payload = validateReservedHomeownerArtifactPayload({ descriptor, bytes })
+    } catch {
+      await this.#client.rpc('homesrolo_reject_dev_homeowner_artifact_upload', {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: reservation.artifactRef,
+        p_command_ref: reservation.commandRef,
+        p_lease_token: leaseToken,
+        p_rejection_reason: 'content_rejected',
+      })
+      throw new HomeownerApiError('invalid_request')
+    }
+    const { data: finalizedData, error: finalizedError } = await this.#client.rpc(
+      'homesrolo_finalize_dev_homeowner_artifact_upload',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_artifact_ref: reservation.artifactRef,
+        p_command_ref: reservation.commandRef,
+        p_command_digest: reservation.commandDigest,
+        p_storage_object_ref: reservation.storageObjectRef,
+        p_lease_token: leaseToken,
+        p_verified_media_type: payload.mediaType,
+        p_verified_byte_length: payload.byteLength,
+        p_verified_payload_sha256: payload.payloadSha256,
+      },
+    )
+    if (finalizedError) {
+      if (finalizedError.message.includes('lease_mismatch')
+        || finalizedError.message.includes('descriptor_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return artifactFromRow(finalizedData)
+  }
+
   async storeArtifact(input: Parameters<HomeownerPrivateObjectPort['storeArtifact']>[0]) {
     const artifactRef = mintOpaqueRef('hart')
     const storageObjectRef = mintOpaqueRef('hobj')
@@ -1172,8 +1458,15 @@ export class SupabaseHomeownerProvider implements
       || artifact.byteLength > input.maximumBytes) {
       throw new HomeownerApiError('unavailable')
     }
+    const storageBucket = row.storage_bucket === undefined
+      ? LEGACY_PRIVATE_STORAGE_BUCKET
+      : requiredString(row, 'storage_bucket')
+    if (storageBucket !== LEGACY_PRIVATE_STORAGE_BUCKET
+      && storageBucket !== DEV_PRIVATE_UPLOAD_BUCKET) {
+      throw new HomeownerApiError('unavailable')
+    }
     const download = await this.#client.storage
-      .from('homesrolo-homeowner-private')
+      .from(storageBucket)
       .download(requiredString(row, 'storage_key'))
     if (download.error || !download.data) throw new HomeownerApiError('unavailable')
     const bytes = new Uint8Array(await download.data.arrayBuffer())
@@ -1275,9 +1568,25 @@ export class SupabaseHomeownerProvider implements
     }
     const expiresIn = Math.floor((Date.parse(input.expiresAt) - Date.parse(this.#now())) / 1000)
     if (expiresIn < 1 || expiresIn > 300) throw new HomeownerApiError('unavailable')
-    const storageKey = `${input.grant.homeRef}/${input.artifact.storageObjectRef}`
+    const { data: artifactData, error: artifactError } = await this.#client
+      .from('homesrolo_homeowner_artifacts')
+      .select('artifact_ref,home_ref,storage_object_ref,storage_key,storage_bucket,state')
+      .eq('artifact_ref', input.artifact.artifactRef)
+      .eq('home_ref', input.grant.homeRef)
+      .eq('storage_object_ref', input.artifact.storageObjectRef)
+      .eq('state', 'available')
+      .maybeSingle()
+    if (artifactError || !artifactData) throw new HomeownerApiError('not_found')
+    const artifactRow = record(artifactData)
+    const storageKey = requiredString(artifactRow, 'storage_key')
+    const storageBucket = requiredString(artifactRow, 'storage_bucket')
+    if (storageKey !== `${input.grant.homeRef}/${input.artifact.storageObjectRef}`
+      || (storageBucket !== LEGACY_PRIVATE_STORAGE_BUCKET
+        && storageBucket !== DEV_PRIVATE_UPLOAD_BUCKET)) {
+      throw new HomeownerApiError('unavailable')
+    }
     const { data, error } = await this.#client.storage
-      .from('homesrolo-homeowner-private')
+      .from(storageBucket)
       // This URL is consumed by the exact Jobrolo server adapter, not offered
       // as a browser download. A token-only query lets the receiver reject all
       // extra query authority.

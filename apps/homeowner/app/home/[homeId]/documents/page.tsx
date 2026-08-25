@@ -40,6 +40,7 @@ function FiledRows({ records }: { records: readonly DocumentSummary[] }) {
             </span>
             <span className="row__end">
               <span className="mono">{record.addedOn}</span>
+              {record.previewHref ? <a href={record.previewHref}>Preview</a> : null}
               {record.downloadHref ? <a href={record.downloadHref}>Download</a> : null}
             </span>
           </span>
@@ -106,6 +107,9 @@ export default function HomeRecordPage({
       file,
     })
     if (!result.ok) {
+      if (result.error === 'invalid' || result.error === 'conflict') {
+        commandRef.current = null
+      }
       setUploadState('error')
       return
     }

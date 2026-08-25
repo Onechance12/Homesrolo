@@ -102,7 +102,9 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
     '../../app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts',
     '../../app/api/v1/homes/[homeRef]/research/route.ts',
     '../../app/api/v1/homes/[homeRef]/handoffs/route.ts',
     '../../app/api/v1/homes/[homeRef]/handoffs/[shareId]/route.ts',
@@ -160,7 +162,7 @@ test('protected reads are bounded 401 signed_out, cookie or not', async () => {
   }
 })
 
-test('artifact upload envelope requires exact origin, multipart boundary, and a bounded length', () => {
+test('artifact reservation envelope requires exact origin and bounded JSON', () => {
   const origin = 'https://app.homesrolo.com'
   const request = (headers: Record<string, string>) => new Request(`${BASE}/upload`, {
     method: 'POST',
@@ -169,16 +171,15 @@ test('artifact upload envelope requires exact origin, multipart boundary, and a 
   })
   assert.equal(artifactUploadEnvelopeAllowed(request({
     origin,
-    'content-length': '1024',
-    'content-type': 'multipart/form-data; boundary=exact',
+    'content-length': '256',
+    'content-type': 'application/json',
   }), origin), true)
   for (const headers of [
-    { 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact' },
-    { origin, 'content-type': 'multipart/form-data; boundary=exact' },
-    { origin, 'content-length': '99999999', 'content-type': 'multipart/form-data; boundary=exact' },
-    { origin, 'content-length': '1024', 'content-type': 'application/json' },
-    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data' },
-    { origin, 'content-length': '1024', 'content-type': 'multipart/form-data; boundary=exact', 'content-encoding': 'gzip' },
+    { 'content-length': '256', 'content-type': 'application/json' },
+    { origin, 'content-type': 'application/json' },
+    { origin, 'content-length': '99999999', 'content-type': 'application/json' },
+    { origin, 'content-length': '256', 'content-type': 'multipart/form-data' },
+    { origin, 'content-length': '256', 'content-type': 'application/json', 'content-encoding': 'gzip' },
   ] as readonly Record<string, string>[]) {
     assert.equal(artifactUploadEnvelopeAllowed(request(headers), origin), false)
   }

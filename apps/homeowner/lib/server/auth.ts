@@ -57,7 +57,7 @@ export class HomeownerAuthService {
     const { error } = await this.#auth.auth.signInWithOtp({
       email: parsed.data.toLowerCase(),
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: this.#configuration.selfSignupEnabled,
         emailRedirectTo: `${this.#configuration.appOrigin}${withHomeownerEntryContext('/auth/complete', { intent, handoff })}`,
       },
     })
@@ -72,7 +72,7 @@ export class HomeownerAuthService {
     const { error } = await this.#auth.auth.signInWithOtp({
       email: parsed.data.toLowerCase(),
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: this.#configuration.selfSignupEnabled,
       },
     })
     if (!error) return 'accepted'

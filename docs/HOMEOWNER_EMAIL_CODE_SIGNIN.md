@@ -13,6 +13,11 @@ legacy `magicLinkSignIn` capability remains mutually exclusive during the
 migration. Old callback routes stay deployed long enough to consume links that
 were already issued, but the new UI does not depend on them.
 
+Supabase OTP user creation has a separate `HOMESROLO_SELF_SIGNUP_ENABLED` gate
+that defaults to `false`. With that gate off, existing principals can sign in,
+but an arbitrary new email address cannot create an account. Keep it off for
+the private upload development lane.
+
 ## Default-off release gate
 
 `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED` accepts only `true` or `false` and

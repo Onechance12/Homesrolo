@@ -489,6 +489,21 @@ type WireArtifact = {
   createdAt: string
 }
 
+export interface SignedStorageUploadTicket {
+  readonly signedUrl: string
+  readonly path: string
+  readonly token: string
+  readonly expiresAt: string
+}
+
+export type ArtifactUploadReservation =
+  | { readonly state: 'available'; readonly artifact: DocumentSummary }
+  | {
+      readonly state: 'upload_required'
+      readonly artifactRef: string
+      readonly upload: SignedStorageUploadTicket
+    }
+
 export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
   const decoded = object<WireArtifact>({
     artifactRef: opaqueRef('hart'),
@@ -500,8 +515,8 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     byteLength: countInt,
     createdAt: utcInstant,
   })(value, at)
-  if (decoded.byteLength < 1 || decoded.byteLength > 25 * 1024 * 1024) {
-    return fail(`${at}.byteLength`, 'a byte length from 1 through 25 MiB')
+  if (decoded.byteLength < 1 || decoded.byteLength > 10 * 1024 * 1024) {
+    return fail(`${at}.byteLength`, 'a byte length from 1 through 10 MiB')
   }
   return {
     documentRef: decoded.artifactRef,
@@ -514,8 +529,76 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     mediaType: decoded.mediaType,
     byteLength: decoded.byteLength,
     downloadHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/content`,
+    ...(['image/jpeg', 'image/png'].includes(decoded.mediaType)
+      ? { previewHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/preview` }
+      : {}),
     isSynthetic: false,
   }
+}
+
+const signedUploadPath: Decoder<string> = (value, at) =>
+  typeof value === 'string'
+    && /^hhom_[A-Za-z0-9_-]{43}\/hobj_[A-Za-z0-9_-]{43}$/.test(value)
+    ? value
+    : fail(at, 'a canonical private upload path')
+
+const signedUploadToken: Decoder<string> = (value, at) =>
+  typeof value === 'string' && value.length >= 32 && value.length <= 4_096 && !/\s/.test(value)
+    ? value
+    : fail(at, 'a bounded non-whitespace signed upload token')
+
+const decodeSignedStorageUploadTicket: Decoder<SignedStorageUploadTicket> = (value, at) => {
+  const decoded = object<SignedStorageUploadTicket>({
+    signedUrl: (candidate, candidateAt) => typeof candidate === 'string'
+      && candidate.length >= 1 && candidate.length <= 4_096
+      ? candidate
+      : fail(candidateAt, 'a bounded signed upload URL'),
+    path: signedUploadPath,
+    token: signedUploadToken,
+    expiresAt: utcInstant,
+  })(value, at)
+  try {
+    const url = new URL(decoded.signedUrl)
+    const host = url.hostname.toLowerCase()
+    const local = host === 'localhost' || host === '127.0.0.1'
+    const expectedPath =
+      `/storage/v1/object/upload/sign/homesrolo-homeowner-dev-uploads/${decoded.path}`
+    const tokens = url.searchParams.getAll('token')
+    if ((!local && url.protocol !== 'https:') || (local && !['http:', 'https:'].includes(url.protocol))
+      || url.username || url.password || url.hash
+      || (!local && url.port)
+      || (!local && !host.endsWith('.supabase.co'))
+      || url.pathname !== expectedPath
+      || [...url.searchParams.keys()].length !== 1
+      || tokens.length !== 1 || tokens[0] !== decoded.token) {
+      return fail(at, 'an exact Homesrolo private signed upload URL')
+    }
+  } catch {
+    return fail(at, 'an exact Homesrolo private signed upload URL')
+  }
+  return decoded
+}
+
+export const decodeArtifactUploadReservation: Decoder<ArtifactUploadReservation> = (value, at) => {
+  if (!isRecord(value)) return fail(at, 'an artifact upload reservation')
+  if (value.state === 'available') {
+    return object<{ state: 'available'; artifact: DocumentSummary }>({
+      state: literal('available'),
+      artifact: decodeArtifact,
+    })(value, at)
+  }
+  if (value.state === 'upload_required') {
+    return object<{
+      state: 'upload_required'
+      artifactRef: string
+      upload: SignedStorageUploadTicket
+    }>({
+      state: literal('upload_required'),
+      artifactRef: opaqueRef('hart'),
+      upload: decodeSignedStorageUploadTicket,
+    })(value, at)
+  }
+  return fail(`${at}.state`, 'available or upload_required')
 }
 
 const decodeHomeRecordHandoffItem = object<HomeRecordHandoffItem>({

@@ -470,7 +470,7 @@ test('artifact upload derives media, digest, principal, and time on the server',
   assert.deepEqual(stored.bytes, bytes)
 })
 
-test('artifact upload rejects member authority, bad bytes, and a project from another home', async () => {
+test('legacy artifact upload rejects viewer authority, bad bytes, and a project from another home', async () => {
   const privateObjects: HomeownerPrivateObjectPort = {
     async storeArtifact() { throw new Error('must not store') },
     async readExactObject() { throw new Error('not used') },
@@ -490,7 +490,7 @@ test('artifact upload rejects member authority, bad bytes, and a project from an
     service({
       uploads: true,
       privateObjects,
-      repository: repository({ async readMembership() { return { ...membership, role: 'member' } } }),
+      repository: repository({ async readMembership() { return { ...membership, role: 'viewer' } } }),
     }).uploadArtifact(context, homeRef, input, new TextEncoder().encode('%PDF-1.7')),
     (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
   )
@@ -508,6 +508,80 @@ test('artifact upload rejects member authority, bad bytes, and a project from an
       projectRef: `hprj_${body('j')}`,
     }, new TextEncoder().encode('%PDF-1.7')),
     (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+})
+
+test('direct artifact reservation allows an exact-home member and completion stays opaque', async () => {
+  const observed: Parameters<NonNullable<HomeownerPrivateObjectPort['reserveArtifactUpload']>>[0][] = []
+  const commandRef = `hcmd_${body('d')}`
+  const objectRef = `hobj_${body('d')}`
+  const privateObjects: HomeownerPrivateObjectPort = {
+    async storeArtifact() { throw new Error('not used') },
+    async readExactObject() { throw new Error('not used') },
+    async reserveArtifactUpload(input) {
+      observed.push(input)
+      return {
+        state: 'upload_required',
+        reservation: {
+          artifactRef: artifact.artifactRef,
+          homeRef: input.grant.homeRef,
+          uploaderPrincipalRef: input.grant.principalRef,
+          commandRef: input.command.commandRef,
+          commandDigest: 'd'.repeat(64),
+          storageObjectRef: objectRef,
+          storageKey: `${input.grant.homeRef}/${objectRef}`,
+        },
+        upload: {
+          signedUrl: `https://project.supabase.co/signed?token=${'t'.repeat(40)}`,
+          path: `${input.grant.homeRef}/${objectRef}`,
+          token: 't'.repeat(40),
+          expiresAt: '2026-08-10T14:00:00.000Z',
+        },
+      }
+    },
+    async completeArtifactUpload() { return artifact },
+  }
+  const memberRepository = repository({
+    async readMembership() { return { ...membership, role: 'member' } },
+  })
+  const result = await service({
+    uploads: true, privateObjects, repository: memberRepository,
+  }).reserveArtifactUpload(context, homeRef, {
+    commandRef,
+    kind: 'document',
+    displayName: '../Contract.pdf',
+    mediaType: 'application/pdf',
+    byteLength: 9,
+    payloadSha256: 'a'.repeat(64),
+  })
+  assert.equal(result.state, 'upload_required')
+  assert.equal(result.artifactRef, artifact.artifactRef)
+  assert.equal('uploaderPrincipalRef' in result, false)
+  assert.equal(observed[0]?.grant.action, 'artifact.upload')
+  assert.equal(observed[0]?.command.displayName, '.. Contract.pdf')
+
+  const complete = await service({
+    uploads: true, privateObjects, repository: memberRepository,
+  }).completeArtifactUpload(context, homeRef, artifact.artifactRef, commandRef)
+  assert.equal(complete.artifactRef, artifact.artifactRef)
+  assert.equal('storageObjectRef' in complete, false)
+
+  await assert.rejects(
+    service({
+      uploads: true,
+      privateObjects,
+      repository: repository({
+        async readMembership() { return { ...membership, role: 'viewer' } },
+      }),
+    }).reserveArtifactUpload(context, homeRef, {
+      commandRef,
+      kind: 'document',
+      displayName: 'Contract.pdf',
+      mediaType: 'application/pdf',
+      byteLength: 9,
+      payloadSha256: 'a'.repeat(64),
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
   )
 })
 

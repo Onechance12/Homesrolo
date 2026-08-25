@@ -45,7 +45,7 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
+  decodeArtifact, decodeArtifactUploadReservation, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
   portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
@@ -77,6 +77,43 @@ const PHOTO_CHECKUP_AREAS = new Set([
   'hvac', 'water_heater', 'foundation', 'gutters', 'other',
 ])
 const MAX_PHOTO_INPUT_BYTES = 10 * 1024 * 1024
+
+function artifactMediaType(bytes: Uint8Array): 'application/pdf' | 'image/jpeg' | 'image/png' | null {
+  if (bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50
+    && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf'
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8
+    && bytes[2] === 0xff) return 'image/jpeg'
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50
+    && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d
+    && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png'
+  return null
+}
+
+function safeArtifactDisplayName(input: string): string | null {
+  const candidate = input.normalize('NFC')
+    .replace(/[\\/\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!candidate || candidate === '.' || candidate === '..') return null
+  return candidate.slice(0, 160).trim() || null
+}
+
+async function hashedFilePayload(file: File): Promise<{
+  readonly payload: ArrayBuffer
+  readonly bytes: Uint8Array
+  readonly sha256: string
+} | null> {
+  try {
+    const payload = await file.arrayBuffer()
+    if (payload.byteLength !== file.size) return null
+    const hash = await globalThis.crypto.subtle.digest('SHA-256', payload)
+    const sha256 = [...new Uint8Array(hash)]
+      .map(byte => byte.toString(16).padStart(2, '0')).join('')
+    return { payload, bytes: new Uint8Array(payload), sha256 }
+  } catch {
+    return null
+  }
+}
 
 function validCalendarDate(value: string): boolean {
   if (!CALENDAR_DATE.test(value)) return false
@@ -787,38 +824,83 @@ export function createRemotePort(
       const projectRef = input.projectRef === undefined
         ? undefined
         : projectRefSegment(input.projectRef) ?? null
+      const displayName = input.file && typeof input.file.name === 'string'
+        ? safeArtifactDisplayName(input.file.name)
+        : null
       if (!ref || !COMMAND_REF_PATTERN.test(input.commandRef)
         || !['photo', 'document', 'warranty'].includes(input.kind)
         || projectRef === null
         || !input.file || typeof input.file.name !== 'string'
         || typeof input.file.arrayBuffer !== 'function'
         || input.file.size < 1
-        || input.file.size > 25 * 1024 * 1024) {
+        || input.file.size > 10 * 1024 * 1024
+        || !displayName) {
+        return { ok: false, error: 'invalid' }
+      }
+      const hashed = await hashedFilePayload(input.file)
+      if (!hashed) return { ok: false, error: 'unavailable' }
+      const mediaType = artifactMediaType(hashed.bytes)
+      if (!mediaType || (input.kind === 'photo' && mediaType === 'application/pdf')) {
         return { ok: false, error: 'invalid' }
       }
       let reply: TransportReply
       try {
-        reply = await artifactTransport({
+        reply = await transport({
+          method: 'POST',
           path: `${API}/homes/${ref}/artifacts`,
-          commandRef: input.commandRef,
-          kind: input.kind,
-          ...(projectRef ? { projectRef } : {}),
-          file: input.file,
+          body: {
+            commandRef: input.commandRef,
+            kind: input.kind,
+            ...(projectRef ? { projectRef } : {}),
+            displayName,
+            mediaType,
+            byteLength: hashed.payload.byteLength,
+            payloadSha256: hashed.sha256,
+          },
         })
       } catch {
         return { ok: false, error: 'unavailable' }
       }
       if (reply.kind === 'network_failure') return { ok: false, error: 'unavailable' }
-      if (reply.status !== 201) return { ok: false, error: portErrorForStatus(reply.status) }
+      if (reply.status !== 200 && reply.status !== 202) {
+        return { ok: false, error: portErrorForStatus(reply.status) }
+      }
+      let reservation
       try {
-        const artifact = decodeArtifact(unwrapEnvelope(reply.body), 'data')
-        if (artifact.homeRef !== ref || artifact.projectRef !== (projectRef ?? null)) {
-          return { ok: false, error: 'invalid' }
-        }
-        return { ok: true, value: artifact }
+        reservation = decodeArtifactUploadReservation(unwrapEnvelope(reply.body), 'data')
       } catch {
         return { ok: false, error: 'invalid' }
       }
+      if ((reply.status === 200) !== (reservation.state === 'available')) {
+        return { ok: false, error: 'invalid' }
+      }
+      const expectedKind = input.kind === 'photo' ? 'photo_set' : input.kind
+      const matches = (artifact: ReturnType<typeof decodeArtifact>) =>
+        artifact.homeRef === ref
+        && artifact.projectRef === (projectRef ?? null)
+        && artifact.title === displayName
+        && artifact.kind === expectedKind
+        && artifact.mediaType === mediaType
+        && artifact.byteLength === hashed.payload.byteLength
+      if (reservation.state === 'available') {
+        return matches(reservation.artifact)
+          ? { ok: true, value: reservation.artifact }
+          : { ok: false, error: 'invalid' }
+      }
+      try {
+        await artifactTransport({ ...reservation.upload, payload: hashed.payload })
+      } catch {
+        // Completion is authoritative after an ambiguous direct PUT result.
+      }
+      const completed = await call({
+        method: 'POST',
+        path: `${API}/homes/${ref}/artifacts/${reservation.artifactRef}/complete`,
+        body: { commandRef: input.commandRef },
+      }, decodeArtifact, 201)
+      if (!completed.ok) return completed
+      return completed.value.documentRef === reservation.artifactRef && matches(completed.value)
+        ? completed
+        : { ok: false, error: 'invalid' }
     },
 
     async listHomeRecordHandoffs(homeRef) {

@@ -7,6 +7,8 @@ import {
   createHomeWorkspaceInputSchema,
   homeownerApproximateYearSchema,
   homeownerArtifactMetadataSchema,
+  homeownerArtifactUploadReservationSchema,
+  homeownerSignedUploadGrantSchema,
   homeownerHomeTypeSchema,
   homeownerProjectSchema,
   homeownerSystemKindSchema,
@@ -29,7 +31,9 @@ import {
   type PrivateHomeProfile,
 } from './homeowner-runtime.v1.ts'
 import {
+  homeownerArtifactUploadDescriptorSchema,
   homeownerArtifactUploadInputSchema,
+  safeArtifactDisplayName,
   validateHomeownerArtifactPayload,
 } from './homeowner-artifacts.v1.ts'
 import {
@@ -301,6 +305,22 @@ export const homeownerApiArtifactViewSchema = z.object({
 }).strict()
 
 export type HomeownerApiArtifactView = z.infer<typeof homeownerApiArtifactViewSchema>
+
+export const homeownerApiArtifactUploadReservationSchema = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('available'),
+    artifact: homeownerApiArtifactViewSchema,
+  }).strict(),
+  z.object({
+    state: z.literal('upload_required'),
+    artifactRef: opaqueRef('hart'),
+    upload: homeownerSignedUploadGrantSchema,
+  }).strict(),
+])
+
+export type HomeownerApiArtifactUploadReservation = z.infer<
+  typeof homeownerApiArtifactUploadReservationSchema
+>
 
 export const homeownerApiCreateCheckupPhotoInputSchema =
   createHomeownerCheckupPhotoInputSchema.omit({ requestedAt: true })
@@ -1331,6 +1351,87 @@ export class HomeownerApiService {
       && stored.contentClass === 'homeowner_private'
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeArtifact(stored)
+  }
+
+  async reserveArtifactUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiArtifactUploadReservation> {
+    const parsed = homeownerArtifactUploadDescriptorSchema.safeParse(input)
+    if (!parsed.success) throw new HomeownerApiError('invalid_request')
+    const displayName = safeArtifactDisplayName(parsed.data.displayName)
+    if (!displayName) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'artifact.upload')
+    if (!this.#capabilities.uploads || !this.#privateObjects?.reserveArtifactUpload) {
+      throw new HomeownerApiError('unavailable')
+    }
+    if (parsed.data.projectRef) {
+      const projects = await this.#repository.listProjects(grant)
+      if (!projects.some(project => project.projectRef === parsed.data.projectRef
+        && project.homeRef === grant.homeRef)) {
+        throw new HomeownerApiError('not_found')
+      }
+    }
+    const command = storeHomeownerArtifactInputSchema.parse({
+      ...parsed.data,
+      displayName,
+      requestedAt: this.#now(),
+    })
+    const result = await this.#privateObjects.reserveArtifactUpload({ grant, command })
+    if (result.state === 'available') {
+      const artifact = homeownerArtifactMetadataSchema.parse(result.artifact)
+      if (artifact.homeRef !== grant.homeRef
+        || artifact.controllerPrincipalRef !== grant.principalRef
+        || artifact.projectRef !== command.projectRef
+        || artifact.kind !== command.kind
+        || artifact.displayName !== command.displayName
+        || artifact.mediaType !== command.mediaType
+        || artifact.byteLength !== command.byteLength
+        || artifact.payloadSha256 !== command.payloadSha256
+        || artifact.contentClass !== 'homeowner_private') {
+        throw new HomeownerApiError('unavailable')
+      }
+      return { state: 'available', artifact: safeArtifact(artifact) }
+    }
+    const reservation = homeownerArtifactUploadReservationSchema.parse(result.reservation)
+    const upload = homeownerSignedUploadGrantSchema.parse(result.upload)
+    if (reservation.homeRef !== grant.homeRef
+      || reservation.uploaderPrincipalRef !== grant.principalRef
+      || reservation.commandRef !== command.commandRef
+      || reservation.storageKey !== upload.path) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return { state: 'upload_required', artifactRef: reservation.artifactRef, upload }
+  }
+
+  async completeArtifactUpload(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedArtifactRef: string,
+    requestedCommandRef: string,
+  ): Promise<HomeownerApiArtifactView> {
+    const artifactRef = opaqueRef('hart').safeParse(requestedArtifactRef)
+    const commandRef = opaqueRef('hcmd').safeParse(requestedCommandRef)
+    if (!artifactRef.success || !commandRef.success) throw new HomeownerApiError('invalid_request')
+    const grant = await this.#workspaceGrant(context, requestedHomeRef, 'artifact.upload')
+    if (!this.#capabilities.uploads || !this.#privateObjects?.completeArtifactUpload) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const artifact = homeownerArtifactMetadataSchema.parse(
+      await this.#privateObjects.completeArtifactUpload({
+        grant,
+        artifactRef: artifactRef.data,
+        commandRef: commandRef.data,
+      }),
+    )
+    if (artifact.artifactRef !== artifactRef.data
+      || artifact.homeRef !== grant.homeRef
+      || artifact.controllerPrincipalRef !== grant.principalRef
+      || artifact.contentClass !== 'homeowner_private') {
+      throw new HomeownerApiError('unavailable')
+    }
+    return safeArtifact(artifact)
   }
 
   async readArtifactContent(

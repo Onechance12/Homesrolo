@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
-export const HOMEOWNER_ARTIFACT_MAX_BYTES = 25 * 1024 * 1024
+/** Each development reservation permanently charges this full authority. */
+export const HOMEOWNER_ARTIFACT_MAX_BYTES = 10 * 1024 * 1024
 
 export const homeownerArtifactKindSchema = z.enum(['photo', 'document', 'warranty'])
 export type HomeownerArtifactKind = z.infer<typeof homeownerArtifactKindSchema>
@@ -15,6 +16,16 @@ export const homeownerArtifactUploadInputSchema = z.object({
 
 export type HomeownerArtifactUploadInput = z.infer<typeof homeownerArtifactUploadInputSchema>
 
+export const homeownerArtifactUploadDescriptorSchema = homeownerArtifactUploadInputSchema.extend({
+  mediaType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  byteLength: z.number().int().min(1).max(HOMEOWNER_ARTIFACT_MAX_BYTES),
+  payloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict()
+
+export type HomeownerArtifactUploadDescriptor = z.infer<
+  typeof homeownerArtifactUploadDescriptorSchema
+>
+
 export interface ValidatedHomeownerArtifactPayload {
   readonly displayName: string
   readonly mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
@@ -23,7 +34,9 @@ export interface ValidatedHomeownerArtifactPayload {
   readonly bytes: Uint8Array
 }
 
-function detectedMediaType(bytes: Uint8Array): ValidatedHomeownerArtifactPayload['mediaType'] | null {
+export function detectHomeownerArtifactMediaType(
+  bytes: Uint8Array,
+): ValidatedHomeownerArtifactPayload['mediaType'] | null {
   if (bytes.length >= 5
     && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44
     && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf'
@@ -59,7 +72,7 @@ export function validateHomeownerArtifactPayload(input: {
   if (input.bytes.byteLength < 1 || input.bytes.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES) {
     throw new Error('artifact_byte_length_invalid')
   }
-  const mediaType = detectedMediaType(input.bytes)
+  const mediaType = detectHomeownerArtifactMediaType(input.bytes)
   if (!mediaType || (input.kind === 'photo' && mediaType === 'application/pdf')) {
     throw new Error('artifact_media_type_invalid')
   }
@@ -72,4 +85,23 @@ export function validateHomeownerArtifactPayload(input: {
     payloadSha256: createHash('sha256').update(input.bytes).digest('hex'),
     bytes: input.bytes,
   })
+}
+
+/** Re-derives every browser-declared content fact from the private object. */
+export function validateReservedHomeownerArtifactPayload(input: {
+  readonly descriptor: HomeownerArtifactUploadDescriptor
+  readonly bytes: Uint8Array
+}): ValidatedHomeownerArtifactPayload {
+  const descriptor = homeownerArtifactUploadDescriptorSchema.parse(input.descriptor)
+  const payload = validateHomeownerArtifactPayload({
+    kind: descriptor.kind,
+    displayName: descriptor.displayName,
+    bytes: input.bytes,
+  })
+  if (payload.mediaType !== descriptor.mediaType
+    || payload.byteLength !== descriptor.byteLength
+    || payload.payloadSha256 !== descriptor.payloadSha256) {
+    throw new Error('artifact_payload_descriptor_mismatch')
+  }
+  return payload
 }

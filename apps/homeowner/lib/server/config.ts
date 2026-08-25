@@ -20,6 +20,7 @@ const configurationSchema = z.object({
   publishableKey: providerKey,
   secretKey: providerKey,
   appOrigin: httpsUrl,
+  selfSignupEnabled: z.enum(['true', 'false']).optional().default('false'),
   emailCodeSignInEnabled: z.enum(['true', 'false']).optional().default('false'),
   emailCodeRateLimitSecret: hmacSecret.optional(),
   projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
@@ -51,6 +52,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly publishableKey: string
   readonly secretKey: string
   readonly appOrigin: string
+  readonly selfSignupEnabled: boolean
   readonly emailCodeSignInEnabled: boolean
   readonly emailCodeRateLimitSecret: string | null
   readonly projectQuotesEnabled: boolean
@@ -87,6 +89,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: environment.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: environment.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: environment.HOMESROLO_APP_ORIGIN,
+    selfSignupEnabled: environment.HOMESROLO_SELF_SIGNUP_ENABLED,
     emailCodeSignInEnabled: environment.HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED,
     emailCodeRateLimitSecret: environment.HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET,
     projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
@@ -101,6 +104,7 @@ export function readHomeownerRuntimeConfiguration(
     publishableKey: parsed.data.publishableKey,
     secretKey: parsed.data.secretKey,
     appOrigin: parsed.data.appOrigin.origin,
+    selfSignupEnabled: parsed.data.selfSignupEnabled === 'true',
     emailCodeSignInEnabled: parsed.data.emailCodeSignInEnabled === 'true',
     emailCodeRateLimitSecret: parsed.data.emailCodeRateLimitSecret ?? null,
     projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
