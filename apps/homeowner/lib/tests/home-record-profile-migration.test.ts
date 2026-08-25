@@ -25,9 +25,33 @@ test('Home Record migration keeps exact addresses private and complete', () => {
   assert.match(migration, /address_postal_code is not null/)
   assert.match(migration, /address_country_code is not null/)
   assert.match(migration, /address_postal_code ~ '\^\[0-9\]\{5\}/)
+  assert.match(migration,
+    /set record_updated_at = greatest\(record_updated_at, created_at\)[\s\S]*where record_updated_at < created_at/)
+  assert.ok(
+    migration.indexOf('set record_updated_at = greatest(record_updated_at, created_at)')
+      < migration.indexOf('add constraint homesrolo_private_homes_record_updated_at_check'),
+    'future-dated existing homes are repaired before the timestamp constraint is added',
+  )
   assert.doesNotMatch(migration, /create policy|grant .* to authenticated|grant .* to anon/i,
     'the existing deny-by-default table does not gain a browser database policy')
   assert.doesNotMatch(migration, /measurement|square_foot|roof_area/i)
+})
+
+test('home creation uses one clock for created and aggregate timestamps', () => {
+  const createFunction = migration.slice(
+    migration.indexOf('create or replace function public.homesrolo_create_private_home_workspace'),
+    migration.indexOf('alter table public.homesrolo_homeowner_command_receipts'),
+  )
+  assert.match(createFunction,
+    /created_at, updated_at, record_revision, record_updated_at[\s\S]*p_requested_at, p_requested_at,[\s\S]*1, p_requested_at/)
+  assert.doesNotMatch(createFunction, /to_jsonb\s*\(/,
+    'future home or membership columns cannot enter the create receipt')
+  assert.match(createFunction,
+    /'home', jsonb_build_object\([\s\S]*'membership', jsonb_build_object\(/)
+  assert.match(migration,
+    /revoke all on function public\.homesrolo_create_private_home_workspace[\s\S]*from public, anon, authenticated/)
+  assert.match(migration,
+    /grant execute on function public\.homesrolo_create_private_home_workspace[\s\S]*to service_role/)
 })
 
 test('Home Record update is exact-controller, receipt-backed, and optimistic', () => {

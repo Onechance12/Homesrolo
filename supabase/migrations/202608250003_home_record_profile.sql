@@ -60,9 +60,105 @@ alter table public.homesrolo_private_homes
 
 alter table public.homesrolo_private_homes
   drop constraint if exists homesrolo_private_homes_record_updated_at_check;
+update public.homesrolo_private_homes
+set record_updated_at = greatest(record_updated_at, created_at)
+where record_updated_at < created_at;
 alter table public.homesrolo_private_homes
   add constraint homesrolo_private_homes_record_updated_at_check
   check (record_updated_at >= created_at);
+
+-- The existing create command timestamps homes from the server-supplied
+-- request time. Set the new aggregate timestamp from that same clock so an
+-- app clock slightly ahead of the database cannot violate the constraint.
+create or replace function public.homesrolo_create_private_home_workspace(
+  p_principal_ref text,
+  p_command_ref text,
+  p_command_digest text,
+  p_home_ref text,
+  p_membership_ref text,
+  p_display_label text,
+  p_private_location_label text,
+  p_requested_at timestamptz
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_receipt public.homesrolo_homeowner_command_receipts%rowtype;
+  v_home public.homesrolo_private_homes%rowtype;
+  v_membership public.homesrolo_homeowner_memberships%rowtype;
+  v_result jsonb;
+begin
+  perform pg_advisory_xact_lock(
+    hashtextextended(p_principal_ref || ':' || p_command_ref || ':home.create', 0)
+  );
+  select * into v_receipt from public.homesrolo_homeowner_command_receipts
+  where principal_ref = p_principal_ref
+    and command_ref = p_command_ref
+    and action = 'home.create';
+  if found then
+    if v_receipt.command_digest <> p_command_digest then
+      raise exception 'command_digest_mismatch';
+    end if;
+    return v_receipt.result;
+  end if;
+
+  if not exists (
+    select 1 from public.homesrolo_homeowner_principals
+    where principal_ref = p_principal_ref
+      and status = 'active'
+      and email_verified = true
+  ) then raise exception 'principal_not_authorized'; end if;
+
+  insert into public.homesrolo_private_homes (
+    home_ref, created_by_principal_ref, display_label, private_location_label,
+    created_at, updated_at, record_revision, record_updated_at
+  ) values (
+    p_home_ref, p_principal_ref, btrim(p_display_label),
+    btrim(p_private_location_label), p_requested_at, p_requested_at,
+    1, p_requested_at
+  ) returning * into v_home;
+
+  insert into public.homesrolo_homeowner_memberships (
+    membership_ref, principal_ref, home_ref, role, basis, state,
+    relationship_label, revision, created_at
+  ) values (
+    p_membership_ref, p_principal_ref, p_home_ref, 'workspace_controller',
+    'self_created_workspace', 'active', 'claimed_unverified', 1, p_requested_at
+  ) returning * into v_membership;
+
+  v_result := jsonb_build_object(
+    'home', jsonb_build_object(
+      'home_ref', v_home.home_ref,
+      'created_by_principal_ref', v_home.created_by_principal_ref,
+      'display_label', v_home.display_label,
+      'private_location_label', v_home.private_location_label,
+      'created_at', v_home.created_at,
+      'updated_at', v_home.updated_at
+    ),
+    'membership', jsonb_build_object(
+      'membership_ref', v_membership.membership_ref,
+      'principal_ref', v_membership.principal_ref,
+      'home_ref', v_membership.home_ref,
+      'role', v_membership.role,
+      'basis', v_membership.basis,
+      'state', v_membership.state,
+      'relationship_label', v_membership.relationship_label,
+      'revision', v_membership.revision,
+      'created_at', v_membership.created_at,
+      'revoked_at', v_membership.revoked_at
+    )
+  );
+  insert into public.homesrolo_homeowner_command_receipts (
+    principal_ref, command_ref, action, command_digest, result, created_at
+  ) values (
+    p_principal_ref, p_command_ref, 'home.create',
+    p_command_digest, v_result, p_requested_at
+  );
+  return v_result;
+end;
+$$;
 
 alter table public.homesrolo_homeowner_command_receipts
   drop constraint if exists homesrolo_homeowner_command_receipts_action_check;
@@ -625,12 +721,18 @@ revoke all on function public.homesrolo_update_home_record(
   text, text, text, integer, text, text, integer,
   text, text, text, text, text, text, text, text, integer, text, jsonb, timestamptz
 ) from public, anon, authenticated;
+revoke all on function public.homesrolo_create_private_home_workspace(
+  text, text, text, text, text, text, text, timestamptz
+) from public, anon, authenticated;
 revoke all on function public.homesrolo_read_home_record(
   text, text, text, integer
 ) from public, anon, authenticated;
 grant execute on function public.homesrolo_update_home_record(
   text, text, text, integer, text, text, integer,
   text, text, text, text, text, text, text, text, integer, text, jsonb, timestamptz
+) to service_role;
+grant execute on function public.homesrolo_create_private_home_workspace(
+  text, text, text, text, text, text, text, timestamptz
 ) to service_role;
 grant execute on function public.homesrolo_read_home_record(
   text, text, text, integer

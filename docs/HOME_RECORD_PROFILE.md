@@ -57,6 +57,11 @@ been recorded, edits must use the revision-backed Home Record command. A later
 profile editor therefore sees a revision conflict instead of silently replacing
 a concurrent intake write.
 
+The home-creation RPC initializes `record_updated_at` from the same
+server-supplied command time as `created_at`. The migration first raises any
+older aggregate timestamp to its existing home creation time, so bounded clock
+skew cannot make the new timestamp constraint reject an existing or new home.
+
 ## Migration order
 
 Apply migrations in filename order. This feature specifically requires:
