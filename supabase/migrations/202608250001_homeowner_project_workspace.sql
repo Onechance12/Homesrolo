@@ -22,11 +22,6 @@ alter table public.homesrolo_homeowner_projects
 alter table public.homesrolo_homeowner_projects
   add constraint homesrolo_homeowner_projects_archived_at_check
   check (archived_at is null or archived_at >= created_at);
-alter table public.homesrolo_homeowner_projects
-  drop constraint if exists homesrolo_projects_ref_home_unique;
-alter table public.homesrolo_homeowner_projects
-  add constraint homesrolo_projects_ref_home_unique unique (project_ref, home_ref);
-
 create table if not exists public.homesrolo_homeowner_project_activity (
   activity_ref text primary key check (activity_ref ~ '^hact_[A-Za-z0-9_-]{43}$'),
   home_ref text not null references public.homesrolo_private_homes(home_ref),
@@ -131,6 +126,15 @@ declare
   v_project public.homesrolo_homeowner_projects%rowtype;
   v_result jsonb;
 begin
+  if p_set_title is null
+    or p_set_category is null
+    or p_set_status is null
+    or p_set_occurred_on is null
+    or p_set_summary is null
+    or p_set_professional_label is null
+    or p_set_archived is null then
+    raise exception 'invalid_project_update_flags';
+  end if;
   if not (
     p_set_title or p_set_category or p_set_status or p_set_occurred_on
     or p_set_summary or p_set_professional_label or p_set_archived
@@ -367,12 +371,17 @@ declare
   v_item public.homesrolo_homeowner_project_items%rowtype;
   v_result jsonb;
 begin
-  if p_kind not in ('material', 'decision', 'wishlist')
+  if p_kind is null
+    or p_kind not in ('material', 'decision', 'wishlist')
+    or p_state is null
     or p_state not in ('considering', 'chosen', 'purchased', 'declined')
     or p_label is null
     or length(btrim(p_label)) not between 1 and 160
     or (p_detail is not null and length(btrim(p_detail)) not between 1 and 2000) then
     raise exception 'invalid_project_item';
+  end if;
+  if p_expected_revision is not null and p_expected_revision < 1 then
+    raise exception 'invalid_expected_revision';
   end if;
 
   perform pg_advisory_xact_lock(
