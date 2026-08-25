@@ -13,15 +13,12 @@ const CONFIG = {
 test('production pins byte-exact known app origins while explicit nonproduction origins stay local', () => {
   assert.equal(readHomeownerRuntimeConfiguration(CONFIG)?.appOrigin,
     'https://app.homesrolo.com')
-  assert.equal(readHomeownerRuntimeConfiguration({
-    ...CONFIG,
-    HOMESROLO_APP_ORIGIN: 'https://homesrolo-homeowner-v2.onrender.com',
-  })?.appOrigin, 'https://homesrolo-homeowner-v2.onrender.com')
   for (const origin of [
     'HTTPS://app.homesrolo.com',
     'https://APP.HOMESROLO.COM',
     'https://app.homesrolo.com:443',
     'https://homesrolo.com',
+    'https://homesrolo-homeowner-v2.onrender.com',
     'https://homesrolo-homeowner-v2.onrender.com/',
     'http://127.0.0.1:3100',
   ]) {
