@@ -9,6 +9,7 @@ import { PhotoPlate } from '../../../../../components/PhotoPlate.tsx'
 import { IconDocs } from '../../../../../components/icons.tsx'
 import { STATUS_LABEL } from '../../../../../components/projectStatus.ts'
 import { mintCommandRef } from '../../../../../lib/port/command-ref.ts'
+import { PrivateArtifactCollection, PrivateArtifactUploader } from '../../../../../components/PrivateArtifacts.tsx'
 import type {
   Project,
   ProjectActivity,
@@ -105,12 +106,6 @@ export default function ProjectPage({
   const [savingItem, setSavingItem] = useState(false)
   const [itemError, setItemError] = useState<string | null>(null)
   const itemAttempt = useRef<string | null>(null)
-  const [uploadKind, setUploadKind] = useState<'photo' | 'document' | 'warranty'>('photo')
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const uploadAttempt = useRef<string | null>(null)
-  const uploadInput = useRef<HTMLInputElement | null>(null)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [preferredContact, setPreferredContact] = useState<'email' | 'phone' | 'text'>('email')
@@ -283,29 +278,6 @@ export default function ProjectPage({
     }
     setReviewPreview(result.value)
     setConsentAccepted(false)
-  }
-
-  async function uploadProjectFile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!uploadFile || uploading) return
-    uploadAttempt.current ??= mintCommandRef()
-    setUploading(true)
-    setUploadError(null)
-    const result = await port.uploadPrivateArtifact(homeId, {
-      commandRef: uploadAttempt.current,
-      kind: uploadKind,
-      file: uploadFile,
-      projectRef: projectId,
-    })
-    setUploading(false)
-    if (!result.ok) {
-      setUploadError('Homesrolo could not save this file. It was not sent to Jobrolo or a contractor.')
-      return
-    }
-    uploadAttempt.current = null
-    setUploadFile(null)
-    if (uploadInput.current) uploadInput.current.value = ''
-    retryFiles()
   }
 
   async function submitForReview(event: FormEvent<HTMLFormElement>) {
@@ -559,54 +531,20 @@ export default function ProjectPage({
               <p>Photos and papers saved to this project.</p>
             </div>
           </div>
-          <form className="stack" style={{ ['--stack-gap' as never]: '0.65rem' }} onSubmit={uploadProjectFile}>
-            <div className="intake__row">
-              <label className="field" style={{ marginTop: 0 }}>
-                <span>Type</span>
-                <select value={uploadKind} onChange={event => {
-                  setUploadKind(event.target.value as typeof uploadKind)
-                  uploadAttempt.current = null
-                }}>
-                  <option value="photo">Photo</option>
-                  <option value="document">Quote or other project document</option>
-                  <option value="warranty">Warranty document</option>
-                </select>
-              </label>
-              <label className="field" style={{ marginTop: 0, flex: 1 }}>
-                <span>PDF, JPEG, or PNG up to 10 MB</span>
-                <input ref={uploadInput} type="file" accept="application/pdf,image/jpeg,image/png"
-                  onChange={event => {
-                    setUploadFile(event.target.files?.[0] ?? null)
-                    uploadAttempt.current = null
-                  }} />
-              </label>
-            </div>
-            <button className="btn btn--quiet" type="submit" disabled={!uploadFile || uploading}>
-              {uploading ? 'Adding file…' : 'Add to this project'}
-            </button>
-            {uploadError ? <div className="notice" role="alert">{uploadError}</div> : null}
-          </form>
+          <PrivateArtifactUploader
+            homeRef={homeId}
+            projectRef={projectId}
+            upload={(ref, input) => port.uploadPrivateArtifact(ref, input)}
+            onUploaded={retryFiles}
+            initialKind="photo"
+          />
           {filesState.status === 'loading' ? <Skeleton lines={2} label="Loading project files" /> : null}
           {filesState.status === 'error' ? <ErrorState retry={retryFiles} error={filesState.error} /> : null}
-          {projectFiles.length === 0 && filesState.status === 'ready'
-            ? <p className="mono">No files are attached to this project yet.</p>
-            : null}
-          {projectFiles.length > 0 ? (
-            <ul className="rows" style={{ display: 'block' }}>
-              {projectFiles.map(file => (
-                <li key={file.documentRef}>
-                  <span className="row">
-                    <span className="row__body">
-                      <span className="row__title">{file.title}</span>
-                      <span className="row__sub">{file.kind.replace('_', ' ')} · {file.addedOn}</span>
-                    </span>
-                    <span className="row__end">
-                      {file.downloadHref ? <a href={file.downloadHref}>Download</a> : null}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+          {filesState.status === 'ready' ? (
+            <PrivateArtifactCollection
+              records={projectFiles}
+              emptyMessage="Take a before photo or save the first estimate, receipt, or warranty for this project."
+            />
           ) : null}
         </section>
       ) : null}
