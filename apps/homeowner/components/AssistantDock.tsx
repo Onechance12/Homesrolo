@@ -80,11 +80,12 @@ function readStoredThread(homeId: string): ThreadMessage[] {
         || typeof candidate.text !== 'string'
         || candidate.text.trim().length < 1
         || candidate.text.length > 1_600) return []
-      return [{
+      const restored: ThreadMessage = {
         id: typeof candidate.id === 'string' ? candidate.id : `restored-${index}`,
         role: candidate.role,
         text: candidate.text.trim(),
-      }]
+      }
+      return [restored]
     }).slice(-12)
   } catch {
     return []
@@ -179,11 +180,12 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       setError(assistantError(result.error))
       return
     }
-    setThread(current => [...current, {
+    const assistantMessage: ThreadMessage = {
       id: result.value.requestRef,
       role: 'assistant',
       text: result.value.answer,
-    }].slice(-12))
+    }
+    setThread(current => [...current, assistantMessage].slice(-12))
     setProposal(result.value.proposedWork)
     setSuggestion({ destination: result.value.destination, projectRef: result.value.projectRef })
     setFollowUps(result.value.followUpQuestions)
@@ -232,13 +234,14 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setProposal(null)
     saveAttempt.current = null
     setSavedProject({ ref: created.value.projectRef, title: created.value.title, partial })
-    setThread(current => [...current, {
+    const savedMessage: ThreadMessage = {
       id: `saved-${created.value.projectRef}`,
       role: 'assistant',
       text: partial
         ? `I saved ${created.value.title}. One extra detail did not attach, so open the record to review it.`
         : `Saved. ${created.value.title} is now part of this home's work history.`,
-    }].slice(-12))
+    }
+    setThread(current => [...current, savedMessage].slice(-12))
     window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
       detail: { homeId, projectRef: created.value.projectRef },
     }))

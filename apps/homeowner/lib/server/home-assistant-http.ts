@@ -172,13 +172,13 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
           title: project.title,
           category: project.category,
           status: project.status,
-          occurredOn: project.occurredOn,
-          professionalLabel: project.professionalLabel,
+          occurredOn: project.occurredOn ?? null,
+          professionalLabel: project.professionalLabel ?? null,
         })),
         files: files.slice(0, 24).map(file => ({
           displayName: file.displayName,
           kind: file.kind,
-          projectRef: file.projectRef,
+          projectRef: file.projectRef ?? null,
         })),
         systems,
       }
