@@ -31,6 +31,7 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     publishableKey: CONFIG.HOMESROLO_SUPABASE_PUBLISHABLE_KEY,
     secretKey: CONFIG.HOMESROLO_SUPABASE_SECRET_KEY,
     appOrigin: 'https://app.homesrolo.com',
+    selfSignupEnabled: false,
     emailCodeSignInEnabled: false,
     emailCodeRateLimitSecret: null,
     projectQuotesEnabled: false,
@@ -174,7 +175,7 @@ test('email link and code completion mint only opaque hashed Homesrolo sessions'
   assert.deepEqual(authCalls[0], {
     email: 'person@example.com',
     options: {
-      shouldCreateUser: true,
+      shouldCreateUser: false,
       emailRedirectTo: `https://app.homesrolo.com/auth/complete?intent=storm_damage&handoff=${handoff}`,
     },
   })
@@ -195,7 +196,7 @@ test('email link and code completion mint only opaque hashed Homesrolo sessions'
   assert.equal(codeCompletion.kind, 'complete')
   assert.deepEqual(authCalls[3], {
     email: 'person@example.com',
-    options: { shouldCreateUser: true },
+    options: { shouldCreateUser: false },
   })
   assert.deepEqual(authCalls[4], {
     email: 'person@example.com', token: '012345', type: 'email',

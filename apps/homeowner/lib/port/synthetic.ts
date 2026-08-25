@@ -153,9 +153,11 @@ export const syntheticPort: HomeownerDataPort = {
     if (gate) return gate
     if (!homes().some(h => h.homeRef === homeRef)) return err('not_found')
     const created = memory.createdProjects
-      .filter(p => p.homeRef === homeRef)
-      .map(({ projectRef, homeRef: hr, title, trade, performedOn, status, photoCount, documentCount }) => ({
-        projectRef, homeRef: hr, title, trade, performedOn, status, photoCount, documentCount, isSynthetic: true as const,
+      .filter(p => p.homeRef === homeRef && !p.archived)
+      .map(({ projectRef, homeRef: hr, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount }) => ({
+        projectRef, homeRef: hr, title, category, trade, performedOn, status,
+        professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
+        isSynthetic: true as const,
       }))
     const fixture = homeRef === BIRCH_REF ? projectSummaries() : []
     return ok([...created, ...fixture])
@@ -179,9 +181,14 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: input.title.trim() || 'Untitled project',
+      category: 'other',
       trade: input.trade.trim() || 'General',
       performedOn: input.performedOn,
       status: 'completed',
+      professionalLabel: input.contractor.trim() || '',
+      revision: 1,
+      archived: false,
+      archivedAt: null,
       photoCount: 0,
       documentCount: 0,
       summary: input.summary.trim() || 'No summary recorded.',
@@ -193,8 +200,12 @@ export const syntheticPort: HomeownerDataPort = {
       isSynthetic: true,
     }
     memory.createdProjects.push(project)
-    const { projectRef, title, trade, performedOn, status, photoCount, documentCount } = project
-    return ok({ projectRef, homeRef, title, trade, performedOn, status, photoCount, documentCount, isSynthetic: true as const })
+    const { projectRef, title, category, trade, performedOn, status, professionalLabel, revision, archived, archivedAt, photoCount, documentCount } = project
+    return ok({
+      projectRef, homeRef, title, category, trade, performedOn, status,
+      professionalLabel, revision, archived, archivedAt, photoCount, documentCount,
+      isSynthetic: true as const,
+    })
   },
 
   async createProject(homeRef, input) {
@@ -212,9 +223,14 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: input.title.trim(),
+      category: input.category,
       trade: trade[input.category],
       performedOn: input.occurredOn ?? null,
       status: input.status,
+      professionalLabel: '',
+      revision: 1,
+      archived: false,
+      archivedAt: null,
       photoCount: 0,
       documentCount: 0,
       summary: input.summary.trim(),
@@ -227,6 +243,31 @@ export const syntheticPort: HomeownerDataPort = {
     }
     memory.createdProjects.push(project)
     return ok(project)
+  },
+
+  async updateProject() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async listProjectActivity() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async addProjectActivity() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async listProjectItems() {
+    await wait()
+    return err('unavailable')
+  },
+
+  async saveProjectItem() {
+    await wait()
+    return err('unavailable')
   },
 
   async startRoofingProject(homeRef, input) {
@@ -251,9 +292,14 @@ export const syntheticPort: HomeownerDataPort = {
       projectRef: mint('hprj'),
       homeRef,
       title: titles[input.need],
+      category: 'roofing',
       trade: 'Roofing',
       performedOn: null,
       status: 'planned',
+      professionalLabel: '',
+      revision: 1,
+      archived: false,
+      archivedAt: null,
       photoCount: 0,
       documentCount: 0,
       summary: input.notes.trim()

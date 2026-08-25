@@ -159,7 +159,7 @@ test('viewer cannot mutate and membership never grants third-party contribution 
   ), false)
 })
 
-test('private artifact upload is controller-only and does not grant disclosure authority', () => {
+test('private artifact upload allows active members but not viewers or disclosure', () => {
   assert.equal(authorizeHomeownerWorkspace({
     principal,
     membership,
@@ -167,9 +167,16 @@ test('private artifact upload is controller-only and does not grant disclosure a
     action: 'artifact.upload',
     recheckedAt: now,
   }).authorized, true)
-  assert.deepEqual(authorizeHomeownerWorkspace({
+  assert.equal(authorizeHomeownerWorkspace({
     principal,
     membership: { ...membership, role: 'member' },
+    requestedHomeRef: homeRef,
+    action: 'artifact.upload',
+    recheckedAt: now,
+  }).authorized, true)
+  assert.deepEqual(authorizeHomeownerWorkspace({
+    principal,
+    membership: { ...membership, role: 'viewer' },
     requestedHomeRef: homeRef,
     action: 'artifact.upload',
     recheckedAt: now,

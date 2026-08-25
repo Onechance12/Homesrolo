@@ -16,7 +16,7 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
+  type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -123,6 +123,11 @@ const countInt: Decoder<number> = (value, at) =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0
     ? value
     : fail(at, 'a non-negative integer')
+
+const positiveInt: Decoder<number> = (value, at) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : fail(at, 'a positive integer')
 
 function literal<const T extends string>(expected: T): Decoder<T> {
   return (value, at) => (value === expected ? expected : fail(at, JSON.stringify(expected)))
@@ -369,6 +374,10 @@ type WireProject = {
   status: Project['status']
   occurredOn: string | null
   summary: string
+  professionalLabel: string | null
+  revision: number
+  archived: boolean
+  archivedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -402,19 +411,31 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
     occurredOn: nullable(calendarDate),
     summary: trimmedText(2000),
+    professionalLabel: nullable(boundedLabel(160)),
+    revision: positiveInt,
+    archived: boolean,
+    archivedAt: nullable(utcInstant),
     createdAt: utcInstant,
     updatedAt: utcInstant,
   })(value, at)
   if (decoded.updatedAt < decoded.createdAt) {
     return fail(`${at}.updatedAt`, 'a time on or after createdAt')
   }
+  if (decoded.archived !== (decoded.archivedAt !== null)) {
+    return fail(`${at}.archivedAt`, 'an instant exactly when archived is true')
+  }
   return {
     projectRef: decoded.projectRef,
     homeRef: decoded.homeRef,
     title: decoded.title,
+    category: decoded.category,
     trade: PROJECT_CATEGORY_LABEL[decoded.category],
     performedOn: decoded.occurredOn,
     status: decoded.status,
+    professionalLabel: decoded.professionalLabel ?? '',
+    revision: decoded.revision,
+    archived: decoded.archived,
+    archivedAt: decoded.archivedAt,
     photoCount: 0,
     documentCount: 0,
     isSynthetic: false,
@@ -425,6 +446,36 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     documents: [],
     warranty: null,
   }
+}
+
+export const decodeProjectActivity: Decoder<ProjectActivity> = object<ProjectActivity>({
+  activityRef: opaqueRef('hact'),
+  homeRef: opaqueRef('hhom'),
+  projectRef: opaqueRef('hprj'),
+  kind: oneOf(['note', 'milestone'] as const),
+  body: boundedLabel(2000),
+  source: literal('homeowner_entry'),
+  createdAt: utcInstant,
+})
+
+export const decodeProjectItem: Decoder<ProjectItem> = (value, at) => {
+  const item = object<ProjectItem>({
+    itemRef: opaqueRef('hpit'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: opaqueRef('hprj'),
+    kind: oneOf(['material', 'decision', 'wishlist'] as const),
+    label: boundedLabel(160),
+    detail: trimmedText(2000),
+    state: oneOf(['considering', 'chosen', 'purchased', 'declined'] as const),
+    source: literal('homeowner_entry'),
+    revision: positiveInt,
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (item.updatedAt < item.createdAt) {
+    return fail(`${at}.updatedAt`, 'a time on or after createdAt')
+  }
+  return item
 }
 
 type WireArtifact = {
@@ -438,6 +489,21 @@ type WireArtifact = {
   createdAt: string
 }
 
+export interface SignedStorageUploadTicket {
+  readonly signedUrl: string
+  readonly path: string
+  readonly token: string
+  readonly expiresAt: string
+}
+
+export type ArtifactUploadReservation =
+  | { readonly state: 'available'; readonly artifact: DocumentSummary }
+  | {
+      readonly state: 'upload_required'
+      readonly artifactRef: string
+      readonly upload: SignedStorageUploadTicket
+    }
+
 export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
   const decoded = object<WireArtifact>({
     artifactRef: opaqueRef('hart'),
@@ -449,8 +515,8 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     byteLength: countInt,
     createdAt: utcInstant,
   })(value, at)
-  if (decoded.byteLength < 1 || decoded.byteLength > 25 * 1024 * 1024) {
-    return fail(`${at}.byteLength`, 'a byte length from 1 through 25 MiB')
+  if (decoded.byteLength < 1 || decoded.byteLength > 10 * 1024 * 1024) {
+    return fail(`${at}.byteLength`, 'a byte length from 1 through 10 MiB')
   }
   return {
     documentRef: decoded.artifactRef,
@@ -463,8 +529,76 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     mediaType: decoded.mediaType,
     byteLength: decoded.byteLength,
     downloadHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/content`,
+    ...(['image/jpeg', 'image/png'].includes(decoded.mediaType)
+      ? { previewHref: `/api/v1/homes/${decoded.homeRef}/artifacts/${decoded.artifactRef}/preview` }
+      : {}),
     isSynthetic: false,
   }
+}
+
+const signedUploadPath: Decoder<string> = (value, at) =>
+  typeof value === 'string'
+    && /^hhom_[A-Za-z0-9_-]{43}\/hobj_[A-Za-z0-9_-]{43}$/.test(value)
+    ? value
+    : fail(at, 'a canonical private upload path')
+
+const signedUploadToken: Decoder<string> = (value, at) =>
+  typeof value === 'string' && value.length >= 32 && value.length <= 4_096 && !/\s/.test(value)
+    ? value
+    : fail(at, 'a bounded non-whitespace signed upload token')
+
+const decodeSignedStorageUploadTicket: Decoder<SignedStorageUploadTicket> = (value, at) => {
+  const decoded = object<SignedStorageUploadTicket>({
+    signedUrl: (candidate, candidateAt) => typeof candidate === 'string'
+      && candidate.length >= 1 && candidate.length <= 4_096
+      ? candidate
+      : fail(candidateAt, 'a bounded signed upload URL'),
+    path: signedUploadPath,
+    token: signedUploadToken,
+    expiresAt: utcInstant,
+  })(value, at)
+  try {
+    const url = new URL(decoded.signedUrl)
+    const host = url.hostname.toLowerCase()
+    const local = host === 'localhost' || host === '127.0.0.1'
+    const expectedPath =
+      `/storage/v1/object/upload/sign/homesrolo-homeowner-dev-uploads/${decoded.path}`
+    const tokens = url.searchParams.getAll('token')
+    if ((!local && url.protocol !== 'https:') || (local && !['http:', 'https:'].includes(url.protocol))
+      || url.username || url.password || url.hash
+      || (!local && url.port)
+      || (!local && !host.endsWith('.supabase.co'))
+      || url.pathname !== expectedPath
+      || [...url.searchParams.keys()].length !== 1
+      || tokens.length !== 1 || tokens[0] !== decoded.token) {
+      return fail(at, 'an exact Homesrolo private signed upload URL')
+    }
+  } catch {
+    return fail(at, 'an exact Homesrolo private signed upload URL')
+  }
+  return decoded
+}
+
+export const decodeArtifactUploadReservation: Decoder<ArtifactUploadReservation> = (value, at) => {
+  if (!isRecord(value)) return fail(at, 'an artifact upload reservation')
+  if (value.state === 'available') {
+    return object<{ state: 'available'; artifact: DocumentSummary }>({
+      state: literal('available'),
+      artifact: decodeArtifact,
+    })(value, at)
+  }
+  if (value.state === 'upload_required') {
+    return object<{
+      state: 'upload_required'
+      artifactRef: string
+      upload: SignedStorageUploadTicket
+    }>({
+      state: literal('upload_required'),
+      artifactRef: opaqueRef('hart'),
+      upload: decodeSignedStorageUploadTicket,
+    })(value, at)
+  }
+  return fail(`${at}.state`, 'available or upload_required')
 }
 
 const decodeHomeRecordHandoffItem = object<HomeRecordHandoffItem>({

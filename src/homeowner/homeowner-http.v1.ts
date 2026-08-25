@@ -36,6 +36,9 @@ const HOME_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})$/
 const HOME_INTAKE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/intake$/
 const HOME_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects$/
 const HOME_PROJECT_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})$/
+const HOME_PROJECT_UPDATE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/update$/
+const HOME_PROJECT_ACTIVITY_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/activity$/
+const HOME_PROJECT_ITEMS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/items$/
 const HOME_PROJECT_QUOTES_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes$/
 const HOME_PROJECT_QUOTE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes\/(hquo_[A-Za-z0-9_-]{43})$/
 const HOME_ARTIFACTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/artifacts$/
@@ -98,6 +101,22 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
         if (projectMatch?.[1] && projectMatch[2]) {
           return success(await service.readProject(context, projectMatch[1], projectMatch[2]))
         }
+        const projectActivityMatch = HOME_PROJECT_ACTIVITY_PATH.exec(request.pathname)
+        if (projectActivityMatch?.[1] && projectActivityMatch[2]) {
+          return success(await service.listProjectActivity(
+            context,
+            projectActivityMatch[1],
+            projectActivityMatch[2],
+          ))
+        }
+        const projectItemsMatch = HOME_PROJECT_ITEMS_PATH.exec(request.pathname)
+        if (projectItemsMatch?.[1] && projectItemsMatch[2]) {
+          return success(await service.listProjectItems(
+            context,
+            projectItemsMatch[1],
+            projectItemsMatch[2],
+          ))
+        }
         const projectQuotesMatch = HOME_PROJECT_QUOTES_PATH.exec(request.pathname)
         if (projectQuotesMatch?.[1] && projectQuotesMatch[2]) {
           return success(await service.listProjectQuotes(
@@ -125,6 +144,43 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const projectUpdateMatch = HOME_PROJECT_UPDATE_PATH.exec(request.pathname)
+        if (projectUpdateMatch?.[1] && projectUpdateMatch[2]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.updateProject(
+            context,
+            projectUpdateMatch[1],
+            projectUpdateMatch[2],
+            request.jsonBody,
+          ))
+        }
+        const projectActivityMatch = HOME_PROJECT_ACTIVITY_PATH.exec(request.pathname)
+        if (projectActivityMatch?.[1] && projectActivityMatch[2]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.appendProjectActivity(
+            context,
+            projectActivityMatch[1],
+            projectActivityMatch[2],
+            request.jsonBody,
+          ), 201)
+        }
+        const projectItemsMatch = HOME_PROJECT_ITEMS_PATH.exec(request.pathname)
+        if (projectItemsMatch?.[1] && projectItemsMatch[2]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          const input = request.jsonBody as { itemRef?: unknown }
+          return success(await service.saveProjectItem(
+            context,
+            projectItemsMatch[1],
+            projectItemsMatch[2],
+            request.jsonBody,
+          ), input && typeof input === 'object' && typeof input.itemRef === 'string' ? 200 : 201)
+        }
         const projectsMatch = HOME_PROJECTS_PATH.exec(request.pathname)
         if (projectsMatch?.[1]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -191,6 +247,9 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
          || HOME_INTAKE_PATH.test(request.pathname)
          || HOME_PROJECTS_PATH.test(request.pathname)
          || HOME_PROJECT_PATH.test(request.pathname)
+         || HOME_PROJECT_UPDATE_PATH.test(request.pathname)
+         || HOME_PROJECT_ACTIVITY_PATH.test(request.pathname)
+         || HOME_PROJECT_ITEMS_PATH.test(request.pathname)
          || HOME_PROJECT_QUOTES_PATH.test(request.pathname)
          || HOME_PROJECT_QUOTE_PATH.test(request.pathname)
          || HOME_ARTIFACTS_PATH.test(request.pathname)
@@ -206,4 +265,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines authenticated home, project, quote, artifact-metadata, and sanitized checkup-photo metadata reads plus exact home, intake, bounded all-home project, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'
+  'This boundary defines authenticated home, project, activity, item, quote, artifact-metadata, and sanitized checkup-photo metadata reads plus exact home, intake, revision-backed project workspace, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'

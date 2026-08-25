@@ -1,53 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useEffect, useRef, useState, type FormEvent } from 'react'
+import { use, useEffect, useRef } from 'react'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
-import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
-import { IconDocs } from '../../../../components/icons.tsx'
+import { ErrorState, Skeleton } from '../../../../components/states.tsx'
 import { HomeRecordHandoffs } from '../../../../components/HomeRecordHandoffs.tsx'
-import { mintCommandRef } from '../../../../lib/port/command-ref.ts'
-import type { DocumentKind, DocumentSummary } from '../../../../lib/port/types.ts'
+import { PrivateArtifactCollection, PrivateArtifactUploader } from '../../../../components/PrivateArtifacts.tsx'
+import type { DocumentSummary } from '../../../../lib/port/types.ts'
 import { handoffShareRef } from '../../../../lib/entry-context.ts'
-
-const KIND_LABEL: Record<DocumentKind, string> = {
-  document: 'Home record',
-  contract: 'Contract',
-  invoice: 'Invoice',
-  warranty: 'Warranty',
-  photo_set: 'Photo',
-  permit: 'Permit',
-  manual: 'Manual',
-}
-
-function FiledRows({ records }: { records: readonly DocumentSummary[] }) {
-  return (
-    <ul className="rows">
-      {records.map(record => (
-        <li key={record.documentRef}>
-          <span className="row">
-            <span className="row__glyph"><IconDocs /></span>
-            <span className="row__body">
-              <span className="row__title">{record.title}</span>
-              <span className="row__sub">
-                {KIND_LABEL[record.kind]}
-                {record.byteLength
-                  ? ` · ${(record.byteLength / 1024 / 1024).toFixed(1)} MB`
-                  : record.pages ? ` · ${record.pages} pages` : ''}
-                {record.projectRef ? ' · linked to a project' : ' · home-level record'}
-              </span>
-            </span>
-            <span className="row__end">
-              <span className="mono">{record.addedOn}</span>
-              {record.downloadHref ? <a href={record.downloadHref}>Download</a> : null}
-            </span>
-          </span>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 /** The working index to every record Homesrolo can actually open for this home. */
 export default function HomeRecordPage({
@@ -79,11 +40,6 @@ export default function HomeRecordPage({
     value => value.length === 0,
   )
   const previousRecordsReadable = useRef(recordsReadable)
-  const [kind, setKind] = useState<'document' | 'photo' | 'warranty'>('document')
-  const [file, setFile] = useState<File | null>(null)
-  const [uploadState, setUploadState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const commandRef = useRef<string | null>(null)
-  const fileInput = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (previousRecordsReadable.current === recordsReadable) return
@@ -94,27 +50,6 @@ export default function HomeRecordPage({
   const returnedRecords = state.status === 'ready' ? state.value : []
   const photos = returnedRecords.filter(record => record.kind === 'photo_set')
   const filedRecords = returnedRecords.filter(record => record.kind !== 'photo_set')
-
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!file || !uploadsEnabled || uploadState === 'saving') return
-    commandRef.current ??= mintCommandRef()
-    setUploadState('saving')
-    const result = await port.uploadPrivateArtifact(homeId, {
-      commandRef: commandRef.current,
-      kind,
-      file,
-    })
-    if (!result.ok) {
-      setUploadState('error')
-      return
-    }
-    commandRef.current = null
-    setFile(null)
-    if (fileInput.current) fileInput.current.value = ''
-    setUploadState('saved')
-    retry()
-  }
 
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.1rem' }}>
@@ -158,40 +93,19 @@ export default function HomeRecordPage({
       </section>
 
       {mode === 'remote' && uploadsEnabled ? (
-        <form className="panel stack" style={{ ['--stack-gap' as never]: '0.75rem' }} onSubmit={upload}>
-          <div className="panel__head"><h2>Add a file to the home record</h2></div>
-          <label className="field" style={{ marginTop: 0 }}>
-            <span>What are you adding?</span>
-            <select value={kind} onChange={event => {
-              setKind(event.target.value as typeof kind)
-              commandRef.current = null
-              setUploadState('idle')
-            }}>
-              <option value="document">Home record</option>
-              <option value="photo">Photo</option>
-              <option value="warranty">Warranty paper</option>
-            </select>
-          </label>
-          <label className="field" style={{ marginTop: 0 }}>
-            <span>Choose a PDF, JPEG, or PNG</span>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="application/pdf,image/jpeg,image/png"
-              onChange={event => {
-                setFile(event.target.files?.[0] ?? null)
-                commandRef.current = null
-                setUploadState('idle')
-              }}
-              required
-            />
-          </label>
-          <button className="btn btn--primary" type="submit" disabled={!file || uploadState === 'saving'}>
-            {uploadState === 'saving' ? 'Uploading…' : 'Add to home record'}
-          </button>
-          {uploadState === 'saved' ? <p role="status">File added to this private home record.</p> : null}
-          {uploadState === 'error' ? <p role="alert">The file could not be added. Check the type and size, then try again.</p> : null}
-        </form>
+        <section className="panel stack" style={{ ['--stack-gap' as never]: '0.75rem' }} aria-labelledby="add-home-record-file-title">
+          <div className="panel__head">
+            <div>
+              <p className="mono">Quick capture</p>
+              <h2 id="add-home-record-file-title">Add to this home</h2>
+            </div>
+          </div>
+          <PrivateArtifactUploader
+            homeRef={homeId}
+            upload={(ref, input) => port.uploadPrivateArtifact(ref, input)}
+            onUploaded={retry}
+          />
+        </section>
       ) : null}
 
       {recordsReadable && state.status === 'loading'
@@ -203,31 +117,28 @@ export default function HomeRecordPage({
 
       {recordsReadable && state.status !== 'loading' && state.status !== 'error' ? (
         <>
-          {photos.length > 0 ? (
-            <section className="panel" aria-labelledby="saved-photo-records-title">
-              <div className="panel__head">
-                <h2 id="saved-photo-records-title">Saved photo files</h2>
-                <span className="mono">{photos.length} saved</span>
-              </div>
-              <FiledRows records={photos} />
-            </section>
-          ) : null}
+          <section className="panel" aria-labelledby="saved-photo-records-title">
+            <div className="panel__head">
+              <div><p className="mono">A visual history</p><h2 id="saved-photo-records-title">Home photos</h2></div>
+              <span className="mono">{photos.length} saved</span>
+            </div>
+            <PrivateArtifactCollection
+              records={photos}
+              emptyMessage="Take the first photo when there is something this home should remember."
+            />
+          </section>
 
           <section className="panel" aria-labelledby="saved-home-files-title">
             <div className="panel__head">
               <h2 id="saved-home-files-title">Saved home files</h2>
               {state.status === 'ready' ? <span className="mono">{filedRecords.length} saved</span> : null}
             </div>
-            {filedRecords.length > 0 ? (
-              <FiledRows records={filedRecords} />
-            ) : (
-              <EmptyState
-                title={mode === 'synthetic' ? 'No sample files' : 'No files saved yet'}
-                body={mode === 'synthetic'
-                  ? 'This sample home does not include file records.'
-                  : 'Use the form above when you have a home paper or image to keep.'}
-              />
-            )}
+            <PrivateArtifactCollection
+              records={filedRecords}
+              emptyMessage={mode === 'synthetic'
+                ? 'This sample home does not include file records.'
+                : 'Save a receipt, estimate, manual, permit, or warranty when you have one.'}
+            />
           </section>
         </>
       ) : null}

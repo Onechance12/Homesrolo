@@ -36,16 +36,16 @@ from raw document bytes. Create-home, intake, and project saves use
 transaction-bound command receipts; a changed payload cannot reuse an earlier
 command reference.
 
-Private artifacts live in a non-public Supabase Storage bucket. Each upload is
-limited to 25 MiB, checked by file signature as PDF/JPEG/PNG, hashed with
-SHA-256, stored under opaque home/object references, and read back before its
-metadata becomes available. List and download routes fresh-check the exact home
-membership; a download rechecks it again after object retrieval. Browser
-responses contain no provider object key, integrity hash, or public URL.
-`HOMESROLO_PRIVATE_UPLOADS_ENABLED=true` is a separate, default-off release
-gate and must not be enabled before migration `202608120003` is applied.
-It must also remain off until malware quarantine/scanning, abuse controls,
-cleanup, deletion, and retention are implemented and verified.
+The original server-buffered artifact lane remains disabled. A newer,
+signed-in development lane sends bounded PDF/JPEG/PNG bytes directly to a
+separate non-public Supabase bucket, then verifies length, SHA-256, and magic
+bytes behind an exact-home fenced completion. It preserves authenticated
+same-origin list/download and adds inline JPEG/PNG preview; all private payloads
+are `no-store`. It requires migration `202608250002` and the separate,
+default-off `HOMESROLO_PRIVATE_UPLOADS_ENABLED` gate. Its intentionally
+permanent worst-case quota accounting and deferred malware scanning make it a
+private development tool, not a public launch. See
+`docs/HOMEOWNER_DEV_PRIVATE_UPLOADS.md`.
 
 The authenticated Home Library is now organized as a whole-home map: photos and
 seasonal checkups, insurance, projects and upgrades, inventory and manuals,
@@ -80,7 +80,7 @@ The matching framework-neutral HTTP boundary serves `GET /api/v1/session`,
 `POST /api/v1/homes/{opaque-home-ref}/intake`, exact-home project list/detail
 reads, generic `POST /api/v1/homes/{opaque-home-ref}/projects`, the retained
 `POST /api/v1/homes/{opaque-home-ref}/roofing-projects`, exact-home artifact
-metadata listing/upload, exact-artifact private download, and default-off
+metadata listing/reservation, exact-artifact private download/image preview, and default-off
 `POST /api/v1/homes/{opaque-home-ref}/research`.
 The separate image-only boundary exposes an exact-home photo-checkup list and
 raw JPEG/PNG upload plus exact-photo thumbnail, full-image, and delete routes.

@@ -77,3 +77,15 @@ test('email-code activation requires an independent server-only HMAC secret', ()
   assert.equal(configured?.emailCodeSignInEnabled, true)
   assert.equal(configured?.emailCodeRateLimitSecret, `rate_${'r'.repeat(43)}`)
 })
+
+test('self signup defaults off and accepts only an explicit boolean gate', () => {
+  assert.equal(readHomeownerRuntimeConfiguration(CONFIG)?.selfSignupEnabled, false)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_SELF_SIGNUP_ENABLED: 'true',
+  })?.selfSignupEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_SELF_SIGNUP_ENABLED: 'yes',
+  }), null)
+})

@@ -264,13 +264,16 @@ test('no raw storage URLs or provider identifiers are projected into the UI', ()
   for (const rel of appSources) {
     if (rel.startsWith('lib/tests')) continue // the tripwire may name its own targets
     if (rel.startsWith('lib/server') || rel.startsWith('app/api/')) continue
+    if (['lib/port/transport.ts', 'lib/port/remote.ts', 'lib/port/wire.ts'].includes(rel)) continue
     const content = read(rel)
     assert.doesNotMatch(content, /storageObjectRef|storageUrl|signedUrl|s3:|gs:\/\//i,
       `${rel} must not project storage internals`)
   }
   const wire = read('lib/port/wire.ts')
-  assert.doesNotMatch(wire, /storageUrl|signedUrl|providerObjectId/i,
-    'the browser decoder accepts no provider URL or object identifier')
+  assert.match(wire, /homesrolo-homeowner-dev-uploads[\s\S]*url\.pathname !== expectedPath/,
+    'the transient upload ticket is accepted only for the exact private bucket and key')
+  assert.doesNotMatch(read('lib/port/types.ts'), /signedUrl|storageObjectRef|providerObjectId/i,
+    'no signed URL or provider identifier enters the public UI data port')
   assert.match(wire, /downloadHref:\s*`\/api\/v1\/homes\//,
     'artifact download links are derived from opaque refs and stay same-origin')
 })
@@ -291,12 +294,17 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
     'app/api/v1/homes/[homeRef]/roofing-projects/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
@@ -362,6 +370,13 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves one private download`)
       assert.match(content, /handleArtifactDownload/, `${rel} delegates download policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves one private image preview`)
+      assert.match(content, /handleArtifactPreview/, `${rel} delegates preview policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} completes one reserved upload`)
+      assert.match(content, /handleArtifactUploadCompletion/,
+        `${rel} delegates completion policy to the server seam`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the bounded photo list`)
       assert.match(content, /export async function POST/, `${rel} serves one raw image upload`)
@@ -394,6 +409,14 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function GET/, `${rel} serves the project list`)
       assert.match(content, /export async function POST/, `${rel} serves generic project creation`)
       assert.match(content, /handleHomeownerRequest/, `${rel} delegates both methods to the adapter`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} serves one revision-backed update`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} must not expose a duplicate read surface`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts'
+      || rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts') {
+      assert.match(content, /export async function GET/, `${rel} serves the exact-project list`)
+      assert.match(content, /export async function POST/, `${rel} serves the bounded command`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the private quote list`)
       assert.match(content, /export async function POST/, `${rel} serves strict quote creation`)
@@ -411,7 +434,11 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
@@ -432,6 +459,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     }
     if (!rel.startsWith('app/api/v1/auth/')
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'
@@ -674,8 +703,8 @@ test('roof proposal comparison is private, neutral, editable, and separate from 
     'the disabled upload capability makes zero artifact-list requests')
   assert.match(project, /session\.state\.capabilities\.projectQuotes/,
     'the proposal vault is gated independently from general persistence')
-  assert.doesNotMatch(project, /project-files-unavailable|roof-quotes-unavailable|Private uploads are unavailable/,
-    'capability-off tools are omitted instead of appearing as dead product surfaces')
+  assert.match(project, /!uploadsEnabled \? \([\s\S]*Uploads are turned off in this build\./,
+    'the project workspace says plainly when its private storage control is off')
   assert.match(vault, /Scope only—not a price score/)
   assert.match(vault, /Homesrolo does not estimate this roof, rank proposals/)
   assert.match(vault, /Not reviewed/)
@@ -888,6 +917,51 @@ test('whole-home project history never invents a category or work date', () => {
   assert.match(wire, /performedOn: decoded\.occurredOn/)
   assert.doesNotMatch(wire, /performedOn:[^\n]*createdAt/,
     'record creation time is never relabeled as the work date')
+})
+
+test('projects open as a compact mobile workspace with working-data controls', () => {
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  const detail = read('app/home/[homeId]/projects/[projectId]/page.tsx')
+
+  assert.match(projects, /Add something/,
+    'project capture starts with one plain-language action')
+  assert.match(projects, /Where is it now\?/)
+  for (const state of ['Planned', 'Happening now', 'Already done']) {
+    assert.match(projects, new RegExp(state), `${state} remains one fast creation state`)
+  }
+  assert.match(projects, /<select[\s\S]*Choose an area[\s\S]*CATEGORIES\.map/,
+    'twelve home categories stay available without twelve oversized cards')
+  assert.match(projects, /<details className="project-more">[\s\S]*Add date or notes/,
+    'optional capture stays progressively disclosed')
+
+  for (const section of [
+    "{ value: 'overview', label: 'Overview' }",
+    "{ value: 'activity', label: 'Updates' }",
+    "{ value: 'files', label: 'Photos & files' }",
+    "{ value: 'decisions', label: 'Decisions' }",
+    "{ value: 'people', label: 'People' }",
+  ]) assert.match(detail, new RegExp(section.replace(/[&{}'()]/g, '\\$&')))
+  assert.match(detail, /role="tablist" aria-label="Project workspace"/)
+  assert.match(detail, /expectedRevision: project\.revision/,
+    'homeowner corrections are revision-safe')
+  assert.match(detail, /occurredOn: editOccurredOn \|\| null/,
+    'clearing an exact date is an explicit saved correction')
+  assert.match(detail, /professionalLabel: editProfessional\.trim\(\) \|\| null/,
+    'clearing a professional label is an explicit saved correction')
+  assert.match(detail, /expectedRevision: editingItem\.revision/,
+    'a saved decision cannot overwrite a newer edit')
+  assert.match(detail, /detail: itemDetail\.trim\(\) \|\| undefined/,
+    'an optional blank item detail stays valid and can clear an older detail')
+  assert.doesNotMatch(detail, /Archive project|deleteProject/,
+    'the UI does not strand or delete projects before a restore surface exists')
+  assert.match(detail, /port\.addProjectActivity\(homeId, projectId/,
+    'updates write through the project activity contract')
+  assert.match(detail, /port\.saveProjectItem\(homeId, projectId/,
+    'materials, decisions, and wish-list items share one bounded project contract')
+  assert.match(detail, /This does not grant account or Home Record access\./,
+    'a named professional is never confused with sharing authority')
+  assert.match(css, /\.project-workspace__tabs\s*\{[^}]*overflow-x:\s*auto/s,
+    'the workspace navigation remains horizontally usable on a phone')
 })
 
 test('the home record avoids disabled routes and old paths remain compatible', () => {

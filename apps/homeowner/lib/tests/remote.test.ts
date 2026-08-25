@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { COMMAND_REF_PATTERN, commandRefForAttempt, mintCommandRef } from '../port/command-ref.ts'
 import { resolvePortMode } from '../port/mode.ts'
 import { createRemotePort } from '../port/remote.ts'
@@ -17,6 +18,18 @@ import type {
 
 const REF = (prefix: string, c: string) => `${prefix}_${c.repeat(43)}`
 const HOME = REF('hhom', 'b')
+
+function signedUploadTicket(path: string) {
+  const token = `upload.${'t'.repeat(40)}`
+  return {
+    signedUrl: `https://project.supabase.co/storage/v1/object/upload/sign/homesrolo-homeowner-dev-uploads/${path}?token=${token}`,
+    path,
+    token,
+    expiresAt: '2099-08-24T18:00:00.000Z',
+  }
+}
+
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
 const data = (value: unknown) => ({ kind: 'reply' as const, status: 200, body: { data: value } })
 
@@ -87,6 +100,10 @@ const PROJECT_VIEW = {
   status: 'planned',
   occurredOn: null,
   summary: 'Timing: As soon as possible\n\nLeak above the back room.',
+  professionalLabel: null,
+  revision: 1,
+  archived: false,
+  archivedAt: null,
   createdAt: '2026-08-12T16:00:00.000Z',
   updatedAt: '2026-08-12T16:00:00.000Z',
 }
@@ -898,23 +915,42 @@ test('remaining undefined routes return unavailable without ever building a requ
 
 test('private artifacts list and upload through exact-home routes with safe projections', async () => {
   const artifactRef = REF('hart', 'a')
+  const bytes = new TextEncoder().encode('%PDF-1.7')
+  const ticket = signedUploadTicket(`${HOME}/${REF('hobj', 's')}`)
   const wireArtifact = {
     artifactRef,
     homeRef: HOME,
     projectRef: null,
     kind: 'document',
-    displayName: 'Roof contract.pdf',
+    displayName: 'contract.pdf',
     mediaType: 'application/pdf',
-    byteLength: 128,
+    byteLength: bytes.byteLength,
     createdAt: '2026-08-10T16:00:00.000Z',
   }
-  const { transport, requests } = recordingTransport({
-    [`GET /api/v1/homes/${HOME}/artifacts`]: [wireArtifact],
-  })
+  const wirePhoto = {
+    ...wireArtifact,
+    artifactRef: REF('hart', 'i'),
+    kind: 'photo',
+    displayName: 'kitchen-before.jpg',
+    mediaType: 'image/jpeg',
+  }
+  const requests: TransportRequest[] = []
+  const transport: JsonTransport = async request => {
+    requests.push(request)
+    if (request.method === 'GET') {
+      return { kind: 'reply', status: 200, body: { data: [wireArtifact, wirePhoto] } }
+    }
+    if (request.path.endsWith('/complete')) {
+      return { kind: 'reply', status: 201, body: { data: wireArtifact } }
+    }
+    return { kind: 'reply', status: 202, body: { data: {
+      state: 'upload_required', artifactRef, upload: ticket,
+    } } }
+  }
   const uploads: ArtifactUploadTransportRequest[] = []
   const port = createRemotePort(transport, async request => {
     uploads.push(request)
-    return { kind: 'reply', status: 201, body: { data: wireArtifact } }
+    return { kind: 'reply', status: 200, body: undefined }
   })
   const listed = await port.listDocuments(HOME)
   assert.ok(listed.ok)
@@ -922,9 +958,14 @@ test('private artifacts list and upload through exact-home routes with safe proj
   assert.equal(listed.value[0]?.kind, 'document')
   assert.equal(listed.value[0]?.downloadHref,
     `/api/v1/homes/${HOME}/artifacts/${artifactRef}/content`)
+  assert.equal(listed.value[0]?.previewHref, undefined,
+    'PDFs remain download-only instead of being rendered inline')
+  assert.equal(listed.value[1]?.previewHref,
+    `/api/v1/homes/${HOME}/artifacts/${wirePhoto.artifactRef}/preview`,
+    'images use an authenticated same-origin preview route')
   assert.equal(JSON.stringify(listed.value).includes('storage'), false)
 
-  const file = new File([new TextEncoder().encode('%PDF-1.7')], 'contract.pdf', {
+  const file = new File([bytes], 'contract.pdf', {
     type: 'text/plain',
   })
   const uploaded = await port.uploadPrivateArtifact(HOME, {
@@ -933,11 +974,26 @@ test('private artifacts list and upload through exact-home routes with safe proj
     file,
   })
   assert.ok(uploaded.ok)
-  assert.deepEqual(requests, [{ method: 'GET', path: `/api/v1/homes/${HOME}/artifacts` }])
+  assert.deepEqual(requests, [
+    { method: 'GET', path: `/api/v1/homes/${HOME}/artifacts` },
+    {
+      method: 'POST', path: `/api/v1/homes/${HOME}/artifacts`, body: {
+        commandRef: REF('hcmd', 'u'), kind: 'document', displayName: 'contract.pdf',
+        mediaType: 'application/pdf', byteLength: bytes.byteLength,
+        payloadSha256: sha256(bytes),
+      },
+    },
+    {
+      method: 'POST',
+      path: `/api/v1/homes/${HOME}/artifacts/${artifactRef}/complete`,
+      body: { commandRef: REF('hcmd', 'u') },
+    },
+  ])
   assert.equal(uploads.length, 1)
-  assert.equal(uploads[0]?.path, `/api/v1/homes/${HOME}/artifacts`)
-  assert.equal(uploads[0]?.commandRef, REF('hcmd', 'u'))
+  assert.deepEqual({ ...uploads[0], payload: undefined }, { ...ticket, payload: undefined })
+  assert.deepEqual(new Uint8Array(uploads[0]!.payload), bytes)
   assert.equal('principalRef' in (uploads[0] ?? {}), false)
+  assert.equal('file' in (uploads[0] ?? {}), false)
 })
 
 test('artifact client rejects malformed refs, oversized files, and leaked server fields', async () => {
@@ -950,7 +1006,7 @@ test('artifact client rejects malformed refs, oversized files, and leaked server
     called += 1
     return { kind: 'reply', status: 503, body: {} }
   })
-  const oversized = new File([new Uint8Array(25 * 1024 * 1024 + 1)], 'large.pdf')
+  const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.pdf')
   assert.deepEqual(await port.uploadPrivateArtifact(HOME, {
     commandRef: REF('hcmd', 'u'), kind: 'document', file: oversized,
   }), { ok: false, error: 'invalid' })

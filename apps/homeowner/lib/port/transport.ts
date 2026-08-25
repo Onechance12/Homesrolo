@@ -25,11 +25,10 @@ export type TransportReply =
 export type JsonTransport = (request: TransportRequest) => Promise<TransportReply>
 
 export interface ArtifactUploadTransportRequest {
+  readonly signedUrl: string
   readonly path: string
-  readonly commandRef: string
-  readonly kind: 'photo' | 'document' | 'warranty'
-  readonly projectRef?: string
-  readonly file: File
+  readonly token: string
+  readonly payload: ArrayBuffer
 }
 
 export type ArtifactUploadTransport = (
@@ -76,28 +75,34 @@ export const fetchJsonTransport: JsonTransport = async request => {
   }
 }
 
-export const fetchArtifactUploadTransport: ArtifactUploadTransport = async request => {
-  const form = new FormData()
-  form.set('commandRef', request.commandRef)
-  form.set('kind', request.kind)
-  if (request.projectRef) form.set('projectRef', request.projectRef)
-  form.set('file', request.file, request.file.name)
-  try {
-    /* eslint-disable no-restricted-globals -- sanctioned transport seam */
-    const response = await fetch(request.path, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { accept: 'application/json' },
-      body: form,
-    })
-    /* eslint-enable no-restricted-globals */
-    let body: unknown = undefined
-    try { body = await response.json() } catch { body = undefined }
-    return { kind: 'reply', status: response.status, body }
-  } catch {
-    return { kind: 'network_failure' }
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
+/** Platform-neutral signed PUT seam used by browsers and future native apps. */
+export function createSignedStorageUploadTransport(fetchImpl: FetchLike): ArtifactUploadTransport {
+  return async request => {
+    try {
+      const response = await fetchImpl(request.signedUrl, {
+        method: 'PUT',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        headers: {
+          'content-type': 'application/octet-stream',
+          'cache-control': 'max-age=0',
+          'x-upsert': 'false',
+        },
+        body: request.payload,
+      })
+      return { kind: 'reply', status: response.status, body: undefined }
+    } catch {
+      return { kind: 'network_failure' }
+    }
   }
 }
+
+export const fetchArtifactUploadTransport = createSignedStorageUploadTransport(
+  /* eslint-disable-next-line no-restricted-globals -- sanctioned transport seam */
+  (input, init) => fetch(input, init),
+)
 
 /**
  * Image-only beta transport. The bytes are the request body: no multipart

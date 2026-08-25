@@ -58,9 +58,11 @@ also has `HOMESROLO_AI_ENABLED=true` plus a server-only `OPENAI_API_KEY`. See
 `docs/HOME_RESEARCH.md` for the privacy, source, rate-limit, and deployment
 boundaries.
 
-Private PDF/JPEG/PNG storage remains separately gated and must stay off until
-malware quarantine/scanning, abuse controls, cleanup, deletion, and retention
-are implemented and verified. The Home Library shows an honest unavailable
+Private PDF/JPEG/PNG storage remains separately gated. A signed-in development
+lane now supports a bounded private bucket without routing bytes through
+Netlify, but public signup remains off and malware scanning is explicitly
+deferred. Its permanent quota accounting and rollout steps are documented in
+`docs/HOMEOWNER_DEV_PRIVATE_UPLOADS.md`. The Home Library shows an honest unavailable
 state when that capability is off; it does not simulate an upload. Controller
 verification, invitations, public sharing, payments, analytics, automatic
 professional routing, and production-ready assistant operations are also still

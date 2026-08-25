@@ -7,7 +7,7 @@ import { usePort, usePortMode } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
-import { IconProjects } from '../../../../components/icons.tsx'
+import { IconPlus, IconProjects } from '../../../../components/icons.tsx'
 import { STATUS_LABEL, STATUS_PILL } from '../../../../components/projectStatus.ts'
 import type { ProjectCategory, ProjectStatus } from '../../../../lib/port/types.ts'
 import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
@@ -16,27 +16,19 @@ type RecordMode = 'planned' | 'active' | 'past'
 
 const MODES: readonly {
   value: RecordMode
-  eyebrow: string
   title: string
-  body: string
 }[] = [
   {
     value: 'planned',
-    eyebrow: 'Plan',
-    title: 'Something you are considering',
-    body: 'Keep research, questions, and proposals together before you decide.',
+    title: 'Planned',
   },
   {
     value: 'active',
-    eyebrow: 'Track',
-    title: 'Work happening now',
-    body: 'Give an active repair, upgrade, or maintenance visit one clear home.',
+    title: 'Happening now',
   },
   {
     value: 'past',
-    eyebrow: 'Remember',
-    title: 'Work already completed',
-    body: 'Backfill the history so the next owner—or future you—can find it.',
+    title: 'Already done',
   },
 ]
 
@@ -129,51 +121,30 @@ export default function ProjectsPage({
 
   return (
     <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
-      <div className="pagehead">
-        <p className="mono">Your Home Record</p>
-        <h1>Projects, repairs, and upgrades</h1>
-        <p>
-          Record anything that changes or maintains the home—from a filter service to a remodel.
-          Roofing is one chapter, not the whole file.
-        </p>
+      <div className="project-list-head">
+        <div>
+          <p className="mono">Your Home Record</p>
+          <h1>Projects</h1>
+          <p>Repairs, maintenance, upgrades, and ideas—all in one home history.</p>
+        </div>
+        <button
+          type="button"
+          className="btn btn--primary"
+          aria-expanded={recordMode !== null}
+          aria-controls="add-project"
+          onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
+        >
+          <IconPlus /> {recordMode === null ? 'Add something' : 'Close'}
+        </button>
       </div>
 
-      <section aria-labelledby="project-record-actions">
-        <div className="panel__head">
-          <div>
-            <p className="mono">Add to the history</p>
-            <h2 id="project-record-actions">What are you recording?</h2>
-          </div>
-        </div>
-        <div className="project-action-grid">
-          {MODES.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              className="project-action"
-              aria-pressed={recordMode === option.value}
-              onClick={() => chooseMode(option.value)}
-            >
-              <span className="mono">{option.eyebrow}</span>
-              <strong>{option.title}</strong>
-              <span>{option.body}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
       {recordMode ? (
-        <section className="panel project-form" aria-labelledby="project-details-title">
+        <section id="add-project" className="panel project-composer" aria-labelledby="project-details-title">
           <div className="panel__head">
             <div>
-              <p className="mono">Private home record</p>
-              <h2 id="project-details-title">
-                {recordMode === 'past' ? 'Add the work you remember' : 'Give this work a clear name'}
-              </h2>
+              <p className="mono">Add to this home</p>
+              <h2 id="project-details-title">What should your home remember?</h2>
             </div>
-            <button type="button" className="btn btn--quiet" onClick={() => setRecordMode(null)}>
-              Close
-            </button>
           </div>
 
           {carriedIntent && category === 'roofing' ? (
@@ -183,74 +154,90 @@ export default function ProjectsPage({
             </div>
           ) : null}
 
-          <form onSubmit={createProject} className="roof-start__form">
-            <fieldset>
-              <legend>Part of the home</legend>
-              <div className="project-category-grid">
-                {CATEGORIES.map(option => (
-                  <label className="choice-card" key={option.value}>
-                    <input
-                      type="radio"
-                      name="project-category"
-                      value={option.value}
-                      checked={category === option.value}
-                      onChange={() => {
-                        resetAttempt()
-                        setCategory(option.value)
-                      }}
-                    />
-                    <span>{option.label}</span>
-                  </label>
+          <form onSubmit={createProject} className="project-composer__form">
+            <fieldset className="project-stage-picker">
+              <legend>Where is it now?</legend>
+              <div>
+                {MODES.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={recordMode === option.value}
+                    onClick={() => chooseMode(option.value)}
+                  >
+                    {option.title}
+                  </button>
                 ))}
               </div>
             </fieldset>
 
-            <div className="field">
-              <label htmlFor="project-title">Project name</label>
-              <input
-                id="project-title"
-                value={title}
-                maxLength={120}
-                required
-                onChange={event => {
-                  resetAttempt()
-                  setTitle(event.target.value)
-                }}
-                placeholder="Kitchen remodel, spring AC service, fence repair…"
-              />
-            </div>
-
-            {recordMode === 'past' ? (
-              <div className="field">
-                <label htmlFor="project-date">Exact completion date (optional)</label>
-                <input
-                  id="project-date"
-                  type="date"
-                  max={new Date().toISOString().slice(0, 10)}
-                  value={occurredOn}
+            <div className="project-composer__primary">
+              <label className="field" style={{ marginTop: 0 }}>
+                <span>Part of the home</span>
+                <select
+                  value={category ?? ''}
+                  required
                   onChange={event => {
                     resetAttempt()
-                    setOccurredOn(event.target.value)
+                    setCategory(event.target.value as ProjectCategory)
                   }}
-                />
-                <span className="field__hint">Leave this blank unless you can support the exact day. Put a known month, season, or year in the notes instead.</span>
-              </div>
-            ) : null}
+                >
+                  <option value="">Choose an area</option>
+                  {CATEGORIES.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
 
-            <div className="field">
-              <label htmlFor="project-summary">What do you know so far?</label>
-              <textarea
-                id="project-summary"
-                value={summary}
-                maxLength={2000}
-                onChange={event => {
-                  resetAttempt()
-                  setSummary(event.target.value)
-                }}
-                placeholder="Who did the work, what changed, questions, model numbers, or what to check next."
-              />
-              <span className="field__hint">Optional. Facts can be added as you find them.</span>
+              <label className="field" style={{ marginTop: 0 }}>
+                <span>What is it?</span>
+                <input
+                  id="project-title"
+                  value={title}
+                  maxLength={120}
+                  required
+                  onChange={event => {
+                    resetAttempt()
+                    setTitle(event.target.value)
+                  }}
+                  placeholder="Kitchen remodel, AC service, fence repair…"
+                />
+              </label>
             </div>
+
+            <details className="project-more">
+              <summary>Add date or notes</summary>
+              {recordMode === 'past' ? (
+                <div className="field">
+                  <label htmlFor="project-date">Exact completion date (optional)</label>
+                  <input
+                    id="project-date"
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={occurredOn}
+                    onChange={event => {
+                      resetAttempt()
+                      setOccurredOn(event.target.value)
+                    }}
+                  />
+                  <span className="field__hint">Leave this blank unless you can support the exact day. Put a known month, season, or year in the notes instead.</span>
+                </div>
+              ) : null}
+
+              <div className="field">
+                <label htmlFor="project-summary">Notes (optional)</label>
+                <textarea
+                  id="project-summary"
+                  value={summary}
+                  maxLength={2000}
+                  onChange={event => {
+                    resetAttempt()
+                    setSummary(event.target.value)
+                  }}
+                  placeholder="Who is involved, what changed, model numbers, questions, or what to do next."
+                />
+              </div>
+            </details>
 
             {failed ? (
               <p role="alert" className="form-error">
@@ -262,12 +249,12 @@ export default function ProjectsPage({
               </p>
             ) : null}
 
-            <button type="submit" className="btn btn--primary btn--block" disabled={busy || !category || !title.trim()}>
-              {busy ? 'Saving to the home…' : recordMode === 'past' ? 'Add to home history' : 'Create project record'}
-            </button>
-            <p className="form-note">
-              This creates a private record. It does not hire, schedule, approve, or pay a professional.
-            </p>
+            <div className="project-composer__actions">
+              <button type="submit" className="btn btn--primary" disabled={busy || !category || !title.trim()}>
+                {busy ? 'Saving…' : 'Add to my home'}
+              </button>
+              <span className="form-note">Private by default. This does not hire or notify anyone.</span>
+            </div>
             {mode === 'synthetic' ? <p className="mono">Demo only. A refresh clears the record.</p> : null}
           </form>
         </section>
@@ -292,7 +279,7 @@ export default function ProjectsPage({
           <ul className="rows panel panel--flush" style={{ display: 'block' }}>
             {state.value.map(project => (
               <li key={project.projectRef}>
-                <Link className="row" href={`/home/${homeId}/projects/${project.projectRef}`}>
+                <Link className="row project-list-row" href={`/home/${homeId}/projects/${project.projectRef}`}>
                   <span className="row__glyph"><IconProjects /></span>
                   <span className="row__body">
                     <span className="row__title">{project.title}</span>
