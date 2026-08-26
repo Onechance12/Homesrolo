@@ -5,6 +5,7 @@ import test from 'node:test'
 
 const appRoot = path.resolve(import.meta.dirname, '../..')
 const component = readFileSync(path.join(appRoot, 'components/PrivateArtifacts.tsx'), 'utf8')
+const viewer = readFileSync(path.join(appRoot, 'components/PrivateImageViewer.tsx'), 'utf8')
 const projectPage = readFileSync(
   path.join(appRoot, 'app/home/[homeId]/projects/[projectId]/page.tsx'),
   'utf8',
@@ -25,9 +26,11 @@ test('private capture is phone-first, multi-file, bounded, and sequential', () =
 
 test('private photo previews render as an authenticated lazy gallery', () => {
   assert.match(component, /record\.kind === 'photo_set' && record\.previewHref/)
-  assert.match(component, /<img src=\{photo\.previewHref\}[^>]+loading="lazy"/)
-  assert.match(component, /Download original/)
-  assert.doesNotMatch(component, /target="_blank"/)
+  assert.match(component, /<PrivateImageViewer/)
+  assert.match(viewer, /<img src=\{item\.thumbnailSrc\}[^>]+loading="lazy"/)
+  assert.match(viewer, /Download original/)
+  assert.match(viewer, /role="dialog"[^>]+aria-modal="true"/)
+  assert.doesNotMatch(`${component}\n${viewer}`, /target="_blank"/)
 })
 
 test('the project and whole-home record share one capture and gallery surface', () => {

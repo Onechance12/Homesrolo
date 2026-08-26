@@ -9,7 +9,7 @@ export const metadata = publicPageMetadata({
   canonical: '/privacy/',
 })
 
-const LAST_UPDATED = 'August 23, 2026'
+const LAST_UPDATED = 'August 26, 2026'
 
 export default function PrivacyPage() {
   return (
@@ -42,6 +42,11 @@ export default function PrivacyPage() {
               <h2>Photo checkups</h2>
               <p>If photo checkups are available on your account, you may upload JPEG or PNG images with an area, repeatable view name, observation date, and optional note. The service re-encodes the image and removes embedded metadata before saving the full image and thumbnail in private storage.</p>
               <p>Photo checkups are displayed only after the signed-in account is authorized for that exact home. They are not sent to a contractor, Jobrolo, a public page, or an automated image-analysis service. You can delete an individual checkup photo from the account; provider backup, security, or legal retention may differ from active application storage.</p>
+            </section>
+            <section className="prose">
+              <h2>Optional Rolo photo review</h2>
+              <p>Ordinary files and photos in the private Library are not sent to an AI service by default. If the feature is available, you can choose one saved Library photo and give permission for Rolo to inspect it for one message. Homesrolo verifies access to that exact home and photo, creates a fresh JPEG copy with embedded metadata removed, and sends only that copy and your message to OpenAI. The original file is not sent, the permission does not apply to other photos or later messages, and photo checkups are excluded from this feature.</p>
+              <p>Homesrolo sends the request with Responses storage disabled. That setting is not a promise of zero provider retention; OpenAI&apos;s API data-control and abuse-monitoring rules may still apply. Rolo can describe visible details and uncertainty, but it cannot confirm hidden causes, safety, code compliance, measurements, price, workmanship, insurance coverage, or a complete repair scope from an image. Its review is not saved as a home fact unless you separately review and save a work record.</p>
             </section>
             <section className="prose">
               <h2>Sharing and selling data</h2>

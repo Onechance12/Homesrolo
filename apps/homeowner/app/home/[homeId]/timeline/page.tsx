@@ -3,18 +3,20 @@
 import Link from 'next/link'
 import { use, useEffect, useMemo, useRef, useState } from 'react'
 import { ErrorState, Skeleton } from '../../../../components/states.tsx'
+import { PHOTO_CHECKUP_AREA_LABEL } from '../../../../components/PhotoCheckups.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import {
   homeLabel,
   homeLocality,
   type DocumentSummary,
+  type PhotoCheckup,
   type ProjectCategory,
   type ProjectStatus,
 } from '../../../../lib/port/types.ts'
 import styles from './timeline.module.css'
 
-type ActivityFilter = 'all' | 'work' | 'files'
+type ActivityFilter = 'all' | 'work' | 'photos' | 'files'
 
 interface ActivityEntry {
   readonly id: string
@@ -79,7 +81,7 @@ function dateParts(value: string | null): { readonly month: string; readonly day
   }
 }
 
-/** A chronological projection over work and files; no copied timeline storage. */
+/** A chronological projection over work, photos, and files; no copied timeline storage. */
 export default function ActivityPage({ params }: { params: Promise<{ homeId: string }> }) {
   const { homeId } = use(params)
   const port = usePort()
@@ -92,10 +94,24 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
   const files = usePortCall<readonly DocumentSummary[]>(() => filesReadable
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
+  const checkupsReadable = mode === 'remote'
+    && session.state.kind === 'signed_in'
+    && session.state.capabilities.photoCheckups
+  const checkups = usePortCall<readonly PhotoCheckup[]>(() => checkupsReadable
+    ? port.listPhotoCheckups(homeId)
+    : Promise.resolve({ ok: true as const, value: [] }))
   const retryProjects = projects.retry
   const retryFiles = files.retry
+  const retryCheckups = checkups.retry
   const previousFilesReadable = useRef(filesReadable)
+  const previousCheckupsReadable = useRef(checkupsReadable)
   const [filter, setFilter] = useState<ActivityFilter>('all')
+
+  useEffect(() => {
+    if (previousCheckupsReadable.current === checkupsReadable) return
+    previousCheckupsReadable.current = checkupsReadable
+    retryCheckups()
+  }, [checkupsReadable, retryCheckups])
 
   useEffect(() => {
     if (previousFilesReadable.current === filesReadable) return
@@ -108,10 +124,11 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
       if ((event as CustomEvent<{ homeId?: string }>).detail?.homeId !== homeId) return
       retryProjects()
       if (filesReadable) retryFiles()
+      if (checkupsReadable) retryCheckups()
     }
     window.addEventListener('homesrolo:data-changed', refreshChangedHome)
     return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
-  }, [filesReadable, homeId, retryFiles, retryProjects])
+  }, [checkupsReadable, filesReadable, homeId, retryCheckups, retryFiles, retryProjects])
 
   const entries = useMemo<readonly ActivityEntry[]>(() => {
     const work: ActivityEntry[] = (projects.state.status === 'ready' ? projects.state.value : [])
@@ -130,7 +147,7 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
     const documents: ActivityEntry[] = (files.state.status === 'ready' ? files.state.value : [])
       .map<ActivityEntry>(document => ({
         id: document.documentRef,
-        kind: 'files',
+        kind: document.kind === 'photo_set' ? 'photos' : 'files',
         date: document.addedOn,
         title: document.title,
         eyebrow: fileKind(document.kind),
@@ -141,17 +158,30 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
           : `/home/${homeId}/documents`,
       }))
 
-    return [...work, ...documents].sort((left, right) => {
+    const checkupPhotos: ActivityEntry[] = (checkups.state.status === 'ready' ? checkups.state.value : [])
+      .map<ActivityEntry>(photo => ({
+        id: photo.photoRef,
+        kind: 'photos',
+        date: photo.observedOn,
+        title: photo.viewLabel,
+        eyebrow: `${PHOTO_CHECKUP_AREA_LABEL[photo.area]} photo`,
+        detail: 'Saved in Home Watch',
+        context: photo.caption || 'Repeatable private home view',
+        href: `/home/${homeId}/checkups`,
+      }))
+
+    return [...work, ...documents, ...checkupPhotos].sort((left, right) => {
       if (left.date && right.date) return right.date.localeCompare(left.date)
       if (left.date) return -1
       if (right.date) return 1
       return left.title.localeCompare(right.title)
     })
-  }, [files.state, homeId, projects.state])
+  }, [checkups.state, files.state, homeId, projects.state])
 
   const counts = useMemo(() => ({
     all: entries.length,
     work: entries.filter(entry => entry.kind === 'work').length,
+    photos: entries.filter(entry => entry.kind === 'photos').length,
     files: entries.filter(entry => entry.kind === 'files').length,
   }), [entries])
 
@@ -178,7 +208,7 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
         <div>
           <p className={styles.kicker}>The story so far</p>
           <h1>Activity</h1>
-          <p className={styles.lead}>A single history of the work and files already connected to this home.</p>
+          <p className={styles.lead}>A single history of the work, photos, and files already connected to this home.</p>
           <p className={styles.homeName}>{homeLabel(home.state.value)} <span>{homeLocality(home.state.value)}</span></p>
         </div>
         <Link href={`/home/${homeId}/projects`} className={styles.addButton}>
@@ -194,25 +224,31 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
             <h2 id="activity-history-title">What this home remembers</h2>
           </div>
           <div className={styles.filters} role="group" aria-label="Filter activity">
-            {(['all', 'work', 'files'] as const).map(value => (
+            {(['all', 'work', 'photos', 'files'] as const).map(value => (
               <button
                 key={value}
                 type="button"
                 aria-pressed={filter === value}
                 onClick={() => setFilter(value)}
               >
-                {value === 'all' ? 'All' : value === 'work' ? 'Work' : 'Files'}
+                {value === 'all' ? 'All' : value === 'work' ? 'Work' : value === 'photos' ? 'Photos' : 'Files'}
                 <small>{counts[value]}</small>
               </button>
             ))}
           </div>
         </div>
 
-        {files.state.status === 'loading' ? <p className={styles.loading} role="status">Adding saved files to the history…</p> : null}
+        {files.state.status === 'loading' || checkups.state.status === 'loading' ? <p className={styles.loading} role="status">Adding saved photos and files to the history…</p> : null}
         {files.state.status === 'error' ? (
           <div className={styles.fileError} role="status">
             <span>Saved files could not be added to this view.</span>
             <button type="button" onClick={files.retry}>Try again</button>
+          </div>
+        ) : null}
+        {checkups.state.status === 'error' ? (
+          <div className={styles.fileError} role="status">
+            <span>Home Watch photos could not be added to this view.</span>
+            <button type="button" onClick={checkups.retry}>Try again</button>
           </div>
         ) : null}
 
@@ -239,7 +275,7 @@ export default function ActivityPage({ params }: { params: Promise<{ homeId: str
                           <Link href={entry.href} className={styles.entry}>
                             <span className={styles.entryTop}>
                               <small>{entry.eyebrow}</small>
-                              <b>{entry.kind === 'work' ? 'WORK' : 'FILE'}</b>
+                              <b>{entry.kind === 'work' ? 'WORK' : entry.kind === 'photos' ? 'PHOTO' : 'FILE'}</b>
                             </span>
                             <strong>{entry.title}</strong>
                             <span className={styles.entryDetails}>{entry.detail} <i aria-hidden="true">·</i> {entry.context}</span>

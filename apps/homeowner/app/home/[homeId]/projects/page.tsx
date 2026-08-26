@@ -2,21 +2,24 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { use, useRef, useState } from 'react'
+import { use, useMemo, useRef, useState } from 'react'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { commandRefForAttempt } from '../../../../lib/port/command-ref.ts'
 import { EmptyState, ErrorState, Skeleton } from '../../../../components/states.tsx'
-import { IconPlus, IconProjects } from '../../../../components/icons.tsx'
+import { IconPlus } from '../../../../components/icons.tsx'
 import {
-  STATUS_LABEL, STATUS_PILL, WORK_KIND_LABEL, WORK_KIND_OPTIONS,
+  PROJECT_CATEGORY_LABEL, PROJECT_CATEGORY_OPTIONS, STATUS_LABEL, STATUS_PILL,
+  WORK_KIND_LABEL, WORK_KIND_OPTIONS,
 } from '../../../../components/projectStatus.ts'
 import type {
-  HomeownerWorkKind, ProjectCategory, ProjectStatus,
+  DocumentSummary, HomeownerWorkKind, ProjectCategory, ProjectStatus,
 } from '../../../../lib/port/types.ts'
 import { ROOFING_INTENT_LABEL, roofingIntent } from '../../../../lib/roofing-intent.ts'
 
 type RecordMode = 'planned' | 'active' | 'past'
+type WorkView = 'all' | 'open' | 'care' | 'complete'
+type WorkSort = 'recent' | 'work_date' | 'title'
 
 const MODES: readonly {
   value: RecordMode
@@ -34,21 +37,6 @@ const MODES: readonly {
     value: 'past',
     title: 'Already done',
   },
-]
-
-const CATEGORIES: readonly { value: ProjectCategory; label: string }[] = [
-  { value: 'interior', label: 'Interior & remodel' },
-  { value: 'hvac', label: 'Heating & cooling' },
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'appliances', label: 'Appliances' },
-  { value: 'exterior', label: 'Exterior & gutters' },
-  { value: 'roofing', label: 'Roof' },
-  { value: 'landscaping', label: 'Yard & landscaping' },
-  { value: 'pest', label: 'Pest control' },
-  { value: 'pool', label: 'Pool' },
-  { value: 'new_construction', label: 'New construction' },
-  { value: 'other', label: 'Something else' },
 ]
 
 const ROOF_TITLE = {
@@ -81,6 +69,11 @@ export default function ProjectsPage({
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
+  const recordsReadable = mode === 'synthetic'
+    || (session.kind === 'signed_in' && session.capabilities.uploads)
+  const documents = usePortCall<readonly DocumentSummary[]>(() => recordsReadable
+    ? port.listDocuments(homeId)
+    : Promise.resolve({ ok: true as const, value: [] }))
   const [recordMode, setRecordMode] = useState<RecordMode | null>(() => carriedIntent ? 'planned' : null)
   const [workKind, setWorkKind] = useState<HomeownerWorkKind>('project')
   const [category, setCategory] = useState<ProjectCategory | null>(() => carriedIntent ? 'roofing' : null)
@@ -89,7 +82,65 @@ export default function ProjectsPage({
   const [summary, setSummary] = useState('')
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
+  const [workView, setWorkView] = useState<WorkView>('all')
+  const [workQuery, setWorkQuery] = useState('')
+  const [kindFilter, setKindFilter] = useState<HomeownerWorkKind | 'all'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<ProjectCategory | 'all'>('all')
+  const [sort, setSort] = useState<WorkSort>('recent')
   const attemptRef = useRef<string | null>(null)
+
+  const artifactCounts = useMemo(() => {
+    const counts = new Map<string, { photos: number; files: number }>()
+    if (documents.state.status !== 'ready') return null
+    for (const record of documents.state.value) {
+      if (!record.projectRef) continue
+      const current = counts.get(record.projectRef) ?? { photos: 0, files: 0 }
+      if (record.kind === 'photo_set') current.photos += 1
+      else current.files += 1
+      counts.set(record.projectRef, current)
+    }
+    return counts
+  }, [documents.state])
+
+  const visibleWork = useMemo(() => {
+    if (state.status !== 'ready') return []
+    const needle = workQuery.trim().toLocaleLowerCase()
+    const filtered = state.value.filter(project => !project.archived).filter(project => {
+      if (workView === 'open' && !['planned', 'in_progress'].includes(project.status)) return false
+      if (workView === 'care' && !['issue', 'repair', 'service'].includes(project.workKind)) return false
+      if (workView === 'complete' && project.status !== 'completed') return false
+      if (kindFilter !== 'all' && project.workKind !== kindFilter) return false
+      if (categoryFilter !== 'all' && project.category !== categoryFilter) return false
+      if (!needle) return true
+      return [
+        project.title,
+        project.trade,
+        project.professionalLabel,
+        PROJECT_CATEGORY_LABEL[project.category],
+        WORK_KIND_LABEL[project.workKind],
+        STATUS_LABEL[project.status],
+      ].join(' ').toLocaleLowerCase().includes(needle)
+    })
+    if (sort === 'recent') return filtered
+    return [...filtered].sort((left, right) => {
+      if (sort === 'title') return left.title.localeCompare(right.title)
+      if (!left.performedOn && !right.performedOn) return 0
+      if (!left.performedOn) return 1
+      if (!right.performedOn) return -1
+      return right.performedOn.localeCompare(left.performedOn)
+    })
+  }, [categoryFilter, kindFilter, sort, state, workQuery, workView])
+
+  const filtersActive = workView !== 'all' || Boolean(workQuery.trim())
+    || kindFilter !== 'all' || categoryFilter !== 'all' || sort !== 'recent'
+
+  function clearWorkFilters() {
+    setWorkView('all')
+    setWorkQuery('')
+    setKindFilter('all')
+    setCategoryFilter('all')
+    setSort('recent')
+  }
 
   function resetAttempt() {
     attemptRef.current = null
@@ -217,7 +268,7 @@ export default function ProjectsPage({
                   }}
                 >
                   <option value="">Choose an area</option>
-                  {CATEGORIES.map(option => (
+                  {PROJECT_CATEGORY_OPTIONS.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
@@ -301,31 +352,104 @@ export default function ProjectsPage({
             <h2 id="saved-projects">Saved work</h2>
           </div>
         </div>
+        <div className="work-index panel" aria-label="Find saved work">
+          <label className="work-index__search">
+            <span className="sr-only">Search saved work</span>
+            <input
+              type="search"
+              value={workQuery}
+              onChange={event => setWorkQuery(event.target.value)}
+              placeholder="Search work, people, or home area"
+              autoComplete="off"
+            />
+          </label>
+          <div className="work-index__views" role="group" aria-label="Quick work filters">
+            {([
+              ['all', 'Everything'],
+              ['open', 'Needs attention'],
+              ['care', 'Care & repairs'],
+              ['complete', 'History'],
+            ] as const).map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={workView === value} onClick={() => setWorkView(value)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="work-index__selects">
+            <label>
+              <span>Kind</span>
+              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
+                <option value="all">All kinds</option>
+                {WORK_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Area</span>
+              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value as ProjectCategory | 'all')}>
+                <option value="all">All areas</option>
+                {PROJECT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Sort</span>
+              <select value={sort} onChange={event => setSort(event.target.value as WorkSort)}>
+                <option value="recent">Recently updated</option>
+                <option value="work_date">Work date</option>
+                <option value="title">A–Z</option>
+              </select>
+            </label>
+          </div>
+          <div className="work-index__result" aria-live="polite">
+            <span>{state.status === 'ready' ? `${visibleWork.length} of ${state.value.filter(project => !project.archived).length} records` : 'Opening work…'}</span>
+            {filtersActive ? <button type="button" onClick={clearWorkFilters}>Clear filters</button> : null}
+          </div>
+        </div>
         {state.status === 'loading' && <div className="panel"><Skeleton lines={4} label="Loading projects" /></div>}
         {state.status === 'error' && <ErrorState retry={retry} error={state.status === 'error' ? state.error : undefined} />}
+        {recordsReadable && documents.state.status === 'error' ? (
+          <div className="notice" role="status">
+            Photo and file counts could not be loaded, so they are left unknown. <button type="button" onClick={documents.retry}>Try again</button>
+          </div>
+        ) : null}
         {state.status === 'empty' && (
           <EmptyState
             title="Nothing recorded here yet"
             body="Tell Rolo what happened or add it manually. You can begin with work from years ago, something underway, or an idea you are still considering."
           />
         )}
-        {state.status === 'ready' && (
-          <ul className="rows panel panel--flush" style={{ display: 'block' }}>
-            {state.value.map(project => (
+        {state.status === 'ready' && visibleWork.length === 0 && state.value.length > 0 ? (
+          <EmptyState
+            title="Nothing matches this view"
+            body="Try another area or kind, or clear the filters to see the whole home history."
+          />
+        ) : null}
+        {state.status === 'ready' && visibleWork.length > 0 && (
+          <ul className="work-card-grid">
+            {visibleWork.map(project => {
+              const counts = project.isSynthetic
+                ? { photos: project.photoCount, files: project.documentCount }
+                : artifactCounts?.get(project.projectRef)
+                  ?? (artifactCounts ? { photos: 0, files: 0 } : null)
+              return (
               <li key={project.projectRef}>
-                <Link className="row project-list-row" href={`/home/${homeId}/projects/${project.projectRef}`}>
-                  <span className="row__glyph"><IconProjects /></span>
-                  <span className="row__body">
-                    <span className="row__title">{project.title}</span>
-                    <span className="row__sub">{WORK_KIND_LABEL[project.workKind]} · {project.trade}</span>
-                  </span>
-                  <span className="row__end">
+                <Link className="work-card" href={`/home/${homeId}/projects/${project.projectRef}`}>
+                  <span className="work-card__topline">
+                    <span>{PROJECT_CATEGORY_LABEL[project.category]}</span>
                     <span className={STATUS_PILL[project.status]}>{STATUS_LABEL[project.status]}</span>
-                    <span className="mono">{project.performedOn ?? 'Date not recorded'}</span>
+                  </span>
+                  <strong>{project.title}</strong>
+                  <span className="work-card__kind">{WORK_KIND_LABEL[project.workKind]} · {project.trade}</span>
+                  {project.professionalLabel ? <span className="work-card__person">With {project.professionalLabel}</span> : null}
+                  <span className="work-card__meta">
+                    <span>{project.performedOn ?? 'Date not recorded'}</span>
+                    {counts ? (
+                      <span>{counts.photos} {counts.photos === 1 ? 'photo' : 'photos'} · {counts.files} {counts.files === 1 ? 'file' : 'files'}</span>
+                    ) : <span>Evidence count unavailable</span>}
                   </span>
                 </Link>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </section>

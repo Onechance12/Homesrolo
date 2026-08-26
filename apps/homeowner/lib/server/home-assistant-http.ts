@@ -14,7 +14,12 @@ import {
   HomeAssistantError,
   type HomeAssistantClient,
   type HomeAssistantContext,
+  type HomeAssistantSelectedPhoto,
 } from './home-assistant.ts'
+import {
+  PhotoTransformBusyError,
+  sanitizeHomeownerPhotoForAnalysis,
+} from './checkup-photo-http.ts'
 
 const MAX_JSON_BYTES = 24 * 1024
 const JSON_HEADERS = Object.freeze({
@@ -26,6 +31,7 @@ const JSON_HEADERS = Object.freeze({
 })
 
 const sharedRateLimiter = new HomeResearchRateLimiter({ limit: 16, windowMs: 10 * 60 * 1_000 })
+const sharedVisionRateLimiter = new HomeResearchRateLimiter({ limit: 4, windowMs: 10 * 60 * 1_000 })
 
 function boundaryAwareRequest(request: z.infer<typeof askRoloRequestSchema>) {
   const current = classifyRequest(request.message)
@@ -136,6 +142,9 @@ async function boundedJson(request: Request): Promise<unknown | null> {
 
 function mapped(error: unknown): Response {
   if (error instanceof z.ZodError) return response(400, { error: { code: 'invalid_request' } })
+  if (error instanceof PhotoTransformBusyError) {
+    return response(429, { error: { code: 'rate_limited' } }, { 'retry-after': '5' })
+  }
   if (error instanceof HomeAssistantError) return response(503, { error: { code: 'unavailable' } })
   if (!(error instanceof HomeownerApiError)) return response(503, { error: { code: 'unavailable' } })
   if (error.code === 'signed_out') return response(401, { error: { code: 'signed_out' } })
@@ -162,6 +171,13 @@ export interface HomeAssistantHttpDependencies {
     requestedProjectRef?: string,
   ) => Promise<HomeAssistantContext>
   readonly rateLimiter: HomeResearchRateLimiter
+  readonly visionEnabled?: boolean
+  readonly visionRateLimiter?: HomeResearchRateLimiter
+  readonly readSelectedPhoto?: (
+    sessionHandle: string,
+    homeRef: string,
+    selectedPhoto: NonNullable<z.infer<typeof askRoloRequestSchema>['selectedPhoto']>,
+  ) => Promise<HomeAssistantSelectedPhoto>
 }
 
 export async function handleHomeAssistantRequestWithDependencies(
@@ -203,12 +219,37 @@ export async function handleHomeAssistantRequestWithDependencies(
         data: homeAssistantBoundaryResult(boundaryDecision.request, boundaryDecision.refusals),
       })
     }
+    let selectedPhoto: HomeAssistantSelectedPhoto | null = null
+    if (boundaryDecision.request.selectedPhoto) {
+      if (!dependencies.visionEnabled
+        || !dependencies.visionRateLimiter
+        || !dependencies.readSelectedPhoto) {
+        return response(503, { error: { code: 'unavailable' } })
+      }
+      const visionAllowance = dependencies.visionRateLimiter.consume(
+        `${rateLimitKey(sessionHandle, homeRef)}:vision`,
+      )
+      if (!visionAllowance.allowed) {
+        return response(429, { error: { code: 'rate_limited' } }, {
+          'retry-after': String(visionAllowance.retryAfterSeconds),
+        })
+      }
+      selectedPhoto = await dependencies.readSelectedPhoto(
+        sessionHandle,
+        homeRef,
+        boundaryDecision.request.selectedPhoto,
+      )
+    }
     const context = await dependencies.readContext(
       sessionHandle,
       homeRef,
       boundaryDecision.request.projectRef,
     )
-    const result = await dependencies.client.answer(boundaryDecision.request, context)
+    const result = await dependencies.client.answer(
+      boundaryDecision.request,
+      context,
+      selectedPhoto,
+    )
     return response(200, { data: result })
   } catch (error) {
     return mapped(error)
@@ -221,6 +262,24 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
   return handleHomeAssistantRequestWithDependencies(request, homeRef, {
     appOrigin: configuration?.appOrigin ?? null,
     client: runtime.configuredHomeAssistantClient(),
+    visionEnabled: configuration?.privateUploadsEnabled === true
+      && configuration.roloVisionEnabled === true,
+    visionRateLimiter: sharedVisionRateLimiter,
+    async readSelectedPhoto(sessionHandle, requestedHomeRef, selection) {
+      const service = runtime.homeownerApiService()
+      const result = await service.readArtifactContent(
+        { sessionHandle },
+        requestedHomeRef,
+        selection.artifactRef,
+      )
+      if (result.artifact.kind !== 'photo'
+        || (result.artifact.mediaType !== 'image/jpeg'
+          && result.artifact.mediaType !== 'image/png')) {
+        throw new HomeownerApiError('invalid_request')
+      }
+      const sanitized = await sanitizeHomeownerPhotoForAnalysis(result.bytes)
+      return { bytes: sanitized.fullBytes, mediaType: 'image/jpeg' }
+    },
     async readContext(sessionHandle, requestedHomeRef, requestedProjectRef) {
       const service = runtime.homeownerApiService()
       const requestContext = { sessionHandle }

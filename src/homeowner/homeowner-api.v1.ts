@@ -98,6 +98,9 @@ export const homeownerApiCapabilitiesSchema = z.object({
   projectQuotes: z.boolean(),
   homeResearch: z.boolean(),
   homeAssistant: z.boolean(),
+  // Optional on the wire during the staged PWA rollout; parsed service values
+  // always receive false when an older response omits it.
+  homeAssistantVision: z.boolean().optional().default(false),
   uploads: z.boolean(),
   photoCheckups: z.boolean(),
   projectReview: z.boolean(),

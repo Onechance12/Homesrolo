@@ -76,3 +76,37 @@ test('progress never rewards cancelled work as active or complete', () => {
   assert.equal(progress.cards.find(card => card.id === 'projects')?.detail, '0 completed · 0 active')
   assert.equal(progress.milestones.find(item => item.id === 'project-remembered')?.earned, false)
 })
+
+test('remote work evidence is derived from the real artifact index when wire counters are zero', () => {
+  const project = { ...projectSummaries()[0]!, isSynthetic: false, photoCount: 0, documentCount: 0 }
+  const linked = allDocuments().filter(document => document.projectRef === project.projectRef)
+  const photo = {
+    ...linked[0]!,
+    documentRef: `hart_${'p'.repeat(43)}`,
+    kind: 'photo_set' as const,
+    mediaType: 'image/jpeg' as const,
+  }
+  const progress = buildHomeRecordProgress({
+    home: {
+      source: 'server',
+      homeRef: FIXTURE_HOMES[0]!.homeRef,
+      displayLabel: FIXTURE_HOMES[0]!.alias,
+      privateLocationLabel: FIXTURE_HOMES[0]!.locality,
+      relationshipLabel: 'claimed_unverified',
+      projectCount: 0,
+      documentCount: 0,
+      warrantyCount: 0,
+      maintenanceCount: 0,
+      updatedAt: '2026-08-26T12:00:00.000Z',
+    },
+    projects: [project],
+    documents: [...linked, photo],
+    checkups: [],
+    uploadsEnabled: true,
+    checkupsEnabled: false,
+  })
+
+  assert.equal(progress.counts.projectPhotos, 1)
+  assert.ok(progress.tracks.find(track => track.id === 'remember')?.evidence.includes('A project has supporting evidence'))
+  assert.ok(progress.tracks.find(track => track.id === 'protect')?.evidence.includes('Photo evidence is saved'))
+})

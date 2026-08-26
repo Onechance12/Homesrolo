@@ -212,6 +212,7 @@ function service(options: {
       projectQuotes: false,
       homeResearch: false,
       homeAssistant: false,
+      homeAssistantVision: false,
       uploads: false,
       photoCheckups: false,
       projectReview: false,

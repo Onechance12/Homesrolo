@@ -8,6 +8,7 @@ import { usePort, useSession } from '../lib/port/provider.tsx'
 import { roloThreadStorageKey } from '../lib/rolo-thread-storage.ts'
 import type {
   AskRoloResult,
+  DocumentSummary,
   RoloAssistantTurn,
   RoloDestination,
   RoloWorkDraft,
@@ -15,12 +16,20 @@ import type {
 import { HouseMark } from './icons.tsx'
 import styles from './AssistantDock.module.css'
 
-type ThreadMessage = RoloAssistantTurn & { readonly id: string }
+type ThreadMessage = RoloAssistantTurn & {
+  readonly id: string
+  readonly photoTitle?: string
+}
 type StoredConversation = {
   readonly thread: ThreadMessage[]
   readonly proposal: RoloWorkDraft | null
   readonly followUps: readonly string[]
+  readonly photoReview: AskRoloResult['photoReview']
+  readonly photoReviewTitle: string | null
+  readonly photoReviewRef: string | null
 }
+
+const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 
 const STARTERS = [
   'My AC stopped cooling yesterday.',
@@ -101,17 +110,54 @@ function readStoredDraft(value: unknown): RoloWorkDraft | null {
   }
 }
 
+function readStoredPhotoReview(value: unknown): AskRoloResult['photoReview'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const review = value as Record<string, unknown>
+  if (Object.keys(review).sort().join(',')
+    !== 'cannotConfirm,hazardSignal,suggestedTrade,urgency,visibleObservations') return null
+  const validText = (item: unknown) => typeof item === 'string'
+    && item === item.trim() && item.length > 0 && item.length <= 240
+    && !/[\u0000-\u001f\u007f]/.test(item)
+  if (!Array.isArray(review.visibleObservations)
+    || !review.visibleObservations.every(validText)
+    || !Array.isArray(review.cannotConfirm)
+    || !review.cannotConfirm.every(validText)) return null
+  const observations = review.visibleObservations as string[]
+  const limits = review.cannotConfirm as string[]
+  const hazards = new Set([
+    'none', 'visible_fire_or_smoke', 'visible_sparking_or_exposed_electrical',
+    'water_near_electrical', 'major_displacement_or_collapse',
+  ])
+  if (observations.length < 1 || observations.length > 5 || limits.length < 1 || limits.length > 4
+    || (review.urgency !== 'routine' && review.urgency !== 'prompt_attention' && review.urgency !== 'urgent')
+    || (review.suggestedTrade !== null
+      && (typeof review.suggestedTrade !== 'string'
+        || !Object.hasOwn(CATEGORY_LABEL, review.suggestedTrade)))
+    || typeof review.hazardSignal !== 'string' || !hazards.has(review.hazardSignal)) return null
+  return {
+    visibleObservations: observations,
+    cannotConfirm: limits,
+    urgency: review.urgency,
+    suggestedTrade: review.suggestedTrade as RoloWorkDraft['category'] | null,
+    hazardSignal: review.hazardSignal as NonNullable<AskRoloResult['photoReview']>['hazardSignal'],
+  }
+}
+
 function readStoredConversation(storageKey: string): StoredConversation {
+  const empty = (): StoredConversation => ({
+    thread: [], proposal: null, followUps: [], photoReview: null,
+    photoReviewTitle: null, photoReviewRef: null,
+  })
   try {
     const raw = sessionStorage.getItem(storageKey)
-    if (!raw) return { thread: [], proposal: null, followUps: [] }
+    if (!raw) return empty()
     const decoded = JSON.parse(raw) as unknown
     if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
-      return { thread: [], proposal: null, followUps: [] }
+      return empty()
     }
     const stored = decoded as Record<string, unknown>
     if (stored.version !== 1 || !Array.isArray(stored.thread)) {
-      return { thread: [], proposal: null, followUps: [] }
+      return empty()
     }
     const thread = stored.thread.flatMap((entry, index) => {
       if (!entry || typeof entry !== 'object') return []
@@ -124,6 +170,11 @@ function readStoredConversation(storageKey: string): StoredConversation {
         id: typeof candidate.id === 'string' ? candidate.id : `restored-${index}`,
         role: candidate.role,
         text: candidate.text.trim(),
+        ...(candidate.role === 'user' && typeof candidate.photoTitle === 'string'
+          && candidate.photoTitle === candidate.photoTitle.trim()
+          && candidate.photoTitle.length > 0 && candidate.photoTitle.length <= 160
+          ? { photoTitle: candidate.photoTitle }
+          : {}),
       }
       return [restored]
     }).slice(-20)
@@ -131,9 +182,24 @@ function readStoredConversation(storageKey: string): StoredConversation {
       ? stored.followUps.flatMap(question => typeof question === 'string'
         && question.trim().length > 0 && question.length <= 240 ? [question.trim()] : []).slice(0, 1)
       : []
-    return { thread, proposal: readStoredDraft(stored.proposal), followUps }
+    const photoReview = readStoredPhotoReview(stored.photoReview)
+    const photoReviewTitle = photoReview && typeof stored.photoReviewTitle === 'string'
+      && stored.photoReviewTitle === stored.photoReviewTitle.trim()
+      && stored.photoReviewTitle.length > 0 && stored.photoReviewTitle.length <= 160
+      ? stored.photoReviewTitle
+      : null
+    const photoReviewRef = photoReview && typeof stored.photoReviewRef === 'string'
+      && ARTIFACT_REF.test(stored.photoReviewRef) ? stored.photoReviewRef : null
+    return {
+      thread,
+      proposal: readStoredDraft(stored.proposal),
+      followUps,
+      photoReview,
+      photoReviewTitle,
+      photoReviewRef,
+    }
   } catch {
-    return { thread: [], proposal: null, followUps: [] }
+    return empty()
   }
 }
 
@@ -164,6 +230,20 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     () => readStoredConversation(storageKey).followUps,
   )
   const [savedProject, setSavedProject] = useState<{ ref: string; title: string; partial: boolean } | null>(null)
+  const [savedPhotos, setSavedPhotos] = useState<readonly DocumentSummary[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  const [photosError, setPhotosError] = useState(false)
+  const [selectedPhotoRef, setSelectedPhotoRef] = useState<string | null>(null)
+  const [photoConsent, setPhotoConsent] = useState(false)
+  const [photoReview, setPhotoReview] = useState<AskRoloResult['photoReview']>(
+    () => readStoredConversation(storageKey).photoReview,
+  )
+  const [photoReviewTitle, setPhotoReviewTitle] = useState<string | null>(
+    () => readStoredConversation(storageKey).photoReviewTitle,
+  )
+  const [photoReviewRef, setPhotoReviewRef] = useState<string | null>(
+    () => readStoredConversation(storageKey).photoReviewRef,
+  )
   const saveAttempt = useRef<string | null>(null)
   const sendInFlight = useRef(false)
   const saveInFlight = useRef(false)
@@ -173,6 +253,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const launchRef = useRef<HTMLElement | null>(null)
   const activeStorageKey = useRef(storageKey)
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
+  const visionEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistantVision
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
 
@@ -188,9 +269,15 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       setThread(restored.thread)
       setProposal(restored.proposal)
       setFollowUps(restored.followUps)
+      setPhotoReview(restored.photoReview)
+      setPhotoReviewTitle(restored.photoReviewTitle)
+      setPhotoReviewRef(restored.photoReviewRef)
       setSuggestion(null)
       setSavedProject(null)
       setError(null)
+      setSavedPhotos([])
+      setSelectedPhotoRef(null)
+      setPhotoConsent(false)
       return
     }
     try {
@@ -199,11 +286,14 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
         thread: thread.slice(-20),
         proposal,
         followUps: followUps.slice(0, 1),
+        photoReview,
+        photoReviewTitle,
+        photoReviewRef,
       }))
     } catch {
       // Conversation persistence is a convenience only; the app still works.
     }
-  }, [followUps, proposal, storageKey, thread])
+  }, [followUps, photoReview, photoReviewRef, photoReviewTitle, proposal, storageKey, thread])
 
   useEffect(() => {
     const show = () => {
@@ -213,6 +303,39 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     window.addEventListener('homesrolo:open-assistant', show)
     return () => window.removeEventListener('homesrolo:open-assistant', show)
   }, [])
+
+  useEffect(() => {
+    if (!open || !visionEnabled) return
+    let active = true
+    setSavedPhotos([])
+    setPhotosLoading(true)
+    setPhotosError(false)
+    void port.listDocuments(homeId).then(result => {
+      if (!active) return
+      setPhotosLoading(false)
+      if (!result.ok) {
+        setSavedPhotos([])
+        setPhotosError(true)
+        return
+      }
+      setSavedPhotos(result.value.filter(record => !record.isSynthetic
+        && record.kind === 'photo_set'
+        && !!record.previewHref))
+    }).catch(() => {
+      if (!active) return
+      setSavedPhotos([])
+      setPhotosLoading(false)
+      setPhotosError(true)
+    })
+    return () => { active = false }
+  }, [homeId, open, port, visionEnabled])
+
+  useEffect(() => {
+    if (visionEnabled) return
+    setSavedPhotos([])
+    setSelectedPhotoRef(null)
+    setPhotoConsent(false)
+  }, [visionEnabled])
 
   useEffect(() => {
     if (!open) return
@@ -260,17 +383,32 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   }, [thread, proposal, busy])
 
   const history = useMemo<readonly RoloAssistantTurn[]>(
-    () => thread.slice(-16).map(({ role, text }) => ({ role, text })),
+    () => thread.slice(-16).map(({ role, text, photoTitle }) => ({
+      role,
+      text: `${text}${photoTitle ? `\n[Saved photo attached: ${photoTitle}]` : ''}`.slice(0, 900),
+    })),
     [thread],
   )
 
   async function sendMessage(message: string) {
     const clean = message.trim()
     if (!clean || busy || sendInFlight.current || !assistantEnabled) return
+    const selectedPhoto = selectedPhotoRef
+      ? savedPhotos.find(photo => photo.documentRef === selectedPhotoRef) ?? null
+      : null
+    if (selectedPhotoRef && (!visionEnabled || !selectedPhoto || !photoConsent)) {
+      setError('Check the photo permission box for this message, or remove the photo.')
+      return
+    }
     sendInFlight.current = true
     const pendingWork = proposal
     const unansweredFollowUpQuestion = followUps[0] ?? null
-    const userMessage: ThreadMessage = { id: `user-${crypto.randomUUID()}`, role: 'user', text: clean }
+    const userMessage: ThreadMessage = {
+      id: `user-${crypto.randomUUID()}`,
+      role: 'user',
+      text: clean,
+      ...(selectedPhoto ? { photoTitle: selectedPhoto.title } : {}),
+    }
     setThread(current => [...current, userMessage].slice(-20))
     setInput('')
     setBusy(true)
@@ -279,6 +417,11 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setSuggestion(null)
     setFollowUps([])
     setSavedProject(null)
+    if (selectedPhoto) {
+      setPhotoReview(null)
+      setPhotoReviewTitle(null)
+      setPhotoReviewRef(null)
+    }
     saveAttempt.current = null
     let result: Awaited<ReturnType<typeof port.askRolo>>
     try {
@@ -288,6 +431,13 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
         conversation: { pendingWork, unansweredFollowUpQuestion },
         destination,
         ...(currentProjectRef ? { projectRef: currentProjectRef } : {}),
+        ...(visionEnabled && selectedPhoto && photoConsent ? {
+          selectedPhoto: {
+            source: 'artifact' as const,
+            artifactRef: selectedPhoto.documentRef,
+            consentToAnalyze: true as const,
+          },
+        } : {}),
       })
     } catch {
       setBusy(false)
@@ -314,6 +464,15 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setProposal(result.value.proposedWork)
     setSuggestion({ destination: result.value.destination, projectRef: result.value.projectRef })
     setFollowUps(result.value.followUpQuestions)
+    if (result.value.photoReview && selectedPhoto) {
+      setPhotoReview(result.value.photoReview)
+      setPhotoReviewTitle(selectedPhoto.title)
+      setPhotoReviewRef(selectedPhoto.documentRef)
+    }
+    if (selectedPhoto) {
+      setSelectedPhotoRef(null)
+      setPhotoConsent(false)
+    }
   }
 
   async function saveProposal() {
@@ -388,6 +547,11 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setFollowUps([])
     setSavedProject(null)
     setError(null)
+    setSelectedPhotoRef(null)
+    setPhotoConsent(false)
+    setPhotoReview(null)
+    setPhotoReviewTitle(null)
+    setPhotoReviewRef(null)
     try { sessionStorage.removeItem(storageKey) } catch {}
   }
 
@@ -419,6 +583,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 >
                   <span className={styles.speaker}>{message.role === 'user' ? 'You' : 'Rolo'}</span>
                   <p>{message.text}</p>
+                  {message.photoTitle ? <span className={styles.threadPhoto}>▣ {message.photoTitle}</span> : null}
                 </div>
               ))}
 
@@ -467,6 +632,26 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 </section>
               ) : null}
 
+              {photoReview ? (
+                <section className={styles.photoReview} aria-label="Rolo photo review">
+                  <div>
+                    <span>{photoReviewTitle ?? 'Selected photo'}</span>
+                    <strong>{photoReview.urgency === 'urgent'
+                      ? 'Treat this as urgent'
+                      : photoReview.urgency === 'prompt_attention'
+                        ? 'Worth prompt attention'
+                        : 'No urgent signal visible'}</strong>
+                  </div>
+                  <h3>What Rolo can see</h3>
+                  <ul>{photoReview.visibleObservations.map(item => <li key={item}>{item}</li>)}</ul>
+                  <h3>What the photo cannot confirm</h3>
+                  <ul>{photoReview.cannotConfirm.map(item => <li key={item}>{item}</li>)}</ul>
+                  {photoReview.suggestedTrade ? (
+                    <p>Likely next trade to consider: <strong>{CATEGORY_LABEL[photoReview.suggestedTrade]}</strong></p>
+                  ) : null}
+                </section>
+              ) : null}
+
               {savedProject ? (
                 <div className={styles.saved} role="status">
                   <span>Saved to this home</span>
@@ -507,13 +692,77 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 void sendMessage(input)
               }}
             >
+              {visionEnabled ? (
+                <div className={styles.photoAttach}>
+                  {selectedPhotoRef ? (() => {
+                    const selected = savedPhotos.find(photo => photo.documentRef === selectedPhotoRef)
+                    return selected ? (
+                      <div className={styles.selectedPhoto}>
+                        <span className={styles.selectedPhotoMark} aria-hidden="true">▣</span>
+                        <div>
+                          <strong>{selected.title}</strong>
+                          <button type="button" onClick={() => {
+                            setSelectedPhotoRef(null)
+                            setPhotoConsent(false)
+                          }}>Remove</button>
+                        </div>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={photoConsent}
+                            onChange={event => setPhotoConsent(event.target.checked)}
+                          />
+                          Let Rolo inspect this photo for this message only.
+                        </label>
+                      </div>
+                    ) : (
+                      <div className={styles.selectedPhotoMissing}>
+                        <span>That photo is no longer available in this home.</span>
+                        <button type="button" onClick={() => {
+                          setSelectedPhotoRef(null)
+                          setPhotoConsent(false)
+                        }}>Remove it</button>
+                      </div>
+                    )
+                  })() : (
+                    <details>
+                      <summary>Review a saved photo</summary>
+                      {photosLoading ? <p>Loading your private photos…</p> : null}
+                      {photosError ? <p>Photos could not load here. Your Library is still available.</p> : null}
+                      {!photosLoading && !photosError && savedPhotos.length === 0 ? (
+                        <p>No saved photos yet. <Link href={`/home/${homeId}/documents`} onClick={closeAssistant}>Add one in Library.</Link></p>
+                      ) : null}
+                      {savedPhotos.length > 0 ? (
+                        <div className={styles.photoChoices}>
+                          {savedPhotos.slice(0, 12).map(photo => (
+                            <button
+                              key={photo.documentRef}
+                              type="button"
+                              onClick={() => {
+                                setSelectedPhotoRef(photo.documentRef)
+                                setPhotoConsent(false)
+                              }}
+                            >
+                              <span className={styles.photoChoiceMark} aria-hidden="true">▣</span>
+                              <span>{photo.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </details>
+                  )}
+                </div>
+              ) : null}
               <label htmlFor="rolo-message">Talk to Rolo</label>
               <div>
                 <textarea
                   id="rolo-message"
                   ref={inputRef}
                   value={input}
-                  onChange={event => setInput(event.target.value)}
+                  onChange={event => {
+                    setInput(event.target.value)
+                    setPhotoConsent(false)
+                  }}
                   maxLength={1_600}
                   rows={2}
                   placeholder="My water heater started leaking this morning…"
@@ -525,11 +774,16 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                     }
                   }}
                 />
-                <button type="submit" disabled={!assistantEnabled || busy || !input.trim()} aria-label="Send to Rolo">↑</button>
+                <button
+                  type="submit"
+                  disabled={!assistantEnabled || busy || !input.trim() || (!!selectedPhotoRef && !photoConsent)}
+                  aria-label="Send to Rolo"
+                >↑</button>
               </div>
               <span>
-                Your message and a limited index of this home—including city/state when available, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. The saved street-address field and file or photo contents are not sent.
-                Rolo does not diagnose, price, hire, or save without approval.
+                Your message and a limited index of this home—including city/state when available, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. The saved street-address field is not sent. File and photo contents are not sent by default.
+                {visionEnabled ? ' If you explicitly select a saved photo and check the consent box, a fresh metadata-free JPEG copy is sent for that message. Responses storage is disabled, though OpenAI’s provider-retention rules may still apply; no other photo contents are sent.' : ''}
+                {' '}Rolo can describe visible details, but it does not diagnose, measure, price, hire, or save without approval.
               </span>
             </form>
 

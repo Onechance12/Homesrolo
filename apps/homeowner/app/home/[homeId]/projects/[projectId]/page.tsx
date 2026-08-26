@@ -104,6 +104,11 @@ export default function ProjectPage({
   const [savingProject, setSavingProject] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const editAttempt = useRef<string | null>(null)
+  const [editingPeople, setEditingPeople] = useState(false)
+  const [peopleProfessional, setPeopleProfessional] = useState('')
+  const [savingPeople, setSavingPeople] = useState(false)
+  const [peopleError, setPeopleError] = useState<string | null>(null)
+  const peopleAttempt = useRef<string | null>(null)
   const [activityKind, setActivityKind] = useState<ProjectActivity['kind']>('note')
   const [activityBody, setActivityBody] = useState('')
   const [addingActivity, setAddingActivity] = useState(false)
@@ -201,6 +206,44 @@ export default function ProjectPage({
     setSavedProject(result.value)
     editAttempt.current = null
     setEditing(false)
+  }
+
+  function beginPeopleEdit(project: Project) {
+    setPeopleProfessional(project.professionalLabel || project.contractor || '')
+    setPeopleError(null)
+    peopleAttempt.current = null
+    setEditingPeople(true)
+  }
+
+  async function savePeople(event: FormEvent<HTMLFormElement>, project: Project) {
+    event.preventDefault()
+    if (savingPeople) return
+    peopleAttempt.current ??= mintCommandRef()
+    setSavingPeople(true)
+    setPeopleError(null)
+    const result = await port.updateProject(homeId, projectId, {
+      commandRef: peopleAttempt.current,
+      expectedRevision: project.revision,
+      professionalLabel: peopleProfessional.trim() || null,
+    })
+    setSavingPeople(false)
+    if (!result.ok) {
+      if (result.error === 'conflict') {
+        setSavedProject(null)
+        peopleAttempt.current = null
+        retry()
+        setPeopleError('This record changed somewhere else. Homesrolo is loading the latest version; review the name before saving again.')
+        return
+      }
+      setPeopleError('The person or company was not changed. Try again when the connection is ready.')
+      return
+    }
+    setSavedProject(result.value)
+    peopleAttempt.current = null
+    setEditingPeople(false)
+    window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
+      detail: { homeId, projectRef: projectId },
+    }))
   }
 
   async function addActivity(event: FormEvent<HTMLFormElement>) {
@@ -711,10 +754,9 @@ export default function ProjectPage({
           <div className="project-overview__head">
             <div><p className="mono">People connected to this work</p><h2>Homeowner &amp; professionals</h2></div>
             {editingSupported ? (
-              <button type="button" className="btn btn--quiet btn--compact" onClick={() => {
-                chooseWorkspaceSection('overview')
-                beginEditing(project)
-              }}>Edit people</button>
+              <button type="button" className="btn btn--quiet btn--compact" onClick={() => editingPeople
+                ? setEditingPeople(false)
+                : beginPeopleEdit(project)}>{editingPeople ? 'Cancel' : 'Edit people'}</button>
             ) : null}
           </div>
           <div className="project-person-card">
@@ -726,6 +768,28 @@ export default function ProjectPage({
                 : 'Add the company or person helping with this work when you know it.'}</p>
             </div>
           </div>
+          {editingPeople ? (
+            <form className="project-people-edit" onSubmit={event => savePeople(event, project)}>
+              <label className="field" style={{ marginTop: 0 }}>
+                <span>Person or company</span>
+                <input
+                  value={peopleProfessional}
+                  maxLength={160}
+                  onChange={event => {
+                    peopleAttempt.current = null
+                    setPeopleProfessional(event.target.value)
+                  }}
+                  placeholder="ABC Heating & Air"
+                  autoFocus
+                />
+                <span className="field__hint">This saves history only. It does not invite, endorse, or give anyone access.</span>
+              </label>
+              {peopleError ? <div className="notice" role="alert">{peopleError}</div> : null}
+              <button className="btn btn--primary" type="submit" disabled={savingPeople}>
+                {savingPeople ? 'Saving…' : 'Save person or company'}
+              </button>
+            </form>
+          ) : null}
         </section>
       ) : null}
 

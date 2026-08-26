@@ -61,6 +61,7 @@
 .userBubble { margin-left: auto; border-bottom-right-radius: 0.25rem; color: #f5f9f5; background: #0b5267; }
 .speaker { display: block; margin-bottom: 0.3rem; color: #618087; font-size: 0.61rem; font-weight: 900; letter-spacing: 0.11em; text-transform: uppercase; }
 .userBubble .speaker { color: #b8d8df; }
+.threadPhoto { display: block; margin-top: 0.55rem; padding-top: 0.45rem; border-top: 1px solid rgb(255 255 255 / 0.2); color: #d9edf0; font-size: 0.68rem; font-weight: 800; }
 .thinking { color: #526e74; }
 
 .starters, .followUps { display: grid; gap: 0.48rem; margin: 0.25rem 0 1rem; }
@@ -113,7 +114,40 @@
 .error { color: #742e2e; background: #f9dfdc; }
 .unavailable { color: #614f26; background: #f5ebc9; }
 
+.photoReview {
+  margin: 0.85rem 0 1rem;
+  padding: 0.9rem;
+  border: 1px solid #9eb8b5;
+  border-radius: 0.9rem;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(7 37 45 / 0.08);
+}
+.photoReview > div { display: flex; justify-content: space-between; gap: 0.75rem; margin: -0.9rem -0.9rem 0.85rem; padding: 0.65rem 0.85rem; border-radius: 0.85rem 0.85rem 0 0; color: #0b3441; background: #d8f56c; }
+.photoReview > div span { font-size: 0.62rem; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; }
+.photoReview > div strong { font-size: 0.72rem; }
+.photoReview h3 { margin: 0.65rem 0 0.3rem; color: #34555e; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.photoReview ul { display: grid; gap: 0.28rem; margin: 0; padding-left: 1.2rem; color: #24464f; font-size: 0.8rem; line-height: 1.4; }
+.photoReview p { margin: 0.7rem 0 0; color: #31535b; font-size: 0.78rem; }
+
 .composer { padding: 0.85rem 1rem max(0.75rem, env(safe-area-inset-bottom)); border-top: 1px solid #c8d4d0; background: #fff; }
+.photoAttach { margin: 0 0 0.7rem; }
+.photoAttach details { border: 1px solid #b8c9c6; border-radius: 0.75rem; background: #f7f8f5; }
+.photoAttach summary { padding: 0.62rem 0.75rem; color: #24515d; font-size: 0.75rem; font-weight: 850; cursor: pointer; }
+.photoAttach details > p { margin: 0; padding: 0 0.75rem 0.7rem; color: #607980; font-size: 0.72rem; line-height: 1.4; }
+.photoAttach details > p a { color: #0b5267; font-weight: 800; }
+.photoChoices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.35rem; max-height: 10.5rem; padding: 0 0.55rem 0.6rem; overflow-y: auto; }
+.photoChoices button { position: relative; min-width: 0; aspect-ratio: 1; padding: 0; border: 1px solid #bdcdca; border-radius: 0.55rem; background: #e7eeeb; overflow: hidden; cursor: pointer; }
+.photoChoiceMark { display: grid; place-items: center; width: 100%; height: 100%; color: #0b6073; background: linear-gradient(145deg, #e9f3ef, #d7e6e2); font-size: 1.35rem; }
+.photoChoices button > span:last-child { position: absolute; inset: auto 0 0; padding: 1.1rem 0.25rem 0.25rem; color: white; background: linear-gradient(transparent, rgb(3 26 33 / 0.88)); font-size: 0.55rem; font-weight: 800; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selectedPhoto { display: grid; grid-template-columns: 3.5rem 1fr; gap: 0.55rem; align-items: center; padding: 0.55rem; border: 1px solid #9fb9b5; border-radius: 0.75rem; background: #f2f7f3; }
+.selectedPhotoMark { grid-row: span 2; display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 0.5rem; color: #0b6073; background: #dceae6; font-size: 1.35rem; }
+.selectedPhoto > div { display: flex; align-items: center; justify-content: space-between; gap: 0.45rem; min-width: 0; }
+.selectedPhoto > div strong { overflow: hidden; color: #173f49; font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.selectedPhoto > div button { padding: 0; border: 0; color: #0b5267; background: transparent; font: inherit; font-size: 0.66rem; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.selectedPhoto > label { display: flex; gap: 0.4rem; align-items: flex-start; color: #49676d; font-size: 0.66rem; line-height: 1.35; }
+.selectedPhoto input { margin-top: 0.08rem; accent-color: #0b6579; }
+.selectedPhotoMissing { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.65rem 0.75rem; border: 1px solid #d1bda2; border-radius: 0.7rem; color: #684d2f; background: #fff6e9; font-size: 0.7rem; }
+.selectedPhotoMissing button { padding: 0; border: 0; color: #0b5267; background: transparent; font: inherit; font-weight: 850; text-decoration: underline; cursor: pointer; }
 .composer > label { display: block; margin-bottom: 0.35rem; color: #577078; font-size: 0.64rem; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; }
 .composer > div { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 0.45rem; }
 .composer textarea { width: 100%; min-height: 3.1rem; max-height: 8rem; resize: vertical; padding: 0.72rem 0.8rem; border: 1px solid #9eb6b6; border-radius: 0.8rem; color: #102b35; background: #f7f8f5; font: inherit; font-size: 0.92rem; line-height: 1.42; }
@@ -128,6 +162,7 @@
   .header { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
   .thread { padding-left: max(0.85rem, env(safe-area-inset-left)); padding-right: max(0.85rem, env(safe-area-inset-right)); }
   .composer { padding-left: max(0.85rem, env(safe-area-inset-left)); padding-right: max(0.85rem, env(safe-area-inset-right)); }
+  .photoChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

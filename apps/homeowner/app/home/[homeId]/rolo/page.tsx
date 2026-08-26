@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { use, useEffect, useMemo, useRef, useState } from 'react'
 import { ErrorState, Skeleton } from '../../../../components/states.tsx'
+import { PHOTO_CHECKUP_AREA_LABEL } from '../../../../components/PhotoCheckups.tsx'
 import { usePortCall } from '../../../../lib/port/hooks.ts'
 import { usePort, usePortMode, useSession } from '../../../../lib/port/provider.tsx'
 import {
@@ -11,6 +13,7 @@ import {
   type DocumentSummary,
   type HomeRecordProfile,
   type HomeSystemKind,
+  type PhotoCheckup,
   type ProjectCategory,
   type ProjectSummary,
   type ProjectStatus,
@@ -95,8 +98,20 @@ function SearchIcon() {
 }
 
 /** One searchable Rolodex assembled from the records this home already owns. */
-export default function RoloPage({ params }: { params: Promise<{ homeId: string }> }) {
+export default function RoloPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ homeId: string }>
+  searchParams: Promise<{ filter?: string | string[] }>
+}) {
   const { homeId } = use(params)
+  const queryParams = use(searchParams)
+  const requestedFilter = Array.isArray(queryParams.filter) ? null : queryParams.filter
+  const initialFilter: RoloFilter = FILTERS.some(option => option.value === requestedFilter)
+    ? requestedFilter as RoloFilter
+    : 'all'
+  const router = useRouter()
   const port = usePort()
   const mode = usePortMode()
   const session = useSession()
@@ -110,12 +125,38 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
   const files = usePortCall<readonly DocumentSummary[]>(() => filesReadable
     ? port.listDocuments(homeId)
     : Promise.resolve({ ok: true as const, value: [] }))
+  const checkupsReadable = mode === 'remote'
+    && session.state.kind === 'signed_in'
+    && session.state.capabilities.photoCheckups
+  const checkups = usePortCall<readonly PhotoCheckup[]>(() => checkupsReadable
+    ? port.listPhotoCheckups(homeId)
+    : Promise.resolve({ ok: true as const, value: [] }))
   const retryProjects = projects.retry
   const retryRecord = record.retry
   const retryFiles = files.retry
+  const retryCheckups = checkups.retry
   const previousFilesReadable = useRef(filesReadable)
-  const [filter, setFilter] = useState<RoloFilter>('all')
+  const previousCheckupsReadable = useRef(checkupsReadable)
+  const [filter, setFilter] = useState<RoloFilter>(initialFilter)
   const [query, setQuery] = useState('')
+
+  function chooseFilter(nextFilter: RoloFilter) {
+    setFilter(nextFilter)
+    router.replace(
+      `/home/${homeId}/rolo${nextFilter === 'all' ? '' : `?filter=${nextFilter}`}`,
+      { scroll: false },
+    )
+  }
+
+  useEffect(() => {
+    if (previousCheckupsReadable.current === checkupsReadable) return
+    previousCheckupsReadable.current = checkupsReadable
+    retryCheckups()
+  }, [checkupsReadable, retryCheckups])
+
+  useEffect(() => {
+    setFilter(initialFilter)
+  }, [initialFilter])
 
   useEffect(() => {
     if (previousFilesReadable.current === filesReadable) return
@@ -129,14 +170,16 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
       retryProjects()
       retryRecord()
       if (filesReadable) retryFiles()
+      if (checkupsReadable) retryCheckups()
     }
     window.addEventListener('homesrolo:data-changed', refreshChangedHome)
     return () => window.removeEventListener('homesrolo:data-changed', refreshChangedHome)
-  }, [filesReadable, homeId, retryFiles, retryProjects, retryRecord])
+  }, [checkupsReadable, filesReadable, homeId, retryCheckups, retryFiles, retryProjects, retryRecord])
 
   const entries = useMemo<readonly RoloEntry[]>(() => {
     const projectRecords = projects.state.status === 'ready' ? projects.state.value : []
     const documentRecords = files.state.status === 'ready' ? files.state.value : []
+    const checkupRecords = checkups.state.status === 'ready' ? checkups.state.value : []
     const profile = record.state.status === 'ready' ? record.state.value : null
     const work: RoloEntry[] = projectRecords
       .filter(project => !project.archived)
@@ -210,7 +253,7 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
       }
     })
 
-    const saved: RoloEntry[] = documentRecords.map<RoloEntry>(document => ({
+    const savedFiles: RoloEntry[] = documentRecords.map<RoloEntry>(document => ({
       id: document.documentRef,
       group: 'saved',
       eyebrow: fileKind(document.kind),
@@ -228,8 +271,22 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
       searchText: `${document.title} ${fileKind(document.kind)} ${document.addedOn}`,
     }))
 
-    return [...work, ...homeSystems, ...people, ...saved]
-  }, [files.state, homeId, projects.state, record.state])
+    const savedCheckups: RoloEntry[] = checkupRecords.map<RoloEntry>(photo => ({
+      id: photo.photoRef,
+      group: 'saved',
+      eyebrow: `${PHOTO_CHECKUP_AREA_LABEL[photo.area]} · Home Watch`,
+      title: photo.viewLabel,
+      detail: photo.caption || 'Repeatable private home view',
+      meta: `Observed ${readableDate(photo.observedOn)}`,
+      href: `/home/${homeId}/checkups`,
+      tab: 'PHOTO',
+      mark: '▣',
+      accent: 'mint',
+      searchText: `${photo.viewLabel} ${PHOTO_CHECKUP_AREA_LABEL[photo.area]} ${photo.caption} ${photo.observedOn} Home Watch checkup`,
+    }))
+
+    return [...work, ...homeSystems, ...people, ...savedFiles, ...savedCheckups]
+  }, [checkups.state, files.state, homeId, projects.state, record.state])
 
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(option => [
     option.value,
@@ -251,6 +308,7 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
 
   const optionalLoadFailed = record.state.status === 'error' && record.state.error !== 'unavailable'
     || files.state.status === 'error'
+    || checkups.state.status === 'error'
 
   return (
     <div className={styles.page}>
@@ -299,7 +357,7 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
               type="button"
               key={option.value}
               aria-pressed={filter === option.value}
-              onClick={() => setFilter(option.value)}
+              onClick={() => chooseFilter(option.value)}
             >
               <span>{option.label}</span>
               <small>{counts[option.value]}</small>
@@ -307,13 +365,13 @@ export default function RoloPage({ params }: { params: Promise<{ homeId: string 
           ))}
         </div>
 
-        {record.state.status === 'loading' || files.state.status === 'loading' ? (
+        {record.state.status === 'loading' || files.state.status === 'loading' || checkups.state.status === 'loading' ? (
           <p className={styles.loadingNote} role="status">Filing the rest of your cards…</p>
         ) : null}
         {optionalLoadFailed ? (
           <div className={styles.partialNotice} role="status">
             <span>Some home or file cards could not be opened.</span>
-            <button type="button" onClick={() => { record.retry(); files.retry() }}>Try again</button>
+            <button type="button" onClick={() => { record.retry(); files.retry(); checkups.retry() }}>Try again</button>
           </div>
         ) : null}
 

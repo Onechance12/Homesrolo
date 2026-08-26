@@ -78,6 +78,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   projectQuotes: false,
   homeResearch: false,
   homeAssistant: false,
+  homeAssistantVision: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -189,6 +190,9 @@ export function homeownerApiService(): HomeownerApiService {
         projectQuotes: configuration?.projectQuotesEnabled === true,
         homeResearch: homeResearchClient !== null,
         homeAssistant: homeAssistantClient !== null,
+        homeAssistantVision: homeAssistantClient !== null
+          && configuration?.privateUploadsEnabled === true
+          && configuration?.roloVisionEnabled === true,
         uploads: configuration?.privateUploadsEnabled === true,
         photoCheckups: configuration?.photoCheckupsEnabled === true,
         projectReview: projectReviewCapabilityEnabled(

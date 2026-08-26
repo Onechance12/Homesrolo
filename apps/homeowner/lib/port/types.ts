@@ -47,6 +47,8 @@ export interface SignInCapabilities {
   readonly projectQuotes: boolean
   readonly homeResearch: boolean
   readonly homeAssistant: boolean
+  /** Explicitly selected, per-request photo review through Rolo. */
+  readonly homeAssistantVision: boolean
   readonly uploads: boolean
   /** Image-only, sanitized seasonal checkups; never enables generic files. */
   readonly photoCheckups: boolean
@@ -65,6 +67,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   projectQuotes: false,
   homeResearch: false,
   homeAssistant: false,
+  homeAssistantVision: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -319,12 +322,33 @@ export interface RoloConversationState {
   readonly unansweredFollowUpQuestion: string | null
 }
 
+export interface RoloSelectedPhoto {
+  readonly source: 'artifact'
+  readonly artifactRef: string
+  /** Per-request consent; it is never persisted as a blanket permission. */
+  readonly consentToAnalyze: true
+}
+
+export interface RoloPhotoReview {
+  readonly visibleObservations: readonly string[]
+  readonly cannotConfirm: readonly string[]
+  readonly urgency: 'routine' | 'prompt_attention' | 'urgent'
+  readonly suggestedTrade: ProjectCategory | null
+  readonly hazardSignal:
+    | 'none'
+    | 'visible_fire_or_smoke'
+    | 'visible_sparking_or_exposed_electrical'
+    | 'water_near_electrical'
+    | 'major_displacement_or_collapse'
+}
+
 export interface AskRoloInput {
   readonly message: string
   readonly history: readonly RoloAssistantTurn[]
   readonly conversation: RoloConversationState
   readonly destination: Exclude<RoloDestination, 'work'>
   readonly projectRef?: string
+  readonly selectedPhoto?: RoloSelectedPhoto
 }
 
 export interface AskRoloResult {
@@ -334,6 +358,7 @@ export interface AskRoloResult {
   readonly destination: RoloDestination | null
   readonly projectRef: string | null
   readonly followUpQuestions: readonly string[]
+  readonly photoReview: RoloPhotoReview | null
   readonly disclosure: 'Nothing is saved until you review and approve it.'
 }
 
