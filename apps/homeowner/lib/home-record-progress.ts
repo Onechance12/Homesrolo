@@ -111,8 +111,14 @@ export function buildHomeRecordProgress(input: HomeRecordProgressInput): HomeRec
   const completedProjects = projects.filter(project => project.status === 'completed')
   const plannedProjects = projects.filter(project => project.status === 'planned')
   const activeProjects = projects.filter(project => project.status === 'in_progress')
-  const projectPhotos = projects.reduce((sum, project) => sum + project.photoCount, 0)
-  const projectDocuments = projects.reduce((sum, project) => sum + project.documentCount, 0)
+  const syntheticProjectCounters = projects.some(project => project.isSynthetic)
+  const linkedDocuments = documents?.filter(document => document.projectRef !== null) ?? []
+  const projectPhotos = documents === null || syntheticProjectCounters
+    ? projects.reduce((sum, project) => sum + project.photoCount, 0)
+    : linkedDocuments.filter(document => document.kind === 'photo_set').length
+  const projectDocuments = documents === null || syntheticProjectCounters
+    ? projects.reduce((sum, project) => sum + project.documentCount, 0)
+    : linkedDocuments.filter(document => document.kind !== 'photo_set').length
   const representedAreas = new Set(projects.map(project => project.trade.trim().toLowerCase()).filter(Boolean)).size
   const loadedFiles = documents?.length ?? 0
   const loadedWarranties = documents?.filter(document => document.kind === 'warranty').length ?? 0
@@ -129,7 +135,9 @@ export function buildHomeRecordProgress(input: HomeRecordProgressInput): HomeRec
     seenViews.add(key)
   }
   const hasDatedProject = projects.some(project => project.performedOn !== null)
-  const hasProjectEvidence = projects.some(project => project.photoCount + project.documentCount > 0)
+  const hasProjectEvidence = documents === null || syntheticProjectCounters
+    ? projects.some(project => project.photoCount + project.documentCount > 0)
+    : linkedDocuments.length > 0
 
   const tracks = [
     buildTrack('know', 'Know it', 'The basic facts and parts represented in this record.', [

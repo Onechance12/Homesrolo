@@ -255,6 +255,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   projectQuotes: boolean,
   homeResearch: boolean,
   homeAssistant: boolean,
+  homeAssistantVision: (value, at) => value === undefined ? false : boolean(value, at),
   uploads: boolean,
   photoCheckups: boolean,
   projectReview: boolean,
@@ -895,6 +896,20 @@ const decodeRoloWorkDraft = object<RoloWorkDraft>({
   firstUpdate: nullable(boundedResearchText(2_000)),
 })
 
+const decodeRoloPhotoReview = object<NonNullable<AskRoloResult['photoReview']>>({
+  visibleObservations: boundedArray(boundedResearchText(240), 1, 5),
+  cannotConfirm: boundedArray(boundedResearchText(240), 1, 4),
+  urgency: oneOf(['routine', 'prompt_attention', 'urgent'] as const),
+  suggestedTrade: nullable(oneOf(PROJECT_CATEGORIES)),
+  hazardSignal: oneOf([
+    'none',
+    'visible_fire_or_smoke',
+    'visible_sparking_or_exposed_electrical',
+    'water_near_electrical',
+    'major_displacement_or_collapse',
+  ] as const),
+})
+
 /** Strict, citation-free response for the private in-app organizer. */
 export const decodeAskRoloResult: Decoder<AskRoloResult> = object<AskRoloResult>({
   requestRef: matching(
@@ -905,7 +920,13 @@ export const decodeAskRoloResult: Decoder<AskRoloResult> = object<AskRoloResult>
   proposedWork: nullable(decodeRoloWorkDraft),
   destination: nullable(oneOf(['home', 'rolo', 'activity', 'library', 'details', 'work'] as const)),
   projectRef: nullable(opaqueRef('hprj')),
+  // The server now emits at most one follow-up, but accepting the former
+  // four-question ceiling keeps a newly loaded client compatible with an
+  // older instance during a rolling deploy.
   followUpQuestions: boundedArray(boundedResearchText(240), 0, 4),
+  // Older servers did not return this key. Treat omission as the same safe
+  // state as an explicit null until every deployed client/server is current.
+  photoReview: (value, at) => value === undefined ? null : nullable(decodeRoloPhotoReview)(value, at),
   disclosure: literal('Nothing is saved until you review and approve it.'),
 })
 

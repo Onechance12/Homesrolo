@@ -87,8 +87,37 @@ Rolo receives the home label, city/state when available, bounded project and
 file metadata, and system presence/year. It never receives the legacy
 `privateLocationLabel`, because older/native records may contain a street
 address in that display field. It does not receive the structured street
-address, file bytes, photo pixels, document text, browser identity, or provider
-credentials. A filename is metadata, not evidence that Rolo read the file.
+address, document text, browser identity, or provider credentials. By default it
+does not receive file bytes or photo pixels. A filename is metadata, not evidence
+that Rolo read the file.
+
+### One-photo review boundary
+
+Selected-photo review has its own default-off capability and requires all of:
+
+- `HOMESROLO_ROLO_VISION_ENABLED=true`
+- private uploads enabled for the homeowner account
+- an authenticated exact-home artifact read
+- one existing generic Library photo, selected by immutable artifact reference
+- a fresh `consentToAnalyze: true` value on that exact message
+
+The server reads the exact authorized artifact, accepts only JPEG or PNG photo
+records, and re-encodes the pixels to a bounded JPEG through the same
+metadata-stripping Sharp pipeline used for private photos. Only that derivative
+is included as `input_image`; the original object URL, original bytes, EXIF, and
+other photos are not sent. The Responses request remains stateless with
+`store: false`, subject to the provider-retention caveat above. A separate,
+tighter rate limiter protects image calls, and image transforms share one
+process-wide memory slot with uploads on the free worker.
+
+The output schema requires visible observations, explicit uncertainty, urgency,
+a neutral likely trade when useful, and a bounded hazard signal. App-owned text
+overrides the model for visible fire/smoke, electrical, water-near-electrical,
+and major displacement/collapse signals. Rolo is prohibited from using pixels
+to determine hidden cause, mold/asbestos, code compliance, structural soundness,
+storm date or cause, workmanship, insurance, measurements, scope, or price.
+Photo checkups are deliberately excluded because their public privacy promise
+states that they are not sent to automated image analysis.
 
 Rolo is a librarian, not an advisor. The versioned prompt carries the product
 voice from `docs/VOICE.md`, distinguishes general education from facts about the

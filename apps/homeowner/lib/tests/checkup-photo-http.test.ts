@@ -12,7 +12,9 @@ import {
   handleCheckupPhotoContent,
   handleCheckupPhotoDelete,
   handleCheckupPhotoUpload,
+  PhotoTransformBusyError,
   sanitizeHomeownerCheckupPhoto,
+  sanitizeHomeownerPhotoForAnalysis,
   type CheckupPhotoHttpDependencies,
 } from '../server/checkup-photo-http.ts'
 
@@ -204,6 +206,23 @@ test('Sharp outputs bounded one-frame JPEG derivatives with metadata stripped', 
     assert.equal(metadata.xmp, undefined)
     assert.equal(metadata.orientation, undefined)
   }
+})
+
+test('Rolo analysis re-encodes one image and rejects concurrent transforms', async () => {
+  const input = new Uint8Array(await sharp({
+    create: { width: 640, height: 480, channels: 3, background: '#466071' },
+  }).withMetadata({ orientation: 6 }).jpeg({ quality: 90 }).toBuffer())
+  const first = sanitizeHomeownerPhotoForAnalysis(input)
+  await assert.rejects(
+    sanitizeHomeownerPhotoForAnalysis(input),
+    error => error instanceof PhotoTransformBusyError,
+  )
+  const result = await first
+  const metadata = await sharp(result.fullBytes).metadata()
+  assert.equal(metadata.format, 'jpeg')
+  assert.equal(metadata.pages ?? 1, 1)
+  assert.equal(metadata.exif, undefined)
+  assert.equal(metadata.orientation, undefined)
 })
 
 test('Sharp rejects invalid and animated source payloads', async () => {

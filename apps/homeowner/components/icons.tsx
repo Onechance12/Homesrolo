@@ -101,6 +101,17 @@ export function IconThread({ size = 20 }: IconProps) {
   )
 }
 
+export function IconPeople({ size = 20 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="9" cy="9" r="3" />
+      <circle cx="17" cy="10" r="2.3" />
+      <path d="M3.8 19 C4.2 15.8 6 14.2 9 14.2 C12 14.2 13.8 15.8 14.2 19" />
+      <path d="M14.4 14.8 C17.9 14.1 20 15.5 20.4 18.5" />
+    </svg>
+  )
+}
+
 export function IconGear({ size = 20 }: IconProps) {
   return (
     <svg {...base(size)}>

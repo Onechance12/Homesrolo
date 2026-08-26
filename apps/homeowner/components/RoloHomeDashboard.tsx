@@ -164,7 +164,7 @@ export function RoloHomeDashboard({
       title: `${professionalNames.length} ${professionalNames.length === 1 ? 'professional' : 'professionals'}`,
       detail: professionalNames.slice(0, 3).join(' · '),
       meta: 'Drawn from saved work records',
-      href: `/home/${homeId}/projects`,
+      href: `/home/${homeId}/rolo?filter=people`,
       tone: 'mint' as const,
     }] : []),
     ...(checkupsEnabled ? [{
@@ -315,7 +315,7 @@ export function RoloHomeDashboard({
               <p>RECENT</p>
               <h2 id="recent-activity-title">What this home remembers</h2>
             </div>
-            <Link className={styles.headerLink} href={`/home/${homeId}/projects`}>All work →</Link>
+            <Link className={styles.headerLink} href={`/home/${homeId}/timeline`}>Full activity →</Link>
           </header>
           {activity.length > 0 ? (
             <ol className={styles.activityList}>

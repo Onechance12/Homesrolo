@@ -86,7 +86,12 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
           return problem(400, 'invalid_request')
         }
         if (request.pathname === '/api/v1/session') {
-          return success(await service.readSession(context))
+          const session = await service.readSession(context)
+          if (!session.capabilities.homeAssistantVision) {
+            const { homeAssistantVision: _stagedCapability, ...capabilities } = session.capabilities
+            return success({ ...session, capabilities })
+          }
+          return success(session)
         }
         if (request.pathname === '/api/v1/homes') {
           return success(await service.listHomes(context))

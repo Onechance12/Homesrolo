@@ -26,6 +26,7 @@ const configurationSchema = z.object({
   projectQuotesEnabled: z.enum(['true', 'false']).optional().default('false'),
   privateUploadsEnabled: z.enum(['true', 'false']).optional().default('false'),
   photoCheckupsEnabled: z.enum(['true', 'false']).optional().default('false'),
+  roloVisionEnabled: z.enum(['true', 'false']).optional().default('false'),
   jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict().superRefine((value, context) => {
   if (value.emailCodeSignInEnabled === 'true' && !value.emailCodeRateLimitSecret) {
@@ -58,6 +59,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly projectQuotesEnabled: boolean
   readonly privateUploadsEnabled: boolean
   readonly photoCheckupsEnabled: boolean
+  readonly roloVisionEnabled: boolean
   readonly jobroloAttachmentsEnabled: boolean
 }
 
@@ -95,6 +97,7 @@ export function readHomeownerRuntimeConfiguration(
     projectQuotesEnabled: environment.HOMESROLO_PROJECT_QUOTES_ENABLED,
     privateUploadsEnabled: environment.HOMESROLO_PRIVATE_UPLOADS_ENABLED,
     photoCheckupsEnabled: environment.HOMESROLO_PHOTO_CHECKUPS_ENABLED,
+    roloVisionEnabled: environment.HOMESROLO_ROLO_VISION_ENABLED,
     jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
   })
   if (!parsed.success) return null
@@ -110,6 +113,7 @@ export function readHomeownerRuntimeConfiguration(
     projectQuotesEnabled: parsed.data.projectQuotesEnabled === 'true',
     privateUploadsEnabled: parsed.data.privateUploadsEnabled === 'true',
     photoCheckupsEnabled: parsed.data.photoCheckupsEnabled === 'true',
+    roloVisionEnabled: parsed.data.roloVisionEnabled === 'true',
     jobroloAttachmentsEnabled: parsed.data.jobroloAttachmentsEnabled === 'true',
   })
 }

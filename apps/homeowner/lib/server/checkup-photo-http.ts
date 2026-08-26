@@ -45,13 +45,14 @@ const JSON_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
 })
 
-class PhotoTransformBusyError extends Error {}
+export class PhotoTransformBusyError extends Error {}
 
 // The free Render worker has 512 MiB. Disable libvips' shared cache, use one
 // worker, and admit only one whole upload (including body buffering) at a time.
 sharp.cache(false)
 sharp.concurrency(1)
 let uploadActive = false
+let analysisTransformActive = false
 type CheckupPhotoContentVariant = 'full' | 'thumbnail'
 const activeContentReads: Record<CheckupPhotoContentVariant, number> = { full: 0, thumbnail: 0 }
 const contentReadCaps: Record<CheckupPhotoContentVariant, number> = { full: 4, thumbnail: 12 }
@@ -362,6 +363,24 @@ export async function sanitizeHomeownerCheckupPhoto(input: Uint8Array) {
   }
 }
 
+/**
+ * Re-encode one already-authorized saved image for a single Rolo request.
+ * This shares the free worker's Sharp slot with uploads so two large image
+ * decodes can never contend for memory.
+ */
+export async function sanitizeHomeownerPhotoForAnalysis(input: Uint8Array) {
+  if (input.byteLength < 1 || input.byteLength > HOMEOWNER_CHECKUP_PHOTO_MAX_INPUT_BYTES) {
+    throw new HomeownerApiError('invalid_request')
+  }
+  if (uploadActive || analysisTransformActive) throw new PhotoTransformBusyError()
+  analysisTransformActive = true
+  try {
+    return await sanitizeHomeownerCheckupPhoto(input)
+  } finally {
+    analysisTransformActive = false
+  }
+}
+
 export async function handleCheckupPhotoUpload(
   request: Request,
   requestedHomeRef: string,
@@ -390,7 +409,7 @@ export async function handleCheckupPhotoUpload(
     // Parse the complete homeowner-authored envelope before it can occupy the
     // sole body/Sharp slot or make the server pull one byte from the stream.
     const headers = photoHeaders(request)
-    if (uploadActive) throw new PhotoTransformBusyError()
+    if (uploadActive || analysisTransformActive) throw new PhotoTransformBusyError()
     uploadActive = true
     uploadSlotHeld = true
     const bytes = await boundedRawBody(request, declared)

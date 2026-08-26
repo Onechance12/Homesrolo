@@ -25,7 +25,7 @@ export const PHOTO_CHECKUP_AREAS = [
   { value: 'other', label: 'Other' },
 ] as const satisfies readonly { value: PhotoCheckupArea; label: string }[]
 
-const AREA_LABEL: Readonly<Record<PhotoCheckupArea, string>> = Object.freeze({
+export const PHOTO_CHECKUP_AREA_LABEL: Readonly<Record<PhotoCheckupArea, string>> = Object.freeze({
   front_exterior: 'Front exterior',
   rear_exterior: 'Rear exterior',
   roofline: 'Roofline',
@@ -105,13 +105,13 @@ function PhotoImage({ photo, comparison = false, comparisonLabel }: {
       <img
         src={photo.thumbnailUrl}
         loading="lazy"
-        alt={`${photo.viewLabel}, ${AREA_LABEL[photo.area]} checkup photo observed ${dateLabel}`}
+        alt={`${photo.viewLabel}, ${PHOTO_CHECKUP_AREA_LABEL[photo.area]} checkup photo observed ${dateLabel}`}
         width={photo.width}
         height={photo.height}
       />
       <figcaption>
         {comparisonLabel ? <strong className="checkup-compare__label">{comparisonLabel}</strong> : null}
-        <span className="checkup-photo__view">{photo.viewLabel} · {AREA_LABEL[photo.area]}</span>
+        <span className="checkup-photo__view">{photo.viewLabel} · {PHOTO_CHECKUP_AREA_LABEL[photo.area]}</span>
         <time dateTime={photo.observedOn}>{dateLabel}</time>
         {photo.caption ? <span>{photo.caption}</span> : <span className="form-note">No caption recorded.</span>}
       </figcaption>
@@ -150,7 +150,7 @@ function CheckupGallery({
       const group = grouped.get(key) ?? {
         key,
         area: photo.area,
-        areaLabel: AREA_LABEL[photo.area],
+        areaLabel: PHOTO_CHECKUP_AREA_LABEL[photo.area],
         viewLabel: photo.viewLabel,
         photos: [],
       }

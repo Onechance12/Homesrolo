@@ -7,6 +7,7 @@ export interface Capabilities {
   readonly projectQuotes: boolean
   readonly homeResearch: boolean
   readonly homeAssistant: boolean
+  readonly homeAssistantVision: boolean
   readonly uploads: boolean
   readonly photoCheckups: boolean
   readonly projectReview: boolean
@@ -139,6 +140,18 @@ export interface RoloReply {
   readonly destination: 'home' | 'rolo' | 'activity' | 'library' | 'details' | 'work' | null
   readonly projectRef: string | null
   readonly followUpQuestions: readonly string[]
+  readonly photoReview: {
+    readonly visibleObservations: readonly string[]
+    readonly cannotConfirm: readonly string[]
+    readonly urgency: 'routine' | 'prompt_attention' | 'urgent'
+    readonly suggestedTrade: WorkCategory | null
+    readonly hazardSignal:
+      | 'none'
+      | 'visible_fire_or_smoke'
+      | 'visible_sparking_or_exposed_electrical'
+      | 'water_near_electrical'
+      | 'major_displacement_or_collapse'
+  } | null
   readonly disclosure: string
 }
 

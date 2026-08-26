@@ -37,6 +37,7 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     projectQuotesEnabled: false,
     privateUploadsEnabled: false,
     photoCheckupsEnabled: false,
+    roloVisionEnabled: false,
     jobroloAttachmentsEnabled: false,
   })
   assert.equal(readHomeownerRuntimeConfiguration({
@@ -72,11 +73,19 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   })?.photoCheckupsEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
+    HOMESROLO_ROLO_VISION_ENABLED: 'true',
+  })?.roloVisionEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'true',
   })?.jobroloAttachmentsEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'yes',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_ROLO_VISION_ENABLED: 'yes',
   }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,

@@ -56,6 +56,7 @@ const CAPABILITIES = {
   projectQuotes: false,
   homeResearch: false,
   homeAssistant: false,
+  homeAssistantVision: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -148,6 +149,30 @@ const RESEARCH_VIEW = {
   limitations: ['Public records can lag behind completed work.'],
   followUpQuestions: ['Do you have a closing disclosure to compare?'],
   disclosure: 'Research is a draft. Confirm proposed facts before adding them to your home record.',
+}
+
+const ARTIFACT = REF('hart', 'a')
+const ASSISTANT_INPUT = {
+  message: 'Review this saved photo.',
+  history: [] as const,
+  conversation: { pendingWork: null, unansweredFollowUpQuestion: null },
+  destination: 'home' as const,
+}
+const ASSISTANT_VIEW = {
+  requestRef: 'hask_00000000-0000-4000-8000-000000000000',
+  answer: 'I can describe what is visible, but this image cannot confirm the cause.',
+  proposedWork: null,
+  destination: null,
+  projectRef: null,
+  followUpQuestions: ['Is the area wet right now?'],
+  photoReview: {
+    visibleObservations: ['Discoloration is visible below a fitting.'],
+    cannotConfirm: ['The photo cannot confirm whether the material is currently wet.'],
+    urgency: 'prompt_attention',
+    suggestedTrade: 'plumbing',
+    hazardSignal: 'none',
+  },
+  disclosure: 'Nothing is saved until you review and approve it.',
 }
 
 // --- mode selection -----------------------------------------------------------
@@ -651,6 +676,70 @@ test('updateHomeRecord rejects malformed address, scope, and stale output before
   const conflict = createRemotePort(transportReturning(409, { error: { code: 'conflict' } }))
   assert.deepEqual(await conflict.updateHomeRecord(HOME, HOME_RECORD_INPUT),
     { ok: false, error: 'conflict' })
+})
+
+// --- consent-bound Rolo photo review -----------------------------------------
+
+test('Rolo sends only one exact consented artifact selection', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    return data(ASSISTANT_VIEW)
+  })
+  const result = await port.askRolo(HOME, {
+    ...ASSISTANT_INPUT,
+    selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: true },
+  })
+  assert.ok(result.ok)
+  if (!result.ok) return
+  assert.equal(result.value.photoReview?.suggestedTrade, 'plumbing')
+  assert.deepEqual(requests, [{
+    method: 'POST',
+    path: `/api/v1/homes/${HOME}/assistant`,
+    body: {
+      ...ASSISTANT_INPUT,
+      history: [],
+      selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: true },
+    },
+  }])
+  assert.doesNotMatch(JSON.stringify(requests), /previewHref|signedUrl|storage|principal|membership|provider/i)
+})
+
+test('Rolo rejects malformed photo selections before transport', async () => {
+  const { transport, requests } = recordingTransport({})
+  const port = createRemotePort(transport)
+  for (const selectedPhoto of [
+    null,
+    [],
+    { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: false },
+    { source: 'artifact', artifactRef: 'hart_short', consentToAnalyze: true },
+    { source: 'url', artifactRef: ARTIFACT, consentToAnalyze: true },
+    { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: true, previewHref: 'https://example.com/photo.jpg' },
+  ]) {
+    assert.deepEqual(await port.askRolo(HOME, {
+      ...ASSISTANT_INPUT,
+      selectedPhoto,
+    } as never), { ok: false, error: 'invalid' })
+  }
+  assert.equal(requests.length, 0)
+})
+
+test('Rolo accepts an omitted legacy review and rejects extra or malformed review projections', async () => {
+  const { photoReview: _photoReview, ...missingReview } = ASSISTANT_VIEW
+  const legacyPort = createRemotePort(transportReturning(200, { data: missingReview }))
+  const legacy = await legacyPort.askRolo(HOME, ASSISTANT_INPUT)
+  assert.equal(legacy.ok, true)
+  if (legacy.ok) assert.equal(legacy.value.photoReview, null)
+  const malformed: readonly unknown[] = [
+    { ...ASSISTANT_VIEW, extra: true },
+    { ...ASSISTANT_VIEW, photoReview: { ...ASSISTANT_VIEW.photoReview, extra: true } },
+    { ...ASSISTANT_VIEW, photoReview: { ...ASSISTANT_VIEW.photoReview, urgency: 'emergency' } },
+    { ...ASSISTANT_VIEW, photoReview: { ...ASSISTANT_VIEW.photoReview, visibleObservations: [] } },
+  ]
+  for (const view of malformed) {
+    const port = createRemotePort(transportReturning(200, { data: view }))
+    assert.deepEqual(await port.askRolo(HOME, ASSISTANT_INPUT), { ok: false, error: 'invalid' })
+  }
 })
 
 // --- consent-bound home research ---------------------------------------------

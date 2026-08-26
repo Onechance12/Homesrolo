@@ -75,16 +75,24 @@ function count(value: unknown): number {
 
 function capabilities(value: unknown): Capabilities {
   const source = record(value)
-  const keys: readonly (keyof Capabilities)[] = [
+  const requiredKeys: readonly (keyof Capabilities)[] = [
     'emailCodeSignIn', 'magicLinkSignIn', 'persistence', 'projectQuotes',
     'homeResearch', 'homeAssistant', 'uploads', 'photoCheckups', 'projectReview',
     'projectReviewAttachments', 'homeRecordHandoffs', 'invitations', 'sharing',
   ]
+  const allowedKeys = new Set<keyof Capabilities>([...requiredKeys, 'homeAssistantVision'])
+  if (Object.keys(source).some(key => !allowedKeys.has(key as keyof Capabilities))) {
+    throw new Error('invalid_wire_data')
+  }
   const out = {} as Record<keyof Capabilities, boolean>
-  for (const key of keys) {
+  for (const key of requiredKeys) {
     if (typeof source[key] !== 'boolean') throw new Error('invalid_wire_data')
     out[key] = source[key]
   }
+  if (source.homeAssistantVision !== undefined && typeof source.homeAssistantVision !== 'boolean') {
+    throw new Error('invalid_wire_data')
+  }
+  out.homeAssistantVision = source.homeAssistantVision === true
   return out
 }
 
@@ -184,6 +192,12 @@ function parseArtifact(value: unknown): ArtifactRecord {
 function parseRolo(value: unknown): RoloReply {
   const source = record(value)
   const proposed = source.proposedWork === null ? null : record(source.proposedWork)
+  // `photoReview` was added after the first mobile contract. Missing and null
+  // both mean that no saved photo was reviewed, which keeps rolling deploys
+  // backward compatible without relaxing the shape of a present review.
+  const photoReviewSource = source.photoReview === undefined || source.photoReview === null
+    ? null
+    : record(source.photoReview)
   if (typeof source.requestRef !== 'string' || !source.requestRef.startsWith('hask_')
     || (source.destination !== null
       && (typeof source.destination !== 'string' || !DESTINATIONS.has(source.destination)))
@@ -191,6 +205,39 @@ function parseRolo(value: unknown): RoloReply {
     || !Array.isArray(source.followUpQuestions)
     || source.followUpQuestions.some(question => typeof question !== 'string')) {
     throw new Error('invalid_wire_data')
+  }
+  let photoReview: RoloReply['photoReview'] = null
+  if (photoReviewSource) {
+    const urgency = photoReviewSource.urgency
+    const suggestedTrade = photoReviewSource.suggestedTrade
+    const hazardSignal = photoReviewSource.hazardSignal
+    const hazards = new Set([
+      'none', 'visible_fire_or_smoke', 'visible_sparking_or_exposed_electrical',
+      'water_near_electrical', 'major_displacement_or_collapse',
+    ])
+    if (!Array.isArray(photoReviewSource.visibleObservations)
+      || photoReviewSource.visibleObservations.length < 1
+      || photoReviewSource.visibleObservations.length > 5
+      || photoReviewSource.visibleObservations.some(item => typeof item !== 'string')
+      || !Array.isArray(photoReviewSource.cannotConfirm)
+      || photoReviewSource.cannotConfirm.length < 1
+      || photoReviewSource.cannotConfirm.length > 4
+      || photoReviewSource.cannotConfirm.some(item => typeof item !== 'string')
+      || (urgency !== 'routine' && urgency !== 'prompt_attention' && urgency !== 'urgent')
+      || (suggestedTrade !== null
+        && (typeof suggestedTrade !== 'string'
+          || !WORK_CATEGORIES.has(suggestedTrade as WorkCategory)))
+      || typeof hazardSignal !== 'string'
+      || !hazards.has(hazardSignal)) {
+      throw new Error('invalid_wire_data')
+    }
+    photoReview = {
+      visibleObservations: photoReviewSource.visibleObservations.map(item => text(item, 240)),
+      cannotConfirm: photoReviewSource.cannotConfirm.map(item => text(item, 240)),
+      urgency,
+      suggestedTrade: suggestedTrade as WorkCategory | null,
+      hazardSignal: hazardSignal as NonNullable<RoloReply['photoReview']>['hazardSignal'],
+    }
   }
   let proposedWork: RoloReply['proposedWork'] = null
   if (proposed) {
@@ -220,6 +267,7 @@ function parseRolo(value: unknown): RoloReply {
     destination: source.destination as RoloReply['destination'],
     projectRef: source.projectRef,
     followUpQuestions: source.followUpQuestions as string[],
+    photoReview,
     disclosure: text(source.disclosure, 120),
   }
 }

@@ -801,10 +801,13 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
   const experience = read('components/RoloHomeDashboard.tsx')
   const rolo = read('app/home/[homeId]/rolo/page.tsx')
   const library = read('app/home/[homeId]/documents/page.tsx')
+  const projects = read('app/home/[homeId]/projects/page.tsx')
+  const projectStatus = read('components/projectStatus.ts')
 
-  assert.match(shell, /label: 'My Rolo', tabLabel: 'Rolo'/)
-  assert.match(shell, /label: 'Activity', tabLabel: 'Activity'/)
+  assert.match(shell, /label: 'Home', tabLabel: 'Home'/)
+  assert.match(shell, /label: 'Work', tabLabel: 'Work'/)
   assert.match(shell, /label: 'Library', tabLabel: 'Library'/)
+  assert.match(shell, /label: 'People', tabLabel: 'People'/)
   assert.match(shell, /homesrolo:open-assistant/,
     'Rolo remains available from the persistent app shell')
   assert.match(shell, /Account &amp; settings/,
@@ -818,13 +821,12 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'Exterior & gutters', 'Yard & landscaping', 'Appliances', 'Pest control',
     'Pool', 'New construction', 'Something else',
   ]) {
-    const projects = read('app/home/[homeId]/projects/page.tsx')
-    assert.match(projects, new RegExp(area.replace('&', '\\&')),
+    const expected = area === 'Something else' ? 'Whole home' : area
+    assert.match(projectStatus, new RegExp(expected.replace('&', '\\&')),
       `${area} remains available in manual whole-home capture`)
   }
-  const projects = read('app/home/[homeId]/projects/page.tsx')
-  assert.match(projects, /const CATEGORIES:[^=]+?= \[\s*\{ value: 'interior'/,
-    'the project category picker must not default to roofing')
+  assert.match(projects, /PROJECT_CATEGORY_OPTIONS\.map/,
+    'the project category picker reuses the shared whole-home vocabulary')
   assert.doesNotMatch(experience, /Need roof work\?|Start a roof project|Open roof projects/,
     'roofing is never presented as the dashboard default')
   assert.match(experience, /approximate date is enough/i,
@@ -991,7 +993,7 @@ test('work opens as conversational capture with a compact manual workspace', () 
   for (const state of ['Planned', 'Happening now', 'Already done']) {
     assert.match(projects, new RegExp(state), `${state} remains one fast creation state`)
   }
-  assert.match(projects, /<select[\s\S]*Choose an area[\s\S]*CATEGORIES\.map/,
+  assert.match(projects, /<select[\s\S]*Choose an area[\s\S]*PROJECT_CATEGORY_OPTIONS\.map/,
     'twelve home categories stay available without twelve oversized cards')
   assert.match(projects, /<details className="project-more">[\s\S]*Add date or notes/,
     'optional capture stays progressively disclosed')
@@ -1038,7 +1040,7 @@ test('the home library avoids disabled routes and Activity is a real projection'
     'Activity reuses the canonical work records')
   assert.match(care, /port\.listDocuments\(homeId\)/,
     'Activity projects saved file metadata without copying it')
-  assert.match(care, /A chronological projection over work and files; no copied timeline storage/,
+  assert.match(care, /A chronological projection over work, photos, and files; no copied timeline storage/,
     'Activity is explicitly a read model, not another persistence system')
   assert.match(warranties, /redirect\(`\/home\/\$\{homeId\}\/documents`\)/,
     'the former warranties path resolves to the working Home record')
@@ -1105,6 +1107,9 @@ test('the dashboard uses real records and opens one approval-gated Rolo assistan
   const dashboard = read('app/home/[homeId]/page.tsx')
   const experience = read('components/RoloHomeDashboard.tsx')
   const assistant = read('components/AssistantDock.tsx')
+  const assistantServer = read('lib/server/home-assistant.ts')
+  const assistantHttp = read('lib/server/home-assistant-http.ts')
+  const privacy = read('../web/app/privacy/page.tsx')
   const progress = read('lib/home-record-progress.ts')
 
   assert.match(dashboard, /port\.listProjects\(homeId\)/)
@@ -1123,6 +1128,19 @@ test('the dashboard uses real records and opens one approval-gated Rolo assistan
     'approved drafts reuse the existing work command')
   assert.match(assistant, /Nothing is saved until you approve it/,
     'the review boundary is visible beside every proposed work record')
+  assert.match(assistant, /session\.capabilities\.homeAssistantVision/,
+    'saved-photo review is hidden behind its explicit runtime capability')
+  assert.match(assistant, /port\.listDocuments\(homeId\)/,
+    'photo review reuses the existing private Library rather than adding another uploader')
+  assert.match(assistant, /setPhotoConsent\(false\)/,
+    'photo consent is reset and must be renewed for each message')
+  assert.doesNotMatch(assistant, /type=["']file["']/,
+    'the assistant does not create a second photo-upload surface')
+  assert.match(assistantServer, /type: 'input_image'/)
+  assert.match(assistantServer, /store: false/)
+  assert.match(assistantHttp, /sanitizeHomeownerPhotoForAnalysis/)
+  assert.match(privacy, /choose one saved Library photo/i,
+    'privacy copy names the narrow one-photo exception')
   assert.doesNotMatch(assistant, /dangerouslySetInnerHTML/,
     'model text is rendered as escaped React text')
   assert.doesNotMatch(`${dashboard}\n${experience}\n${progress}`, /measurement/i,

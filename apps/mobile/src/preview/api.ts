@@ -31,6 +31,7 @@ const PREVIEW_CAPABILITIES = Object.freeze({
   projectQuotes: true,
   homeResearch: true,
   homeAssistant: true,
+  homeAssistantVision: false,
   uploads: false,
   photoCheckups: true,
   projectReview: true,
@@ -418,6 +419,7 @@ export class PreviewHomesroloApi implements HomesroloApi {
       followUpQuestions: conversation.unansweredFollowUpQuestion
         ? []
         : ['When did you first notice it, and is anything leaking, sparking, or unsafe right now?'],
+      photoReview: null,
       disclosure: 'Local preview response · no network request',
     }
   }

@@ -31,6 +31,7 @@ const ALL_FALSE = {
   projectQuotes: false,
   homeResearch: false,
   homeAssistant: false,
+  homeAssistantVision: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -133,11 +134,12 @@ test('GET /api/v1/session with no cookie is signed_out with all-false capabiliti
   assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8')
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff')
   const body = await response.json()
+  const { homeAssistantVision: _stagedCapability, ...legacyCompatibleCapabilities } = ALL_FALSE
   assert.deepEqual(body, {
     data: {
       apiVersion: 'homeowner-api.v1-draft',
       kind: 'signed_out',
-      capabilities: ALL_FALSE,
+      capabilities: legacyCompatibleCapabilities,
     },
   })
 })

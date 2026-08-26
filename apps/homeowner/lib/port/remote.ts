@@ -203,6 +203,22 @@ function normalizedRoloConversation(value: unknown): RoloConversationState | nul
   return { pendingWork, unansweredFollowUpQuestion }
 }
 
+function normalizedRoloSelectedPhoto(value: unknown) {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const selection = value as Record<string, unknown>
+  if (Object.keys(selection).sort().join(',') !== 'artifactRef,consentToAnalyze,source'
+    || selection.source !== 'artifact'
+    || typeof selection.artifactRef !== 'string'
+    || !ARTIFACT_REF.test(selection.artifactRef)
+    || selection.consentToAnalyze !== true) return null
+  return {
+    source: 'artifact' as const,
+    artifactRef: selection.artifactRef,
+    consentToAnalyze: true as const,
+  }
+}
+
 function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>[2]) {
   const body: Record<string, unknown> = {
     commandRef: input.commandRef,
@@ -637,6 +653,7 @@ export function createRemotePort(
         text: typeof turn?.text === 'string' ? boundedResearchText(turn.text, 900) : null,
       }))
       const conversation = normalizedRoloConversation(input.conversation)
+      const selectedPhoto = normalizedRoloSelectedPhoto(input.selectedPhoto)
       const totalCharacters = (message?.length ?? 0)
         + normalizedHistory.reduce((total, turn) => total + (turn.text?.length ?? 0), 0)
         + (conversation?.pendingWork ? JSON.stringify(conversation.pendingWork).length : 0)
@@ -646,6 +663,7 @@ export function createRemotePort(
         || (input.projectRef !== undefined && !PROJECT_REF.test(input.projectRef))
         || history.length > 16
         || !conversation
+        || selectedPhoto === null
         || normalizedHistory.some(turn => turn.role === null || turn.text === null)
         || totalCharacters > 12_000) {
         return { ok: false, error: 'invalid' }
@@ -662,6 +680,7 @@ export function createRemotePort(
           conversation,
           destination: input.destination,
           ...(input.projectRef ? { projectRef: input.projectRef } : {}),
+          ...(selectedPhoto ? { selectedPhoto } : {}),
         },
       }, decodeAskRoloResult)
     },

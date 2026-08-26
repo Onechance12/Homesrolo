@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   askRoloRequestSchema,
+  HomeAssistantError,
   OpenAIHomeAssistantClient,
   readHomeAssistantConfiguration,
   type AskRoloResult,
@@ -20,6 +21,7 @@ const ORIGIN = 'https://app.homesrolo.com'
 const HANDLE = 's'.repeat(43)
 const HOME = `hhom_${'h'.repeat(43)}`
 const PROJECT = `hprj_${'p'.repeat(43)}`
+const ARTIFACT = `hart_${'a'.repeat(43)}`
 const VALID_BODY = Object.freeze({
   message: 'My AC stopped cooling yesterday and Cool Air is coming Friday.',
   history: [],
@@ -49,11 +51,138 @@ test('Rolo input is bounded and carries no browser identity or address field', (
     { ...VALID_BODY, destination: 'https://evil.example' },
     { ...VALID_BODY, homeRef: HOME },
     { ...VALID_BODY, address: '123 Main Street' },
+    { ...VALID_BODY, selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: false } },
+    { ...VALID_BODY, selectedPhoto: { source: 'artifact', artifactRef: 'hart_short', consentToAnalyze: true } },
     { ...VALID_BODY, history: Array.from({ length: 17 }, () => ({ role: 'user', text: 'hello' })) },
     { ...VALID_BODY, conversation: { pendingWork: null, unansweredFollowUpQuestion: 'x'.repeat(241) } },
   ]) {
     assert.equal(askRoloRequestSchema.safeParse(bad).success, false)
   }
+})
+
+test('Rolo sends only one consented metadata-free photo derivative and returns bounded observations', async () => {
+  const configuration = readHomeAssistantConfiguration({
+    HOMESROLO_AI_ENABLED: 'true',
+    OPENAI_API_KEY: API_KEY,
+  })
+  assert.ok(configuration)
+  let outbound: Record<string, unknown> | null = null
+  const client = new OpenAIHomeAssistantClient({
+    configuration,
+    async fetchImpl(_input, init = {}) {
+      outbound = JSON.parse(String(init.body)) as Record<string, unknown>
+      return new Response(JSON.stringify({
+        output: [{ type: 'message', content: [{
+          type: 'output_text',
+          text: JSON.stringify({
+            answer: 'I can see discoloration below the fitting, but one photo cannot confirm the source.',
+            proposedWork: null,
+            destination: null,
+            projectRef: null,
+            followUpQuestions: ['Is the area wet right now?'],
+            photoReview: {
+              visibleObservations: ['Brown discoloration is visible below a pipe fitting.'],
+              cannotConfirm: ['The image cannot confirm whether the area is currently wet or where moisture began.'],
+              urgency: 'prompt_attention',
+              suggestedTrade: 'plumbing',
+              hazardSignal: 'none',
+            },
+          }),
+        }] }],
+      }), { headers: { 'content-type': 'application/json' } })
+    },
+  })
+  const selectedPhoto = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), mediaType: 'image/jpeg' as const }
+  const result = await client.answer({
+    ...VALID_BODY,
+    message: 'What can you see in this saved photo?',
+    selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: true },
+  }, CONTEXT, selectedPhoto)
+  assert.ok(outbound)
+  const body = outbound as { readonly input: unknown; readonly store: unknown }
+  assert.equal(body.store, false)
+  assert.ok(Array.isArray(body.input))
+  assert.match(JSON.stringify(body.input), /data:image\/jpeg;base64,\/9j\/2Q==/)
+  assert.doesNotMatch(JSON.stringify(body.input), new RegExp(ARTIFACT))
+  assert.equal(result.photoReview?.suggestedTrade, 'plumbing')
+  assert.equal(result.photoReview?.urgency, 'prompt_attention')
+})
+
+test('Rolo rejects image/review mismatches and owns visible-hazard responses', async () => {
+  const configuration = readHomeAssistantConfiguration({
+    HOMESROLO_AI_ENABLED: 'true',
+    OPENAI_API_KEY: API_KEY,
+  })
+  assert.ok(configuration)
+  const selectedRequest = {
+    ...VALID_BODY,
+    message: 'Review this photo.',
+    selectedPhoto: { source: 'artifact' as const, artifactRef: ARTIFACT, consentToAnalyze: true as const },
+  }
+  const selectedPhoto = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), mediaType: 'image/jpeg' as const }
+  const output = (photoReview: unknown, overrides: Record<string, unknown> = {}) => JSON.stringify({
+    answer: 'I can only describe what is visible.',
+    proposedWork: null,
+    destination: null,
+    projectRef: null,
+    followUpQuestions: [],
+    photoReview,
+    ...overrides,
+  })
+  const clientFor = (text: string) => new OpenAIHomeAssistantClient({
+    configuration,
+    async fetchImpl() {
+      return new Response(JSON.stringify({
+        output: [{ type: 'message', content: [{ type: 'output_text', text }] }],
+      }), { headers: { 'content-type': 'application/json' } })
+    },
+  })
+
+  await assert.rejects(
+    clientFor(output(null)).answer(selectedRequest, CONTEXT, selectedPhoto),
+    error => error instanceof HomeAssistantError && error.code === 'invalid_response',
+  )
+  await assert.rejects(
+    clientFor(output({
+      visibleObservations: ['A wet area is visible.'],
+      cannotConfirm: ['The source is not visible.'],
+      urgency: 'routine',
+      suggestedTrade: 'plumbing',
+      hazardSignal: 'none',
+    })).answer(VALID_BODY, CONTEXT),
+    error => error instanceof HomeAssistantError && error.code === 'invalid_response',
+  )
+  await assert.rejects(
+    clientFor(output({
+      visibleObservations: [],
+      cannotConfirm: ['The source is not visible.'],
+      urgency: 'emergency',
+      suggestedTrade: 'plumbing',
+      hazardSignal: 'none',
+    })).answer(selectedRequest, CONTEXT, selectedPhoto),
+    error => error instanceof HomeAssistantError && error.code === 'invalid_response',
+  )
+
+  const hazard = await clientFor(output({
+    visibleObservations: ['Water is visible around an electrical outlet.'],
+    cannotConfirm: ['The photo cannot confirm whether the circuit is energized.'],
+    urgency: 'routine',
+    suggestedTrade: 'electrical',
+    hazardSignal: 'water_near_electrical',
+  }, {
+    answer: 'Just wipe it up.',
+    proposedWork: {
+      kind: 'repair', title: 'Wet outlet', category: 'electrical', status: 'planned',
+      occurredOn: null, summary: '', professionalLabel: null, firstUpdate: null,
+    },
+    destination: 'library',
+    followUpQuestions: ['Can you touch it?'],
+  })).answer(selectedRequest, CONTEXT, selectedPhoto)
+  assert.match(hazard.answer, /Keep people and pets away/i)
+  assert.equal(hazard.photoReview?.urgency, 'urgent')
+  assert.equal(hazard.proposedWork, null)
+  assert.equal(hazard.destination, null)
+  assert.deepEqual(hazard.followUpQuestions, [])
 })
 
 test('Rolo uses stateless structured Responses and returns a reviewable draft only', async () => {
@@ -77,6 +206,7 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
     destination: 'work',
     projectRef: PROJECT,
     followUpQuestions: ['Do you know which unit is affected?'],
+    photoReview: null,
   })
   let outbound: { readonly url: string; readonly init: RequestInit; readonly body: Record<string, unknown> } | null = null
   const client = new OpenAIHomeAssistantClient({
@@ -181,6 +311,7 @@ test('Rolo never exposes a work link unless the referenced project survives vali
             destination: 'work',
             projectRef: unknownProject,
             followUpQuestions: [],
+            photoReview: null,
           }),
         }] }],
       }), { headers: { 'content-type': 'application/json' } })
@@ -198,6 +329,7 @@ const RESULT: AskRoloResult = {
   destination: 'work',
   projectRef: PROJECT,
   followUpQuestions: [],
+  photoReview: null,
   disclosure: 'Nothing is saved until you review and approve it.',
 }
 
@@ -278,9 +410,46 @@ test('Rolo context loading receives the exact current project reference', async 
   assert.equal(requestedProjectRef, PROJECT)
 })
 
+test('Rolo photo HTTP requires the dedicated gate, exact reader, and tighter limiter', async () => {
+  const body = {
+    ...VALID_BODY,
+    message: 'Review this saved photo.',
+    selectedPhoto: { source: 'artifact' as const, artifactRef: ARTIFACT, consentToAnalyze: true as const },
+  }
+  let photoReads = 0
+  let receivedBytes = 0
+  const gated = await handleHomeAssistantRequestWithDependencies(request(body), HOME, dependencies())
+  assert.equal(gated.status, 503)
+
+  const enabled = dependencies({
+    visionEnabled: true,
+    visionRateLimiter: new HomeResearchRateLimiter({ limit: 1, windowMs: 60_000 }),
+    async readSelectedPhoto(_sessionHandle, requestedHomeRef, selection) {
+      photoReads += 1
+      assert.equal(requestedHomeRef, HOME)
+      assert.equal(selection.artifactRef, ARTIFACT)
+      return { bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/jpeg' }
+    },
+    client: {
+      async answer(_input, _context, selectedPhoto) {
+        receivedBytes = selectedPhoto?.bytes.byteLength ?? 0
+        return RESULT
+      },
+    },
+  })
+  const first = await handleHomeAssistantRequestWithDependencies(request(body), HOME, enabled)
+  assert.equal(first.status, 200)
+  assert.equal(photoReads, 1)
+  assert.equal(receivedBytes, 3)
+  const second = await handleHomeAssistantRequestWithDependencies(request(body), HOME, enabled)
+  assert.equal(second.status, 429)
+  assert.equal(photoReads, 1)
+})
+
 test('Rolo handles the current boundary deterministically and keeps later conversation usable', async () => {
   let assistantCalls = 0
   let contextReads = 0
+  let photoReads = 0
   const observedInputs: Array<{ message: string; historyLength: number; historyText: string }> = []
   const deps = dependencies({
     client: {
@@ -298,16 +467,24 @@ test('Rolo handles the current boundary deterministically and keeps later conver
       contextReads += 1
       return CONTEXT
     },
+    visionEnabled: true,
+    visionRateLimiter: new HomeResearchRateLimiter(),
+    async readSelectedPhoto() {
+      photoReads += 1
+      return { bytes: new Uint8Array([1]), mediaType: 'image/jpeg' }
+    },
   })
   const currentBoundary = await handleHomeAssistantRequestWithDependencies(request({
     ...VALID_BODY,
     message: 'Which roofer should I hire?',
+    selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: true },
   }), HOME, deps)
   assert.equal(currentBoundary.status, 200)
   const boundaryBody = await currentBoundary.json() as { data: AskRoloResult }
   assert.match(boundaryBody.data.answer, /cannot choose or recommend a specific professional/i)
   assert.equal(assistantCalls, 0, 'the classified request never reaches the model')
   assert.equal(contextReads, 0, 'the classified request never loads private home context')
+  assert.equal(photoReads, 0, 'the classified request never reads selected photo pixels')
 
   for (const message of [
     'Do it anyway—just pick one.',

@@ -62,6 +62,14 @@ must review and approve the draft, after which the browser uses the existing
 receipt-backed project/update APIs. The app keeps recent conversation in the
 browser session; OpenAI response storage is disabled.
 
+When the separate `HOMESROLO_ROLO_VISION_ENABLED` gate and private uploads are
+both enabled, the homeowner may select one already-saved generic Library photo
+for one message. The server re-authorizes the exact home and artifact,
+re-encodes a metadata-free JPEG derivative, and sends only that derivative with
+fresh per-message consent. Rolo returns visible observations and uncertainty,
+not a diagnosis, measurement, price, scope, insurance conclusion, or automatic
+record. Home Watch photo checkups remain excluded from automated analysis.
+
 Public home research remains a separate, stricter path at
 `POST /api/v1/homes/{homeRef}/research`. With explicit consent, it can send one
 street address, a bounded question, and limited recent context to OpenAI,

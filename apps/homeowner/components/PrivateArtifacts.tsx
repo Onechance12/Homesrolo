@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type ChangeEvent } from 'react'
 import { IconDocs } from './icons.tsx'
+import { PrivateImageViewer } from './PrivateImageViewer.tsx'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import type {
   DocumentKind,
@@ -295,22 +296,16 @@ export function PrivateArtifactCollection({
   return (
     <div className="artifact-collection">
       {photos.length > 0 ? (
-        <div className="artifact-photo-grid" aria-label="Saved photos">
-          {photos.map(photo => (
-            <figure key={photo.documentRef} className="artifact-photo-card">
-              <a href={photo.previewHref} aria-label={`Open ${photo.title}`}>
-                {/* Authenticated same-origin previews cannot travel through an image optimizer. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.previewHref} alt={photo.title} loading="lazy" />
-              </a>
-              <figcaption>
-                <strong>{photo.title}</strong>
-                <span>{photo.addedOn}{photo.byteLength ? ` · ${fileSize(photo.byteLength)}` : ''}</span>
-                {photo.downloadHref ? <a href={photo.downloadHref}>Download original</a> : null}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
+        <PrivateImageViewer items={photos.map(photo => ({
+          id: photo.documentRef,
+          title: photo.title,
+          alt: photo.title,
+          thumbnailSrc: photo.previewHref!,
+          fullSrc: photo.previewHref!,
+          meta: `${photo.addedOn}${photo.byteLength ? ` · ${fileSize(photo.byteLength)}` : ''}`,
+          sourceLabel: photo.projectRef ? 'Work photo' : 'Home photo',
+          ...(photo.downloadHref ? { downloadHref: photo.downloadHref } : {}),
+        }))} />
       ) : null}
       {files.length > 0 ? <ArtifactRows records={files} /> : null}
     </div>
