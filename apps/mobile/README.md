@@ -40,4 +40,6 @@ SecureStore. Browser sessions continue to use their HttpOnly cookie.
 
 The first app slice is deliberately useful: sign in, select a home, review its
 current work, talk to Rolo, save a reviewable Rolo draft, and capture private
-photos/documents through the existing signed upload protocol.
+photos/documents through the existing signed upload protocol. Rolo can inspect
+one private photo only after an explicit, per-message consent. Preview mode uses
+one existing in-memory sample photo and never invokes a picker, upload, or model.

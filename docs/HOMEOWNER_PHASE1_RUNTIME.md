@@ -85,13 +85,15 @@ metadata listing/reservation, exact-artifact private download/image preview, and
 The separate image-only boundary exposes an exact-home photo-checkup list and
 raw JPEG/PNG upload plus exact-photo thumbnail, full-image, and delete routes.
 The raw input route is not multipart and carries no original filename.
-Roofing projects also expose an exact-project proposal list, strict create, and
-revision-backed full save. These quote routes store homeowner-entered company
-labels and partial scope classifications. An absent row means “not reviewed”;
-`not_stated` is an explicit homeowner classification. Migration
-`202608210001` must be applied and verified before the default-off
+Every real project can expose an exact-project proposal list, strict create,
+and revision-backed full save. These routes store homeowner-entered company
+labels and partial scope classifications. Roofing projects retain detailed
+roof-system rows; other categories use a neutral whole-home proposal scope. An
+absent row means “not reviewed”; `not_stated` is an explicit homeowner
+classification. Migrations `202608210001` and `202608260001` must both be
+applied and verified before the default-off
 `HOMESROLO_PROJECT_QUOTES_ENABLED=true` release gate is enabled. When the gate
-is false, the browser makes no quote-list or quote-write request.
+is false, the browser makes no proposal-list or proposal-write request.
 One additional controller-only route submits an exact roofing project for
 review. The browser supplies only contact preferences, explicitly selected
 artifact references, and consent; the server derives the authenticated email,

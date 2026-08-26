@@ -65,3 +65,41 @@ test('cannot perform an upload', async () => {
     /preview_upload_disabled/,
   )
 })
+
+test('reviews one saved preview photo deterministically without transport or upload', async () => {
+  const first = new PreviewHomesroloApi()
+  const second = new PreviewHomesroloApi()
+  const photo = (await first.listArtifacts(PREVIEW_PRIMARY_HOME_REF))
+    .find(item => item.kind === 'photo')
+  assert.ok(photo)
+  const selection = {
+    source: 'artifact' as const,
+    artifactRef: photo.artifactRef,
+    consentToAnalyze: true as const,
+  }
+  const state = { pendingWork: null, unansweredFollowUpQuestion: null }
+  const firstReply = await first.askRolo(
+    PREVIEW_PRIMARY_HOME_REF, 'What can you see here?', [], state, selection,
+  )
+  const secondReply = await second.askRolo(
+    PREVIEW_PRIMARY_HOME_REF, 'What can you see here?', [], state, selection,
+  )
+
+  assert.deepEqual(firstReply.photoReview, secondReply.photoReview)
+  assert.equal(firstReply.photoReview?.hazardSignal, 'none')
+  assert.equal(firstReply.photoReview?.urgency, 'routine')
+  assert.match(firstReply.disclosure, /no network request/)
+  const refusal = await first.askRolo(
+    PREVIEW_PRIMARY_HOME_REF, 'Decide my insurance coverage.', [], state, selection,
+  )
+  assert.equal(refusal.photoReview, null)
+  assert.equal(refusal.proposedWork, null)
+  assert.match(refusal.answer, /did not open the attached photo/i)
+  await assert.rejects(
+    first.askRolo(PREVIEW_PRIMARY_HOME_REF, 'Review this.', [], state, {
+      ...selection,
+      artifactRef: `hart_${'x'.repeat(43)}`,
+    }),
+    /preview_artifact_not_found/,
+  )
+})

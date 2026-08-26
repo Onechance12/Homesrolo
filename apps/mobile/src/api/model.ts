@@ -133,6 +133,13 @@ export interface RoloConversationState {
   readonly unansweredFollowUpQuestion: string | null
 }
 
+export interface RoloSelectedPhoto {
+  readonly source: 'artifact'
+  readonly artifactRef: string
+  /** Consent is scoped to one assistant request and is never stored as a default. */
+  readonly consentToAnalyze: true
+}
+
 export interface RoloReply {
   readonly requestRef: string
   readonly answer: string

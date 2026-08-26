@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   apiPath, base64Url, boundedRoloConversation, commandRef, envelopeData, isHomeRef, isSessionToken,
-  nativeRequestHeaders, normalizeApiOrigin, problemCode,
+  nativeRequestHeaders, normalizedRoloSelectedPhoto, normalizeApiOrigin, problemCode,
+  roloPhotoReviewPresenceAllowed,
 } from './protocol.ts'
 
 test('normalizes only safe API origins', () => {
@@ -27,6 +28,34 @@ test('keeps identifier and session validation exact', () => {
   assert.equal(isSessionToken('contains a space'), false)
   assert.equal(apiPath('homes', `hhom_${'A'.repeat(43)}`, 'projects'),
     `/api/v1/homes/hhom_${'A'.repeat(43)}/projects`)
+})
+
+test('keeps Rolo photo analysis bound to one exact consented artifact', () => {
+  const artifactRef = `hart_${'A'.repeat(43)}`
+  assert.deepEqual(normalizedRoloSelectedPhoto({
+    source: 'artifact', artifactRef, consentToAnalyze: true,
+  }), {
+    source: 'artifact', artifactRef, consentToAnalyze: true,
+  })
+  for (const malformed of [
+    null,
+    [],
+    { source: 'artifact', artifactRef, consentToAnalyze: false },
+    { source: 'artifact', artifactRef: 'hart_short', consentToAnalyze: true },
+    { source: 'url', artifactRef, consentToAnalyze: true },
+    { source: 'artifact', artifactRef, consentToAnalyze: true, previewUrl: 'https://example.test' },
+  ]) assert.equal(normalizedRoloSelectedPhoto(malformed), null)
+
+  const selected = normalizedRoloSelectedPhoto({
+    source: 'artifact', artifactRef, consentToAnalyze: true,
+  })
+  assert.ok(selected)
+  assert.equal(roloPhotoReviewPresenceAllowed(selected, true), true)
+  assert.equal(roloPhotoReviewPresenceAllowed(selected, false), true,
+    'a boundary refusal answers without opening the selected photo')
+  assert.equal(roloPhotoReviewPresenceAllowed(null, false), true)
+  assert.equal(roloPhotoReviewPresenceAllowed(null, true), false,
+    'the server cannot return photo observations when no photo was selected')
 })
 
 test('accepts one-key data envelopes and bounded problems', () => {

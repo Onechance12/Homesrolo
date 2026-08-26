@@ -755,6 +755,9 @@ export const decodeDeletedPhotoCheckup: Decoder<DeletedPhotoCheckup> =
   })
 
 const QUOTE_SCOPE_KEYS = [
+  'project_scope', 'site_conditions', 'preparation', 'labor', 'materials_products',
+  'allowances', 'schedule', 'access_protection', 'inspection_closeout', 'warranty',
+  'change_orders',
   'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
   'leak_barrier', 'primary_materials', 'starter_and_ridge', 'valleys',
   'flashing_transitions', 'penetrations', 'ventilation', 'permits', 'cleanup',

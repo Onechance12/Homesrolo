@@ -8,6 +8,7 @@ import type {
   NativeSessionCredential,
   RoloReply,
   RoloConversationState,
+  RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
   UpdateWorkInput,
@@ -42,6 +43,7 @@ export interface HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversation: RoloConversationState,
+    selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply>
   listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]>
   artifactPreviewSource(homeRef: string, artifactRef: string): {

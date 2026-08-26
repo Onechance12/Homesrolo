@@ -182,6 +182,10 @@ test('quote contract keeps unreviewed rows absent and cannot represent price sco
   })
   assert.equal('measurement' in parsed.scope, false)
   assert.equal(parsed.scope.valleys?.status, 'allowance')
+  assert.equal(createHomeownerProjectQuoteInputSchema.safeParse({
+    ...parsed,
+    scope: { project_scope: { status: 'included', detail: 'Written scope attached' } },
+  }).success, true)
   for (const invalid of [
     { ...parsed, scope: { measurement: { status: 'unreviewed' } } },
     { ...parsed, scope: { measurement: { status: null } } },
@@ -200,14 +204,25 @@ test('quote contract keeps unreviewed rows absent and cannot represent price sco
 })
 
 test('database quote invariants reject null statuses and tie project and artifact controllers', () => {
-  const migration = readFileSync(
+  const originalMigration = readFileSync(
     'supabase/migrations/202608210001_homeowner_project_quotes.sql',
     'utf8',
   )
-  assert.match(migration, /jsonb_typeof\(item\.value -> 'status'\) <> 'string'/)
-  assert.match(migration, /foreign key \(project_ref, home_ref, controller_principal_ref\)/)
+  const allProjectMigration = readFileSync(
+    'supabase/migrations/202608260001_homeowner_all_project_proposals.sql',
+    'utf8',
+  )
+  assert.match(allProjectMigration, /jsonb_typeof\(item\.value -> 'status'\) <> 'string'/)
+  assert.match(allProjectMigration, /'project_scope'.*'site_conditions'.*'schedule'/s)
+  assert.doesNotMatch(allProjectMigration, /and category = 'roofing'/)
+  assert.match(allProjectMigration, /homesrolo_update_homeowner_project/)
+  assert.doesNotMatch(
+    allProjectMigration,
+    /homesrolo_homeowner_project_quotes[\s\S]{0,260}project_category_has_roof_records/,
+  )
+  assert.match(originalMigration, /foreign key \(project_ref, home_ref, controller_principal_ref\)/)
   assert.match(
-    migration,
+    originalMigration,
     /foreign key \(artifact_ref, home_ref, project_ref, controller_principal_ref\)/,
   )
 })
@@ -255,7 +270,7 @@ test('create and list are exact-home private projections with no authority or ra
   assert.doesNotMatch(serialized, /controllerPrincipalRef|commandDigest|storage|payloadSha|jobrolo|score|rank|fairPrice/i)
 })
 
-test('list rejects a quote whose controller does not match its roofing project', async () => {
+test('list rejects a quote whose controller does not match its project', async () => {
   await assert.rejects(
     service({
       quotes: quotePort({
@@ -280,20 +295,23 @@ test('quote routes stay unavailable until the independent release gate is enable
   assert.equal(called, false)
 })
 
-test('quote creation rejects cross-project, non-PDF, and non-roofing source records', async () => {
+test('proposal creation rejects cross-project and non-PDF source records but supports every trade', async () => {
   const crossProjectArtifact = { ...artifact, projectRef: `hprj_${body('x')}` }
   const imageArtifact = { ...artifact, mediaType: 'image/jpeg' as const }
   const nonRoofing = { ...project, category: 'interior' as const }
   for (const repo of [
     repository({ async listArtifactMetadata() { return [crossProjectArtifact] } }),
     repository({ async listArtifactMetadata() { return [imageArtifact] } }),
-    repository({ async listProjects() { return [nonRoofing] } }),
   ]) {
     await assert.rejects(
       service({ repository: repo }).createProjectQuote(context, homeRef, projectRef, createInput),
       (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
     )
   }
+  const created = await service({
+    repository: repository({ async listProjects() { return [nonRoofing] } }),
+  }).createProjectQuote(context, homeRef, projectRef, createInput)
+  assert.equal(created.projectRef, projectRef)
 })
 
 test('revision-backed save forwards one full private replacement and rejects incoherent output', async () => {

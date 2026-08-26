@@ -999,8 +999,7 @@ export class HomeownerApiService {
     }
     const projects = await this.#repository.listProjects(grant)
     const matchedProject = projects.find(project => project.projectRef === parsedProjectRef.data
-      && project.homeRef === grant.homeRef
-      && project.category === 'roofing')
+      && project.homeRef === grant.homeRef)
     if (!matchedProject) {
       throw new HomeownerApiError('not_found')
     }
@@ -1035,8 +1034,7 @@ export class HomeownerApiService {
     }
     const projects = await this.#repository.listProjects(grant)
     if (!projects.some(project => project.projectRef === parsedProjectRef.data
-      && project.homeRef === grant.homeRef
-      && project.category === 'roofing')) {
+      && project.homeRef === grant.homeRef)) {
       throw new HomeownerApiError('not_found')
     }
     if (parsedInput.data.artifactRef) {
@@ -1093,8 +1091,7 @@ export class HomeownerApiService {
     }
     const projects = await this.#repository.listProjects(grant)
     if (!projects.some(project => project.projectRef === parsedProjectRef.data
-      && project.homeRef === grant.homeRef
-      && project.category === 'roofing')) {
+      && project.homeRef === grant.homeRef)) {
       throw new HomeownerApiError('not_found')
     }
     if (parsedInput.data.artifactRef) {
@@ -1802,4 +1799,4 @@ export class HomeownerApiService {
 }
 
 export const HOMEOWNER_API_WARNING =
-  'Home creation, exact-home profile and intake, projects, private quote records, and private artifact storage remain fail-closed until their server adapters are configured. Invitations, sharing, and Jobrolo delivery remain unavailable until separately configured and verified.'
+  'Home creation, exact-home profile and intake, projects, private proposal records, and private artifact storage remain fail-closed until their server adapters are configured. External invitations, contractor access, and Jobrolo delivery remain unavailable until separately configured and verified.'
