@@ -97,6 +97,39 @@ function SearchIcon() {
   )
 }
 
+function emptyStateFor(filter: RoloFilter, homeId: string) {
+  if (filter === 'people') return {
+    title: 'No home pros saved yet',
+    detail: 'Open a saved job and add the company or person who handled it. Homesrolo will connect them to every job they appear on.',
+    href: `/home/${homeId}/projects`,
+    action: 'Open saved work',
+  }
+  if (filter === 'home') return {
+    title: 'Home details need a first pass',
+    detail: 'Add what you know about the roof, heating, cooling, water heater, gutters, and foundation.',
+    href: `/home/${homeId}/details`,
+    action: 'Open home details',
+  }
+  if (filter === 'saved') return {
+    title: 'Nothing saved in the Library yet',
+    detail: 'Add a photo, receipt, estimate, warranty, or Home Watch view and it will become a card here.',
+    href: `/home/${homeId}/documents`,
+    action: 'Open the Library',
+  }
+  if (filter === 'work') return {
+    title: 'No work saved yet',
+    detail: 'Start with a repair, service visit, home event, old job, or project—whatever this home should remember first.',
+    href: `/home/${homeId}/projects`,
+    action: 'Add work',
+  }
+  return {
+    title: 'This Rolo is ready for its first card',
+    detail: 'Add work, home details, a professional, a photo, or a file. Each one joins the same searchable home history.',
+    href: `/home/${homeId}/projects`,
+    action: 'Add something',
+  }
+}
+
 /** One searchable Rolodex assembled from the records this home already owns. */
 export default function RoloPage({
   params,
@@ -293,6 +326,7 @@ export default function RoloPage({
     return entries.filter(entry => (filter === 'all' || entry.group === filter)
       && (!needle || `${entry.title} ${entry.searchText}`.toLocaleLowerCase().includes(needle)))
   }, [entries, filter, query])
+  const emptyState = emptyStateFor(filter, homeId)
 
   if (home.state.status === 'loading' || projects.state.status === 'loading') {
     return <div className="panel"><Skeleton lines={7} label="Opening your Rolo" /></div>
@@ -398,14 +432,14 @@ export default function RoloPage({
           <div className={styles.empty}>
             <span aria-hidden="true">R</span>
             <div>
-              <h3>{query ? 'No matching cards' : 'This section is clear'}</h3>
+              <h3>{query ? 'No matching cards' : emptyState.title}</h3>
               <p>{query
                 ? `Nothing in this Rolo matches “${query.trim()}”.`
-                : 'Add work or a home file and it will appear here automatically.'}</p>
+                : emptyState.detail}</p>
             </div>
             {query
               ? <button type="button" onClick={() => setQuery('')}>Clear search</button>
-              : <Link href={`/home/${homeId}/projects`}>Add something</Link>}
+              : <Link href={emptyState.href}>{emptyState.action}</Link>}
           </div>
         )}
       </section>
