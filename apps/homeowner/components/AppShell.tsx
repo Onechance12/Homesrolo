@@ -64,7 +64,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
 
   const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
   const visibleNav = NAV
-  const assistantEnabled = session.capabilities.homeResearch
+  const assistantEnabled = session.capabilities.homeAssistant
 
   function openAssistant() {
     window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))

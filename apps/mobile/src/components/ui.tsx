@@ -116,6 +116,7 @@ export function TextField({ label, hint, ...props }: TextInputProps & {
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         {...props}
+        accessibilityLabel={props.accessibilityLabel ?? label}
         placeholderTextColor={colors.smoke}
         selectionColor={colors.lime}
         style={[styles.field, props.multiline && styles.fieldMultiline, props.style]}
@@ -131,7 +132,13 @@ export function Chip({ label, selected, onPress }: {
   readonly onPress: () => void
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, selected && styles.chipSelected]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.chip, selected && styles.chipSelected]}
+    >
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </Pressable>
   )

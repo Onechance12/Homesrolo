@@ -27,12 +27,20 @@ function photoFromResult(
   if ('code' in result) throw new Error('photo_picker_recovery_failed')
   if (result.canceled || !result.assets[0]) return null
   const asset = result.assets[0]
-  const name = asset.fileName || `home-photo-${Date.now()}.jpg`
+  const uriExtension = asset.uri.toLowerCase().split(/[?#]/, 1)[0]?.split('.').pop()
+  const fallbackExtension = asset.mimeType?.toLowerCase() === 'image/png' || uriExtension === 'png'
+    ? 'png'
+    : 'jpg'
+  // Keep the fallback stable so reselecting identical bytes after an ambiguous
+  // upload does not create a new command merely because the clock changed.
+  const name = asset.fileName?.trim() || `home-photo.${fallbackExtension}`
   const type = mediaType(asset.mimeType, name)
   if (!type || type === 'application/pdf') throw new Error('choose_jpeg_or_png')
   const byteLength = sizeFor(asset.uri, asset.fileSize)
   if (byteLength < 1) throw new Error('empty_file')
-  return { uri: asset.uri, name, mediaType: type, byteLength }
+  // Treat picker/camera results conservatively. In particular, a photo-library
+  // URI is never ours to delete.
+  return { uri: asset.uri, name, mediaType: type, byteLength, lifecycle: 'external-source' }
 }
 
 export async function pickPhoto(source: 'camera' | 'library'): Promise<DeviceFile | null> {
@@ -70,5 +78,6 @@ export async function pickDocument(): Promise<DeviceFile | null> {
     name: asset.name,
     mediaType: type,
     byteLength,
+    lifecycle: 'staged-cache',
   }
 }

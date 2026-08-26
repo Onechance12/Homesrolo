@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, useLocalSearchParams } from 'expo-router'
+import { Redirect, useGlobalSearchParams } from 'expo-router'
 import type { ArtifactKind } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
@@ -10,11 +10,12 @@ import { WorkCard } from '../../../src/components/WorkCard.tsx'
 import { Button, Card, Loading, Metric, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import { pickDocument, pickPhoto } from '../../../src/native/pickers.ts'
+import { PREVIEW_UPLOAD_NOTICE } from '../../../src/preview/api.ts'
 import { colors, radius, space } from '../../../src/theme.ts'
 
 export default function HomeScreen() {
-  const { homeId } = useLocalSearchParams<{ homeId: string }>()
-  const { state: auth, api, refreshSession } = useSession()
+  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const { state: auth, api, previewMode, refreshSession } = useSession()
   const width = useWindowDimensions().width
   const loader = useCallback(async () => {
     const [home, work, artifacts] = await Promise.all([
@@ -46,6 +47,10 @@ export default function HomeScreen() {
   const photos = artifacts.filter(item => item.kind === 'photo')
 
   async function upload(kind: ArtifactKind, source: 'camera' | 'library' | 'document' | 'warranty') {
+    if (previewMode) {
+      setUploadError(PREVIEW_UPLOAD_NOTICE)
+      return
+    }
     try {
       setUploadError(null)
       setUploading(source)

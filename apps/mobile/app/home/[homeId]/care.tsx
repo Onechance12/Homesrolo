@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, router, useLocalSearchParams } from 'expo-router'
+import { Redirect, router, useGlobalSearchParams } from 'expo-router'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { WorkCard } from '../../../src/components/WorkCard.tsx'
@@ -10,8 +10,8 @@ import { useResource } from '../../../src/hooks/useResource.ts'
 import { colors, radius, space } from '../../../src/theme.ts'
 
 export default function CareScreen() {
-  const { homeId } = useLocalSearchParams<{ homeId: string }>()
-  const { state: auth, api, refreshSession } = useSession()
+  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const { state: auth, api, previewMode, refreshSession } = useSession()
   const loader = useCallback(async () => {
     const [home, work, artifacts] = await Promise.all([
       api.getHome(homeId), api.listWork(homeId), api.listArtifacts(homeId),
@@ -37,7 +37,10 @@ export default function CareScreen() {
   }
   if (resource.state.kind === 'loading') return <Loading label="Checking the house…" />
   if (resource.state.kind === 'error' || !values) {
-    return <Page><Notice message="Care could not load." actionLabel="Try again" onAction={resource.reload} /></Page>
+    const previewDetail = previewMode && resource.state.kind === 'error'
+      ? ` (${resource.state.message})`
+      : ''
+    return <Page><Notice message={`Care could not load.${previewDetail}`} actionLabel="Try again" onAction={resource.reload} /></Page>
   }
 
   const { home } = resource.state.value

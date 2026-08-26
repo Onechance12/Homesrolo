@@ -46,6 +46,7 @@ export interface SignInCapabilities {
   readonly persistence: boolean
   readonly projectQuotes: boolean
   readonly homeResearch: boolean
+  readonly homeAssistant: boolean
   readonly uploads: boolean
   /** Image-only, sanitized seasonal checkups; never enables generic files. */
   readonly photoCheckups: boolean
@@ -63,6 +64,7 @@ export const NO_CAPABILITIES: SignInCapabilities = Object.freeze({
   persistence: false,
   projectQuotes: false,
   homeResearch: false,
+  homeAssistant: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -312,9 +314,15 @@ export interface RoloWorkDraft {
   readonly firstUpdate: string | null
 }
 
+export interface RoloConversationState {
+  readonly pendingWork: RoloWorkDraft | null
+  readonly unansweredFollowUpQuestion: string | null
+}
+
 export interface AskRoloInput {
   readonly message: string
   readonly history: readonly RoloAssistantTurn[]
+  readonly conversation: RoloConversationState
   readonly destination: Exclude<RoloDestination, 'work'>
   readonly projectRef?: string
 }

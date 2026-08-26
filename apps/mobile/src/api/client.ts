@@ -1,6 +1,7 @@
 import Constants from 'expo-constants'
 import * as Crypto from 'expo-crypto'
-import { File } from 'expo-file-system'
+import { File, Paths } from 'expo-file-system'
+import type { HomesroloApi } from './contract.ts'
 import type {
   ArtifactKind,
   ArtifactMediaType,
@@ -12,6 +13,7 @@ import type {
   HomeSummary,
   HomeView,
   NativeSessionCredential,
+  RoloConversationState,
   RoloReply,
   RoloTurn,
   ServerSession,
@@ -34,6 +36,11 @@ import {
   normalizeApiOrigin,
   problemCode,
 } from './protocol.ts'
+import {
+  ActiveArtifactUploadAttempts,
+  type ArtifactUploadAttempt,
+  shouldDeleteUploadFile,
+} from './upload-attempt.ts'
 
 type JsonRecord = Record<string, unknown>
 type TokenProvider = () => string | null
@@ -70,7 +77,7 @@ function capabilities(value: unknown): Capabilities {
   const source = record(value)
   const keys: readonly (keyof Capabilities)[] = [
     'emailCodeSignIn', 'magicLinkSignIn', 'persistence', 'projectQuotes',
-    'homeResearch', 'uploads', 'photoCheckups', 'projectReview',
+    'homeResearch', 'homeAssistant', 'uploads', 'photoCheckups', 'projectReview',
     'projectReviewAttachments', 'homeRecordHandoffs', 'invitations', 'sharing',
   ]
   const out = {} as Record<keyof Capabilities, boolean>
@@ -290,10 +297,11 @@ function assertSignedUpload(reservation: Extract<ArtifactReservation, { state: '
   }
 }
 
-export class HomesroloNativeApi {
+export class HomesroloNativeApi implements HomesroloApi {
   readonly #origin: string
   readonly #token: TokenProvider
   readonly #onSignedOut: () => void
+  readonly #uploadAttempts = new ActiveArtifactUploadAttempts()
 
   constructor(token: TokenProvider, options: {
     readonly origin?: string
@@ -306,6 +314,40 @@ export class HomesroloNativeApi {
 
   async newCommandRef(): Promise<string> {
     return commandRef(await Crypto.getRandomBytesAsync(32))
+  }
+
+  #cleanupConfirmedUploadFiles(): void {
+    const candidates = this.#uploadAttempts.pendingCleanupCandidates()
+    let cacheDirectoryUri: string
+    try { cacheDirectoryUri = Paths.cache.uri } catch { return }
+    for (const candidate of candidates) {
+      if (!shouldDeleteUploadFile(candidate, cacheDirectoryUri, true)) {
+        this.#uploadAttempts.markCleanupComplete(candidate.uri)
+        continue
+      }
+      try {
+        const stagedFile = new File(candidate.uri)
+        if (stagedFile.exists) stagedFile.delete()
+        this.#uploadAttempts.markCleanupComplete(candidate.uri)
+      } catch {
+        // Keep the candidate for another active-session cleanup pass.
+      }
+    }
+  }
+
+  #confirmUploadAttempt(attempt: ArtifactUploadAttempt): void {
+    this.#uploadAttempts.confirm(attempt)
+    this.#cleanupConfirmedUploadFiles()
+  }
+
+  async #completeArtifactUpload(
+    homeRef: string,
+    attempt: ArtifactUploadAttempt & { readonly artifactRef: string },
+  ): Promise<ArtifactRecord> {
+    return parseArtifact(await this.#request(
+      apiPath('homes', homeRef, 'artifacts', attempt.artifactRef, 'complete'),
+      { method: 'POST', body: { commandRef: attempt.commandRef } },
+    ))
   }
 
   async #request(path: string, options: {
@@ -419,16 +461,30 @@ export class HomesroloNativeApi {
     }))
   }
 
-  async addWorkNote(homeRef: string, projectRef: string, body: string): Promise<void> {
+  async addWorkNote(
+    homeRef: string,
+    projectRef: string,
+    body: string,
+    noteCommandRef?: string,
+  ): Promise<void> {
     await this.#request(apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
       method: 'POST',
-      body: { commandRef: await this.newCommandRef(), kind: 'note', body: body.trim() },
+      body: {
+        commandRef: noteCommandRef ?? await this.newCommandRef(),
+        kind: 'note',
+        body: body.trim(),
+      },
     })
   }
 
-  async askRolo(homeRef: string, message: string, history: readonly RoloTurn[]): Promise<RoloReply> {
+  async askRolo(
+    homeRef: string,
+    message: string,
+    history: readonly RoloTurn[],
+    conversationState: RoloConversationState,
+  ): Promise<RoloReply> {
     let conversation: ReturnType<typeof boundedRoloConversation>
-    try { conversation = boundedRoloConversation(message, history) } catch {
+    try { conversation = boundedRoloConversation(message, history, conversationState) } catch {
       throw new NativeApiError(400, 'invalid_request')
     }
     return parseRolo(await this.#request(apiPath('homes', homeRef, 'assistant'), {
@@ -462,36 +518,72 @@ export class HomesroloNativeApi {
     deviceFile: DeviceFile,
     projectRef?: string,
   ): Promise<ArtifactRecord> {
+    this.#cleanupConfirmedUploadFiles()
     if (!isHomeRef(homeRef) || (projectRef !== undefined && !isProjectRef(projectRef))
       || deviceFile.byteLength < 1 || deviceFile.byteLength > 10 * 1024 * 1024) {
       throw new NativeApiError(400, 'invalid_request')
     }
-    const payload = await new File(deviceFile.uri).arrayBuffer()
+    let payload: ArrayBuffer
+    try {
+      const sourceFile = new File(deviceFile.uri)
+      if (!sourceFile.exists) throw new Error('missing_file')
+      payload = await sourceFile.arrayBuffer()
+    } catch {
+      throw new NativeApiError(400, 'invalid_file')
+    }
     if (payload.byteLength !== deviceFile.byteLength) throw new NativeApiError(400, 'invalid_file')
     const mediaType = mediaTypeFor(new Uint8Array(payload))
     if (!mediaType || mediaType !== deviceFile.mediaType
       || (kind === 'photo' && mediaType === 'application/pdf')) {
       throw new NativeApiError(400, 'unsupported_file')
     }
-    const command = await this.newCommandRef()
     const digest = hex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, payload))
+    const displayName = deviceFile.name.slice(0, 160)
+    let attempt = await this.#uploadAttempts.begin({
+      homeRef,
+      projectRef: projectRef ?? null,
+      kind,
+      displayName,
+      mediaType,
+      byteLength: payload.byteLength,
+      payloadSha256: digest,
+    }, deviceFile, () => this.newCommandRef())
+    if (attempt.artifactRef) {
+      try {
+        const artifact = await this.#completeArtifactUpload(homeRef, {
+          ...attempt,
+          artifactRef: attempt.artifactRef,
+        })
+        this.#confirmUploadAttempt(attempt)
+        return artifact
+      } catch (error) {
+        // A server-unavailable result can mean the object was never stored.
+        // Every retry first attempts exact completion; only then may the same
+        // reservation receive a fresh bounded upload ticket.
+        if (!(error instanceof NativeApiError
+          && (error.status === 409 || error.status === 503))) throw error
+      }
+    }
     const reservation = parseReservation(await this.#request(apiPath('homes', homeRef, 'artifacts'), {
       method: 'POST',
       body: {
-        commandRef: command,
+        commandRef: attempt.commandRef,
         kind,
         ...(projectRef ? { projectRef } : {}),
-        displayName: deviceFile.name.slice(0, 160),
+        displayName,
         mediaType,
         byteLength: payload.byteLength,
         payloadSha256: digest,
       },
     }))
-    if (reservation.state === 'available') return reservation.artifact
+    if (reservation.state === 'available') {
+      this.#confirmUploadAttempt(attempt)
+      return reservation.artifact
+    }
     assertSignedUpload(reservation)
-    let uploadResponse: Response | null = null
+    attempt = this.#uploadAttempts.rememberReservation(attempt, reservation.artifactRef)
     try {
-      uploadResponse = await fetch(reservation.upload.signedUrl, {
+      await fetch(reservation.upload.signedUrl, {
         method: 'PUT', credentials: 'omit',
         headers: {
           'content-type': 'application/octet-stream',
@@ -503,12 +595,14 @@ export class HomesroloNativeApi {
     } catch {
       // Completion is authoritative when the one-time PUT result is ambiguous.
     }
-    if (uploadResponse && !uploadResponse.ok) {
-      throw new NativeApiError(uploadResponse.status, 'upload_failed')
-    }
-    return parseArtifact(await this.#request(
-      apiPath('homes', homeRef, 'artifacts', reservation.artifactRef, 'complete'),
-      { method: 'POST', body: { commandRef: command } },
-    ))
+    // A non-2xx PUT can also mean an earlier ambiguous PUT already stored the
+    // object. Completion verifies the exact bytes and is authoritative either
+    // way, so it is always attempted before this retry is considered failed.
+    const artifact = await this.#completeArtifactUpload(homeRef, {
+      ...attempt,
+      artifactRef: reservation.artifactRef,
+    })
+    this.#confirmUploadAttempt(attempt)
+    return artifact
   }
 }

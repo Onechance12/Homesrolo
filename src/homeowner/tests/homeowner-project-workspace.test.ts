@@ -211,6 +211,7 @@ function service(options: {
       persistence: true,
       projectQuotes: false,
       homeResearch: false,
+      homeAssistant: false,
       uploads: false,
       photoCheckups: false,
       projectReview: false,

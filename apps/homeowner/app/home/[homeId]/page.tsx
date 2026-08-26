@@ -107,7 +107,7 @@ export default function DashboardPage({ params }: { params: Promise<{ homeId: st
       documents={documentRecords}
       uploadsEnabled={uploadsEnabled}
       checkupsEnabled={checkupsEnabled}
-      assistantEnabled={session.state.kind === 'signed_in' && session.state.capabilities.homeResearch}
+      assistantEnabled={session.state.kind === 'signed_in' && session.state.capabilities.homeAssistant}
       synthetic={mode === 'synthetic'}
     />
   )

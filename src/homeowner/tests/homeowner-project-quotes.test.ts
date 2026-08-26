@@ -152,6 +152,7 @@ function service(input: {
       persistence: input.persistence ?? true,
       projectQuotes: input.projectQuotes ?? true,
       homeResearch: false,
+      homeAssistant: false,
       uploads: false,
       photoCheckups: false,
       projectReview: false,

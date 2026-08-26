@@ -254,6 +254,7 @@ const decodeCapabilities: Decoder<SignInCapabilities> = object<SignInCapabilitie
   persistence: boolean,
   projectQuotes: boolean,
   homeResearch: boolean,
+  homeAssistant: boolean,
   uploads: boolean,
   photoCheckups: boolean,
   projectReview: boolean,

@@ -1,14 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { Redirect, useLocalSearchParams } from 'expo-router'
-import type { WorkCategory, WorkKind, WorkStatus } from '../../../src/api/model.ts'
-import { friendlyError } from '../../../src/api/errors.ts'
-import { useSession } from '../../../src/auth/SessionProvider.tsx'
-import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
-import { WorkCard } from '../../../src/components/WorkCard.tsx'
-import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../src/components/ui.tsx'
-import { useResource } from '../../../src/hooks/useResource.ts'
-import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../src/theme.ts'
+import { Redirect, useFocusEffect, useGlobalSearchParams } from 'expo-router'
+import type { WorkCategory, WorkKind, WorkStatus } from '../../../../src/api/model.ts'
+import { friendlyError } from '../../../../src/api/errors.ts'
+import { useSession } from '../../../../src/auth/SessionProvider.tsx'
+import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
+import { WorkCard } from '../../../../src/components/WorkCard.tsx'
+import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../../src/components/ui.tsx'
+import { useResource } from '../../../../src/hooks/useResource.ts'
+import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../../src/theme.ts'
 
 const KINDS: readonly WorkKind[] = ['project', 'issue', 'repair', 'service', 'incident']
 const CATEGORIES: readonly WorkCategory[] = [
@@ -18,8 +18,8 @@ const CATEGORIES: readonly WorkCategory[] = [
 const STATUSES: readonly WorkStatus[] = ['planned', 'in_progress', 'completed']
 
 export default function WorkScreen() {
-  const { homeId } = useLocalSearchParams<{ homeId: string }>()
-  const { state: auth, api, refreshSession } = useSession()
+  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const { state: auth, api, previewMode, refreshSession } = useSession()
   const loader = useCallback(() => api.listWork(homeId), [api, homeId])
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [creating, setCreating] = useState(false)
@@ -34,6 +34,12 @@ export default function WorkScreen() {
   const [category, setCategory] = useState<WorkCategory>('other')
   const [status, setStatus] = useState<WorkStatus>('planned')
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
+  const hasFocused = useRef(false)
+
+  useFocusEffect(useCallback(() => {
+    if (hasFocused.current) resource.reload()
+    else hasFocused.current = true
+  }, [resource.reload]))
 
   const visible = useMemo(() => resource.state.kind !== 'ready' ? []
     : resource.state.value.filter(item => !item.archived).filter(item => {
@@ -112,7 +118,13 @@ export default function WorkScreen() {
         <Chip label="Care & repairs" selected={filter === 'care'} onPress={() => setFilter('care')} />
       </View>
       {resource.state.kind === 'loading' ? <Loading label="Opening work…" /> : null}
-      {resource.state.kind === 'error' ? <Notice message="Work could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
+      {resource.state.kind === 'error' ? (
+        <Notice
+          message={`Work could not load.${previewMode ? ` (${resource.state.message})` : ''}`}
+          actionLabel="Try again"
+          onAction={resource.reload}
+        />
+      ) : null}
       {visible.map(item => <WorkCard key={item.projectRef} work={item} />)}
       {resource.state.kind === 'ready' && visible.length === 0 ? <Notice message="Nothing matches this view yet." /> : null}
     </Page>

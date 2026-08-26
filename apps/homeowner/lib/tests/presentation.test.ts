@@ -1117,6 +1117,8 @@ test('the dashboard uses real records and opens one approval-gated Rolo assistan
     'the home front door opens the same persistent assistant as the shell')
   assert.match(assistant, /port\.askRolo\(homeId/,
     'Rolo talks through the typed browser port')
+  assert.match(assistant, /conversation:\s*\{\s*pendingWork,\s*unansweredFollowUpQuestion\s*\}/,
+    'Rolo carries its visible question and pending draft into the next turn')
   assert.match(assistant, /port\.createProject\(homeId/,
     'approved drafts reuse the existing work command')
   assert.match(assistant, /Nothing is saved until you approve it/,

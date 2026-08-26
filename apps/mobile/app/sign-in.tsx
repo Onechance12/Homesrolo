@@ -1,22 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useSession } from '../src/auth/SessionProvider.tsx'
 import { friendlyError } from '../src/api/errors.ts'
+import { postSignInDestination } from '../src/auth/return-route.ts'
 import { Body, Brand, Button, Card, Eyebrow, Page, TextField, Title } from '../src/components/ui.tsx'
 import { colors, space } from '../src/theme.ts'
 
 export default function SignInScreen() {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>()
   const { state, requestCode, verifyCode } = useSession()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'email' | 'code'>('email')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const destination = useMemo(() => postSignInDestination(returnTo), [returnTo])
 
   useEffect(() => {
-    if (state.kind === 'signed_in') router.replace('/homes')
-  }, [state.kind])
+    if (state.kind === 'signed_in') router.replace(destination)
+  }, [destination, state.kind])
 
   async function sendCode() {
     setBusy(true)
@@ -32,7 +35,6 @@ export default function SignInScreen() {
     setError(null)
     try {
       await verifyCode(email, code)
-      router.replace('/homes')
     } catch (caught) { setError(friendlyError(caught)) } finally { setBusy(false) }
   }
 

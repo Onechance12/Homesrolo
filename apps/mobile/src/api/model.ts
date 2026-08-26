@@ -6,6 +6,7 @@ export interface Capabilities {
   readonly persistence: boolean
   readonly projectQuotes: boolean
   readonly homeResearch: boolean
+  readonly homeAssistant: boolean
   readonly uploads: boolean
   readonly photoCheckups: boolean
   readonly projectReview: boolean
@@ -126,6 +127,11 @@ export interface RoloWorkDraft {
   readonly firstUpdate: string | null
 }
 
+export interface RoloConversationState {
+  readonly pendingWork: RoloWorkDraft | null
+  readonly unansweredFollowUpQuestion: string | null
+}
+
 export interface RoloReply {
   readonly requestRef: string
   readonly answer: string
@@ -170,6 +176,8 @@ export interface DeviceFile {
   readonly name: string
   readonly mediaType: ArtifactMediaType
   readonly byteLength: number
+  /** Unmarked inputs are external; only staged cache copies may be removed. */
+  readonly lifecycle?: 'external-source' | 'staged-cache'
 }
 
 export interface ApiProblem {

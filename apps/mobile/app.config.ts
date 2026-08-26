@@ -34,6 +34,9 @@ const config: ExpoConfig = {
       category: ['BROWSABLE', 'DEFAULT'],
     }],
   },
+  web: {
+    bundler: 'metro',
+  },
   plugins: [
     'expo-router',
     'expo-secure-store',

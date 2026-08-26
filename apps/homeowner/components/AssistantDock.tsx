@@ -16,6 +16,11 @@ import { HouseMark } from './icons.tsx'
 import styles from './AssistantDock.module.css'
 
 type ThreadMessage = RoloAssistantTurn & { readonly id: string }
+type StoredConversation = {
+  readonly thread: ThreadMessage[]
+  readonly proposal: RoloWorkDraft | null
+  readonly followUps: readonly string[]
+}
 
 const STARTERS = [
   'My AC stopped cooling yesterday.',
@@ -68,13 +73,47 @@ function destinationHref(homeId: string, destination: RoloDestination, projectRe
   return `/home/${homeId}`
 }
 
-function readStoredThread(storageKey: string): ThreadMessage[] {
+const WORK_KINDS = new Set<RoloWorkDraft['kind']>(['project', 'issue', 'repair', 'service', 'incident'])
+const WORK_STATUSES = new Set<RoloWorkDraft['status']>(['planned', 'in_progress', 'completed', 'cancelled'])
+
+function readStoredDraft(value: unknown): RoloWorkDraft | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const draft = value as Record<string, unknown>
+  if (typeof draft.kind !== 'string' || !WORK_KINDS.has(draft.kind as RoloWorkDraft['kind'])
+    || typeof draft.title !== 'string' || draft.title.trim().length < 1 || draft.title.length > 120
+    || typeof draft.category !== 'string' || !Object.hasOwn(CATEGORY_LABEL, draft.category)
+    || typeof draft.status !== 'string' || !WORK_STATUSES.has(draft.status as RoloWorkDraft['status'])
+    || (draft.occurredOn !== null && (typeof draft.occurredOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(draft.occurredOn)))
+    || typeof draft.summary !== 'string' || draft.summary.length > 2_000
+    || (draft.professionalLabel !== null && (typeof draft.professionalLabel !== 'string'
+      || draft.professionalLabel.trim().length < 1 || draft.professionalLabel.length > 160))
+    || (draft.firstUpdate !== null && (typeof draft.firstUpdate !== 'string'
+      || draft.firstUpdate.trim().length < 1 || draft.firstUpdate.length > 2_000))) return null
+  return {
+    kind: draft.kind as RoloWorkDraft['kind'],
+    title: draft.title.trim(),
+    category: draft.category as RoloWorkDraft['category'],
+    status: draft.status as RoloWorkDraft['status'],
+    occurredOn: draft.occurredOn as string | null,
+    summary: draft.summary.trim(),
+    professionalLabel: typeof draft.professionalLabel === 'string' ? draft.professionalLabel.trim() : null,
+    firstUpdate: typeof draft.firstUpdate === 'string' ? draft.firstUpdate.trim() : null,
+  }
+}
+
+function readStoredConversation(storageKey: string): StoredConversation {
   try {
     const raw = sessionStorage.getItem(storageKey)
-    if (!raw) return []
+    if (!raw) return { thread: [], proposal: null, followUps: [] }
     const decoded = JSON.parse(raw) as unknown
-    if (!Array.isArray(decoded)) return []
-    return decoded.flatMap((entry, index) => {
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+      return { thread: [], proposal: null, followUps: [] }
+    }
+    const stored = decoded as Record<string, unknown>
+    if (stored.version !== 1 || !Array.isArray(stored.thread)) {
+      return { thread: [], proposal: null, followUps: [] }
+    }
+    const thread = stored.thread.flatMap((entry, index) => {
       if (!entry || typeof entry !== 'object') return []
       const candidate = entry as Record<string, unknown>
       if ((candidate.role !== 'user' && candidate.role !== 'assistant')
@@ -87,9 +126,14 @@ function readStoredThread(storageKey: string): ThreadMessage[] {
         text: candidate.text.trim(),
       }
       return [restored]
-    }).slice(-12)
+    }).slice(-20)
+    const followUps = Array.isArray(stored.followUps)
+      ? stored.followUps.flatMap(question => typeof question === 'string'
+        && question.trim().length > 0 && question.length <= 240 ? [question.trim()] : []).slice(0, 1)
+      : []
+    return { thread, proposal: readStoredDraft(stored.proposal), followUps }
   } catch {
-    return []
+    return { thread: [], proposal: null, followUps: [] }
   }
 }
 
@@ -107,14 +151,18 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const principalRef = session.kind === 'signed_in' ? session.session.principalRef : 'signed-out'
   const storageKey = roloThreadStorageKey(homeId, principalRef)
   const [open, setOpen] = useState(false)
-  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredThread(storageKey))
+  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredConversation(storageKey).thread)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [proposal, setProposal] = useState<RoloWorkDraft | null>(null)
+  const [proposal, setProposal] = useState<RoloWorkDraft | null>(
+    () => readStoredConversation(storageKey).proposal,
+  )
   const [suggestion, setSuggestion] = useState<Pick<AskRoloResult, 'destination' | 'projectRef'> | null>(null)
-  const [followUps, setFollowUps] = useState<readonly string[]>([])
+  const [followUps, setFollowUps] = useState<readonly string[]>(
+    () => readStoredConversation(storageKey).followUps,
+  )
   const [savedProject, setSavedProject] = useState<{ ref: string; title: string; partial: boolean } | null>(null)
   const saveAttempt = useRef<string | null>(null)
   const sendInFlight = useRef(false)
@@ -123,7 +171,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const threadRef = useRef<HTMLDivElement | null>(null)
   const drawerRef = useRef<HTMLElement | null>(null)
   const launchRef = useRef<HTMLElement | null>(null)
-  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
+  const activeStorageKey = useRef(storageKey)
+  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
 
@@ -133,12 +182,28 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   }, [])
 
   useEffect(() => {
+    if (activeStorageKey.current !== storageKey) {
+      activeStorageKey.current = storageKey
+      const restored = readStoredConversation(storageKey)
+      setThread(restored.thread)
+      setProposal(restored.proposal)
+      setFollowUps(restored.followUps)
+      setSuggestion(null)
+      setSavedProject(null)
+      setError(null)
+      return
+    }
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify(thread.slice(-12)))
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        version: 1,
+        thread: thread.slice(-20),
+        proposal,
+        followUps: followUps.slice(0, 1),
+      }))
     } catch {
       // Conversation persistence is a convenience only; the app still works.
     }
-  }, [storageKey, thread])
+  }, [followUps, proposal, storageKey, thread])
 
   useEffect(() => {
     const show = () => {
@@ -195,7 +260,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   }, [thread, proposal, busy])
 
   const history = useMemo<readonly RoloAssistantTurn[]>(
-    () => thread.slice(-8).map(({ role, text }) => ({ role, text })),
+    () => thread.slice(-16).map(({ role, text }) => ({ role, text })),
     [thread],
   )
 
@@ -203,8 +268,10 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     const clean = message.trim()
     if (!clean || busy || sendInFlight.current || !assistantEnabled) return
     sendInFlight.current = true
+    const pendingWork = proposal
+    const unansweredFollowUpQuestion = followUps[0] ?? null
     const userMessage: ThreadMessage = { id: `user-${crypto.randomUUID()}`, role: 'user', text: clean }
-    setThread(current => [...current, userMessage].slice(-12))
+    setThread(current => [...current, userMessage].slice(-20))
     setInput('')
     setBusy(true)
     setError(null)
@@ -218,18 +285,23 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       result = await port.askRolo(homeId, {
         message: clean,
         history,
+        conversation: { pendingWork, unansweredFollowUpQuestion },
         destination,
         ...(currentProjectRef ? { projectRef: currentProjectRef } : {}),
       })
     } catch {
       setBusy(false)
       sendInFlight.current = false
+      setProposal(pendingWork)
+      setFollowUps(unansweredFollowUpQuestion ? [unansweredFollowUpQuestion] : [])
       setError('Rolo could not answer right now. Your home information was not changed.')
       return
     }
     setBusy(false)
     sendInFlight.current = false
     if (!result.ok) {
+      setProposal(pendingWork)
+      setFollowUps(unansweredFollowUpQuestion ? [unansweredFollowUpQuestion] : [])
       setError(assistantError(result.error))
       return
     }
@@ -238,7 +310,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       role: 'assistant',
       text: result.value.answer,
     }
-    setThread(current => [...current, assistantMessage].slice(-12))
+    setThread(current => [...current, assistantMessage].slice(-20))
     setProposal(result.value.proposedWork)
     setSuggestion({ destination: result.value.destination, projectRef: result.value.projectRef })
     setFollowUps(result.value.followUpQuestions)
@@ -286,6 +358,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
         if (!update.ok) partial = true
       }
       setProposal(null)
+      setFollowUps([])
+      setSuggestion(null)
       saveAttempt.current = null
       setSavedProject({ ref: created.value.projectRef, title: created.value.title, partial })
       const savedMessage: ThreadMessage = {
@@ -295,7 +369,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
           ? `I saved ${created.value.title}. One extra detail did not attach, so open the record to review it.`
           : `Saved. ${created.value.title} is now part of this home's work history.`,
       }
-      setThread(current => [...current, savedMessage].slice(-12))
+      setThread(current => [...current, savedMessage].slice(-20))
       window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
         detail: { homeId, projectRef: created.value.projectRef },
       }))
@@ -383,7 +457,11 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                     <button type="button" onClick={() => void saveProposal()} disabled={saveBusy}>
                       {saveBusy ? 'Saving…' : 'Save to this home'}
                     </button>
-                    <button type="button" onClick={() => setProposal(null)} disabled={saveBusy}>Not this</button>
+                    <button type="button" onClick={() => {
+                      setProposal(null)
+                      setFollowUps([])
+                      setSuggestion(null)
+                    }} disabled={saveBusy}>Not this</button>
                   </div>
                   <small>Nothing is saved until you approve it. This does not contact or hire anyone.</small>
                 </section>
@@ -450,7 +528,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 <button type="submit" disabled={!assistantEnabled || busy || !input.trim()} aria-label="Send to Rolo">↑</button>
               </div>
               <span>
-                Your message and a limited index of this home—including locality, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. Street address and file or photo contents are not sent.
+                Your message and a limited index of this home—including city/state when available, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. The saved street-address field and file or photo contents are not sent.
                 Rolo does not diagnose, price, hire, or save without approval.
               </span>
             </form>
