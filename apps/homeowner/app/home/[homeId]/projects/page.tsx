@@ -182,9 +182,9 @@ export default function ProjectsPage({
     <div className="stack" style={{ ['--stack-gap' as never]: '1.25rem' }}>
       <div className="project-list-head">
         <div>
-          <p className="mono">Work around this home</p>
-          <h1>Work</h1>
-          <p>Projects, repairs, one-time service, issues, and past work—without forcing everything into the same story.</p>
+          <p className="mono">Plans, service &amp; repairs</p>
+          <h1>Plans</h1>
+          <p>Everything you are trying to fix, improve, maintain, or finish—active work first, history underneath.</p>
         </div>
         <div className="project-list-head__actions">
           {assistantEnabled ? (
@@ -193,7 +193,7 @@ export default function ProjectsPage({
               className="btn btn--primary"
               onClick={() => window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', { detail: { homeId } }))}
             >
-              Tell Rolo about it
+              Start with Rolo
             </button>
           ) : null}
           <button
@@ -203,7 +203,7 @@ export default function ProjectsPage({
             aria-controls="add-work"
             onClick={() => recordMode === null ? chooseMode('planned') : setRecordMode(null)}
           >
-            <IconPlus /> {recordMode === null ? 'Add manually' : 'Close form'}
+            <IconPlus /> {recordMode === null ? 'Add without Rolo' : 'Close form'}
           </button>
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function ProjectsPage({
           <div className="panel__head">
             <div>
               <p className="mono">Manual entry</p>
-              <h2 id="project-details-title">What should your home remember?</h2>
+              <h2 id="project-details-title">What needs to happen?</h2>
             </div>
           </div>
 
@@ -336,9 +336,9 @@ export default function ProjectsPage({
 
             <div className="project-composer__actions">
               <button type="submit" className="btn btn--primary" disabled={busy || !category || !title.trim()}>
-                {busy ? 'Saving…' : 'Add to my home'}
+                {busy ? 'Saving…' : 'Create this plan'}
               </button>
-              <span className="form-note">Private by default. This does not hire or notify anyone.</span>
+              <span className="form-note">Private by default. This creates the workspace; it does not hire or notify anyone.</span>
             </div>
             {mode === 'synthetic' ? <p className="mono">Demo only. A refresh clears the record.</p> : null}
           </form>
@@ -348,8 +348,8 @@ export default function ProjectsPage({
       <section aria-labelledby="saved-projects">
         <div className="panel__head">
           <div>
-            <p className="mono">One history</p>
-            <h2 id="saved-projects">Saved work</h2>
+            <p className="mono">What is happening</p>
+            <h2 id="saved-projects">Plans &amp; history</h2>
           </div>
         </div>
         <div className="work-index panel" aria-label="Find saved work">
@@ -366,9 +366,9 @@ export default function ProjectsPage({
           <div className="work-index__views" role="group" aria-label="Quick work filters">
             {([
               ['all', 'Everything'],
-              ['open', 'Needs attention'],
-              ['care', 'Care & repairs'],
-              ['complete', 'History'],
+              ['open', 'Active'],
+              ['care', 'Service & repairs'],
+              ['complete', 'Finished'],
             ] as const).map(([value, label]) => (
               <button key={value} type="button" aria-pressed={workView === value} onClick={() => setWorkView(value)}>
                 {label}
@@ -413,8 +413,8 @@ export default function ProjectsPage({
         ) : null}
         {state.status === 'empty' && (
           <EmptyState
-            title="Nothing recorded here yet"
-            body="Tell Rolo what happened or add it manually. You can begin with work from years ago, something underway, or an idea you are still considering."
+            title="Nothing in motion yet"
+            body="Tell Rolo what needs fixing, what you want to plan, what service you need, or what old work belongs in the history."
           />
         )}
         {state.status === 'ready' && visibleWork.length === 0 && state.value.length > 0 ? (

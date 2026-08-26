@@ -11,7 +11,7 @@ import {
   initialIntake, isComplete, skip, type IntakeState,
 } from '../../../lib/intake/machine.ts'
 import {
-  EARLIEST_YEAR, SYSTEM_LABEL, SYSTEM_ORDER, validateLabel, validateYear,
+  EARLIEST_YEAR, SYSTEM_LABEL, SYSTEM_ORDER, validateYear,
   type HomeTypeAnswer, type IntakeDraft, type SystemKind,
 } from '../../../lib/intake/script.ts'
 import { commandRefForAttempt } from '../../../lib/port/command-ref.ts'
@@ -98,8 +98,6 @@ function emptySetupForm(): SetupForm {
 
 function validateSetupForm(form: SetupForm, currentYear: number): SetupErrors {
   const errors: SetupErrors = {}
-  const name = validateLabel(form.displayLabel, 80)
-  if (!name.ok) errors.displayLabel = name.error ?? 'Add a short name for this home.'
   if (!form.addressLine1.trim()) errors.addressLine1 = 'Add the street address.'
   if (!form.city.trim()) errors.city = 'Add the city.'
   if (!/^[A-Za-z]{2}$/.test(form.regionCode.trim())) errors.regionCode = 'Use a two-letter state.'
@@ -123,6 +121,13 @@ function locationFromForm(form: SetupForm): string {
   return `${form.city.trim()}, ${form.regionCode.trim().toUpperCase()}`
 }
 
+function homeNameFromForm(form: SetupForm): string {
+  if (form.displayLabel.trim()) return form.displayLabel.trim()
+  const street = form.addressLine1.trim().replace(/^\d+[A-Za-z-]*\s+/, '').trim()
+  const shortStreet = street.split(/\s+/).slice(0, 3).join(' ')
+  return shortStreet ? `${shortStreet} home` : 'My home'
+}
+
 function accepted(state: IntakeState): IntakeState {
   if (state.error) throw new Error(state.error)
   return state
@@ -131,7 +136,7 @@ function accepted(state: IntakeState): IntakeState {
 /** Build the same canonical intake draft as the former question-by-question UI. */
 function intakeStateFromForm(form: SetupForm, currentYear: number): IntakeState {
   let next = initialIntake(currentYear)
-  next = accepted(answer(next, { kind: 'text', value: form.displayLabel }))
+  next = accepted(answer(next, { kind: 'text', value: homeNameFromForm(form) }))
   next = accepted(answer(next, { kind: 'text', value: locationFromForm(form) }))
   next = accepted(finishOptionalLater(next))
 
@@ -300,7 +305,6 @@ export default function NewHomePage({
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) {
       const first = [
-        ['displayLabel', 'home-display-label'],
         ['addressLine1', 'home-address-line-1'],
         ['city', 'home-address-city'],
         ['regionCode', 'home-address-region'],
@@ -327,7 +331,7 @@ export default function NewHomePage({
     setReviewing(false)
     setSubmit({ kind: 'idle' })
     resetSubmissionAttempt()
-    requestAnimationFrame(() => document.getElementById('home-display-label')?.focus())
+    requestAnimationFrame(() => document.getElementById('home-address-line-1')?.focus())
   }
 
   async function saveHomeRecord(homeRef: string, draft: IntakeDraft) {
@@ -410,15 +414,15 @@ export default function NewHomePage({
                 ← Your homes
               </Link>
               <header className="setup-head">
-                <p className="setup-head__eyebrow">Private home file</p>
-                <h1>Set up your home</h1>
+                <p className="setup-head__eyebrow">Start with the address</p>
+                <h1>Where do you need help?</h1>
                 <p>
                   {handoff
                     ? 'Start with the property address. Once the Home Record is open, you can check the completion record against the right home.'
-                    : 'Start with the property address so every project, photo, and document stays connected to the right home.'}
+                    : 'Add the address, then tell Rolo what brought you here. You can fill in home details later.'}
                 </p>
                 <div className="setup-head__notes" aria-label="Setup details">
-                  <span>About 1 minute</span>
+                  <span>About 30 seconds</span>
                   <span>You control what is saved</span>
                 </div>
               </header>
@@ -440,34 +444,10 @@ export default function NewHomePage({
                   <section className="setup-panel" aria-labelledby="setup-basics-title">
                     <div className="setup-panel__question">
                       <p className="setup-panel__status">Required</p>
-                      <h2 id="setup-basics-title">Home basics</h2>
+                      <h2 id="setup-basics-title">Property address</h2>
                       <p>The exact address stays private inside your signed-in Home Record.</p>
                     </div>
                     <div className="cardgrid cardgrid--2">
-                      <div className="field">
-                        <label htmlFor="home-display-label">Home name (required)</label>
-                        <input
-                          id="home-display-label"
-                          type="text"
-                          value={form.displayLabel}
-                          onChange={event => {
-                            setForm(current => ({ ...current, displayLabel: event.target.value }))
-                            clearFormError('displayLabel')
-                          }}
-                          placeholder="Oak Street or Mom’s house"
-                          maxLength={80}
-                          autoComplete="off"
-                          aria-invalid={Boolean(formErrors.displayLabel)}
-                          aria-describedby={formErrors.displayLabel ? 'home-display-label-error' : undefined}
-                          required
-                        />
-                        <span className="field__hint">Use whatever you actually call the place.</span>
-                        {formErrors.displayLabel ? (
-                          <span id="home-display-label-error" className="form-error" role="alert">
-                            {formErrors.displayLabel}
-                          </span>
-                        ) : null}
-                      </div>
                       <div className="field">
                         <label htmlFor="home-address-line-1">Street address (required)</label>
                         <input
@@ -712,7 +692,7 @@ export default function NewHomePage({
                     <p role="alert" className="intake__error">{formErrors.form}</p>
                   ) : null}
                   <div className="setup-submit">
-                    <button type="submit" className="btn btn--primary">Review home file</button>
+                    <button type="submit" className="btn btn--primary">Review address</button>
                     <Link href={withHomeownerEntryContext('/homes', context)} className="btn btn--quiet">Cancel</Link>
                   </div>
                 </form>
@@ -721,14 +701,14 @@ export default function NewHomePage({
                   <section className="setup-panel setup-panel--review" aria-labelledby="setup-review-title">
                     <div className="setup-panel__question">
                       <p className="setup-panel__status">Your starting snapshot</p>
-                      <h2 id="setup-review-title" tabIndex={-1}>Review your home file</h2>
-                      <p>Nothing below is treated as verified. Check it before opening the file.</p>
+                      <h2 id="setup-review-title" tabIndex={-1}>Check the address</h2>
+                      <p>Make sure this is the home you want to work on. You can add the rest later.</p>
                     </div>
                     <ReviewCard draft={draftFrom(state)} address={form} />
                   </section>
                   {submit.kind === 'created' ? (
                     <div className="state setup-result" role="status">
-                      <h3>Home file and starting history saved</h3>
+                      <h3>Your home is ready</h3>
                       <p>
                         The property address, profile, and system answers above are
                         stored as <strong>your recollection</strong>. They are not a
@@ -740,7 +720,7 @@ export default function NewHomePage({
                       >
                         {handoff
                           ? 'Check the completion record'
-                          : intent ? 'Continue to the roof project' : 'Open this home’s file'}
+                          : intent ? 'Continue to the roof project' : 'Tell Rolo what I need'}
                       </Link>
                     </div>
                   ) : submit.kind === 'partial' ? (

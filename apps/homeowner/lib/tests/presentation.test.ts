@@ -62,11 +62,15 @@ test('interactive controls carry a real minimum hit area', () => {
 
 test('new-home setup is a mobile-first progressive form, not a chatbot transcript', () => {
   const page = read('app/homes/new/page.tsx')
-  assert.match(page, /Set up your home/)
+  assert.match(page, /Where do you need help\?/)
   assert.match(page, /Step \{reviewing \? 2 : 1\} of 2/,
     'the short setup and review stages are always visible')
-  assert.match(page, /Home name \(required\)[\s\S]*Street address \(required\)[\s\S]*ZIP code \(required\)/,
-    'the form starts one private Home Record from an exact property address')
+  assert.match(page, /Street address \(required\)[\s\S]*ZIP code \(required\)/,
+    'the form starts one private home workspace from an exact property address')
+  assert.doesNotMatch(page, /Home name \(required\)/,
+    'a homeowner is not forced to name the property before getting help')
+  assert.match(page, /function homeNameFromForm[\s\S]*My home/,
+    'the required internal label is derived honestly from the address')
   assert.match(page, /showOptional[\s\S]*Add optional details/,
     'home type, age, and systems stay behind an optional disclosure')
   assert.match(page, /finishOptionalLater\(next\)/,
@@ -804,18 +808,24 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
   const projects = read('app/home/[homeId]/projects/page.tsx')
   const projectStatus = read('components/projectStatus.ts')
 
-  assert.match(shell, /label: 'Home', tabLabel: 'Home'/)
-  assert.match(shell, /label: 'Work', tabLabel: 'Work'/)
-  assert.match(shell, /label: 'Library', tabLabel: 'Library'/)
-  assert.match(shell, /label: 'People', tabLabel: 'People'/)
+  assert.match(shell, /label: 'Today', tabLabel: 'Today'/)
+  assert.match(shell, /label: 'Plans & service', tabLabel: 'Plans'/)
+  assert.match(shell, /label: 'Pros', tabLabel: 'Pros'/)
+  assert.match(shell, /label: 'My Home', tabLabel: 'My Home'/)
+  for (const action of ['Fix a problem', 'Plan a project', 'Get routine help', 'Add past work']) {
+    assert.match(shell, new RegExp(action), `${action} is available from the persistent Start action`)
+  }
   assert.match(shell, /homesrolo:open-assistant/,
     'Rolo remains available from the persistent app shell')
   assert.match(shell, /Account &amp; settings/,
     'account settings remain available without occupying primary navigation')
   assert.doesNotMatch(shell, /label: 'Warranties'|label: 'Events & care'|label: 'Settings'/,
     'primary navigation contains only destinations that work today')
-  assert.match(experience, /What does \{label\} need today\?/)
-  assert.match(experience, /repair, service visit, purchase, idea, or project/)
+  assert.match(experience, /What do you need done\?/)
+  assert.match(experience, /The home history builds quietly while you handle it\./)
+  for (const action of ['Fix a problem', 'Plan a project', 'Get routine help', 'Add past work']) {
+    assert.match(experience, new RegExp(action), `${action} is a first-class home action`)
+  }
   for (const area of [
     'Roof', 'Interior & remodel', 'Heating & cooling', 'Plumbing', 'Electrical',
     'Exterior & gutters', 'Yard & landscaping', 'Appliances', 'Pest control',
@@ -829,9 +839,9 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'the project category picker reuses the shared whole-home vocabulary')
   assert.doesNotMatch(experience, /Need roof work\?|Start a roof project|Open roof projects/,
     'roofing is never presented as the dashboard default')
-  assert.match(experience, /approximate date is enough/i,
+  assert.match(experience, /Add past work/,
     'historical work remains a first-class dashboard action')
-  assert.match(experience, /What this home remembers/)
+  assert.match(experience, /The record happens underneath the work\./)
   assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/checkups`\}/)
   assert.match(experience, /checkupsEnabled \? \([\s\S]*href=\{`\/home\/\$\{homeId\}\/checkups`\}/,
     'the dashboard never links to a disabled photo workspace')
@@ -857,11 +867,11 @@ test('the Home Record exposes one private, editable address and saved home facts
   assert.match(dashboard, /port\.getHomeRecord\(homeId\)/)
   assert.match(dashboard, /mode === 'remote' && homeRecord\.state\.status === 'ready'/,
     'only an authorized dedicated read can expose the profile card')
-  assert.match(experience, /const exactAddress = homeRecord\?\.address/)
-  assert.match(experience, /exactAddress\?\.line1 \?\? 'Open the facts that identify this home\.'/,
-    'the dashboard renders an honest fallback when no private address was returned')
-  assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/details`\}/)
-  assert.match(experience, /Private by default\. You approve what gets saved\./)
+  assert.match(experience, /const exactLocation = homeRecord\?\.address/)
+  assert.match(experience, /homeRecord\.address\.city[\s\S]*homeRecord\.address\.regionCode/,
+    'Today uses only the private locality and does not turn the address into a marketing hero')
+  assert.match(experience, /href=\{`\/home\/\$\{homeId\}\/rolo`\}/)
+  assert.match(experience, /The record happens underneath the work\./)
   assert.match(details, /Property address[\s\S]*Home facts[\s\S]*Major systems/)
   assert.match(details, /port\.getHomeRecord\(homeId\)/,
     'a direct edit URL must first pass the controller-only record read')
@@ -985,9 +995,9 @@ test('work opens as conversational capture with a compact manual workspace', () 
   const projects = read('app/home/[homeId]/projects/page.tsx')
   const detail = read('app/home/[homeId]/projects/[projectId]/page.tsx')
 
-  assert.match(projects, /Tell Rolo about it/,
+  assert.match(projects, /Start with Rolo/,
     'natural conversation is the primary work-capture action')
-  assert.match(projects, /Add manually/,
+  assert.match(projects, /Add without Rolo/,
     'the homeowner can still navigate and enter work without the assistant')
   assert.match(projects, /Where is it now\?/)
   for (const state of ['Planned', 'Happening now', 'Already done']) {
@@ -999,12 +1009,16 @@ test('work opens as conversational capture with a compact manual workspace', () 
     'optional capture stays progressively disclosed')
 
   for (const section of [
-    "{ value: 'overview', label: 'Overview' }",
+    "{ value: 'overview', label: 'Plan' }",
     "{ value: 'activity', label: 'Updates' }",
-    "{ value: 'files', label: 'Photos & files' }",
-    "{ value: 'decisions', label: 'Decisions' }",
+    "{ value: 'files', label: 'Photos' }",
+    "{ value: 'decisions', label: 'Choices' }",
     "{ value: 'people', label: 'People' }",
   ]) assert.match(detail, new RegExp(section.replace(/[&{}'()]/g, '\\$&')))
+  assert.match(detail, /YOUR NEXT MOVE/,
+    'each plan opens with useful actions instead of a passive record summary')
+  assert.match(detail, /Continue with Rolo/,
+    'Rolo can continue inside the exact plan context')
   assert.match(detail, /role="tablist" aria-label="Project workspace"/)
   assert.match(detail, /expectedRevision: project\.revision/,
     'homeowner corrections are revision-safe')
@@ -1113,11 +1127,16 @@ test('the dashboard uses real records and opens one approval-gated Rolo assistan
   const progress = read('lib/home-record-progress.ts')
 
   assert.match(dashboard, /port\.listProjects\(homeId\)/)
-  assert.match(experience, /What this home remembers/)
+  assert.match(experience, /What do you need done\?/)
+  assert.match(experience, /activeWork/,
+    'open work is promoted before passive history')
+  assert.match(experience, /Pool & outdoor/,
+    'a concrete homeowner project can start from the front door')
+  assert.match(experience, /Photos &amp; files[\s\S]*Home Watch[\s\S]*My Home[\s\S]*Activity/,
+    'the existing record tools stay one tap away without becoming the front door')
   assert.match(progress, /never scores the home's condition, safety, value, or insurability/)
-  assert.match(experience, /not a rating of condition, safety, value, or insurability/i)
-  assert.match(experience, /aria-label="Previous card"[\s\S]*aria-label="Next card"/,
-    'the swipeable card deck also has explicit controls')
+  assert.match(experience, /The record happens underneath the work\./,
+    'the durable record is the result of useful homeowner actions')
   assert.match(experience, /homesrolo:open-assistant/,
     'the home front door opens the same persistent assistant as the shell')
   assert.match(assistant, /port\.askRolo\(homeId/,

@@ -32,10 +32,15 @@ type StoredConversation = {
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 
 const STARTERS = [
-  'My AC stopped cooling yesterday.',
-  'Where did I save my roof warranty?',
-  'I had some work done and want to record it.',
+  'Something is broken and I need help figuring out the next safe step.',
+  'I want to plan a project and organize the ideas, photos, and choices.',
+  'I need routine help around the house.',
 ] as const
+
+interface OpenAssistantDetail {
+  readonly homeId?: string
+  readonly prompt?: string
+}
 
 const KIND_LABEL: Record<RoloWorkDraft['kind'], string> = {
   project: 'Project',
@@ -299,18 +304,21 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   }, [followUps, photoReview, photoReviewRef, photoReviewTitle, proposal, storageKey, thread])
 
   useEffect(() => {
-    const show = () => {
+    const show = (event: Event) => {
+      const detail = (event as CustomEvent<OpenAssistantDetail>).detail
+      if (detail?.homeId && detail.homeId !== homeId) return
       if (document.activeElement instanceof HTMLElement) launchRef.current = document.activeElement
       setSavedPhotos([])
       setSelectedPhotoRef(null)
       setPhotoConsent(false)
       setPhotosError(false)
       setPhotosLoading(visionEnabled)
+      if (typeof detail?.prompt === 'string') setInput(detail.prompt.slice(0, 1_200))
       setOpen(true)
     }
     window.addEventListener('homesrolo:open-assistant', show)
     return () => window.removeEventListener('homesrolo:open-assistant', show)
-  }, [visionEnabled])
+  }, [homeId, visionEnabled])
 
   useEffect(() => {
     if (!open || !visionEnabled) return
@@ -571,7 +579,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
             <div className={styles.thread} ref={threadRef} role="log" aria-live="polite">
               <div className={`${styles.bubble} ${styles.assistantBubble}`}>
                 <span className={styles.speaker}>Rolo</span>
-                <p>Tell me what happened, what you need to find, or what this home should remember. I’ll organize it with you.</p>
+                <p>Tell me what you need done, what is going wrong, or what you are trying to plan. We can turn it into the right next step together.</p>
               </div>
 
               {thread.map(message => (
