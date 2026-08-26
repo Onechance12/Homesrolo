@@ -338,14 +338,15 @@ export default function RoloPage({
   const optionalLoadFailed = record.state.status === 'error' && record.state.error !== 'unavailable'
     || files.state.status === 'error'
     || checkups.state.status === 'error'
+  const showingPros = filter === 'people'
 
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.kicker}>{filter === 'people' ? 'People who know this home' : 'The Rolo behind the work'}</p>
-          <h1>{filter === 'people' ? 'Pros' : 'My Home'}</h1>
-          <p className={styles.intro}>{filter === 'people'
+          <p className={styles.kicker}>{showingPros ? 'People who know this home' : 'The Rolo behind the work'}</p>
+          <h1>{showingPros ? 'Pros' : 'My Home'}</h1>
+          <p className={styles.intro}>{showingPros
             ? 'The real people and companies attached to work you saved. A name here is history—not an endorsement, ranking, or public listing.'
             : 'Work, people, home systems, photos, and files—connected without making you remember where everything lives.'}</p>
           <div className={styles.homeIdentity}>
@@ -363,38 +364,40 @@ export default function RoloPage({
       <section className={styles.directory} aria-labelledby="rolo-directory-title">
         <div className={styles.directoryHead}>
           <div>
-            <p className={styles.eyebrow}>{filter === 'people' ? 'Saved from real work' : 'Flip through this home'}</p>
-            <h2 id="rolo-directory-title">{filter === 'people' ? 'Pros connected to this home' : 'Everything has a card'}</h2>
+            <p className={styles.eyebrow}>{showingPros ? 'Saved from real work' : 'Flip through this home'}</p>
+            <h2 id="rolo-directory-title">{showingPros ? 'Pros connected to this home' : 'Everything has a card'}</h2>
           </div>
-          <Link href={`/home/${homeId}/projects`} className={styles.addLink}>{filter === 'people' ? 'Open plans' : 'Add something'} <span aria-hidden="true">+</span></Link>
+          <Link href={`/home/${homeId}/projects`} className={styles.addLink}>{showingPros ? 'Open plans' : 'Add something'} <span aria-hidden="true">+</span></Link>
         </div>
 
         <label className={styles.search}>
-          <span className={styles.srOnly}>Search this Rolo</span>
+          <span className={styles.srOnly}>{showingPros ? 'Search saved pros' : 'Search this Rolo'}</span>
           <SearchIcon />
           <input
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Search work, people, systems, or files"
+            placeholder={showingPros ? 'Search saved pros' : 'Search work, people, systems, or files'}
             autoComplete="off"
           />
           {query ? <button type="button" onClick={() => setQuery('')} aria-label="Clear search">×</button> : null}
         </label>
 
-        <div className={styles.filters} role="group" aria-label="Filter the Rolo">
-          {FILTERS.map(option => (
-            <button
-              type="button"
-              key={option.value}
-              aria-pressed={filter === option.value}
-              onClick={() => chooseFilter(option.value)}
-            >
-              <span>{option.label}</span>
-              <small>{counts[option.value]}</small>
-            </button>
-          ))}
-        </div>
+        {!showingPros ? (
+          <div className={styles.filters} role="group" aria-label="Filter the Rolo">
+            {FILTERS.map(option => (
+              <button
+                type="button"
+                key={option.value}
+                aria-pressed={filter === option.value}
+                onClick={() => chooseFilter(option.value)}
+              >
+                <span>{option.label}</span>
+                <small>{counts[option.value]}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {record.state.status === 'loading' || files.state.status === 'loading' || checkups.state.status === 'loading' ? (
           <p className={styles.loadingNote} role="status">Filing the rest of your cards…</p>
@@ -407,7 +410,9 @@ export default function RoloPage({
         ) : null}
 
         <p className={styles.resultCount} aria-live="polite">
-          {visibleEntries.length} {visibleEntries.length === 1 ? 'card' : 'cards'}
+          {visibleEntries.length} {showingPros
+            ? visibleEntries.length === 1 ? 'pro saved' : 'pros saved'
+            : visibleEntries.length === 1 ? 'card' : 'cards'}
         </p>
 
         {visibleEntries.length ? (

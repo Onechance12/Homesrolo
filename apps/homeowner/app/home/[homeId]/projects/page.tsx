@@ -87,6 +87,7 @@ export default function ProjectsPage({
   const [kindFilter, setKindFilter] = useState<HomeownerWorkKind | 'all'>('all')
   const [categoryFilter, setCategoryFilter] = useState<ProjectCategory | 'all'>('all')
   const [sort, setSort] = useState<WorkSort>('recent')
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const attemptRef = useRef<string | null>(null)
 
   const artifactCounts = useMemo(() => {
@@ -133,6 +134,9 @@ export default function ProjectsPage({
 
   const filtersActive = workView !== 'all' || Boolean(workQuery.trim())
     || kindFilter !== 'all' || categoryFilter !== 'all' || sort !== 'recent'
+  const advancedFilterCount = Number(kindFilter !== 'all')
+    + Number(categoryFilter !== 'all')
+    + Number(sort !== 'recent')
 
   function clearWorkFilters() {
     setWorkView('all')
@@ -375,29 +379,45 @@ export default function ProjectsPage({
               </button>
             ))}
           </div>
-          <div className="work-index__selects">
-            <label>
-              <span>Kind</span>
-              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
-                <option value="all">All kinds</option>
-                {WORK_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Area</span>
-              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value as ProjectCategory | 'all')}>
-                <option value="all">All areas</option>
-                {PROJECT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Sort</span>
-              <select value={sort} onChange={event => setSort(event.target.value as WorkSort)}>
-                <option value="recent">Recently updated</option>
-                <option value="work_date">Work date</option>
-                <option value="title">A–Z</option>
-              </select>
-            </label>
+          <div className="work-index__advanced">
+            <button
+              type="button"
+              className="work-index__advanced-toggle"
+              aria-expanded={advancedFiltersOpen}
+              aria-controls="work-index-advanced-filters"
+              onClick={() => setAdvancedFiltersOpen(current => !current)}
+            >
+              <span>More filters</span>
+              <small>{advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Kind, area & sort'}</small>
+              <span aria-hidden="true">{advancedFiltersOpen ? '−' : '+'}</span>
+            </button>
+            <div
+              id="work-index-advanced-filters"
+              className={`work-index__selects${advancedFiltersOpen ? ' work-index__selects--open' : ''}`}
+            >
+              <label>
+                <span>Kind</span>
+                <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
+                  <option value="all">All kinds</option>
+                  {WORK_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Area</span>
+                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value as ProjectCategory | 'all')}>
+                  <option value="all">All areas</option>
+                  {PROJECT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Sort</span>
+                <select value={sort} onChange={event => setSort(event.target.value as WorkSort)}>
+                  <option value="recent">Recently updated</option>
+                  <option value="work_date">Work date</option>
+                  <option value="title">A–Z</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div className="work-index__result" aria-live="polite">
             <span>{state.status === 'ready' ? `${visibleWork.length} of ${state.value.filter(project => !project.archived).length} records` : 'Opening work…'}</span>
