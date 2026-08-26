@@ -343,9 +343,11 @@ export default function RoloPage({
     <div className={styles.page}>
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Your home, indexed</p>
-          <h1>The Rolo</h1>
-          <p className={styles.intro}>Work, people, home systems, photos, and files—connected without making you remember where everything lives.</p>
+          <p className={styles.kicker}>{filter === 'people' ? 'People who know this home' : 'The Rolo behind the work'}</p>
+          <h1>{filter === 'people' ? 'Pros' : 'My Home'}</h1>
+          <p className={styles.intro}>{filter === 'people'
+            ? 'The real people and companies attached to work you saved. A name here is history—not an endorsement, ranking, or public listing.'
+            : 'Work, people, home systems, photos, and files—connected without making you remember where everything lives.'}</p>
           <div className={styles.homeIdentity}>
             <span>{homeLabel(home.state.value)}</span>
             <small>{homeLocality(home.state.value)}</small>
@@ -361,10 +363,10 @@ export default function RoloPage({
       <section className={styles.directory} aria-labelledby="rolo-directory-title">
         <div className={styles.directoryHead}>
           <div>
-            <p className={styles.eyebrow}>Flip through this home</p>
-            <h2 id="rolo-directory-title">Everything has a card</h2>
+            <p className={styles.eyebrow}>{filter === 'people' ? 'Saved from real work' : 'Flip through this home'}</p>
+            <h2 id="rolo-directory-title">{filter === 'people' ? 'Pros connected to this home' : 'Everything has a card'}</h2>
           </div>
-          <Link href={`/home/${homeId}/projects`} className={styles.addLink}>Add something <span aria-hidden="true">+</span></Link>
+          <Link href={`/home/${homeId}/projects`} className={styles.addLink}>{filter === 'people' ? 'Open plans' : 'Add something'} <span aria-hidden="true">+</span></Link>
         </div>
 
         <label className={styles.search}>

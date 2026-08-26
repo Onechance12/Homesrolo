@@ -38,21 +38,32 @@ export default function PeopleScreen() {
   return (
     <Page>
       <HomeHeader
-        section="People"
-        title="The Rolodex part of Homesrolo."
-        detail="Remember who worked here, what they touched, and which record proves it—without turning your home into a public profile."
+        section="Pros"
+        title="Keep the right people close."
+        detail="Start with the help you need, then remember the people and companies that actually worked on this home."
       />
       <Card accent>
         <View style={styles.safetyRow}>
           <View style={styles.shield}><Ionicons name="shield-checkmark-outline" size={28} color={colors.ink} /></View>
           <View style={styles.safetyCopy}>
-            <Text style={styles.safetyTitle}>Homeowner first.</Text>
-            <Text style={styles.copy}>A saved name is history, not an endorsement. You control access and decide what a professional can see.</Text>
+            <Text style={styles.safetyTitle}>Need someone for the work?</Text>
+            <Text style={styles.copy}>Rolo can help you describe the job, identify the right kind of professional, and prepare the questions to ask.</Text>
           </View>
         </View>
+        <Button
+          label="Get help choosing a pro"
+          icon="sparkles-outline"
+          onPress={() => router.push({
+            pathname: '/home/[homeId]/rolo',
+            params: {
+              homeId,
+              prompt: 'Help me figure out what kind of professional I need, what information I should give them, and what questions I should ask before inviting anyone to my home.',
+            },
+          })}
+        />
       </Card>
 
-      <SectionTitle title="People this home remembers" detail="Built from the company or person saved on each real work record." />
+      <SectionTitle title="Saved pros" detail="Built from the company or person saved on each real work record—never invented listings." />
       {resource.state.kind === 'loading' ? <Loading label="Opening your people…" /> : null}
       {resource.state.kind === 'error' ? <Notice message="People could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
       {people.map(person => (
@@ -68,13 +79,14 @@ export default function PeopleScreen() {
         </Card>
       ))}
       {resource.state.kind === 'ready' && people.length === 0 ? (
-        <Notice message="Save a person or company on any Work entry and the People Rolodex builds itself." />
+        <Notice message="No pros are saved for this home yet. Add a person or company to a real plan and this Rolodex builds itself." />
       ) : null}
       <Button
-        label="Add through a work record"
-        icon="hammer-outline"
+        label="Add through a plan"
+        icon="layers-outline"
         onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
       />
+      <Text style={styles.disclosure}>A saved name is history, not an endorsement. You control what a professional can see.</Text>
     </Page>
   )
 }
@@ -92,4 +104,5 @@ const styles = StyleSheet.create({
   personName: { color: colors.cream, fontSize: 19, fontWeight: '900' },
   personMeta: { color: colors.slate, fontSize: 12, lineHeight: 17 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  disclosure: { color: colors.smoke, fontSize: 11, lineHeight: 16, textAlign: 'center', paddingHorizontal: space.lg },
 })

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { Redirect, useFocusEffect, useGlobalSearchParams } from 'expo-router'
+import { Redirect, router, useFocusEffect, useGlobalSearchParams } from 'expo-router'
 import type { WorkCategory, WorkKind, WorkStatus } from '../../../../src/api/model.ts'
 import { friendlyError } from '../../../../src/api/errors.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
@@ -25,7 +25,7 @@ export default function WorkScreen() {
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'open' | 'care'>('all')
+  const [filter, setFilter] = useState<'all' | 'open' | 'care'>('open')
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [professional, setProfessional] = useState('')
@@ -87,11 +87,30 @@ export default function WorkScreen() {
   return (
     <Page>
       <HomeHeader
-        section="Work"
-        title="Projects are only one kind of work."
-        detail="Keep projects, repairs, service visits, issues, and one-time home events together without forcing everything into the same box."
+        section="Plans"
+        title="Keep work moving."
+        detail="Projects, repairs, and routine help stay together here from the first idea through the finished work."
       />
-      {!creating ? <Button label="Remember something" icon="add" onPress={() => setCreating(true)} /> : null}
+      {!creating ? (
+        <>
+          <Card accent>
+            <Text style={styles.formTitle}>Start with what you want done.</Text>
+            <Text style={styles.formCopy}>Tell Rolo about the problem, project, or service. It will ask the useful questions and let you approve the plan before anything is saved.</Text>
+            <Button
+              label="Start a plan with Rolo"
+              icon="sparkles-outline"
+              onPress={() => router.push({
+                pathname: '/home/[homeId]/rolo',
+                params: {
+                  homeId,
+                  prompt: 'Help me start a plan for work at my home. Ask what I need done, why, when, and the details a professional would need to understand it.',
+                },
+              })}
+            />
+          </Card>
+          <Button label="Add details myself" icon="create-outline" quiet onPress={() => setCreating(true)} />
+        </>
+      ) : null}
       {creating ? (
         <Card accent>
           <Text style={styles.formTitle}>What happened—or needs to happen?</Text>
@@ -111,10 +130,10 @@ export default function WorkScreen() {
         </Card>
       ) : null}
 
-      <SectionTitle title="Saved work" detail="Filter the same records—no duplicate project system underneath." />
+      <SectionTitle title="Your plans" detail="One place for open work, care, and finished history." />
       <View style={styles.chips}>
+        <Chip label="Active" selected={filter === 'open'} onPress={() => setFilter('open')} />
         <Chip label="Everything" selected={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip label="Needs attention" selected={filter === 'open'} onPress={() => setFilter('open')} />
         <Chip label="Care & repairs" selected={filter === 'care'} onPress={() => setFilter('care')} />
       </View>
       {resource.state.kind === 'loading' ? <Loading label="Opening work…" /> : null}
@@ -126,13 +145,18 @@ export default function WorkScreen() {
         />
       ) : null}
       {visible.map(item => <WorkCard key={item.projectRef} work={item} />)}
-      {resource.state.kind === 'ready' && visible.length === 0 ? <Notice message="Nothing matches this view yet." /> : null}
+      {resource.state.kind === 'ready' && visible.length === 0 ? (
+        <Notice message={filter === 'open'
+          ? 'No active plans yet. Start with Rolo or add the details yourself.'
+          : 'Nothing matches this view yet.'} />
+      ) : null}
     </Page>
   )
 }
 
 const styles = StyleSheet.create({
   formTitle: { color: colors.cream, fontSize: 22, lineHeight: 27, fontWeight: '900' },
+  formCopy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
   label: { color: colors.slate, fontSize: 13, fontWeight: '800', marginTop: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, fontWeight: '700' },

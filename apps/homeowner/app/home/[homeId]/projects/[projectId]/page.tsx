@@ -27,10 +27,10 @@ import { RoofQuoteVault } from '../../../../../components/RoofQuoteVault.tsx'
 type WorkspaceSection = 'overview' | 'activity' | 'files' | 'decisions' | 'people'
 
 const WORKSPACE_SECTIONS: readonly { value: WorkspaceSection; label: string }[] = [
-  { value: 'overview', label: 'Overview' },
+  { value: 'overview', label: 'Plan' },
   { value: 'activity', label: 'Updates' },
-  { value: 'files', label: 'Photos & files' },
-  { value: 'decisions', label: 'Decisions' },
+  { value: 'files', label: 'Photos' },
+  { value: 'decisions', label: 'Choices' },
   { value: 'people', label: 'People' },
 ]
 
@@ -391,21 +391,79 @@ export default function ProjectPage({
   const projectFiles = filesState.status === 'ready'
     ? filesState.value.filter(file => file.projectRef === project.projectRef)
     : []
+  const projectItems = itemsState.status === 'ready' ? itemsState.value : []
+  const projectUpdates = activityState.status === 'ready' ? activityState.value : []
+  const hasProfessional = Boolean((project.professionalLabel || project.contractor).trim())
+  const workspaceSteps = [
+    { label: project.workKind === 'service' ? 'Request' : 'Brief', done: Boolean(project.summary.trim()) },
+    { label: 'Photos', done: projectFiles.length > 0 || project.photos.length > 0 },
+    { label: project.workKind === 'service' ? 'Details' : 'Choices', done: projectItems.length > 0 },
+    { label: 'Pro', done: hasProfessional },
+  ] as const
+  const completedWorkspaceSteps = workspaceSteps.filter(step => step.done).length
+  const roloPrompt = project.workKind === 'service'
+    ? `I am organizing the service request “${project.title}.” Help me clarify what needs to happen, what a professional needs to know, and what the next useful step is.`
+    : project.workKind === 'issue' || project.workKind === 'repair'
+      ? `I am working through “${project.title}.” Help me safely organize what I am seeing, what changed, and the next useful step for this exact work item.`
+      : `I am planning “${project.title}.” Help me shape the vision, organize photos and choices, and identify the next useful step without inventing measurements, prices, or contractors.`
+
+  function openProjectRolo() {
+    window.dispatchEvent(new CustomEvent('homesrolo:open-assistant', {
+      detail: { homeId, prompt: roloPrompt },
+    }))
+  }
 
   return (
     <div className="project-workspace">
-      <Link href={`/home/${homeId}/projects`} className="backlink">← All projects</Link>
+      <Link href={`/home/${homeId}/projects`} className="backlink">← All plans</Link>
 
       <header className="project-workspace__head">
         <div>
           <p className="mono">{project.trade} · {WORK_KIND_LABEL[project.workKind]} record</p>
           <h1>{project.title}</h1>
-          <p>{project.summary || 'Add notes, photos, decisions, and people as this work takes shape.'}</p>
+          <p>{project.summary || 'Build the brief, add photos, keep choices together, and bring in the right person when you are ready.'}</p>
         </div>
         <span className={project.status === 'completed' ? 'pill pill--recorded' : project.status === 'in_progress' ? 'pill pill--progress' : 'pill pill--muted'}>
             {STATUS_LABEL[project.status]}
         </span>
       </header>
+
+      <section className="project-next" aria-labelledby="project-next-title">
+        <div className="project-next__lead">
+          <div>
+            <p className="mono">YOUR NEXT MOVE</p>
+            <h2 id="project-next-title">
+              {project.workKind === 'service'
+                ? 'Get this service request ready.'
+                : project.workKind === 'issue' || project.workKind === 'repair'
+                  ? 'Work through the problem.'
+                  : 'Keep shaping the plan.'}
+            </h2>
+            <p>{completedWorkspaceSteps} of {workspaceSteps.length} workspace pieces started. This is organization, not a project rating.</p>
+          </div>
+          {session.state.kind === 'signed_in' && session.state.capabilities.homeAssistant ? (
+            <button type="button" className="project-next__rolo" onClick={openProjectRolo}>
+              <span aria-hidden="true">R</span>
+              <span><strong>Continue with Rolo</strong><small>Talk inside this exact plan</small></span>
+              <span aria-hidden="true">→</span>
+            </button>
+          ) : null}
+        </div>
+        <div className="project-next__steps" aria-label="Project workspace shortcuts">
+          <button type="button" aria-pressed={activeSection === 'files'} onClick={() => chooseWorkspaceSection('files')}>
+            <span aria-hidden="true">▣</span><strong>Add photos</strong><small>{projectFiles.length} saved</small>
+          </button>
+          <button type="button" aria-pressed={activeSection === 'decisions'} onClick={() => chooseWorkspaceSection('decisions')}>
+            <span aria-hidden="true">◇</span><strong>{project.workKind === 'service' ? 'Save details' : 'Save choices'}</strong><small>{projectItems.length} saved</small>
+          </button>
+          <button type="button" aria-pressed={activeSection === 'people'} onClick={() => chooseWorkspaceSection('people')}>
+            <span aria-hidden="true">+</span><strong>Add a pro</strong><small>{hasProfessional ? '1 connected' : 'None yet'}</small>
+          </button>
+          <button type="button" aria-pressed={activeSection === 'activity'} onClick={() => chooseWorkspaceSection('activity')}>
+            <span aria-hidden="true">↗</span><strong>Add update</strong><small>{projectUpdates.length} saved</small>
+          </button>
+        </div>
+      </section>
 
       <nav className="project-workspace__tabs" role="tablist" aria-label="Project workspace">
         {WORKSPACE_SECTIONS.map((section, index) => (

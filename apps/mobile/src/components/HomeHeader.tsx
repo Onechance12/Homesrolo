@@ -28,7 +28,7 @@ export function HomeHeader({ section, title, detail }: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space.lg, marginBottom: space.sm },
+  wrap: { gap: space.md, marginBottom: 2 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switcher: {
     minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 7,
@@ -36,6 +36,6 @@ const styles = StyleSheet.create({
   },
   switchText: { color: colors.slate, fontWeight: '800', fontSize: 12 },
   copy: { gap: space.xs },
-  title: { color: colors.cream, fontSize: 31, lineHeight: 35, fontWeight: '900', letterSpacing: -1 },
-  detail: { color: colors.slate, fontSize: 15, lineHeight: 22 },
+  title: { color: colors.cream, fontSize: 28, lineHeight: 32, fontWeight: '900', letterSpacing: -0.8 },
+  detail: { color: colors.slate, fontSize: 14, lineHeight: 20 },
 })

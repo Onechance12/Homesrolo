@@ -53,8 +53,8 @@ export default function HomesScreen() {
       </View>
       <View style={styles.hero}>
         <Eyebrow>Your homes</Eyebrow>
-        <Title>Which Rolo are we opening?</Title>
-        <Body muted>Each home keeps its own private people, work, files, care, and history.</Body>
+        <Title>Where do you need help?</Title>
+        <Body muted>Choose the home, then tell Rolo what needs fixing, planning, servicing, or answering. The record builds underneath the work.</Body>
       </View>
 
       {homes.state.kind === 'loading' ? <Loading label="Finding your homes…" /> : null}
@@ -78,8 +78,8 @@ export default function HomesScreen() {
 
       {adding || (homes.state.kind === 'ready' && homes.state.value.length === 0) ? (
         <Card accent>
-          <Eyebrow>Start address-first</Eyebrow>
-          <Text style={styles.addTitle}>Give this home somewhere to remember.</Text>
+          <Eyebrow>Add a home</Eyebrow>
+          <Text style={styles.addTitle}>Where is the work happening?</Text>
           <TextField
             label="Home address"
             value={address}
@@ -88,7 +88,7 @@ export default function HomesScreen() {
             placeholder="123 Main Street, City, State ZIP"
           />
           <TextField label="What should we call it?" value={label} onChangeText={setLabel} placeholder="My home" />
-          <Button label={busy ? 'Creating…' : 'Create this Rolo'} onPress={() => void addHome()} disabled={busy || address.trim().length < 8} />
+          <Button label={busy ? 'Opening…' : 'Continue'} onPress={() => void addHome()} disabled={busy || address.trim().length < 8} />
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {homes.state.kind === 'ready' && homes.state.value.length > 0
             ? <Button label="Cancel" onPress={() => setAdding(false)} quiet /> : null}
