@@ -847,6 +847,10 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
     'the dashboard never links to a disabled photo workspace')
   assert.match(rolo, /type RoloFilter = 'all' \| 'work' \| 'home' \| 'people' \| 'saved'/,
     'the Rolodex ties together the home, work, people, and saved evidence')
+  assert.match(rolo, /!showingPros \? \([\s\S]*styles\.filters/,
+    'the dedicated Pros tab does not expose unrelated My Home filters')
+  assert.match(rolo, /showingPros \? 'Search saved pros'/,
+    'Pros has its own concise search language')
   assert.match(library, /Your working records/)
   assert.match(library, /Project history/)
   assert.match(library, /Condition record/)
@@ -1007,6 +1011,8 @@ test('work opens as conversational capture with a compact manual workspace', () 
     'twelve home categories stay available without twelve oversized cards')
   assert.match(projects, /<details className="project-more">[\s\S]*Add date or notes/,
     'optional capture stays progressively disclosed')
+  assert.match(projects, /<details className="work-index__advanced"[\s\S]*More filters/,
+    'kind, area, and sort stay behind one compact disclosure on a phone')
 
   for (const section of [
     "{ value: 'overview', label: 'Plan' }",

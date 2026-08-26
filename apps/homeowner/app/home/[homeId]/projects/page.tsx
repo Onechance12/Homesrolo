@@ -133,6 +133,9 @@ export default function ProjectsPage({
 
   const filtersActive = workView !== 'all' || Boolean(workQuery.trim())
     || kindFilter !== 'all' || categoryFilter !== 'all' || sort !== 'recent'
+  const advancedFilterCount = Number(kindFilter !== 'all')
+    + Number(categoryFilter !== 'all')
+    + Number(sort !== 'recent')
 
   function clearWorkFilters() {
     setWorkView('all')
@@ -375,30 +378,36 @@ export default function ProjectsPage({
               </button>
             ))}
           </div>
-          <div className="work-index__selects">
-            <label>
-              <span>Kind</span>
-              <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
-                <option value="all">All kinds</option>
-                {WORK_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Area</span>
-              <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value as ProjectCategory | 'all')}>
-                <option value="all">All areas</option>
-                {PROJECT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Sort</span>
-              <select value={sort} onChange={event => setSort(event.target.value as WorkSort)}>
-                <option value="recent">Recently updated</option>
-                <option value="work_date">Work date</option>
-                <option value="title">A–Z</option>
-              </select>
-            </label>
-          </div>
+          <details className="work-index__advanced" open={advancedFilterCount > 0}>
+            <summary>
+              <span>More filters</span>
+              <small>{advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Kind, area & sort'}</small>
+            </summary>
+            <div className="work-index__selects">
+              <label>
+                <span>Kind</span>
+                <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
+                  <option value="all">All kinds</option>
+                  {WORK_KIND_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Area</span>
+                <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value as ProjectCategory | 'all')}>
+                  <option value="all">All areas</option>
+                  {PROJECT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Sort</span>
+                <select value={sort} onChange={event => setSort(event.target.value as WorkSort)}>
+                  <option value="recent">Recently updated</option>
+                  <option value="work_date">Work date</option>
+                  <option value="title">A–Z</option>
+                </select>
+              </label>
+            </div>
+          </details>
           <div className="work-index__result" aria-live="polite">
             <span>{state.status === 'ready' ? `${visibleWork.length} of ${state.value.filter(project => !project.archived).length} records` : 'Opening work…'}</span>
             {filtersActive ? <button type="button" onClick={clearWorkFilters}>Clear filters</button> : null}
