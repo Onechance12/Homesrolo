@@ -17,6 +17,10 @@ import {
   EMAIL_CODE_PENDING_TTL_MS,
   encodePendingEmailCode,
 } from '../email-code-pending.ts'
+import {
+  HOMEOWNER_NATIVE_CLIENT_HEADER,
+  HOMEOWNER_NATIVE_CLIENT_V1,
+} from '../server/request-auth.ts'
 
 const APP_ORIGIN = 'https://app.homesrolo.com'
 const SECRET = `rate_${'r'.repeat(43)}`
@@ -297,4 +301,60 @@ test('verification has a generic invalid response and stops before a ninth provi
   )
   assert.equal(afterCooldown.status, 422)
   assert.equal(calls.verifications, 9)
+})
+
+test('email-code verification never leaks a browser session and returns native bearer only by contract', async () => {
+  const handle = 'n'.repeat(43)
+  const browserResponse = await verifyHomeownerEmailCodeWithDependencies(
+    post({ email: 'person@example.com', code: '012345' }),
+    dependencies({ completion: { kind: 'complete', sessionHandle: handle } }),
+  )
+  assert.equal(browserResponse.status, 200)
+  assert.deepEqual(await browserResponse.json(), { data: { signedIn: true } })
+  assert.match(browserResponse.headers.get('set-cookie') ?? '', /hrolo_session=/)
+
+  const nativeRequest = new Request(`${APP_ORIGIN}/api/v1/auth/email-code/verify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
+      'cf-connecting-ip': '203.0.113.11',
+    },
+    body: JSON.stringify({ email: 'person@example.com', code: '012345' }),
+  })
+  const nativeResponse = await verifyHomeownerEmailCodeWithDependencies(
+    nativeRequest,
+    dependencies({ completion: { kind: 'complete', sessionHandle: handle } }),
+  )
+  assert.equal(nativeResponse.status, 200)
+  assert.equal(nativeResponse.headers.get('set-cookie'), null)
+  assert.deepEqual(await nativeResponse.json(), {
+    data: {
+      signedIn: true,
+      session: {
+        token: handle,
+        tokenType: 'Bearer',
+        expiresInSeconds: 60 * 60 * 24 * 30,
+      },
+    },
+  })
+
+  const browserDisguisedAsNative = new Request(
+    `${APP_ORIGIN}/api/v1/auth/email-code/verify`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: APP_ORIGIN,
+        [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
+      },
+      body: JSON.stringify({ email: 'person@example.com', code: '012345' }),
+    },
+  )
+  const rejected = await verifyHomeownerEmailCodeWithDependencies(
+    browserDisguisedAsNative,
+    dependencies({ completion: { kind: 'complete', sessionHandle: handle } }),
+  )
+  assert.equal(rejected.status, 403)
+  assert.deepEqual(await rejected.json(), { error: { code: 'forbidden' } })
 })

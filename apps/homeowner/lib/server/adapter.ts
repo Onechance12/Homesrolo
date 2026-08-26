@@ -3,16 +3,19 @@
  * merged framework-neutral handler doing every routing and policy decision.
  *
  * What this file may do is deliberately tiny: read the method, the pathname,
- * the query string's presence, whether a body exists, and the ONE named
- * session cookie — as an opaque handle. It copies nothing else. Headers,
- * body content, and every other cookie are ignored, so browser input cannot
+ * the query string's presence, whether a body exists, and one opaque session
+ * handle from the shared request-auth boundary. Request body content and every
+ * other cookie are ignored, so browser input cannot
  * smuggle a principal, role, home, provider id, storage ref, or capability
  * into the boundary: HomeownerHttpRequest has no field to put one in.
  */
 
 import { createHomeownerHttpHandler } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import type { HomeownerHttpResponse } from '../../../../src/homeowner/homeowner-http.v1.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+} from './request-auth.ts'
 import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 function toWebResponse(response: HomeownerHttpResponse): Response {
@@ -38,6 +41,18 @@ export function mutationOriginAllowed(
 function forbiddenMutationResponse(): Response {
   return new Response(JSON.stringify({ error: { code: 'forbidden' } }), {
     status: 403,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+}
+
+function invalidAuthenticationResponse(): Response {
+  return new Response(JSON.stringify({ error: { code: 'invalid_request' } }), {
+    status: 400,
     headers: {
       'cache-control': 'no-store',
       'content-type': 'application/json; charset=utf-8',
@@ -84,11 +99,10 @@ async function boundedJsonBody(request: Request): Promise<unknown> {
 export async function handleHomeownerRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const configuration = homeownerRuntimeConfiguration()
-  if (configuration && !mutationOriginAllowed(
-    request.method,
-    request.headers.get('origin'),
-    configuration.appOrigin,
-  )) {
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return invalidAuthenticationResponse()
+  if (configuration && request.method === 'POST'
+    && !homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
     return forbiddenMutationResponse()
   }
   const handler = createHomeownerHttpHandler(homeownerApiService())
@@ -100,7 +114,7 @@ export async function handleHomeownerRequest(request: Request): Promise<Response
     search: url.search,
     hasBody,
     jsonBody,
-    sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
+    sessionHandle: authentication.sessionHandle,
   })
   return toWebResponse(response)
 }

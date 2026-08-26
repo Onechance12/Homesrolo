@@ -6,6 +6,10 @@ import { SESSION_COOKIE_NAME, sessionHandleFromCookieHeader } from '../server/co
 import { handleHomeownerRequest, mutationOriginAllowed } from '../server/adapter.ts'
 import { artifactUploadEnvelopeAllowed } from '../server/artifact-http.ts'
 import { projectReviewCapabilityEnabled } from '../server/runtime.ts'
+import {
+  HOMEOWNER_NATIVE_CLIENT_HEADER,
+  HOMEOWNER_NATIVE_CLIENT_V1,
+} from '../server/request-auth.ts'
 
 /**
  * The route adapter over the UNCONFIGURED runtime: no identity provider, no
@@ -80,8 +84,8 @@ test('the session cookie parses as an opaque bounded handle or not at all', () =
   }
 })
 
-test('the cookie module never logs and the adapter never projects the handle', () => {
-  for (const rel of ['cookie.ts', 'adapter.ts', 'runtime.ts']) {
+test('the authentication boundary never logs and the adapter never projects the handle', () => {
+  for (const rel of ['cookie.ts', 'request-auth.ts', 'adapter.ts', 'runtime.ts']) {
     const content = readFileSync(path.join(import.meta.dirname, '../server', rel), 'utf8')
     assert.doesNotMatch(content, /console\./, `${rel} must not log`)
   }
@@ -145,6 +149,24 @@ test('a well-formed cookie still reads signed_out: no identity provider exists',
     'an unconfigured runtime resolves every handle to nobody')
 })
 
+test('the route adapter accepts native.v1 bearer and rejects mixed credentials', async () => {
+  const native = await get('/api/v1/session', {
+    [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
+    authorization: `Bearer ${HANDLE}`,
+  })
+  assert.equal(native.status, 200)
+  assert.equal((await native.json()).data.kind, 'signed_out',
+    'the opaque native handle reaches the same server-side identity resolver')
+
+  const mixed = await get('/api/v1/session', {
+    cookie: `${SESSION_COOKIE_NAME}=${HANDLE}`,
+    [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
+    authorization: `Bearer ${HANDLE}`,
+  })
+  assert.equal(mixed.status, 400)
+  assert.deepEqual(await mixed.json(), { error: { code: 'invalid_request' } })
+})
+
 // --- protected reads, fail-closed runtime -------------------------------------
 
 test('protected reads are bounded 401 signed_out, cookie or not', async () => {
@@ -176,9 +198,13 @@ test('artifact reservation envelope requires exact origin and bounded JSON', () 
     'content-length': '256',
     'content-type': 'application/json',
   }), origin), true)
+  assert.equal(artifactUploadEnvelopeAllowed(request({
+    [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
+    authorization: `Bearer ${HANDLE}`,
+    'content-type': 'application/json',
+  }), origin), true, 'native upload reservation may stream a bounded body without content-length')
   for (const headers of [
     { 'content-length': '256', 'content-type': 'application/json' },
-    { origin, 'content-type': 'application/json' },
     { origin, 'content-length': '99999999', 'content-type': 'application/json' },
     { origin, 'content-length': '256', 'content-type': 'multipart/form-data' },
     { origin, 'content-length': '256', 'content-type': 'application/json', 'content-encoding': 'gzip' },

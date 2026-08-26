@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
 import { classifyRequest } from '../../../../src/constitution/detector.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+} from './request-auth.ts'
 import { HomeResearchRateLimiter } from './home-research.ts'
 import {
   askRoloRequestSchema,
@@ -105,7 +108,11 @@ export async function handleHomeAssistantRequestWithDependencies(
   if (request.method !== 'POST') {
     return response(405, { error: { code: 'method_not_allowed' } }, { allow: 'POST' })
   }
-  if (request.headers.get('origin') !== dependencies.appOrigin) {
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') {
+    return response(400, { error: { code: 'invalid_request' } })
+  }
+  if (!homeownerMutationRequestAllowed(request, dependencies.appOrigin, authentication)) {
     return response(403, { error: { code: 'forbidden' } })
   }
   const rawBody = await boundedJson(request)
@@ -118,7 +125,7 @@ export async function handleHomeAssistantRequestWithDependencies(
   if (classifyRequest(homeownerText).refusals.length > 0) {
     return response(400, { error: { code: 'invalid_request' } })
   }
-  const sessionHandle = sessionHandleFromCookieHeader(request.headers.get('cookie'))
+  const sessionHandle = authentication.sessionHandle
   if (!sessionHandle) return response(401, { error: { code: 'signed_out' } })
 
   try {

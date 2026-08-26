@@ -469,6 +469,11 @@ export const createHomeownerProjectInputSchema = z.object({
   status: homeownerProjectSchema.shape.status,
   occurredOn: calendarDate.optional(),
   summary: z.string().trim().max(2000).optional(),
+  professionalLabel: z.string().trim().min(1).max(160).optional(),
+  initialActivity: z.object({
+    kind: z.enum(['note', 'milestone']),
+    body: z.string().trim().min(1).max(2000),
+  }).strict().optional(),
   requestedAt: utcInstant,
 }).strict()
 

@@ -445,6 +445,26 @@ test('project commands use the runtime vocabulary and reject impossible dates', 
     homeownerProjectCommandIntent({ ...command, requestedAt: '2026-08-10T12:05:00.000Z' }),
     homeownerProjectCommandIntent(command),
   )
+  const enriched = createHomeownerProjectInputSchema.parse({
+    ...command,
+    professionalLabel: '  Sample Roofing  ',
+    initialActivity: {
+      kind: 'note',
+      body: '  Homeowner approved the record.  ',
+    },
+  })
+  assert.equal(enriched.professionalLabel, 'Sample Roofing')
+  assert.deepEqual(enriched.initialActivity, {
+    kind: 'note',
+    body: 'Homeowner approved the record.',
+  })
+  assert.deepEqual(homeownerProjectCommandIntent({
+    ...enriched,
+    requestedAt: '2026-08-10T12:05:00.000Z',
+  }), homeownerProjectCommandIntent(enriched),
+    'atomic project extras remain bound to a retry-stable receipt intent')
+  assert.notDeepEqual(homeownerProjectCommandIntent(enriched), homeownerProjectCommandIntent(command),
+    'professional and activity fields are part of the command digest intent')
   assert.equal(createHomeownerProjectInputSchema.parse({
     ...command,
     workKind: 'service',
@@ -467,6 +487,18 @@ test('project commands use the runtime vocabulary and reject impossible dates', 
   assert.throws(() => createHomeownerProjectInputSchema.parse({
     ...command,
     status: 'recorded',
+  }))
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    professionalLabel: ' ',
+  }))
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    initialActivity: { kind: 'note', body: ' ' },
+  }))
+  assert.throws(() => createHomeownerProjectInputSchema.parse({
+    ...command,
+    initialActivity: { kind: 'message', body: 'Not a supported activity.' },
   }))
   assert.throws(() => createHomeownerProjectInputSchema.parse({
     ...command,

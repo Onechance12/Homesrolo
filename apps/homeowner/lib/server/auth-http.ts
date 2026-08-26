@@ -1,4 +1,8 @@
-import { clearSessionCookie, sessionCookie, sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  clearSessionCookie,
+  sessionCookie,
+  SESSION_LIFETIME_SECONDS,
+} from './cookie.ts'
 import {
   configuredEmailCodeRateLimiter,
   configuredHomeownerAuthService,
@@ -14,6 +18,11 @@ import {
   validatedRoofingIntent,
   type HomeownerAuthService,
 } from './auth.ts'
+import {
+  homeownerAuthenticationBootstrapChannel,
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+} from './request-auth.ts'
 
 const JSON_HEADERS = Object.freeze({
   'cache-control': 'no-store',
@@ -144,7 +153,8 @@ export async function requestHomeownerEmailCodeWithDependencies(
     || dependencies.enabled !== true) {
     return json(503, { error: { code: 'unavailable' } })
   }
-  if (!sameOrigin(request, dependencies.appOrigin)) {
+  const channel = homeownerAuthenticationBootstrapChannel(request, dependencies.appOrigin)
+  if (channel === 'invalid') {
     return json(403, { error: { code: 'forbidden' } })
   }
   const body = await boundedJson(request)
@@ -179,7 +189,8 @@ export async function verifyHomeownerEmailCodeWithDependencies(
     || dependencies.enabled !== true) {
     return json(503, { error: { code: 'unavailable' } })
   }
-  if (!sameOrigin(request, dependencies.appOrigin)) {
+  const channel = homeownerAuthenticationBootstrapChannel(request, dependencies.appOrigin)
+  if (channel === 'invalid') {
     return json(403, { error: { code: 'forbidden' } })
   }
   const body = await boundedJson(request)
@@ -229,11 +240,21 @@ export async function verifyHomeownerEmailCodeWithDependencies(
   if (result.kind === 'invalid') {
     return json(422, { error: { code: 'invalid_code' } })
   }
-  return json(
-    200,
-    { data: { signedIn: true } },
-    { 'set-cookie': sessionCookie(result.sessionHandle) },
-  )
+  if (channel === 'native') {
+    return json(200, {
+      data: {
+        signedIn: true,
+        session: {
+          token: result.sessionHandle,
+          tokenType: 'Bearer',
+          expiresInSeconds: SESSION_LIFETIME_SECONDS,
+        },
+      },
+    })
+  }
+  return json(200, { data: { signedIn: true } }, {
+    'set-cookie': sessionCookie(result.sessionHandle),
+  })
 }
 
 export async function verifyHomeownerEmailCode(request: Request): Promise<Response> {
@@ -290,10 +311,15 @@ export async function signOutHomeowner(request: Request): Promise<Response> {
   const configuration = homeownerRuntimeConfiguration()
   const auth = configuredHomeownerAuthService()
   if (!configuration || !auth) return json(503, { error: { code: 'unavailable' } })
-  if (!sameOrigin(request, configuration.appOrigin)) {
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') {
+    return json(400, { error: { code: 'invalid_request' } })
+  }
+  if (!homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
     return json(403, { error: { code: 'forbidden' } })
   }
-  const handle = sessionHandleFromCookieHeader(request.headers.get('cookie'))
-  await auth.revokeSession(handle)
-  return json(200, { data: { signedOut: true } }, { 'set-cookie': clearSessionCookie() })
+  await auth.revokeSession(authentication.sessionHandle)
+  return authentication.kind === 'native'
+    ? json(200, { data: { signedOut: true } })
+    : json(200, { data: { signedOut: true } }, { 'set-cookie': clearSessionCookie() })
 }

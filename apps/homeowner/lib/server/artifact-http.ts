@@ -1,5 +1,9 @@
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+  type HomeownerRequestAuthentication,
+} from './request-auth.ts'
 import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 const MAX_JSON_BYTES = 8 * 1024
@@ -32,8 +36,10 @@ function mappedError(error: unknown): Response {
 
 async function boundedJson(request: Request): Promise<unknown> {
   if (!request.body) throw new HomeownerApiError('invalid_request')
-  const declared = Number(request.headers.get('content-length'))
-  if (!Number.isSafeInteger(declared) || declared < 2 || declared > MAX_JSON_BYTES) {
+  const declaredHeader = request.headers.get('content-length')
+  const declared = declaredHeader === null ? null : Number(declaredHeader)
+  if (declared !== null
+    && (!Number.isSafeInteger(declared) || declared < 2 || declared > MAX_JSON_BYTES)) {
     throw new HomeownerApiError('invalid_request')
   }
   const reader = request.body.getReader()
@@ -60,7 +66,9 @@ async function boundedJson(request: Request): Promise<unknown> {
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
-  if (byteLength !== declared) throw new HomeownerApiError('invalid_request')
+  if (byteLength < 2 || (declared !== null && byteLength !== declared)) {
+    throw new HomeownerApiError('invalid_request')
+  }
   const bytes = new Uint8Array(byteLength)
   let offset = 0
   for (const chunk of chunks) {
@@ -77,17 +85,18 @@ async function boundedJson(request: Request): Promise<unknown> {
 export function artifactUploadEnvelopeAllowed(request: Request, expectedOrigin: string): boolean {
   const length = request.headers.get('content-length')
   const mediaType = request.headers.get('content-type')?.toLowerCase() ?? ''
+  const authentication = homeownerRequestAuthentication(request)
   return request.method === 'POST'
     && new URL(request.url).search === ''
-    && request.headers.get('origin') === expectedOrigin
-    && !!length && /^\d+$/.test(length)
-    && Number(length) >= 2 && Number(length) <= MAX_JSON_BYTES
+    && homeownerMutationRequestAllowed(request, expectedOrigin, authentication)
+    && (length === null || (/^\d+$/.test(length)
+      && Number(length) >= 2 && Number(length) <= MAX_JSON_BYTES))
     && !request.headers.has('content-encoding')
     && mediaType === 'application/json'
 }
 
-function requestContext(request: Request) {
-  return { sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')) }
+function requestContext(authentication: Exclude<HomeownerRequestAuthentication, { kind: 'invalid' }>) {
+  return { sessionHandle: authentication.sessionHandle }
 }
 
 /** Reserves one opaque private key and returns a short-lived signed PUT. */
@@ -97,12 +106,14 @@ export async function handleArtifactUpload(
 ): Promise<Response> {
   const configuration = homeownerRuntimeConfiguration()
   if (!configuration) return problem(503, 'unavailable')
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
   if (!HOME_REF.test(requestedHomeRef)
     || !artifactUploadEnvelopeAllowed(request, configuration.appOrigin)) {
     return problem(400, 'invalid_request')
   }
   try {
-    const context = requestContext(request)
+    const context = requestContext(authentication)
     await homeownerApiService().listArtifacts(context, requestedHomeRef)
     const reservation = await homeownerApiService().reserveArtifactUpload(
       context, requestedHomeRef, await boundedJson(request),
@@ -123,6 +134,8 @@ export async function handleArtifactUploadCompletion(
 ): Promise<Response> {
   const configuration = homeownerRuntimeConfiguration()
   if (!configuration) return problem(503, 'unavailable')
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
   if (!HOME_REF.test(requestedHomeRef) || !ARTIFACT_REF.test(requestedArtifactRef)
     || !artifactUploadEnvelopeAllowed(request, configuration.appOrigin)) {
     return problem(400, 'invalid_request')
@@ -135,7 +148,7 @@ export async function handleArtifactUploadCompletion(
       return problem(400, 'invalid_request')
     }
     const artifact = await homeownerApiService().completeArtifactUpload(
-      requestContext(request), requestedHomeRef, requestedArtifactRef,
+      requestContext(authentication), requestedHomeRef, requestedArtifactRef,
       (body as { commandRef: string }).commandRef,
     )
     return new Response(JSON.stringify({ data: artifact }), {
@@ -156,8 +169,10 @@ async function artifactBytes(
     || !HOME_REF.test(requestedHomeRef) || !ARTIFACT_REF.test(requestedArtifactRef)) {
     throw new HomeownerApiError('invalid_request')
   }
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') throw new HomeownerApiError('invalid_request')
   return homeownerApiService().readArtifactContent(
-    requestContext(request), requestedHomeRef, requestedArtifactRef,
+    requestContext(authentication), requestedHomeRef, requestedArtifactRef,
   )
 }
 
