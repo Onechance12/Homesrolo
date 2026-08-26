@@ -1158,16 +1158,20 @@ test('the dashboard uses real records and opens one approval-gated Rolo assistan
   assert.match(assistant, /session\.capabilities\.homeAssistantVision/,
     'saved-photo review is hidden behind its explicit runtime capability')
   assert.match(assistant, /port\.listDocuments\(homeId\)/,
-    'photo review reuses the existing private Library rather than adding another uploader')
+    'photo review can reuse an existing private Library photo')
+  assert.match(assistant, /port\.uploadPrivateArtifact\(homeId/,
+    'a newly attached photo reuses the existing private artifact upload command')
+  assert.match(assistant, /capture="environment"/,
+    'Rolo offers a phone camera input alongside the photo library')
   assert.match(assistant, /setPhotoConsent\(false\)/,
     'photo consent is reset and must be renewed for each message')
-  assert.doesNotMatch(assistant, /type=["']file["']/,
-    'the assistant does not create a second photo-upload surface')
+  assert.doesNotMatch(assistant, /FileReader|readAsDataURL|createObjectURL/,
+    'the browser never turns an attached photo into model input itself')
   assert.match(assistantServer, /type: 'input_image'/)
   assert.match(assistantServer, /store: false/)
   assert.match(assistantHttp, /sanitizeHomeownerPhotoForAnalysis/)
-  assert.match(privacy, /choose one saved Library photo/i,
-    'privacy copy names the narrow one-photo exception')
+  assert.match(privacy, /choose one saved Library photo or attach one new JPEG or PNG/i,
+    'privacy copy names both narrow one-photo paths')
   assert.doesNotMatch(assistant, /dangerouslySetInnerHTML/,
     'model text is rendered as escaped React text')
   assert.doesNotMatch(`${dashboard}\n${experience}\n${progress}`, /measurement/i,

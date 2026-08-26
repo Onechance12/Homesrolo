@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { commandRefForAttempt, mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePort, useSession } from '../lib/port/provider.tsx'
 import { roloThreadStorageKey } from '../lib/rolo-thread-storage.ts'
@@ -13,7 +13,7 @@ import type {
   RoloDestination,
   RoloWorkDraft,
 } from '../lib/port/types.ts'
-import { HouseMark } from './icons.tsx'
+import { HouseMark, IconCamera, IconDocs } from './icons.tsx'
 import styles from './AssistantDock.module.css'
 
 type ThreadMessage = RoloAssistantTurn & {
@@ -28,8 +28,13 @@ type StoredConversation = {
   readonly photoReviewTitle: string | null
   readonly photoReviewRef: string | null
 }
+type PendingPhoto = {
+  readonly file: File
+  readonly commandRef: string
+}
 
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024
 
 const STARTERS = [
   'Something is broken and I need help figuring out the next safe step.',
@@ -215,6 +220,34 @@ function assistantError(error: string) {
   return 'Rolo could not answer right now. Your home information was not changed.'
 }
 
+function validatePendingPhoto(file: File): string | null {
+  const extension = file.name.toLowerCase().split('.').pop()
+  if (file.size < 1) return 'That photo is empty. Choose another JPEG or PNG.'
+  if (file.size > MAX_PHOTO_BYTES) return 'That photo is larger than 10 MB. Choose a smaller JPEG or PNG.'
+  if (file.type === 'image/heic' || file.type === 'image/heif'
+    || extension === 'heic' || extension === 'heif') {
+    return 'That is an HEIC photo. Choose or export a JPEG or PNG copy for now.'
+  }
+  if (file.type !== 'image/jpeg' && file.type !== 'image/png'
+    && extension !== 'jpg' && extension !== 'jpeg' && extension !== 'png') {
+    return 'Choose one JPEG or PNG photo.'
+  }
+  return null
+}
+
+function photoUploadError(error: string, retryAfterSeconds?: number): string {
+  if (error === 'rate_limited') {
+    return retryAfterSeconds
+      ? `Homesrolo is busy. Try this photo again in ${retryAfterSeconds} seconds.`
+      : 'Homesrolo is busy. Try this photo again shortly.'
+  }
+  if (error === 'invalid') return 'That photo did not match a JPEG or PNG under 10 MB. Choose another photo.'
+  if (error === 'conflict') return 'That photo upload expired. Send again to retry with a fresh upload.'
+  if (error === 'forbidden') return 'Your current access to this home does not allow photo uploads.'
+  if (error === 'not_signed_in') return 'Your sign-in expired. Sign in again before attaching this photo.'
+  return 'The photo did not finish saving. It is still on this device; send again when the connection is ready.'
+}
+
 export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const pathname = usePathname()
   const port = usePort()
@@ -239,6 +272,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState(false)
   const [selectedPhotoRef, setSelectedPhotoRef] = useState<string | null>(null)
+  const [pendingPhoto, setPendingPhoto] = useState<PendingPhoto | null>(null)
   const [photoConsent, setPhotoConsent] = useState(false)
   const [photoReview, setPhotoReview] = useState<AskRoloResult['photoReview']>(
     () => readStoredConversation(storageKey).photoReview,
@@ -253,6 +287,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const sendInFlight = useRef(false)
   const saveInFlight = useRef(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const libraryInputRef = useRef<HTMLInputElement | null>(null)
   const threadRef = useRef<HTMLDivElement | null>(null)
   const drawerRef = useRef<HTMLElement | null>(null)
   const launchRef = useRef<HTMLElement | null>(null)
@@ -260,12 +296,15 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
   const visionEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistantVision
   const activeSelectedPhotoRef = visionEnabled ? selectedPhotoRef : null
+  const activePendingPhoto = visionEnabled ? pendingPhoto : null
+  const hasAttachedPhoto = !!activeSelectedPhotoRef || !!activePendingPhoto
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
 
   const closeAssistant = useCallback(() => {
     setOpen(false)
     setSelectedPhotoRef(null)
+    setPendingPhoto(null)
     setPhotoConsent(false)
     requestAnimationFrame(() => launchRef.current?.focus())
   }, [])
@@ -285,6 +324,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       setError(null)
       setSavedPhotos([])
       setSelectedPhotoRef(null)
+      setPendingPhoto(null)
       setPhotoConsent(false)
       return
     }
@@ -310,6 +350,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       if (document.activeElement instanceof HTMLElement) launchRef.current = document.activeElement
       setSavedPhotos([])
       setSelectedPhotoRef(null)
+      setPendingPhoto(null)
       setPhotoConsent(false)
       setPhotosError(false)
       setPhotosLoading(visionEnabled)
@@ -396,19 +437,88 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     [thread],
   )
 
+  function choosePendingPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null
+    event.currentTarget.value = ''
+    if (!file || busy) return
+    const validationError = validatePendingPhoto(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setPendingPhoto({ file, commandRef: mintCommandRef() })
+    setSelectedPhotoRef(null)
+    setPhotoConsent(false)
+    setError(null)
+  }
+
+  function removeAttachedPhoto() {
+    setPendingPhoto(null)
+    setSelectedPhotoRef(null)
+    setPhotoConsent(false)
+  }
+
   async function sendMessage(message: string) {
     const clean = message.trim()
     if (!clean || busy || sendInFlight.current || !assistantEnabled) return
-    const selectedPhoto = activeSelectedPhotoRef
+    let selectedPhoto = activeSelectedPhotoRef
       ? savedPhotos.find(photo => photo.documentRef === activeSelectedPhotoRef) ?? null
       : null
-    if (activeSelectedPhotoRef && (!selectedPhoto || !photoConsent)) {
+    const photoToUpload = activePendingPhoto
+    if (activeSelectedPhotoRef && !selectedPhoto) {
+      setError('That photo is no longer available in this home. Remove it and choose another photo.')
+      return
+    }
+    if ((selectedPhoto || photoToUpload) && !photoConsent) {
       setError('Check the photo permission box for this message, or remove the photo.')
       return
     }
     sendInFlight.current = true
     const pendingWork = proposal
     const unansweredFollowUpQuestion = followUps[0] ?? null
+    setBusy(true)
+    setError(null)
+
+    let photoSavedDuringSend = false
+    if (photoToUpload) {
+      let uploadResult: Awaited<ReturnType<typeof port.uploadPrivateArtifact>>
+      try {
+        uploadResult = await port.uploadPrivateArtifact(homeId, {
+          commandRef: photoToUpload.commandRef,
+          kind: 'photo',
+          file: photoToUpload.file,
+        })
+      } catch {
+        setBusy(false)
+        sendInFlight.current = false
+        setError(photoUploadError('unavailable'))
+        return
+      }
+      if (!uploadResult.ok) {
+        if (uploadResult.error === 'conflict') {
+          setPendingPhoto(current => current?.commandRef === photoToUpload.commandRef
+            ? { ...current, commandRef: mintCommandRef() }
+            : current)
+        }
+        setBusy(false)
+        sendInFlight.current = false
+        setError(photoUploadError(uploadResult.error, uploadResult.retryAfterSeconds))
+        return
+      }
+      const uploadedPhoto = uploadResult.value
+      selectedPhoto = uploadedPhoto
+      photoSavedDuringSend = true
+      setPendingPhoto(null)
+      setSelectedPhotoRef(uploadedPhoto.documentRef)
+      setSavedPhotos(current => [
+        uploadedPhoto,
+        ...current.filter(photo => photo.documentRef !== uploadedPhoto.documentRef),
+      ])
+      window.dispatchEvent(new CustomEvent('homesrolo:data-changed', {
+        detail: { homeId, artifactRef: uploadedPhoto.documentRef },
+      }))
+    }
+
     const userMessage: ThreadMessage = {
       id: `user-${crypto.randomUUID()}`,
       role: 'user',
@@ -417,8 +527,6 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     }
     setThread(current => [...current, userMessage].slice(-20))
     setInput('')
-    setBusy(true)
-    setError(null)
     setProposal(null)
     setSuggestion(null)
     setFollowUps([])
@@ -450,7 +558,13 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
       sendInFlight.current = false
       setProposal(pendingWork)
       setFollowUps(unansweredFollowUpQuestion ? [unansweredFollowUpQuestion] : [])
-      setError('Rolo could not answer right now. Your home information was not changed.')
+      if (photoSavedDuringSend) {
+        setThread(current => current.filter(message => message.id !== userMessage.id))
+        setInput(clean)
+        setError('The photo is saved to this home, but Rolo could not inspect it right now. Send again to retry without uploading it twice.')
+      } else {
+        setError('Rolo could not answer right now. Your home information was not changed.')
+      }
       return
     }
     setBusy(false)
@@ -458,7 +572,13 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     if (!result.ok) {
       setProposal(pendingWork)
       setFollowUps(unansweredFollowUpQuestion ? [unansweredFollowUpQuestion] : [])
-      setError(assistantError(result.error))
+      if (photoSavedDuringSend) {
+        setThread(current => current.filter(message => message.id !== userMessage.id))
+        setInput(clean)
+        setError(`The photo is saved to this home. ${assistantError(result.error)} Send again to retry without uploading it twice.`)
+      } else {
+        setError(assistantError(result.error))
+      }
       return
     }
     const assistantMessage: ThreadMessage = {
@@ -554,6 +674,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     setSavedProject(null)
     setError(null)
     setSelectedPhotoRef(null)
+    setPendingPhoto(null)
     setPhotoConsent(false)
     setPhotoReview(null)
     setPhotoReviewTitle(null)
@@ -700,22 +821,41 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
             >
               {visionEnabled ? (
                 <div className={styles.photoAttach}>
-                  {selectedPhotoRef ? (() => {
+                  {pendingPhoto ? (
+                    <div className={styles.selectedPhoto}>
+                      <span className={styles.selectedPhotoMark} aria-hidden="true"><IconCamera size={22} /></span>
+                      <div>
+                        <strong>{pendingPhoto.file.name}</strong>
+                        <button type="button" onClick={removeAttachedPhoto} disabled={busy}>Remove</button>
+                      </div>
+                      <span className={styles.attachedPhotoState}>
+                        {busy ? 'Saving privately to this home…' : 'Ready to save privately when you send.'}
+                      </span>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={photoConsent}
+                          disabled={busy}
+                          onChange={event => setPhotoConsent(event.target.checked)}
+                        />
+                        Save this photo to this home and let Rolo inspect a metadata-free copy for this message only.
+                      </label>
+                    </div>
+                  ) : selectedPhotoRef ? (() => {
                     const selected = savedPhotos.find(photo => photo.documentRef === selectedPhotoRef)
                     return selected ? (
                       <div className={styles.selectedPhoto}>
-                        <span className={styles.selectedPhotoMark} aria-hidden="true">▣</span>
+                        <span className={styles.selectedPhotoMark} aria-hidden="true"><IconDocs size={22} /></span>
                         <div>
                           <strong>{selected.title}</strong>
-                          <button type="button" onClick={() => {
-                            setSelectedPhotoRef(null)
-                            setPhotoConsent(false)
-                          }}>Remove</button>
+                          <button type="button" onClick={removeAttachedPhoto} disabled={busy}>Remove</button>
                         </div>
+                        <span className={styles.attachedPhotoState}>Already saved in your private Library.</span>
                         <label>
                           <input
                             type="checkbox"
                             checked={photoConsent}
+                            disabled={busy}
                             onChange={event => setPhotoConsent(event.target.checked)}
                           />
                           Let Rolo inspect this photo for this message only.
@@ -724,43 +864,71 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                     ) : (
                       <div className={styles.selectedPhotoMissing}>
                         <span>That photo is no longer available in this home.</span>
-                        <button type="button" onClick={() => {
-                          setSelectedPhotoRef(null)
-                          setPhotoConsent(false)
-                        }}>Remove it</button>
+                        <button type="button" onClick={removeAttachedPhoto}>Remove it</button>
                       </div>
                     )
                   })() : (
-                    <details>
-                      <summary>Review a saved photo</summary>
-                      {photosLoading ? <p>Loading your private photos…</p> : null}
-                      {photosError ? <p>Photos could not load here. Your Library is still available.</p> : null}
-                      {!photosLoading && !photosError && savedPhotos.length === 0 ? (
-                        <p>No saved photos yet. <Link href={`/home/${homeId}/documents`} onClick={closeAssistant}>Add one in Library.</Link></p>
-                      ) : null}
-                      {savedPhotos.length > 0 ? (
-                        <div className={styles.photoChoices}>
-                          {savedPhotos.slice(0, 12).map(photo => (
-                            <button
-                              key={photo.documentRef}
-                              type="button"
-                              onClick={() => {
-                                setSelectedPhotoRef(photo.documentRef)
-                                setPhotoConsent(false)
-                              }}
-                            >
-                              <span className={styles.photoChoiceMark} aria-hidden="true">▣</span>
-                              <span>{photo.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </details>
+                    <>
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                        capture="environment"
+                        hidden
+                        disabled={busy}
+                        onChange={choosePendingPhoto}
+                      />
+                      <input
+                        ref={libraryInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                        hidden
+                        disabled={busy}
+                        onChange={choosePendingPhoto}
+                      />
+                      <div className={styles.photoActions} aria-label="Attach a photo for Rolo">
+                        <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={busy}>
+                          <IconCamera size={18} />
+                          <span>Take photo</span>
+                        </button>
+                        <button type="button" onClick={() => libraryInputRef.current?.click()} disabled={busy}>
+                          <IconDocs size={18} />
+                          <span>Choose photo</span>
+                        </button>
+                      </div>
+                      <p className={styles.photoHelp}>One JPEG or PNG, up to 10 MB. It stays private unless you choose otherwise.</p>
+                      <details>
+                        <summary>Use a saved Library photo</summary>
+                        {photosLoading ? <p>Loading your private photos…</p> : null}
+                        {photosError ? <p>Photos could not load here. Your Library is still available.</p> : null}
+                        {!photosLoading && !photosError && savedPhotos.length === 0 ? (
+                          <p>No saved photos yet. Take or choose one above, or <Link href={`/home/${homeId}/documents`} onClick={closeAssistant}>open Library.</Link></p>
+                        ) : null}
+                        {savedPhotos.length > 0 ? (
+                          <div className={styles.photoChoices}>
+                            {savedPhotos.slice(0, 12).map(photo => (
+                              <button
+                                key={photo.documentRef}
+                                type="button"
+                                onClick={() => {
+                                  setPendingPhoto(null)
+                                  setSelectedPhotoRef(photo.documentRef)
+                                  setPhotoConsent(false)
+                                }}
+                              >
+                                <span className={styles.photoChoiceMark} aria-hidden="true">▣</span>
+                                <span>{photo.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </details>
+                    </>
                   )}
                 </div>
               ) : null}
               <label htmlFor="rolo-message">Talk to Rolo</label>
-              <div>
+              <div className={styles.messageRow}>
                 <textarea
                   id="rolo-message"
                   ref={inputRef}
@@ -782,13 +950,13 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 />
                 <button
                   type="submit"
-                  disabled={!assistantEnabled || busy || !input.trim() || (!!activeSelectedPhotoRef && !photoConsent)}
+                  disabled={!assistantEnabled || busy || !input.trim() || (hasAttachedPhoto && !photoConsent)}
                   aria-label="Send to Rolo"
                 >↑</button>
               </div>
               <span>
                 Your message and a limited index of this home—including city/state when available, saved titles, dates, statuses, file names, professional labels, and system years—are processed by OpenAI. The saved street-address field is not sent. File and photo contents are not sent by default.
-                {visionEnabled ? ' If you explicitly select a saved photo and check the consent box, a fresh metadata-free JPEG copy is sent for that message. Responses storage is disabled, though OpenAI’s provider-retention rules may still apply; no other photo contents are sent.' : ''}
+                {visionEnabled ? ' If you attach a new photo, it is first saved privately to this home. If you select that photo or one already in Library and check the consent box, a fresh metadata-free JPEG copy is sent for that message. Responses storage is disabled, though OpenAI’s provider-retention rules may still apply; no other photo contents are sent.' : ''}
                 {' '}Rolo can describe visible details, but it does not diagnose, measure, price, hire, or save without approval.
               </span>
             </form>
