@@ -726,7 +726,7 @@ test('project review renders only on its exact server-reported capability', () =
   'both preview and submit force an empty file list when attachment handoff is disabled')
 })
 
-test('roof proposal comparison is private, neutral, editable, and separate from Jobrolo', () => {
+test('whole-home proposal workspace is private, neutral, shareable, and separate from Jobrolo', () => {
   const project = read('app/home/[homeId]/projects/[projectId]/page.tsx')
   const vault = read('components/RoofQuoteVault.tsx')
   const joined = `${project}\n${vault}`
@@ -736,8 +736,15 @@ test('roof proposal comparison is private, neutral, editable, and separate from 
     'the proposal vault is gated independently from general persistence')
   assert.match(project, /!uploadsEnabled \? \([\s\S]*Uploads are turned off in this build\./,
     'the project workspace says plainly when its private storage control is off')
-  assert.match(vault, /Scope only—not a price score/)
-  assert.match(vault, /Homesrolo does not estimate this roof, rank proposals/)
+  assert.match(project, /value: 'quotes', label: 'Quotes'/)
+  assert.match(project, /ProjectProposalWorkspace/)
+  assert.doesNotMatch(project, /project\.trade === 'Roofing'.*projectQuotesEnabled/)
+  assert.match(vault, /Written facts—not a price verdict/)
+  assert.match(vault, /Homesrolo does not estimate this work, rank proposals/)
+  assert.match(vault, /GENERAL_SCOPE_ROWS/)
+  assert.match(vault, /project_scope/)
+  assert.match(vault, /materials_products/)
+  assert.match(vault, /schedule/)
   assert.match(vault, /Not reviewed/)
   assert.match(vault, /Not stated/)
   assert.match(vault, /valleys/)
@@ -753,6 +760,24 @@ test('roof proposal comparison is private, neutral, editable, and separate from 
     'each edit control names the proposal it changes')
   assert.match(vault, /These classifications and notes stay in Homesrolo/,
     'structured quote metadata never implies Jobrolo disclosure')
+  assert.match(vault, /navigator\.share/,
+    'a homeowner can send the exact text request through the device share sheet')
+  assert.match(vault, /Review it and remove anything you do not want to send/,
+    'the homeowner can redact project text before sharing it')
+  assert.match(vault, /Saved photos and files are not attached/,
+    'the request surface makes the automatic attachment boundary exact')
+  assert.match(vault, /setRequestOverride\(event\.target\.value\)/,
+    'the exact request is editable rather than falsely promising to strip typed private facts')
+  assert.match(vault, /const requestText = requestOverride \?\? generatedRequestText/,
+    'late-loading choices and photo counts refresh the draft until the homeowner edits it')
+  assert.match(vault, /navigator\.share\(\{ text: exactText \}\)/,
+    'the device share call sends no hidden project title alongside the reviewed text')
+  assert.match(vault, /scopeOutsideRows/,
+    'proposal facts hidden by a category correction are preserved through later edits')
+  assert.match(vault, /port\.addProjectActivity/,
+    'an estimate visit is persisted through the existing project timeline')
+  assert.match(vault, /Add to phone calendar/,
+    'a saved visit can be handed to the device calendar without a paid integration')
   assert.match(vault, /Nothing was sent to Jobrolo or a contractor/,
     'a failed local save never implies cross-system delivery')
   assert.doesNotMatch(joined, /fair.?price|overpriced|best proposal|recommended proposal|priceScore/i)

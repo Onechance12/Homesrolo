@@ -516,6 +516,17 @@ export interface StartRoofingProjectInput {
 }
 
 export type QuoteScopeKey =
+  | 'project_scope'
+  | 'site_conditions'
+  | 'preparation'
+  | 'labor'
+  | 'materials_products'
+  | 'allowances'
+  | 'schedule'
+  | 'access_protection'
+  | 'inspection_closeout'
+  | 'warranty'
+  | 'change_orders'
   | 'measurement'
   | 'roof_configuration'
   | 'tear_off'

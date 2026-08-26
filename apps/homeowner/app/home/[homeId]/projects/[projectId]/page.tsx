@@ -22,15 +22,16 @@ import type {
   ProjectStatus,
   HomeownerWorkKind,
 } from '../../../../../lib/port/types.ts'
-import { RoofQuoteVault } from '../../../../../components/RoofQuoteVault.tsx'
+import { ProjectProposalWorkspace } from '../../../../../components/RoofQuoteVault.tsx'
 
-type WorkspaceSection = 'overview' | 'activity' | 'files' | 'decisions' | 'people'
+type WorkspaceSection = 'overview' | 'activity' | 'files' | 'decisions' | 'quotes' | 'people'
 
 const WORKSPACE_SECTIONS: readonly { value: WorkspaceSection; label: string }[] = [
   { value: 'overview', label: 'Plan' },
   { value: 'activity', label: 'Updates' },
   { value: 'files', label: 'Photos' },
   { value: 'decisions', label: 'Choices' },
+  { value: 'quotes', label: 'Quotes' },
   { value: 'people', label: 'People' },
 ]
 
@@ -456,8 +457,8 @@ export default function ProjectPage({
           <button type="button" aria-pressed={activeSection === 'decisions'} onClick={() => chooseWorkspaceSection('decisions')}>
             <span aria-hidden="true">◇</span><strong>{project.workKind === 'service' ? 'Save details' : 'Save choices'}</strong><small>{projectItems.length} saved</small>
           </button>
-          <button type="button" aria-pressed={activeSection === 'people'} onClick={() => chooseWorkspaceSection('people')}>
-            <span aria-hidden="true">+</span><strong>Add a pro</strong><small>{hasProfessional ? '1 connected' : 'None yet'}</small>
+          <button type="button" aria-pressed={activeSection === 'quotes'} onClick={() => chooseWorkspaceSection('quotes')}>
+            <span aria-hidden="true">↗</span><strong>Get quotes</strong><small>Invite &amp; compare</small>
           </button>
           <button type="button" aria-pressed={activeSection === 'activity'} onClick={() => chooseWorkspaceSection('activity')}>
             <span aria-hidden="true">↗</span><strong>Add update</strong><small>{projectUpdates.length} saved</small>
@@ -792,13 +793,50 @@ export default function ProjectPage({
         </section>
       ) : null}
 
-      {activeSection === 'decisions' && !project.isSynthetic && project.trade === 'Roofing' && projectQuotesEnabled ? (
-        <RoofQuoteVault
+      {activeSection === 'quotes' && !project.isSynthetic && projectQuotesEnabled ? (
+        <ProjectProposalWorkspace
           homeRef={homeId}
           projectRef={projectId}
+          projectTitle={project.title}
+          projectSummary={project.summary}
+          projectCategory={project.category}
+          projectTrade={project.trade}
+          projectItems={projectItems}
+          projectPhotoCount={projectFiles.filter(file => file.kind === 'photo_set').length + project.photos.length}
           projectFiles={projectFiles}
           uploadsEnabled={uploadsEnabled}
+          onVisitSaved={retryActivity}
         />
+      ) : null}
+
+      {activeSection === 'quotes' && !project.isSynthetic && sessionReady && !projectQuotesEnabled ? (
+        <section id="project-panel-quotes" role="tabpanel" aria-labelledby="project-tab-quotes" className="project-workspace__panel">
+          <div className="project-overview__head">
+            <div><p className="mono">Private proposal workspace</p><h2>Request &amp; proposals</h2></div>
+          </div>
+          <div className="project-upload-off" role="status">
+            <strong>Proposal storage is unavailable in this build.</strong>
+            <p>Your project, choices, and photos remain saved. No request or proposal has been sent.</p>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'quotes' && project.isSynthetic ? (
+        <section id="project-panel-quotes" role="tabpanel" aria-labelledby="project-tab-quotes" className="project-workspace__panel">
+          <div className="project-overview__head">
+            <div><p className="mono">Example workspace</p><h2>Request &amp; proposals</h2></div>
+          </div>
+          <div className="project-empty-inline">
+            <strong>This example has no private proposals.</strong>
+            <span>Open one of your own projects to share a request, compare written proposals, or save a visit.</span>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'quotes' && !project.isSynthetic && !sessionReady ? (
+        <section id="project-panel-quotes" role="tabpanel" aria-labelledby="project-tab-quotes" className="project-workspace__panel">
+          <Skeleton lines={2} label="Loading private proposal tools" />
+        </section>
       ) : null}
 
       {activeSection === 'files' && !project.isSynthetic && !sessionReady ? (

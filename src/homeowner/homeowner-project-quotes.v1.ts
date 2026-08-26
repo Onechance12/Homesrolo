@@ -20,6 +20,17 @@ const utcInstant = z.string().refine(value => {
 }, 'must be a canonical UTC instant')
 
 export const HOMEOWNER_QUOTE_SCOPE_KEYS = Object.freeze([
+  'project_scope',
+  'site_conditions',
+  'preparation',
+  'labor',
+  'materials_products',
+  'allowances',
+  'schedule',
+  'access_protection',
+  'inspection_closeout',
+  'warranty',
+  'change_orders',
   'measurement',
   'roof_configuration',
   'tear_off',
@@ -53,6 +64,17 @@ export const homeownerQuoteScopeItemSchema = z.object({
 }).strict()
 
 export const homeownerQuoteScopeSchema = z.object({
+  project_scope: homeownerQuoteScopeItemSchema.optional(),
+  site_conditions: homeownerQuoteScopeItemSchema.optional(),
+  preparation: homeownerQuoteScopeItemSchema.optional(),
+  labor: homeownerQuoteScopeItemSchema.optional(),
+  materials_products: homeownerQuoteScopeItemSchema.optional(),
+  allowances: homeownerQuoteScopeItemSchema.optional(),
+  schedule: homeownerQuoteScopeItemSchema.optional(),
+  access_protection: homeownerQuoteScopeItemSchema.optional(),
+  inspection_closeout: homeownerQuoteScopeItemSchema.optional(),
+  warranty: homeownerQuoteScopeItemSchema.optional(),
+  change_orders: homeownerQuoteScopeItemSchema.optional(),
   measurement: homeownerQuoteScopeItemSchema.optional(),
   roof_configuration: homeownerQuoteScopeItemSchema.optional(),
   tear_off: homeownerQuoteScopeItemSchema.optional(),
@@ -158,4 +180,4 @@ export interface HomeownerProjectQuotePort {
 }
 
 export const HOMEOWNER_PROJECT_QUOTE_WARNING =
-  'A quote is homeowner-entered private project data. Homesrolo does not rate the price, recommend a contractor, or send quote metadata to Jobrolo.'
+  'A proposal is homeowner-entered private project data. Homesrolo does not rate the price, recommend a professional, or send proposal metadata to Jobrolo.'

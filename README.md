@@ -45,14 +45,23 @@ be applied before the generic project command is used in a configured runtime.
 The existing roofing-specific entry path remains available so public roofing
 guides can carry a homeowner’s stated intent into the broader project center.
 
-Inside a roofing project, a homeowner can record multiple proposal labels,
-link an original proposal PDF when uploads are safely enabled, and mark what
-each document says about measurement, materials, valleys, flashing,
-penetrations, ventilation, warranties, payment terms, and exclusions. Missing
-rows remain “not reviewed”; Homesrolo records no price score, ranking, or
-contractor recommendation. The proposal comparison has its own default-off
-`HOMESROLO_PROJECT_QUOTES_ENABLED` release gate, and migration `202608210001`
-must be applied and verified before that gate is enabled.
+Inside any real project, a homeowner can create and redact a text request, open
+the device share sheet, save estimate or service visits to the existing project
+timeline, and add the visit to a phone calendar. The request is initially built
+from the project name, home area/trade, summary, selected choices, and private
+photo count. The exact text is shown for review and can be edited before the
+share action becomes available inside that review surface. It does not create
+an external account, grant Home Record access, or automatically attach any
+saved photo or file.
+The homeowner can also record multiple proposal labels, link an original PDF
+when uploads are safely enabled, and compare what each proposal actually says.
+Roofing keeps its detailed roof-system rows; other home work uses neutral scope,
+materials, schedule, warranty, payment, change-order, and exclusion rows.
+Missing rows remain “not reviewed”; Homesrolo records no price score, ranking,
+or contractor recommendation. The proposal comparison has its own default-off
+`HOMESROLO_PROJECT_QUOTES_ENABLED` release gate. Migrations `202608210001` and
+`202608260001` must be applied and verified before whole-home proposals are
+enabled.
 
 The authenticated shell now includes Rolo, a private conversational organizer
 at `POST /api/v1/homes/{homeRef}/assistant`. Rolo receives a bounded home index,
@@ -64,11 +73,13 @@ browser session; OpenAI response storage is disabled.
 
 When the separate `HOMESROLO_ROLO_VISION_ENABLED` gate and private uploads are
 both enabled, the homeowner may select one already-saved generic Library photo
-for one message. The server re-authorizes the exact home and artifact,
-re-encodes a metadata-free JPEG derivative, and sends only that derivative with
-fresh per-message consent. Rolo returns visible observations and uncertainty,
-not a diagnosis, measurement, price, scope, insurance conclusion, or automatic
-record. Home Watch photo checkups remain excluded from automated analysis.
+or attach one new JPEG/PNG from the camera or photo library for one message. A
+new attachment is saved into the private Home Library first. The server then
+re-authorizes the exact home and artifact, re-encodes a metadata-free JPEG
+derivative, and sends only that derivative with fresh per-message consent. Rolo
+returns visible observations and uncertainty, not a diagnosis, measurement,
+price, scope, insurance conclusion, or automatic record. Home Watch photo
+checkups remain excluded from automated analysis.
 
 Public home research remains a separate, stricter path at
 `POST /api/v1/homes/{homeRef}/research`. With explicit consent, it can send one
