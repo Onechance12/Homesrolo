@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
+import type { ColorValue } from 'react-native'
 import { colors } from '../../../src/theme.ts'
 
 const icon = (name: keyof typeof Ionicons.glyphMap) =>
-  ({ color, size }: { color: string; size: number }) => <Ionicons name={name} color={color} size={size} />
+  ({ color, size }: { color: ColorValue; size: number }) => <Ionicons name={name} color={color} size={size} />
 
 export default function HomeTabs() {
   return (

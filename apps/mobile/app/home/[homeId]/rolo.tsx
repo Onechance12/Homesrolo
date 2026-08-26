@@ -46,7 +46,11 @@ export default function RoloScreen() {
     setInput('')
     try {
       const reply = await api.askRolo(homeId, clean, turns)
-      setTurns(current => [...current, { role: 'user', text: clean }, { role: 'assistant', text: reply.answer }].slice(-10))
+      const exchange: RoloTurn[] = [
+        { role: 'user', text: clean },
+        { role: 'assistant', text: reply.answer },
+      ]
+      setTurns(current => [...current, ...exchange].slice(-10))
       pendingCreate.current = null
       setProposal(reply.proposedWork)
     } catch (caught) {

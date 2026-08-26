@@ -184,8 +184,6 @@ export function Notice({ message, actionLabel, onAction }: {
 
 export function Divider() { return <View style={styles.divider} /> }
 
-export const ui = styles
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.ink },
   page: { padding: space.lg, paddingBottom: 120, gap: space.md },
