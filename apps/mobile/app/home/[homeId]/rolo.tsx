@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, useGlobalSearchParams, useLocalSearchParams } from 'expo-router'
+import { Redirect, router, useGlobalSearchParams, useLocalSearchParams } from 'expo-router'
 import type { RoloReply, RoloTurn, WorkRecord } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
@@ -29,9 +29,20 @@ export default function RoloScreen() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<WorkRecord | null>(null)
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
+  const conversationVersion = useRef(0)
 
   useEffect(() => {
-    if (prompt && turns.length === 0 && !input) setInput(prompt)
+    if (!prompt) return
+    conversationVersion.current += 1
+    pendingCreate.current = null
+    setTurns([])
+    setProposal(null)
+    setFollowUpQuestions([])
+    setSaved(null)
+    setError(null)
+    setBusy(false)
+    setInput(prompt.slice(0, 1_600))
+    router.setParams({ prompt: undefined })
   }, [prompt])
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
@@ -50,6 +61,7 @@ export default function RoloScreen() {
   async function send(message = input) {
     const clean = message.trim()
     if (!clean || busy) return
+    const version = conversationVersion.current
     setBusy(true)
     setError(null)
     setSaved(null)
@@ -59,6 +71,7 @@ export default function RoloScreen() {
         pendingWork: proposal,
         unansweredFollowUpQuestion: followUpQuestions[0] ?? null,
       })
+      if (version !== conversationVersion.current) return
       const exchange: RoloTurn[] = [
         { role: 'user', text: clean },
         { role: 'assistant', text: reply.answer },
@@ -68,11 +81,14 @@ export default function RoloScreen() {
       setProposal(reply.proposedWork)
       setFollowUpQuestions(reply.followUpQuestions)
     } catch (caught) {
+      if (version !== conversationVersion.current) return
       setInput(clean)
       setError(previewMode && caught instanceof Error
         ? `Preview error: ${caught.message}`
         : friendlyError(caught))
-    } finally { setBusy(false) }
+    } finally {
+      if (version === conversationVersion.current) setBusy(false)
+    }
   }
 
   async function saveProposal() {
@@ -173,11 +189,14 @@ export default function RoloScreen() {
             icon="refresh-outline"
             quiet
             onPress={() => {
+              conversationVersion.current += 1
+              setInput('')
               setTurns([])
               setProposal(null)
               setFollowUpQuestions([])
               setSaved(null)
               setError(null)
+              setBusy(false)
               pendingCreate.current = null
             }}
           />
