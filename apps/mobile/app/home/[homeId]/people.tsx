@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, router, useLocalSearchParams } from 'expo-router'
+import { Redirect, router, useGlobalSearchParams } from 'expo-router'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { Button, Card, Loading, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
@@ -9,7 +9,7 @@ import { useResource } from '../../../src/hooks/useResource.ts'
 import { categoryLabel, colors, space } from '../../../src/theme.ts'
 
 export default function PeopleScreen() {
-  const { homeId } = useLocalSearchParams<{ homeId: string }>()
+  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
   const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(() => api.listWork(homeId), [api, homeId])
   const resource = useResource(loader, auth.kind === 'signed_in')

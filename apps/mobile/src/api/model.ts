@@ -170,6 +170,8 @@ export interface DeviceFile {
   readonly name: string
   readonly mediaType: ArtifactMediaType
   readonly byteLength: number
+  /** Unmarked inputs are external; only staged cache copies may be removed. */
+  readonly lifecycle?: 'external-source' | 'staged-cache'
 }
 
 export interface ApiProblem {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, useLocalSearchParams } from 'expo-router'
+import { Redirect, useGlobalSearchParams, useLocalSearchParams } from 'expo-router'
 import type { RoloReply, RoloTurn, WorkRecord } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
@@ -16,8 +16,9 @@ const STARTERS = [
 ]
 
 export default function RoloScreen() {
-  const { homeId, prompt } = useLocalSearchParams<{ homeId: string; prompt?: string }>()
-  const { state: auth, api, refreshSession } = useSession()
+  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const { prompt } = useLocalSearchParams<{ prompt?: string }>()
+  const { state: auth, api, previewMode, refreshSession } = useSession()
   const [input, setInput] = useState('')
   const [turns, setTurns] = useState<RoloTurn[]>([])
   const [proposal, setProposal] = useState<RoloReply['proposedWork']>(null)
@@ -55,7 +56,9 @@ export default function RoloScreen() {
       setProposal(reply.proposedWork)
     } catch (caught) {
       setInput(clean)
-      setError(friendlyError(caught))
+      setError(previewMode && caught instanceof Error
+        ? `Preview error: ${caught.message}`
+        : friendlyError(caught))
     } finally { setBusy(false) }
   }
 

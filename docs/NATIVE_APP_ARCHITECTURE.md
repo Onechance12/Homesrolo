@@ -100,6 +100,19 @@ Signed URLs are never cached. The first offline capability is capture and a
 bounded pending-upload queue; the server remains authoritative for the Home
 Record.
 
+The initial native client keeps only active-session upload-attempt metadata; it
+does not yet implement that offline queue. A failed upload retains its document
+picker cache copy and command reference so re-picking the same command-bound
+file can retry safely during the active app session. A retry first asks the
+server to complete the exact remembered reservation before requesting another
+bounded upload ticket. After server-confirmed success, the client attempts to
+delete only marked files that are still inside Expo's cache directory and
+retries failed cleanup while that app process remains active. Photo-library
+sources are never marked for deletion. If the app exits first, Expo's
+system-managed cache may retain an unreferenced copy until the platform reclaims
+it; retry and pending-cleanup metadata are bounded to the active process and are
+not restored.
+
 ## Jobrolo boundary
 
 Homesrolo and Jobrolo do not share a database, session, user, or storage
