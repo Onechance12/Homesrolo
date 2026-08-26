@@ -100,6 +100,8 @@ test('the off-Render deployment is reproducible from the repository root', () =>
     'the reviewed private bucket migration is live before this release gate opens')
   assert.match(configuration, /HOMESROLO_PHOTO_CHECKUPS_ENABLED = "true"/,
     'the reviewed photo-checkup migration and bounded private upload path are live before this release gate opens')
+  assert.match(configuration, /HOMESROLO_ROLO_VISION_ENABLED = "true"/,
+    'exact-home authorization, explicit consent, and metadata-free photo transforms are live before photo review opens')
   assert.match(configuration, /for = "\/\*"[\s\S]*X-Content-Type-Options = "nosniff"/)
   assert.match(configuration, /X-Frame-Options = "DENY"/)
   assert.match(configuration, /Referrer-Policy = "strict-origin-when-cross-origin"/)

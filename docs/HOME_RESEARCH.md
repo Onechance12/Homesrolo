@@ -93,7 +93,7 @@ that Rolo read the file.
 
 ### One-photo review boundary
 
-Selected-photo review has its own default-off capability and requires all of:
+Selected-photo review has its own release capability and requires all of:
 
 - `HOMESROLO_ROLO_VISION_ENABLED=true`
 - private uploads enabled for the homeowner account
@@ -118,6 +118,12 @@ to determine hidden cause, mold/asbestos, code compliance, structural soundness,
 storm date or cause, workmanship, insurance, measurements, scope, or price.
 Photo checkups are deliberately excluded because their public privacy promise
 states that they are not sent to automated image analysis.
+
+The Netlify production configuration enables this capability only after the
+compatible client, exact-home authorization, explicit-consent UI, bounded
+metadata-free transform, and deployment guard are present. Removing
+`HOMESROLO_ROLO_VISION_ENABLED=true` hides the control and blocks image calls
+without affecting text-only Rolo.
 
 Rolo is a librarian, not an advisor. The versioned prompt carries the product
 voice from `docs/VOICE.md`, distinguishes general education from facts about the
