@@ -1,199 +1,217 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { useCallback, useMemo } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, useGlobalSearchParams } from 'expo-router'
-import type { ArtifactKind } from '../../../src/api/model.ts'
-import { friendlyError } from '../../../src/api/errors.ts'
+import { Redirect, router, useGlobalSearchParams } from 'expo-router'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { WorkCard } from '../../../src/components/WorkCard.tsx'
-import { Button, Card, Loading, Metric, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
+import { Button, Card, Loading, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
 import { useResource } from '../../../src/hooks/useResource.ts'
-import { pickDocument, pickPhoto } from '../../../src/native/pickers.ts'
-import { PREVIEW_UPLOAD_NOTICE } from '../../../src/preview/api.ts'
 import { colors, radius, space } from '../../../src/theme.ts'
 
-export default function HomeScreen() {
+const ACTIONS = [
+  {
+    icon: 'construct-outline' as const,
+    title: 'Fix a problem',
+    detail: 'Something broke or does not seem right',
+    tone: colors.warning,
+    prompt: 'Something at my home is not working. Help me figure out what is safe to check, what photos or details would help, and whether I need a professional.',
+  },
+  {
+    icon: 'color-wand-outline' as const,
+    title: 'Plan a project',
+    detail: 'Pool, remodel, paint, roof, or another idea',
+    tone: colors.aqua,
+    prompt: 'I want to plan a home project. Ask me what I want, where it is, what matters to me, ideas or photos I already have, my budget, and timing. Help me turn it into a clear plan I can save.',
+  },
+  {
+    icon: 'repeat-outline' as const,
+    title: 'Get routine help',
+    detail: 'Yard care, service, cleaning, pest, and more',
+    tone: colors.mint,
+    prompt: 'I need routine help at my home, such as yard care, heating and air service, pest control, cleaning, or another recurring service. Help me describe exactly what I need and create a service plan.',
+  },
+  {
+    icon: 'time-outline' as const,
+    title: 'Add past work',
+    detail: 'Bring an old repair or improvement into the Rolo',
+    tone: colors.lime,
+    prompt: "Help me add past work to this home's history. Ask only what matters: what was done, when it happened, who did it, and what proof I still have.",
+  },
+]
+
+export default function TodayScreen() {
   const { homeId } = useGlobalSearchParams<{ homeId: string }>()
-  const { state: auth, api, previewMode, refreshSession } = useSession()
-  const width = useWindowDimensions().width
+  const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(async () => {
-    const [home, work, artifacts] = await Promise.all([
-      api.getHome(homeId), api.listWork(homeId), api.listArtifacts(homeId),
-    ])
-    return { home, work: work.filter(item => !item.archived), artifacts }
+    const [home, work] = await Promise.all([api.getHome(homeId), api.listWork(homeId)])
+    return { home, work: work.filter(item => !item.archived) }
   }, [api, homeId])
   const bundle = useResource(loader, auth.kind === 'signed_in')
-  const [uploading, setUploading] = useState<string | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-
-  const cardWidth = Math.max(270, width - 64)
-  const cards = useMemo(() => bundle.state.kind === 'ready'
-    ? bundle.state.value.work.slice(0, 5)
-    : [], [bundle.state])
+  const workViews = useMemo(() => {
+    if (bundle.state.kind !== 'ready') return { active: [], finished: [] }
+    const newest = [...bundle.state.value.work].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    return {
+      active: newest.filter(item => item.status === 'planned' || item.status === 'in_progress'),
+      finished: newest.filter(item => item.status === 'completed'),
+    }
+  }, [bundle.state])
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
-  if (bundle.state.kind === 'loading') return <Loading />
+  if (bundle.state.kind === 'loading') return <Loading label="Opening today…" />
   if (bundle.state.kind === 'error') {
-    return <Page><Notice message="This home could not open." actionLabel="Try again" onAction={bundle.reload} /></Page>
+    return <Page><Notice message="Today could not load." actionLabel="Try again" onAction={bundle.reload} /></Page>
   }
 
-  const { home, work, artifacts } = bundle.state.value
-  const careCount = work.filter(item => item.workKind === 'service' || item.workKind === 'repair').length
-  const photos = artifacts.filter(item => item.kind === 'photo')
-
-  async function upload(kind: ArtifactKind, source: 'camera' | 'library' | 'document' | 'warranty') {
-    if (previewMode) {
-      setUploadError(PREVIEW_UPLOAD_NOTICE)
-      return
-    }
-    try {
-      setUploadError(null)
-      setUploading(source)
-      const file = source === 'document' || source === 'warranty'
-        ? await pickDocument()
-        : await pickPhoto(source)
-      if (!file) return
-      await api.uploadArtifact(homeId, kind, file)
-      bundle.reload()
-    } catch (error) { setUploadError(friendlyError(error)) } finally { setUploading(null) }
-  }
+  const { home } = bundle.state.value
+  const openRolo = (prompt: string) => router.push({
+    pathname: '/home/[homeId]/rolo',
+    params: { homeId, prompt },
+  })
 
   return (
     <Page>
       <HomeHeader
-        section="Your home Rolo"
-        title={home.displayLabel}
-        detail={home.privateLocationLabel}
+        section="Today"
+        title="What needs doing?"
+        detail={`${home.displayLabel} · ${home.privateLocationLabel}`}
       />
-      <Card accent>
-        <View style={styles.metricRow}>
-          <Metric value={work.length} label="work records" />
-          <Metric value={artifacts.length} label="saved files" />
-          <Metric value={careCount} label="care entries" />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Ask Rolo about this home"
+        onPress={() => openRolo('I need help with my home. Ask me what I am trying to fix, plan, schedule, or understand.')}
+        style={({ pressed }) => [styles.roloBar, pressed && styles.pressed]}
+      >
+        <View style={styles.roloMark}><Ionicons name="sparkles" size={23} color={colors.ink} /></View>
+        <View style={styles.roloCopy}>
+          <Text style={styles.roloTitle}>Tell Rolo what you need</Text>
+          <Text style={styles.roloDetail}>Talk it through—no forms or trade knowledge needed.</Text>
         </View>
-        <Text style={styles.privateLine}>Private by default. You decide what gets shared.</Text>
-      </Card>
+        <Ionicons name="arrow-forward" size={20} color={colors.lime} />
+      </Pressable>
 
-      <SectionTitle title="The cards in your Rolo" detail="Swipe through what this home has been through." />
-      {cards.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={cardWidth + 12}
-          decelerationRate="fast"
-          contentContainerStyle={styles.carousel}
-        >
-          {cards.map(item => <View key={item.projectRef} style={{ width: cardWidth }}><WorkCard work={item} compact /></View>)}
-        </ScrollView>
-      ) : (
-        <Card>
-          <Tag tone="lime">First card</Tag>
-          <Text style={styles.emptyTitle}>Start with anything worth remembering.</Text>
-          <Text style={styles.emptyCopy}>An old repair, today’s AC problem, a receipt, or one photo is enough.</Text>
-        </Card>
-      )}
-
-      <SectionTitle title="Capture it now" detail="Photos and files go straight into this private home record." />
-      <View style={styles.captureGrid}>
-        <Capture icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
-        <Capture icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
-        <Capture icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
-        <Capture icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
+      <View style={styles.actionGrid}>
+        {ACTIONS.map(action => (
+          <Pressable
+            key={action.title}
+            accessibilityRole="button"
+            accessibilityLabel={action.title}
+            accessibilityHint={action.detail}
+            onPress={() => openRolo(action.prompt)}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: `${action.tone}24` }]}>
+              <Ionicons name={action.icon} size={24} color={action.tone} />
+            </View>
+            <Text style={styles.actionTitle}>{action.title}</Text>
+            <Text style={styles.actionDetail}>{action.detail}</Text>
+          </Pressable>
+        ))}
       </View>
-      {uploadError ? <Notice message={uploadError} /> : null}
 
-      {photos.length > 0 ? (
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => openRolo("I have a question about my home. Use this home's saved information when it helps, and tell me clearly what you can and cannot confirm.")}
+        style={({ pressed }) => [styles.askCard, pressed && styles.pressed]}
+      >
+        <Ionicons name="chatbubble-ellipses-outline" size={25} color={colors.aqua} />
+        <View style={styles.roloCopy}>
+          <Text style={styles.askTitle}>Ask about my home</Text>
+          <Text style={styles.actionDetail}>Use what this home already remembers.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.slate} />
+      </Pressable>
+
+      <SectionTitle
+        title="In motion"
+        detail={workViews.active.length > 0 ? `${workViews.active.length} open ${workViews.active.length === 1 ? 'plan' : 'plans'} for this home.` : 'The work you start will stay within reach here.'}
+      />
+      {workViews.active.slice(0, 3).map(item => <WorkCard key={item.projectRef} work={item} />)}
+      {workViews.active.length === 0 ? (
+        <Card>
+          <Tag tone="lime">Clear for now</Tag>
+          <Text style={styles.emptyTitle}>No open work is waiting on you.</Text>
+          <Text style={styles.emptyCopy}>Start with a problem, project idea, or routine service and Rolo will help shape the first plan.</Text>
+        </Card>
+      ) : null}
+      <Button
+        label={workViews.active.length > 0 ? 'See all plans' : 'Open plans'}
+        icon="layers-outline"
+        quiet
+        onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
+      />
+
+      {workViews.finished.length > 0 ? (
         <>
-          <SectionTitle title="Photos this home remembers" detail="Private images saved to this address." />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
-            {photos.slice(0, 12).map(photo => (
-              <View key={photo.artifactRef} style={styles.photoCard}>
-                <Image source={api.artifactPreviewSource(homeId, photo.artifactRef)} style={styles.photo} resizeMode="cover" />
-                <Text style={styles.photoName} numberOfLines={2}>{photo.displayName}</Text>
-              </View>
-            ))}
-          </ScrollView>
+          <SectionTitle title="Recently finished" detail="Completed work quietly becomes part of My Home." />
+          {workViews.finished.slice(0, 2).map(item => <WorkCard key={item.projectRef} work={item} compact />)}
         </>
       ) : null}
-
-      {artifacts.some(item => item.kind !== 'photo') ? (
-        <>
-          <SectionTitle title="Files on hand" />
-          {artifacts.filter(item => item.kind !== 'photo').slice(0, 4).map(file => (
-            <Card key={file.artifactRef}>
-              <View style={styles.fileRow}>
-                <Ionicons name={file.kind === 'warranty' ? 'shield-checkmark-outline' : 'document-text-outline'} size={23} color={colors.aqua} />
-                <View style={styles.fileCopy}>
-                  <Text style={styles.fileName}>{file.displayName}</Text>
-                  <Text style={styles.fileMeta}>{file.kind} · {Math.max(1, Math.round(file.byteLength / 1024))} KB</Text>
-                </View>
-              </View>
-            </Card>
-          ))}
-        </>
-      ) : null}
-
-      <Card>
-        <View style={styles.watchIcon}><Ionicons name="scan-outline" size={24} color={colors.lime} /></View>
-        <Text style={styles.watchTitle}>Home Watch looks at the whole house.</Text>
-        <Text style={styles.emptyCopy}>Roof Watch is the roofing part of Home Watch—alongside heating and air, plumbing, exterior, electrical, safety, and seasonal condition photos.</Text>
-      </Card>
-
-      <SectionTitle title="Recently remembered" />
-      {work.slice(0, 3).map(item => <WorkCard key={item.projectRef} work={item} />)}
-      {work.length === 0 ? <Notice message="No work records yet. Tell Rolo what happened or add one from Work." /> : null}
-      <Button label="Refresh this home" onPress={bundle.reload} quiet icon="refresh" />
     </Page>
   )
 }
 
-function Capture({ icon, label, busy, onPress }: {
-  readonly icon: keyof typeof Ionicons.glyphMap
-  readonly label: string
-  readonly busy: boolean
-  readonly onPress: () => void
-}) {
-  return (
-    <Pressable disabled={busy} onPress={onPress} style={({ pressed }) => [styles.capture, pressed && styles.capturePressed]}>
-      <Ionicons name={icon} size={25} color={colors.lime} />
-      <Text style={styles.captureText}>{busy ? 'Saving…' : label}</Text>
-    </Pressable>
-  )
-}
-
 const styles = StyleSheet.create({
-  metricRow: { flexDirection: 'row', gap: space.sm },
-  privateLine: { color: colors.slate, fontSize: 12, paddingTop: 4 },
-  carousel: { gap: 12, paddingRight: space.lg },
-  emptyTitle: { color: colors.cream, fontSize: 20, lineHeight: 25, fontWeight: '900' },
-  emptyCopy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
-  captureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  capture: {
-    width: '48%', minHeight: 96, gap: 9, alignItems: 'center', justifyContent: 'center',
-    borderRadius: radius.medium, borderColor: colors.line, borderWidth: 1,
-    backgroundColor: colors.inkRaised, paddingHorizontal: 8,
-  },
-  capturePressed: { backgroundColor: colors.inkSoft, transform: [{ scale: 0.98 }] },
-  captureText: { color: colors.cream, fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  photoStrip: { gap: 12, paddingRight: space.lg },
-  photoCard: {
-    width: 190, borderRadius: radius.medium, overflow: 'hidden',
-    backgroundColor: colors.inkRaised, borderWidth: 1, borderColor: colors.line,
-  },
-  photo: { width: 190, height: 145, backgroundColor: colors.inkSoft },
-  photoName: { color: colors.cream, fontSize: 12, lineHeight: 17, fontWeight: '700', padding: 11 },
-  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  fileCopy: { flex: 1, gap: 3 },
-  fileName: { color: colors.cream, fontSize: 15, fontWeight: '800' },
-  fileMeta: { color: colors.slate, fontSize: 11, textTransform: 'capitalize' },
-  watchIcon: {
-    width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+  roloBar: {
+    minHeight: 84,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.lime,
     backgroundColor: colors.limeSoft,
+    padding: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  watchTitle: { color: colors.cream, fontSize: 21, lineHeight: 26, fontWeight: '900' },
+  roloMark: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.lime,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roloCopy: { flex: 1, gap: 3 },
+  roloTitle: { color: colors.cream, fontSize: 17, fontWeight: '900' },
+  roloDetail: { color: colors.slate, fontSize: 12, lineHeight: 17 },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  action: {
+    width: '48%',
+    minHeight: 158,
+    borderRadius: radius.large,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.inkRaised,
+    padding: 15,
+    gap: 9,
+  },
+  actionIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTitle: { color: colors.cream, fontSize: 16, lineHeight: 20, fontWeight: '900' },
+  actionDetail: { color: colors.slate, fontSize: 12, lineHeight: 17 },
+  askCard: {
+    minHeight: 72,
+    borderRadius: radius.medium,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.inkRaised,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  askTitle: { color: colors.cream, fontSize: 16, fontWeight: '900' },
+  pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
+  emptyTitle: { color: colors.cream, fontSize: 19, lineHeight: 24, fontWeight: '900' },
+  emptyCopy: { color: colors.slate, fontSize: 14, lineHeight: 20 },
 })

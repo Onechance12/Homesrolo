@@ -10,9 +10,10 @@ import { Button, Card, Loading, Notice, Page, Tag, TextField } from '../../../sr
 import { categoryLabel, colors, kindLabel, radius, space, statusLabel } from '../../../src/theme.ts'
 
 const STARTERS = [
-  'My AC is not cooling. Help me figure out what to check safely.',
-  'Help me remember an old repair.',
-  'What home maintenance should I think about this season?',
+  'Something is not working. Help me figure out what to check safely and what kind of pro I may need.',
+  'Help me plan a project such as a pool, remodel, roof, or outdoor upgrade.',
+  'I need routine help such as yard care, heating and air service, cleaning, or pest control.',
+  'I have a question about my home and what it already remembers.',
 ]
 
 export default function RoloScreen() {
@@ -110,16 +111,16 @@ export default function RoloScreen() {
     <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Page>
         <HomeHeader
-          section="Rolo Live"
-          title="Talk to the home."
-          detail="Diagnose safely, organize what happened, and turn the conversation into a record only after you approve it."
+          section="Start"
+          title="What do you want to get done?"
+          detail="Describe it naturally. Rolo helps you think it through and turns it into a plan only after you approve it."
         />
 
         {turns.length === 0 ? (
           <Card accent>
             <View style={styles.roloMark}><Ionicons name="sparkles" size={28} color={colors.ink} /></View>
-            <Text style={styles.introTitle}>Start wherever your brain is.</Text>
-            <Text style={styles.introCopy}>You do not need to know whether it is a project, repair, service call, or issue. Tell Rolo what is going on.</Text>
+            <Text style={styles.introTitle}>Start with the real reason you opened the app.</Text>
+            <Text style={styles.introCopy}>A broken AC, a pool idea, weekly yard help, or a question about the house—just say it the way you would to a person.</Text>
             {STARTERS.map(starter => (
               <Pressable key={starter} onPress={() => void send(starter)} style={styles.starter}>
                 <Text style={styles.starterText}>{starter}</Text>
@@ -154,7 +155,7 @@ export default function RoloScreen() {
             <Text style={styles.proposalMeta}>{categoryLabel[proposal.category]} · {statusLabel[proposal.status]}</Text>
             {proposal.summary ? <Text style={styles.introCopy}>{proposal.summary}</Text> : null}
             {proposal.professionalLabel ? <Text style={styles.proLabel}>Person/company: {proposal.professionalLabel}</Text> : null}
-            <Button label={saving ? 'Saving…' : 'Approve and save to Work'} onPress={() => void saveProposal()} disabled={saving} />
+            <Button label={saving ? 'Saving…' : 'Approve and add to Plans'} onPress={() => void saveProposal()} disabled={saving} />
             <Button label="Do not save this" onPress={() => {
               pendingCreate.current = null
               setProposal(null)
@@ -163,7 +164,7 @@ export default function RoloScreen() {
             <Text style={styles.disclosure}>Nothing is saved until you approve it.</Text>
           </Card>
         ) : null}
-        {saved ? <Notice message={`Saved “${saved.title}” to this home’s Work.`} /> : null}
+        {saved ? <Notice message={`Saved “${saved.title}” to this home’s Plans.`} /> : null}
         {error ? <Notice message={error} /> : null}
 
         {turns.length > 0 ? (
@@ -188,7 +189,7 @@ export default function RoloScreen() {
             value={input}
             onChangeText={setInput}
             multiline
-            placeholder="Tell me what is broken, what happened, or what this home should remember…"
+            placeholder="Tell me what you need fixed, planned, serviced, or answered…"
           />
           <Button label={busy ? 'Thinking…' : 'Send'} icon="arrow-up" onPress={() => void send()} disabled={busy || !input.trim()} />
         </Card>
