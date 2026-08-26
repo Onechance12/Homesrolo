@@ -947,6 +947,7 @@ export class SupabaseHomeownerProvider implements
 
   async createProject(input: Parameters<HomeownerCommandPort['createProject']>[0]) {
     const projectRef = mintOpaqueRef('hprj')
+    const initialActivityRef = input.command.initialActivity ? mintOpaqueRef('hact') : null
     const { data, error } = await this.#client.rpc('homesrolo_create_homeowner_project', {
       p_principal_ref: input.grant.principalRef,
       p_home_ref: input.grant.homeRef,
@@ -961,6 +962,10 @@ export class SupabaseHomeownerProvider implements
       p_status: input.command.status,
       p_occurred_on: input.command.occurredOn ?? null,
       p_summary: input.command.summary ?? '',
+      p_professional_label: input.command.professionalLabel ?? null,
+      p_initial_activity_ref: initialActivityRef,
+      p_initial_activity_kind: input.command.initialActivity?.kind ?? null,
+      p_initial_activity_body: input.command.initialActivity?.body ?? null,
       p_requested_at: input.command.requestedAt,
     })
     if (error) {

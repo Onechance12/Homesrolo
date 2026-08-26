@@ -6,7 +6,11 @@ import type {
   HomeRecordHandoffPreview,
   HomeRecordHandoffService,
 } from '../../../../src/homeowner/home-record-handoff.v1.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+  type HomeownerRequestAuthentication,
+} from './request-auth.ts'
 import {
   configuredHomeRecordHandoffService,
   homeownerRuntimeConfiguration,
@@ -83,17 +87,25 @@ function runtimeDependencies(): HomeRecordHandoffHttpDependencies | null {
   }
 }
 
-function readEnvelopeAllowed(request: Request, expectedOrigin: string): boolean {
+function readEnvelopeAllowed(
+  request: Request,
+  expectedOrigin: string,
+  authentication: HomeownerRequestAuthentication,
+): boolean {
   const url = new URL(request.url)
   const origin = request.headers.get('origin')
   const fetchSite = request.headers.get('sec-fetch-site')
+  const transportAllowed = authentication.kind === 'native'
+    ? origin === null && fetchSite === null
+    : authentication.kind !== 'invalid'
+      && (origin === null || origin === expectedOrigin)
+      && (fetchSite === null || fetchSite === 'same-origin')
   return request.method === 'GET'
     && url.search === ''
     && request.body === null
     && !request.headers.has('content-type')
     && !request.headers.has('content-encoding')
-    && (origin === null || origin === expectedOrigin)
-    && (fetchSite === null || fetchSite === 'same-origin')
+    && transportAllowed
 }
 
 export function homeRecordHandoffMutationEnvelopeAllowed(
@@ -103,9 +115,10 @@ export function homeRecordHandoffMutationEnvelopeAllowed(
   const url = new URL(request.url)
   const length = request.headers.get('content-length')
   const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  const authentication = homeownerRequestAuthentication(request)
   return request.method === 'POST'
     && url.search === ''
-    && request.headers.get('origin') === expectedOrigin
+    && homeownerMutationRequestAllowed(request, expectedOrigin, authentication)
     && request.headers.get('sec-fetch-site') !== 'cross-site'
     && mediaType === 'application/json'
     && !request.headers.has('content-encoding')
@@ -167,13 +180,15 @@ export async function handleHomeRecordHandoffHttp(
     || ('shareId' in operation && !SHARE_REF.test(operation.shareId))) {
     return problem(400, 'invalid_request')
   }
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
   const context = {
-    sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
+    sessionHandle: authentication.sessionHandle,
   }
   try {
     if (operation.kind === 'list' || operation.kind === 'preview'
       || operation.kind === 'export') {
-      if (!readEnvelopeAllowed(request, dependencies.appOrigin)) {
+      if (!readEnvelopeAllowed(request, dependencies.appOrigin, authentication)) {
         return problem(400, 'invalid_request')
       }
       if (operation.kind === 'list') {

@@ -1,5 +1,8 @@
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+} from './request-auth.ts'
 import { configuredProjectReviewService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 const MAX_JSON_BYTES = 4 * 1024
@@ -62,13 +65,20 @@ export async function submitProjectForHomesroloReview(
   const configuration = homeownerRuntimeConfiguration()
   const service = configuredProjectReviewService()
   if (!configuration || !service) return response(503, { error: { code: 'unavailable' } })
-  if (request.method !== 'POST' || request.headers.get('origin') !== configuration.appOrigin) {
+  if (request.method !== 'POST') {
+    return response(403, { error: { code: 'forbidden' } })
+  }
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') {
+    return response(400, { error: { code: 'invalid_request' } })
+  }
+  if (!homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
     return response(403, { error: { code: 'forbidden' } })
   }
   const body = await boundedJson(request)
   if (body === null) return response(400, { error: { code: 'invalid_request' } })
   try {
-    const context = { sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')) }
+    const context = { sessionHandle: authentication.sessionHandle }
     const operation = body && typeof body === 'object' && !Array.isArray(body)
       ? (body as { operation?: unknown }).operation
       : null

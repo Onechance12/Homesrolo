@@ -1599,6 +1599,7 @@ export class HomeownerApiService {
       && created.status === command.status
       && created.occurredOn === command.occurredOn
       && created.summary === command.summary
+      && created.professionalLabel === command.professionalLabel
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeProject(created)
   }

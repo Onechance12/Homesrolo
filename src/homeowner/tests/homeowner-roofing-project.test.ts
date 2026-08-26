@@ -146,6 +146,7 @@ test('generic project creation records historical work across the home', async (
     status: 'completed',
     occurredOn: '2024-06-15',
     summary: 'Cabinets, counters, and lighting replaced.',
+    professionalLabel: 'Sample Cabinet Company',
   }
   const capture: { commandInput?: Parameters<HomeownerCommandPort['createProject']>[0] } = {}
   const commands: HomeownerCommandPort = {
@@ -161,6 +162,11 @@ test('generic project creation records historical work across the home', async (
     status: 'completed',
     occurredOn: '2024-06-15',
     summary: 'Cabinets, counters, and lighting replaced.',
+    professionalLabel: 'Sample Cabinet Company',
+    initialActivity: {
+      kind: 'milestone',
+      body: 'Final walkthrough recorded.',
+    },
   })
   assert.deepEqual(capture.commandInput?.command, {
     commandRef: `hcmd_${body('g')}`,
@@ -170,10 +176,16 @@ test('generic project creation records historical work across the home', async (
     status: 'completed',
     occurredOn: '2024-06-15',
     summary: 'Cabinets, counters, and lighting replaced.',
+    professionalLabel: 'Sample Cabinet Company',
+    initialActivity: {
+      kind: 'milestone',
+      body: 'Final walkthrough recorded.',
+    },
     requestedAt: now,
   })
   assert.equal(result.category, 'interior')
   assert.equal(result.occurredOn, '2024-06-15')
+  assert.equal(result.professionalLabel, 'Sample Cabinet Company')
 
   const unknownDateProject: HomeownerProject = {
     ...historical,
@@ -181,6 +193,7 @@ test('generic project creation records historical work across the home', async (
     category: 'other',
     summary: undefined,
     occurredOn: undefined,
+    professionalLabel: undefined,
   }
   const unknownDate = await service({
     commands: {

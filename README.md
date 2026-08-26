@@ -19,6 +19,14 @@ projects, inventory, warranties, taxes and sale records, maintenance, and
 service history. Those library areas describe the information architecture;
 only records actually returned by the private runtime are shown.
 
+The native iOS/Android client now lives in `apps/mobile`. It is an Expo Router
+application—not a WebView—and uses the same Homesrolo API through an explicit
+native bearer-session contract. Its first end-to-end slice includes six-digit
+code sign-in, home selection, Home/Care/Rolo/Work/People navigation, real work
+records, Rolo drafts that require homeowner approval, private photo/document/
+warranty capture, and authenticated photo viewing. Browser clients continue to
+use the HttpOnly cookie contract. See `docs/NATIVE_APP_ARCHITECTURE.md`.
+
 The preferred sign-in experience is a six-digit email code entered in the
 same browser where the homeowner started. It is implemented behind the
 default-off `HOMESROLO_EMAIL_CODE_SIGN_IN_ENABLED` release gate. Until both
@@ -107,6 +115,7 @@ Chance decides whether and where to distribute it.
 | docs/HOMEOWNER_PHOTO_CHECKUPS.md | Default-off private seasonal-photo beta, privacy boundary, hard caps, and release checklist |
 | docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
 | docs/HOME_RECORD_HANDOFF.md | Default-off exact-share Jobrolo → Homesrolo handoff architecture, configuration, canary, rollback, and export runbook |
+| docs/NATIVE_APP_ARCHITECTURE.md | Native iOS/Android client, authentication, storage, navigation, and release boundaries |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |
@@ -177,6 +186,11 @@ Requires Node 22.6 or newer.
     npm install
     npm --prefix apps/web install
     npm run verify
+
+The native app owns a separate dependency graph:
+
+    npm --prefix apps/mobile ci
+    npm --prefix apps/mobile start
 
 `verify` runs the contract typecheck, the constitution and contract tests, the
 public directory model tests, the static production web build, and the Phase 0.5

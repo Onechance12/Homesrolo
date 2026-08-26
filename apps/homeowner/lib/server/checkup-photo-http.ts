@@ -15,7 +15,11 @@ import {
   type HomeownerApiCheckupPhotoUploadReservation,
   type HomeownerApiService,
 } from '../../../../src/homeowner/homeowner-api.v1.ts'
-import { sessionHandleFromCookieHeader } from './cookie.ts'
+import {
+  HOMEOWNER_NATIVE_CLIENT_HEADER,
+  homeownerMutationRequestAllowed,
+  homeownerRequestAuthentication,
+} from './request-auth.ts'
 import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
 
 const REF = '[A-Za-z0-9_-]{43}'
@@ -26,6 +30,7 @@ const ALLOWED_INPUT_MEDIA_TYPES = new Set(['image/jpeg', 'image/png'])
 const BODY_READ_DEADLINE_MS = 15_000
 const SHARP_TIMEOUT_SECONDS = 15
 const ALLOWED_PHOTO_HEADERS = new Set([
+  HOMEOWNER_NATIVE_CLIENT_HEADER,
   'x-homesrolo-command-ref',
   'x-homesrolo-observed-on',
   'x-homesrolo-photo-area',
@@ -144,9 +149,10 @@ export function checkupPhotoUploadEnvelopeAllowed(
   expectedOrigin: string,
 ): boolean {
   const length = request.headers.get('content-length')
+  const authentication = homeownerRequestAuthentication(request)
   return request.method === 'POST'
     && new URL(request.url).search === ''
-    && request.headers.get('origin') === expectedOrigin
+    && homeownerMutationRequestAllowed(request, expectedOrigin, authentication)
     && !!length
     && /^\d+$/.test(length)
     && Number(length) > 0
@@ -160,9 +166,10 @@ export function checkupPhotoDeleteEnvelopeAllowed(
   request: Request,
   expectedOrigin: string,
 ): boolean {
+  const authentication = homeownerRequestAuthentication(request)
   return request.method === 'DELETE'
     && new URL(request.url).search === ''
-    && request.headers.get('origin') === expectedOrigin
+    && homeownerMutationRequestAllowed(request, expectedOrigin, authentication)
     && request.body === null
     && !request.headers.has('content-encoding')
     && !request.headers.has('content-type')
@@ -362,12 +369,14 @@ export async function handleCheckupPhotoUpload(
 ): Promise<Response> {
   const configuration = dependencies ?? homeownerRuntimeConfiguration()
   if (!configuration) return problem(503, 'unavailable')
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
   if (!HOME_REF.test(requestedHomeRef)
     || !checkupPhotoUploadEnvelopeAllowed(request, configuration.appOrigin)) {
     return problem(400, 'invalid_request')
   }
   const requestContext = {
-    sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
+    sessionHandle: authentication.sessionHandle,
   }
   let reservation: HomeownerApiCheckupPhotoUploadReservation | null = null
   let uploadSlotHeld = false
@@ -442,8 +451,10 @@ export async function handleCheckupPhotoContent(
   }
   try {
     const service = dependencies?.service ?? homeownerApiService()
+    const authentication = homeownerRequestAuthentication(request)
+    if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
     const requestContext = {
-      sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')),
+      sessionHandle: authentication.sessionHandle,
     }
     await service.preauthorizeCheckupPhotoRead(requestContext, requestedHomeRef)
     const release = await acquireContentRead(variant)
@@ -489,12 +500,14 @@ export async function handleCheckupPhotoDelete(
   if (!HOME_REF.test(requestedHomeRef) || !PHOTO_REF.test(requestedPhotoRef)) {
     return problem(400, 'invalid_request')
   }
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return problem(400, 'invalid_request')
   if (!checkupPhotoDeleteEnvelopeAllowed(request, configuration.appOrigin)) {
     return problem(403, 'forbidden')
   }
   try {
     const result = await (dependencies?.service ?? homeownerApiService()).deleteCheckupPhoto(
-      { sessionHandle: sessionHandleFromCookieHeader(request.headers.get('cookie')) },
+      { sessionHandle: authentication.sessionHandle },
       requestedHomeRef,
       requestedPhotoRef,
     )
