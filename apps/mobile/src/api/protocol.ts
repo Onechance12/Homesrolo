@@ -1,4 +1,4 @@
-import type { RoloConversationState, RoloWorkDraft } from './model.ts'
+import type { RoloConversationState, RoloSelectedPhoto, RoloWorkDraft } from './model.ts'
 
 const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 const SESSION_PATTERN = /^[A-Za-z0-9_-]{16,256}$/
@@ -36,6 +36,32 @@ export function isProjectRef(value: unknown): value is string {
 
 export function isArtifactRef(value: unknown): value is string {
   return typeof value === 'string' && ARTIFACT_REF_PATTERN.test(value)
+}
+
+/** Keeps the native vision boundary to one exact, consented private artifact. */
+export function normalizedRoloSelectedPhoto(value: unknown): RoloSelectedPhoto | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const selected = value as Record<string, unknown>
+  if (Object.keys(selected).sort().join(',') !== 'artifactRef,consentToAnalyze,source'
+    || selected.source !== 'artifact'
+    || !isArtifactRef(selected.artifactRef)
+    || selected.consentToAnalyze !== true) return null
+  return {
+    source: 'artifact',
+    artifactRef: selected.artifactRef,
+    consentToAnalyze: true,
+  }
+}
+
+/**
+ * Boundary refusals intentionally do not open an attached photo, so a selected
+ * photo may have no review. A review without a selected photo is never valid.
+ */
+export function roloPhotoReviewPresenceAllowed(
+  selectedPhoto: RoloSelectedPhoto | null,
+  hasPhotoReview: boolean,
+): boolean {
+  return selectedPhoto !== null || !hasPhotoReview
 }
 
 export function base64Url(bytes: Uint8Array): string {

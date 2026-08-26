@@ -15,6 +15,7 @@ import type {
   NativeSessionCredential,
   RoloConversationState,
   RoloReply,
+  RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
   UpdateWorkInput,
@@ -33,8 +34,10 @@ import {
   isProjectRef,
   isSessionToken,
   nativeRequestHeaders,
+  normalizedRoloSelectedPhoto,
   normalizeApiOrigin,
   problemCode,
+  roloPhotoReviewPresenceAllowed,
 } from './protocol.ts'
 import {
   ActiveArtifactUploadAttempts,
@@ -215,7 +218,9 @@ function parseRolo(value: unknown): RoloReply {
       'none', 'visible_fire_or_smoke', 'visible_sparking_or_exposed_electrical',
       'water_near_electrical', 'major_displacement_or_collapse',
     ])
-    if (!Array.isArray(photoReviewSource.visibleObservations)
+    if (Object.keys(photoReviewSource).sort().join(',')
+        !== 'cannotConfirm,hazardSignal,suggestedTrade,urgency,visibleObservations'
+      || !Array.isArray(photoReviewSource.visibleObservations)
       || photoReviewSource.visibleObservations.length < 1
       || photoReviewSource.visibleObservations.length > 5
       || photoReviewSource.visibleObservations.some(item => typeof item !== 'string')
@@ -530,14 +535,30 @@ export class HomesroloNativeApi implements HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversationState: RoloConversationState,
+    selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply> {
     let conversation: ReturnType<typeof boundedRoloConversation>
     try { conversation = boundedRoloConversation(message, history, conversationState) } catch {
       throw new NativeApiError(400, 'invalid_request')
     }
-    return parseRolo(await this.#request(apiPath('homes', homeRef, 'assistant'), {
-      method: 'POST', body: { ...conversation, destination: 'rolo' },
+    const photoSelection = selectedPhoto === undefined
+      ? null
+      : normalizedRoloSelectedPhoto(selectedPhoto)
+    if (selectedPhoto !== undefined && !photoSelection) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const reply = parseRolo(await this.#request(apiPath('homes', homeRef, 'assistant'), {
+      method: 'POST',
+      body: {
+        ...conversation,
+        destination: 'rolo',
+        ...(photoSelection ? { selectedPhoto: photoSelection } : {}),
+      },
     }))
+    if (!roloPhotoReviewPresenceAllowed(photoSelection, reply.photoReview !== null)) {
+      throw new NativeApiError(502, 'invalid_response')
+    }
+    return reply
   }
 
   async listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]> {

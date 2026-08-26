@@ -9,11 +9,13 @@ import type {
   NativeSessionCredential,
   RoloConversationState,
   RoloReply,
+  RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
   UpdateWorkInput,
   WorkRecord,
 } from '../api/model.ts'
+import { normalizedRoloSelectedPhoto } from '../api/protocol.ts'
 
 const FIXTURE_NOW = '2026-08-26T14:30:00.000Z'
 
@@ -31,7 +33,7 @@ const PREVIEW_CAPABILITIES = Object.freeze({
   projectQuotes: true,
   homeResearch: true,
   homeAssistant: true,
-  homeAssistantVision: false,
+  homeAssistantVision: true,
   uploads: false,
   photoCheckups: true,
   projectReview: true,
@@ -366,18 +368,32 @@ export class PreviewHomesroloApi implements HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversation: RoloConversationState,
+    selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply> {
     this.#assertSignedIn()
     this.#home(homeRef)
     const clean = message.trim()
     if (!clean) throw new Error('invalid_rolo_message')
+    const photoSelection = selectedPhoto === undefined
+      ? null
+      : normalizedRoloSelectedPhoto(selectedPhoto)
+    if (selectedPhoto !== undefined && !photoSelection) throw new Error('invalid_rolo_photo')
+    const selectedArtifact = photoSelection
+      ? (this.#artifacts.get(homeRef) ?? []).find(item => (
+          item.artifactRef === photoSelection.artifactRef && item.kind === 'photo'
+        )) ?? null
+      : null
+    if (photoSelection && !selectedArtifact) throw new Error('preview_artifact_not_found')
     this.#sequence += 1
 
+    const boundaryRefusal = /decide (?:my )?insurance|coverage decision|legal advice/i.test(clean)
     const homeWatch = /home watch|checkup|season/i.test(clean)
     const cooling = /\bac\b|air condition|cool/i.test(clean)
       || conversation.pendingWork?.category === 'hvac'
       || history.some(turn => /\bac\b|air condition|cool/i.test(turn.text))
-    const proposedWork: NonNullable<RoloReply['proposedWork']> = homeWatch
+    const proposedWork: RoloReply['proposedWork'] = boundaryRefusal
+      ? null
+      : homeWatch
       ? {
           kind: 'service',
           title: 'Seasonal Home Watch checkup',
@@ -408,18 +424,34 @@ export class PreviewHomesroloApi implements HomesroloApi {
 
     return {
       requestRef: fixtureRef('hask', this.#sequence),
-      answer: homeWatch
-        ? 'Start with a calm, repeatable walk-through. Compare the same views each season, note only what you can safely observe, and call a qualified professional for anything energized, leaking, unstable, or unsafe.'
-        : cooling
-          ? 'You can safely confirm the thermostat mode and set point, look at the filter, make sure supply vents are open, and check that the outdoor unit is not blocked. Do not open electrical panels or equipment covers. I made a draft you can review.'
-          : 'I organized that into a reviewable Work draft. You can approve it, discard it, or keep talking before anything is saved.',
+      answer: boundaryRefusal
+        ? 'I cannot decide insurance coverage or provide legal advice. I did not open the attached photo. I can help you organize the facts and questions for a licensed professional.'
+        : selectedArtifact
+        ? 'I can describe what is visible in this one photo, but I cannot confirm hidden damage or diagnose the cause from an image alone. The exterior and roofline are visible, with no urgent hazard signal in this sample.'
+        : homeWatch
+          ? 'Start with a calm, repeatable walk-through. Compare the same views each season, note only what you can safely observe, and call a qualified professional for anything energized, leaking, unstable, or unsafe.'
+          : cooling
+            ? 'You can safely confirm the thermostat mode and set point, look at the filter, make sure supply vents are open, and check that the outdoor unit is not blocked. Do not open electrical panels or equipment covers. I made a draft you can review.'
+            : 'I organized that into a reviewable Work draft. You can approve it, discard it, or keep talking before anything is saved.',
       proposedWork,
-      destination: 'work',
+      destination: boundaryRefusal ? null : 'work',
       projectRef: null,
-      followUpQuestions: conversation.unansweredFollowUpQuestion
+      followUpQuestions: boundaryRefusal || conversation.unansweredFollowUpQuestion
         ? []
         : ['When did you first notice it, and is anything leaking, sparking, or unsafe right now?'],
-      photoReview: null,
+      photoReview: selectedArtifact && !boundaryRefusal ? {
+        visibleObservations: [
+          'The photo shows a daylight exterior view with the roofline and part of the front elevation visible.',
+          'No smoke, active fire, exposed wiring, or major displacement is visible in this image.',
+        ],
+        cannotConfirm: [
+          'A single exterior photo cannot confirm hidden leaks, decking condition, installation quality, or remaining service life.',
+          'The image does not establish measurements, code compliance, or whether a repair is needed.',
+        ],
+        urgency: 'routine',
+        suggestedTrade: 'exterior',
+        hazardSignal: 'none',
+      } : null,
       disclosure: 'Local preview response · no network request',
     }
   }
