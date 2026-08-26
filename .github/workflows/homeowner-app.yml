@@ -1,20 +1,29 @@
-# Lane-scoped CI for the Phase 1 homeowner application shell.
-# Deliberately a separate workflow from ci.yml: the integration lane owns that
-# file, and this one triggers only on changes inside apps/homeowner/**.
+# Application quality gates. Keep the homeowner and mobile dependency graphs
+# isolated: each package owns its lockfile and receives its own npm cache.
+#
+# This workflow intentionally runs for every branch and pull request. Root
+# contracts and configuration can affect either application, and path-filtered
+# required checks can otherwise remain missing on an otherwise mergeable PR.
 
 name: Homeowner app
 
 on:
   push:
     branches: ['**']
-    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
   pull_request:
-    paths: ['apps/homeowner/**', '.github/workflows/homeowner-app.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homesrolo-apps-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   homeowner:
     name: Homeowner application shell
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/homeowner
@@ -40,3 +49,65 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+
+  mobile:
+    name: Mobile application
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect mobile package
+        id: mobile-package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -e apps/mobile ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "apps/mobile is not present yet; the mobile gate is ready and inactive."
+            exit 0
+          fi
+
+          if [ ! -d apps/mobile ]; then
+            echo "::error::apps/mobile exists but is not a directory"
+            exit 1
+          fi
+
+          if [ ! -f apps/mobile/package.json ]; then
+            echo "::error::apps/mobile must contain package.json"
+            exit 1
+          fi
+
+          if [ ! -f apps/mobile/package-lock.json ]; then
+            echo "::error::apps/mobile must commit its own package-lock.json"
+            exit 1
+          fi
+
+          echo "present=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.mobile-package.outputs.present == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install mobile app dependencies
+        if: steps.mobile-package.outputs.present == 'true'
+        run: npm --prefix apps/mobile ci
+
+      - name: Typecheck mobile app
+        if: steps.mobile-package.outputs.present == 'true'
+        run: npm --prefix apps/mobile run typecheck
+
+      - name: Test mobile app
+        if: steps.mobile-package.outputs.present == 'true'
+        run: npm --prefix apps/mobile test
+
+      - name: Bundle iOS and Android JavaScript
+        if: steps.mobile-package.outputs.present == 'true'
+        working-directory: apps/mobile
+        run: |
+          npx --no-install expo export --platform ios --output-dir /tmp/homesrolo-ios
+          npx --no-install expo export --platform android --output-dir /tmp/homesrolo-android
