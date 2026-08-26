@@ -1011,8 +1011,10 @@ test('work opens as conversational capture with a compact manual workspace', () 
     'twelve home categories stay available without twelve oversized cards')
   assert.match(projects, /<details className="project-more">[\s\S]*Add date or notes/,
     'optional capture stays progressively disclosed')
-  assert.match(projects, /<details className="work-index__advanced"[\s\S]*More filters/,
+  assert.match(projects, /className="work-index__advanced-toggle"[\s\S]*aria-expanded=\{advancedFiltersOpen\}[\s\S]*More filters/,
     'kind, area, and sort stay behind one compact disclosure on a phone')
+  assert.match(css, /@media \(min-width: 42rem\)[\s\S]*\.work-index__advanced > \.work-index__selects \{ display: grid/,
+    'desktop keeps advanced project filters directly visible')
 
   for (const section of [
     "{ value: 'overview', label: 'Plan' }",

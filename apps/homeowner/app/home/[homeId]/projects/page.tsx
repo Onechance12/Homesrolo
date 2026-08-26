@@ -87,6 +87,7 @@ export default function ProjectsPage({
   const [kindFilter, setKindFilter] = useState<HomeownerWorkKind | 'all'>('all')
   const [categoryFilter, setCategoryFilter] = useState<ProjectCategory | 'all'>('all')
   const [sort, setSort] = useState<WorkSort>('recent')
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const attemptRef = useRef<string | null>(null)
 
   const artifactCounts = useMemo(() => {
@@ -378,12 +379,22 @@ export default function ProjectsPage({
               </button>
             ))}
           </div>
-          <details className="work-index__advanced" open={advancedFilterCount > 0}>
-            <summary>
+          <div className="work-index__advanced">
+            <button
+              type="button"
+              className="work-index__advanced-toggle"
+              aria-expanded={advancedFiltersOpen}
+              aria-controls="work-index-advanced-filters"
+              onClick={() => setAdvancedFiltersOpen(current => !current)}
+            >
               <span>More filters</span>
               <small>{advancedFilterCount > 0 ? `${advancedFilterCount} active` : 'Kind, area & sort'}</small>
-            </summary>
-            <div className="work-index__selects">
+              <span aria-hidden="true">{advancedFiltersOpen ? '−' : '+'}</span>
+            </button>
+            <div
+              id="work-index-advanced-filters"
+              className={`work-index__selects${advancedFiltersOpen ? ' work-index__selects--open' : ''}`}
+            >
               <label>
                 <span>Kind</span>
                 <select value={kindFilter} onChange={event => setKindFilter(event.target.value as HomeownerWorkKind | 'all')}>
@@ -407,7 +418,7 @@ export default function ProjectsPage({
                 </select>
               </label>
             </div>
-          </details>
+          </div>
           <div className="work-index__result" aria-live="polite">
             <span>{state.status === 'ready' ? `${visibleWork.length} of ${state.value.filter(project => !project.archived).length} records` : 'Opening work…'}</span>
             {filtersActive ? <button type="button" onClick={clearWorkFilters}>Clear filters</button> : null}
