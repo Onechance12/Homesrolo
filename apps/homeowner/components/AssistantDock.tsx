@@ -150,16 +150,19 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const { state: session } = useSession()
   const principalRef = session.kind === 'signed_in' ? session.session.principalRef : 'signed-out'
   const storageKey = roloThreadStorageKey(homeId, principalRef)
-  const initialConversation = useRef(readStoredConversation(storageKey)).current
   const [open, setOpen] = useState(false)
-  const [thread, setThread] = useState<ThreadMessage[]>(initialConversation.thread)
+  const [thread, setThread] = useState<ThreadMessage[]>(() => readStoredConversation(storageKey).thread)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [proposal, setProposal] = useState<RoloWorkDraft | null>(initialConversation.proposal)
+  const [proposal, setProposal] = useState<RoloWorkDraft | null>(
+    () => readStoredConversation(storageKey).proposal,
+  )
   const [suggestion, setSuggestion] = useState<Pick<AskRoloResult, 'destination' | 'projectRef'> | null>(null)
-  const [followUps, setFollowUps] = useState<readonly string[]>(initialConversation.followUps)
+  const [followUps, setFollowUps] = useState<readonly string[]>(
+    () => readStoredConversation(storageKey).followUps,
+  )
   const [savedProject, setSavedProject] = useState<{ ref: string; title: string; partial: boolean } | null>(null)
   const saveAttempt = useRef<string | null>(null)
   const sendInFlight = useRef(false)
