@@ -23,6 +23,17 @@ Both server environment variables are required:
 - `HOMESROLO_AI_ENABLED=true`
 - `OPENAI_API_KEY=<a project-scoped server API key>`
 
+Rolo and public home research share the release gate and server-only API key,
+for backward-compatible deployment, but they advertise separate `homeAssistant`
+and `homeResearch` capabilities and do not share a model setting. Setting
+`HOMESROLO_ROLO_ENABLED=true|false` gives Rolo its own explicit gate; when it is
+absent, the original `HOMESROLO_AI_ENABLED` value is used during migration.
+Public research remains pinned to
+`gpt-5.6-luna`. Rolo defaults to `gpt-5.6-terra`; an operator may explicitly set
+`HOMESROLO_ROLO_MODEL` to `gpt-5.6-luna`, `gpt-5.6-terra`, or `gpt-5.6-sol`.
+Unknown model names fail closed. This separation prevents a cheap bounded
+research/extraction choice from silently becoming the homeowner-facing voice.
+
 No variable may use a `NEXT_PUBLIC_` prefix. The API key must be configured in
 the server host's secret manager; it must not be committed, pasted into browser
 code, or exposed in a Render build log. Missing or malformed configuration
@@ -62,3 +73,25 @@ This is a default-off research/API foundation, not permission to silently
 research an address during onboarding or enable production traffic. The UI must
 present fresh per-request consent and must require a separate homeowner
 confirmation before any proposed fact is ever saved.
+
+## Rolo conversation boundary
+
+`POST /api/v1/homes/{homeRef}/assistant` is a separate, no-tool Responses call.
+Homesrolo owns the transcript and sends at most 16 recent text turns plus the
+one pending work draft and one unanswered follow-up question. Provider response
+storage stays disabled. This keeps corrections such as “upstairs” or “Wednesday,
+not Tuesday” attached to the question and draft they answer without making
+OpenAI the system of record.
+
+Rolo receives the home label, city/state when available, bounded project and
+file metadata, and system presence/year. It never receives the legacy
+`privateLocationLabel`, because older/native records may contain a street
+address in that display field. It does not receive the structured street
+address, file bytes, photo pixels, document text, browser identity, or provider
+credentials. A filename is metadata, not evidence that Rolo read the file.
+
+Rolo is a librarian, not an advisor. The versioned prompt carries the product
+voice from `docs/VOICE.md`, distinguishes general education from facts about the
+current home, and turns regulated requests into useful boundaries rather than
+generic validation errors. Every write remains a reviewable draft until the
+homeowner explicitly approves it.

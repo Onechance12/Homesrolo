@@ -7,6 +7,7 @@ import type {
   HomeSummary,
   HomeView,
   NativeSessionCredential,
+  RoloConversationState,
   RoloReply,
   RoloTurn,
   ServerSession,
@@ -29,6 +30,7 @@ const PREVIEW_CAPABILITIES = Object.freeze({
   persistence: true,
   projectQuotes: true,
   homeResearch: true,
+  homeAssistant: true,
   uploads: false,
   photoCheckups: true,
   projectReview: true,
@@ -358,16 +360,22 @@ export class PreviewHomesroloApi implements HomesroloApi {
     }
   }
 
-  async askRolo(homeRef: string, message: string, history: readonly RoloTurn[]): Promise<RoloReply> {
+  async askRolo(
+    homeRef: string,
+    message: string,
+    history: readonly RoloTurn[],
+    conversation: RoloConversationState,
+  ): Promise<RoloReply> {
     this.#assertSignedIn()
     this.#home(homeRef)
     const clean = message.trim()
     if (!clean) throw new Error('invalid_rolo_message')
-    void history
     this.#sequence += 1
 
     const homeWatch = /home watch|checkup|season/i.test(clean)
     const cooling = /\bac\b|air condition|cool/i.test(clean)
+      || conversation.pendingWork?.category === 'hvac'
+      || history.some(turn => /\bac\b|air condition|cool/i.test(turn.text))
     const proposedWork: NonNullable<RoloReply['proposedWork']> = homeWatch
       ? {
           kind: 'service',
@@ -379,7 +387,12 @@ export class PreviewHomesroloApi implements HomesroloApi {
           professionalLabel: null,
           firstUpdate: 'Started from the Rolo preview checkup guide.',
         }
-      : {
+      : conversation.pendingWork
+        ? {
+            ...conversation.pendingWork,
+            summary: `${conversation.pendingWork.summary} Follow-up: ${clean.slice(0, 240)}`.trim(),
+          }
+        : {
           kind: cooling ? 'issue' : 'repair',
           title: cooling ? 'Upstairs AC is not cooling' : 'Follow up on the home concern',
           category: cooling ? 'hvac' : 'other',
@@ -402,7 +415,9 @@ export class PreviewHomesroloApi implements HomesroloApi {
       proposedWork,
       destination: 'work',
       projectRef: null,
-      followUpQuestions: ['When did you first notice it?', 'Is anything leaking, sparking, or unsafe right now?'],
+      followUpQuestions: conversation.unansweredFollowUpQuestion
+        ? []
+        : ['When did you first notice it, and is anything leaking, sparking, or unsafe right now?'],
       disclosure: 'Local preview response · no network request',
     }
   }

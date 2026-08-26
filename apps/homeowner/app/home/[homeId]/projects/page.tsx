@@ -78,7 +78,7 @@ export default function ProjectsPage({
   const router = useRouter()
   const mode = usePortMode()
   const { state: session } = useSession()
-  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeResearch
+  const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
   const port = usePort()
   const { state, retry } = usePortCall(() => port.listProjects(homeId), value => value.length === 0)
   const [recordMode, setRecordMode] = useState<RecordMode | null>(() => carriedIntent ? 'planned' : null)

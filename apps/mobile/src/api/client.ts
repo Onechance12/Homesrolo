@@ -13,6 +13,7 @@ import type {
   HomeSummary,
   HomeView,
   NativeSessionCredential,
+  RoloConversationState,
   RoloReply,
   RoloTurn,
   ServerSession,
@@ -76,7 +77,7 @@ function capabilities(value: unknown): Capabilities {
   const source = record(value)
   const keys: readonly (keyof Capabilities)[] = [
     'emailCodeSignIn', 'magicLinkSignIn', 'persistence', 'projectQuotes',
-    'homeResearch', 'uploads', 'photoCheckups', 'projectReview',
+    'homeResearch', 'homeAssistant', 'uploads', 'photoCheckups', 'projectReview',
     'projectReviewAttachments', 'homeRecordHandoffs', 'invitations', 'sharing',
   ]
   const out = {} as Record<keyof Capabilities, boolean>
@@ -476,9 +477,14 @@ export class HomesroloNativeApi implements HomesroloApi {
     })
   }
 
-  async askRolo(homeRef: string, message: string, history: readonly RoloTurn[]): Promise<RoloReply> {
+  async askRolo(
+    homeRef: string,
+    message: string,
+    history: readonly RoloTurn[],
+    conversationState: RoloConversationState,
+  ): Promise<RoloReply> {
     let conversation: ReturnType<typeof boundedRoloConversation>
-    try { conversation = boundedRoloConversation(message, history) } catch {
+    try { conversation = boundedRoloConversation(message, history, conversationState) } catch {
       throw new NativeApiError(400, 'invalid_request')
     }
     return parseRolo(await this.#request(apiPath('homes', homeRef, 'assistant'), {

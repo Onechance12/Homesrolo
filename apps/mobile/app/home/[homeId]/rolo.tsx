@@ -22,6 +22,7 @@ export default function RoloScreen() {
   const [input, setInput] = useState('')
   const [turns, setTurns] = useState<RoloTurn[]>([])
   const [proposal, setProposal] = useState<RoloReply['proposedWork']>(null)
+  const [followUpQuestions, setFollowUpQuestions] = useState<readonly string[]>([])
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +38,13 @@ export default function RoloScreen() {
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
+  if (!auth.session.capabilities.homeAssistant) {
+    return (
+      <Page>
+        <HomeHeader section="Rolo Live" title="Rolo is unavailable." detail="Your saved home records and uploads still work normally." />
+      </Page>
+    )
+  }
 
   async function send(message = input) {
     const clean = message.trim()
@@ -46,14 +54,18 @@ export default function RoloScreen() {
     setSaved(null)
     setInput('')
     try {
-      const reply = await api.askRolo(homeId, clean, turns)
+      const reply = await api.askRolo(homeId, clean, turns, {
+        pendingWork: proposal,
+        unansweredFollowUpQuestion: followUpQuestions[0] ?? null,
+      })
       const exchange: RoloTurn[] = [
         { role: 'user', text: clean },
         { role: 'assistant', text: reply.answer },
       ]
-      setTurns(current => [...current, ...exchange].slice(-10))
+      setTurns(current => [...current, ...exchange].slice(-18))
       pendingCreate.current = null
       setProposal(reply.proposedWork)
+      setFollowUpQuestions(reply.followUpQuestions)
     } catch (caught) {
       setInput(clean)
       setError(previewMode && caught instanceof Error
@@ -90,6 +102,7 @@ export default function RoloScreen() {
       pendingCreate.current = null
       setSaved(work)
       setProposal(null)
+      setFollowUpQuestions([])
     } catch (caught) { setError(friendlyError(caught)) } finally { setSaving(false) }
   }
 
@@ -124,6 +137,13 @@ export default function RoloScreen() {
         ))}
         {busy ? <View style={styles.thinking}><Loading label="Rolo is looking at this home…" /></View> : null}
 
+        {followUpQuestions[0] ? (
+          <Card>
+            <Text style={styles.followUpLabel}>One thing Rolo still needs</Text>
+            <Text style={styles.followUpQuestion}>{followUpQuestions[0]}</Text>
+          </Card>
+        ) : null}
+
         {proposal ? (
           <Card accent>
             <View style={styles.proposalTop}>
@@ -135,12 +155,32 @@ export default function RoloScreen() {
             {proposal.summary ? <Text style={styles.introCopy}>{proposal.summary}</Text> : null}
             {proposal.professionalLabel ? <Text style={styles.proLabel}>Person/company: {proposal.professionalLabel}</Text> : null}
             <Button label={saving ? 'Saving…' : 'Approve and save to Work'} onPress={() => void saveProposal()} disabled={saving} />
-            <Button label="Do not save this" onPress={() => { pendingCreate.current = null; setProposal(null) }} disabled={saving} quiet />
+            <Button label="Do not save this" onPress={() => {
+              pendingCreate.current = null
+              setProposal(null)
+              setFollowUpQuestions([])
+            }} disabled={saving} quiet />
             <Text style={styles.disclosure}>Nothing is saved until you approve it.</Text>
           </Card>
         ) : null}
         {saved ? <Notice message={`Saved “${saved.title}” to this home’s Work.`} /> : null}
         {error ? <Notice message={error} /> : null}
+
+        {turns.length > 0 ? (
+          <Button
+            label="Start a new conversation"
+            icon="refresh-outline"
+            quiet
+            onPress={() => {
+              setTurns([])
+              setProposal(null)
+              setFollowUpQuestions([])
+              setSaved(null)
+              setError(null)
+              pendingCreate.current = null
+            }}
+          />
+        ) : null}
 
         <Card>
           <TextField
@@ -152,7 +192,7 @@ export default function RoloScreen() {
           />
           <Button label={busy ? 'Thinking…' : 'Send'} icon="arrow-up" onPress={() => void send()} disabled={busy || !input.trim()} />
         </Card>
-        <Text style={styles.safety}>Rolo can help you think and organize. It does not replace a licensed professional or emergency service.</Text>
+        <Text style={styles.safety}>Your message and a limited home index may be processed by OpenAI. The saved street-address field and file or photo contents are not sent. Rolo does not replace a licensed professional or emergency service.</Text>
       </Page>
     </KeyboardAvoidingView>
   )
@@ -174,6 +214,8 @@ const styles = StyleSheet.create({
   bubbleName: { color: colors.aqua, fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
   bubbleText: { color: colors.cream, fontSize: 15, lineHeight: 22 },
   thinking: { maxHeight: 150, overflow: 'hidden' },
+  followUpLabel: { color: colors.aqua, fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
+  followUpQuestion: { color: colors.cream, fontSize: 17, lineHeight: 24, fontWeight: '800' },
   proposalTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   proposalKind: { color: colors.slate, fontSize: 12, fontWeight: '800' },
   proposalTitle: { color: colors.cream, fontSize: 22, lineHeight: 27, fontWeight: '900' },

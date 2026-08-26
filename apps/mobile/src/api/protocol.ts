@@ -1,3 +1,5 @@
+import type { RoloConversationState, RoloWorkDraft } from './model.ts'
+
 const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 const SESSION_PATTERN = /^[A-Za-z0-9_-]{16,256}$/
 const HOME_REF_PATTERN = /^hhom_[A-Za-z0-9_-]{43}$/
@@ -103,23 +105,62 @@ export function nativeRequestHeaders(
 export function boundedRoloConversation(
   message: string,
   history: readonly BoundedRoloTurn[],
-): { readonly message: string; readonly history: readonly BoundedRoloTurn[] } {
+  conversation: RoloConversationState,
+): {
+  readonly message: string
+  readonly history: readonly BoundedRoloTurn[]
+  readonly conversation: RoloConversationState
+} {
   const cleanMessage = message.trim()
   if (cleanMessage.length < 1 || cleanMessage.length > 1_600
     || CONTROL_CHARACTERS.test(cleanMessage)) {
     throw new Error('invalid_rolo_message')
   }
 
-  let remaining = 6_000 - cleanMessage.length
+  const question = conversation.unansweredFollowUpQuestion?.trim() ?? null
+  if ((question !== null && (question.length < 1 || question.length > 240
+      || CONTROL_CHARACTERS.test(question)))
+    || !validRoloDraft(conversation.pendingWork)) {
+    throw new Error('invalid_rolo_conversation')
+  }
+  const boundedConversation = {
+    pendingWork: conversation.pendingWork,
+    unansweredFollowUpQuestion: question,
+  }
+
+  let remaining = 12_000 - cleanMessage.length
+    - (boundedConversation.pendingWork ? JSON.stringify(boundedConversation.pendingWork).length : 0)
+    - (question?.length ?? 0)
+  if (remaining < 0) throw new Error('invalid_rolo_conversation')
   const bounded: BoundedRoloTurn[] = []
-  for (const turn of history.slice(-8).reverse()) {
+  for (const turn of history.slice(-16).reverse()) {
     const clean = turn.text.trim()
     if (clean.length < 1 || CONTROL_CHARACTERS.test(clean)) continue
-    const text = clean.slice(0, Math.min(700, remaining))
+    const text = clean.slice(0, Math.min(900, remaining))
     if (!text) break
     bounded.unshift({ role: turn.role, text })
     remaining -= text.length
     if (remaining === 0) break
   }
-  return { message: cleanMessage, history: bounded }
+  return { message: cleanMessage, history: bounded, conversation: boundedConversation }
+}
+
+function validRoloDraft(draft: RoloWorkDraft | null): boolean {
+  if (draft === null) return true
+  const nullableText = (value: string | null, maximum: number) => value === null
+    || (value.trim().length >= 1 && value.trim().length <= maximum
+      && !CONTROL_CHARACTERS.test(value))
+  return ['project', 'issue', 'repair', 'service', 'incident'].includes(draft.kind)
+    && draft.title.trim().length >= 1 && draft.title.trim().length <= 120
+    && !CONTROL_CHARACTERS.test(draft.title)
+    && [
+      'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
+      'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
+    ].includes(draft.category)
+    && ['planned', 'in_progress', 'completed', 'cancelled'].includes(draft.status)
+    && (draft.occurredOn === null || /^\d{4}-\d{2}-\d{2}$/.test(draft.occurredOn))
+    && draft.summary.trim().length <= 2_000
+    && !CONTROL_CHARACTERS.test(draft.summary)
+    && nullableText(draft.professionalLabel, 160)
+    && nullableText(draft.firstUpdate, 2_000)
 }

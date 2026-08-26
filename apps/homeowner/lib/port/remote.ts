@@ -37,7 +37,7 @@ import { COMMAND_REF_PATTERN } from './command-ref.ts'
 import {
   NO_CAPABILITIES,
   type HomeownerDataPort, type HomeownerSession, type HomeownerWorkKind, type PortResult,
-  type SessionState,
+  type RoloConversationState, type RoloWorkDraft, type SessionState,
 } from './types.ts'
 import {
   fetchArtifactUploadTransport,
@@ -148,6 +148,60 @@ const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as
 const PROJECT_WORK_KINDS = new Set<HomeownerWorkKind>([
   'project', 'issue', 'repair', 'service', 'incident',
 ])
+
+function normalizedRoloWorkDraft(value: unknown): RoloWorkDraft | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const draft = value as Record<string, unknown>
+  const kind = typeof draft.kind === 'string' && PROJECT_WORK_KINDS.has(draft.kind as HomeownerWorkKind)
+    ? draft.kind as RoloWorkDraft['kind']
+    : null
+  const title = typeof draft.title === 'string' ? boundedResearchText(draft.title, 120) : null
+  const category = typeof draft.category === 'string'
+    && PROJECT_CATEGORIES.includes(draft.category as typeof PROJECT_CATEGORIES[number])
+    ? draft.category as RoloWorkDraft['category']
+    : null
+  const status = typeof draft.status === 'string'
+    && PROJECT_STATUSES.includes(draft.status as typeof PROJECT_STATUSES[number])
+    ? draft.status as RoloWorkDraft['status']
+    : null
+  const occurredOn = draft.occurredOn === null
+    ? null
+    : typeof draft.occurredOn === 'string' && validCalendarDate(draft.occurredOn)
+      ? draft.occurredOn
+      : undefined
+  const summary = typeof draft.summary === 'string' && draft.summary.trim().length <= 2_000
+    ? draft.summary.trim()
+    : undefined
+  const professionalLabel = draft.professionalLabel === null
+    ? null
+    : typeof draft.professionalLabel === 'string'
+      ? boundedResearchText(draft.professionalLabel, 160) ?? undefined
+      : undefined
+  const firstUpdate = draft.firstUpdate === null
+    ? null
+    : typeof draft.firstUpdate === 'string'
+      ? boundedResearchText(draft.firstUpdate, 2_000) ?? undefined
+      : undefined
+  if (!kind || !title || !category || !status || occurredOn === undefined
+    || summary === undefined || professionalLabel === undefined || firstUpdate === undefined) {
+    return undefined
+  }
+  return { kind, title, category, status, occurredOn, summary, professionalLabel, firstUpdate }
+}
+
+function normalizedRoloConversation(value: unknown): RoloConversationState | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const conversation = value as Record<string, unknown>
+  const pendingWork = normalizedRoloWorkDraft(conversation.pendingWork)
+  const unansweredFollowUpQuestion = conversation.unansweredFollowUpQuestion === null
+    ? null
+    : typeof conversation.unansweredFollowUpQuestion === 'string'
+      ? boundedResearchText(conversation.unansweredFollowUpQuestion, 240)
+      : undefined
+  if (pendingWork === undefined || unansweredFollowUpQuestion === undefined) return null
+  return { pendingWork, unansweredFollowUpQuestion }
+}
 
 function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>[2]) {
   const body: Record<string, unknown> = {
@@ -580,16 +634,20 @@ export function createRemotePort(
       const history = Array.isArray(input.history) ? input.history : []
       const normalizedHistory = history.map(turn => ({
         role: turn?.role === 'user' || turn?.role === 'assistant' ? turn.role : null,
-        text: typeof turn?.text === 'string' ? boundedResearchText(turn.text, 700) : null,
+        text: typeof turn?.text === 'string' ? boundedResearchText(turn.text, 900) : null,
       }))
+      const conversation = normalizedRoloConversation(input.conversation)
       const totalCharacters = (message?.length ?? 0)
         + normalizedHistory.reduce((total, turn) => total + (turn.text?.length ?? 0), 0)
+        + (conversation?.pendingWork ? JSON.stringify(conversation.pendingWork).length : 0)
+        + (conversation?.unansweredFollowUpQuestion?.length ?? 0)
       if (!ref || !message
         || !destinations.includes(input.destination)
         || (input.projectRef !== undefined && !PROJECT_REF.test(input.projectRef))
-        || history.length > 8
+        || history.length > 16
+        || !conversation
         || normalizedHistory.some(turn => turn.role === null || turn.text === null)
-        || totalCharacters > 6_000) {
+        || totalCharacters > 12_000) {
         return { ok: false, error: 'invalid' }
       }
       return call({
@@ -601,6 +659,7 @@ export function createRemotePort(
             role: turn.role as 'user' | 'assistant',
             text: turn.text as string,
           })),
+          conversation,
           destination: input.destination,
           ...(input.projectRef ? { projectRef: input.projectRef } : {}),
         },

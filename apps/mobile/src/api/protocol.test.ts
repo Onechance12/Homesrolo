@@ -57,12 +57,18 @@ test('bounds Rolo context to the server contract while preserving newest turns',
     role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
     text: `${index}:`.padEnd(1_400, 'x'),
   }))
-  const bounded = boundedRoloConversation('  help my house  ', history)
+  const conversation = { pendingWork: null, unansweredFollowUpQuestion: 'Which unit?' }
+  const bounded = boundedRoloConversation('  help my house  ', history, conversation)
   assert.equal(bounded.message, 'help my house')
-  assert.ok(bounded.history.length <= 8)
-  assert.ok(bounded.history.every(turn => turn.text.length <= 700))
+  assert.equal(bounded.conversation.unansweredFollowUpQuestion, 'Which unit?')
+  assert.ok(bounded.history.length <= 16)
+  assert.ok(bounded.history.every(turn => turn.text.length <= 900))
   assert.ok(bounded.message.length
-    + bounded.history.reduce((total, turn) => total + turn.text.length, 0) <= 6_000)
+    + bounded.history.reduce((total, turn) => total + turn.text.length, 0)
+    + (bounded.conversation.unansweredFollowUpQuestion?.length ?? 0) <= 12_000)
   assert.match(bounded.history.at(-1)?.text ?? '', /^9:/)
-  assert.throws(() => boundedRoloConversation('x'.repeat(1_601), []))
+  assert.throws(() => boundedRoloConversation('x'.repeat(1_601), [], {
+    pendingWork: null,
+    unansweredFollowUpQuestion: null,
+  }))
 })

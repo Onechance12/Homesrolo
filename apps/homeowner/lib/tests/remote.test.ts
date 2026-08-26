@@ -55,6 +55,7 @@ const CAPABILITIES = {
   persistence: false,
   projectQuotes: false,
   homeResearch: false,
+  homeAssistant: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,

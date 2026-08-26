@@ -22,12 +22,25 @@ test('keeps preview Rolo and writes deterministic and isolated', async () => {
   const first = new PreviewHomesroloApi()
   const second = new PreviewHomesroloApi()
   const before = (await first.listWork(PREVIEW_PRIMARY_HOME_REF)).length
-  const reply = await first.askRolo(PREVIEW_PRIMARY_HOME_REF, 'My AC is not cooling', [])
+  const reply = await first.askRolo(PREVIEW_PRIMARY_HOME_REF, 'My AC is not cooling', [], {
+    pendingWork: null,
+    unansweredFollowUpQuestion: null,
+  })
   const proposed = reply.proposedWork
 
   assert.equal(proposed?.category, 'hvac')
   assert.match(reply.disclosure, /no network request/)
   assert.ok(proposed)
+  const continued = await first.askRolo(PREVIEW_PRIMARY_HOME_REF, 'The upstairs unit.', [
+    { role: 'user', text: 'My AC is not cooling' },
+    { role: 'assistant', text: reply.answer },
+  ], {
+    pendingWork: proposed,
+    unansweredFollowUpQuestion: reply.followUpQuestions[0] ?? null,
+  })
+  assert.equal(continued.proposedWork?.title, proposed.title)
+  assert.match(continued.proposedWork?.summary ?? '', /Follow-up: The upstairs unit\./)
+  assert.deepEqual(continued.followUpQuestions, [])
   await first.createWork(PREVIEW_PRIMARY_HOME_REF, {
     commandRef: await first.newCommandRef(),
     title: proposed.title,

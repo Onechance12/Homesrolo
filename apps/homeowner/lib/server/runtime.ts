@@ -44,7 +44,10 @@ import {
   OpenAIHomeResearchClient,
   readHomeResearchConfiguration,
 } from './home-research.ts'
-import { OpenAIHomeAssistantClient } from './home-assistant.ts'
+import {
+  OpenAIHomeAssistantClient,
+  readHomeAssistantConfiguration,
+} from './home-assistant.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -74,6 +77,7 @@ const UNCONFIGURED_CAPABILITIES = Object.freeze({
   persistence: false,
   projectQuotes: false,
   homeResearch: false,
+  homeAssistant: false,
   uploads: false,
   photoCheckups: false,
   projectReview: false,
@@ -110,8 +114,9 @@ const homeResearchConfiguration = readHomeResearchConfiguration(environment)
 const homeResearchClient = homeResearchConfiguration
   ? new OpenAIHomeResearchClient({ configuration: homeResearchConfiguration })
   : null
-const homeAssistantClient = homeResearchConfiguration
-  ? new OpenAIHomeAssistantClient({ configuration: homeResearchConfiguration })
+const homeAssistantConfiguration = readHomeAssistantConfiguration(environment)
+const homeAssistantClient = homeAssistantConfiguration
+  ? new OpenAIHomeAssistantClient({ configuration: homeAssistantConfiguration })
   : null
 let projectReviewService: HomeownerProjectReviewService | null = null
 const jobroloHandoffConfiguration = readJobroloHandoffClientConfiguration(environment)
@@ -183,6 +188,7 @@ export function homeownerApiService(): HomeownerApiService {
         persistence: true,
         projectQuotes: configuration?.projectQuotesEnabled === true,
         homeResearch: homeResearchClient !== null,
+        homeAssistant: homeAssistantClient !== null,
         uploads: configuration?.privateUploadsEnabled === true,
         photoCheckups: configuration?.photoCheckupsEnabled === true,
         projectReview: projectReviewCapabilityEnabled(

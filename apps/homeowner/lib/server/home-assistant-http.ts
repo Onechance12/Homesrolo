@@ -9,12 +9,14 @@ import {
 import { HomeResearchRateLimiter } from './home-research.ts'
 import {
   askRoloRequestSchema,
+  homeAssistantBoundaryResult,
+  homeAssistantBoundaryIdsFromAnswer,
   HomeAssistantError,
   type HomeAssistantClient,
   type HomeAssistantContext,
 } from './home-assistant.ts'
 
-const MAX_JSON_BYTES = 12 * 1024
+const MAX_JSON_BYTES = 24 * 1024
 const JSON_HEADERS = Object.freeze({
   'cache-control': 'no-store',
   'content-type': 'application/json; charset=utf-8',
@@ -24,6 +26,71 @@ const JSON_HEADERS = Object.freeze({
 })
 
 const sharedRateLimiter = new HomeResearchRateLimiter({ limit: 16, windowMs: 10 * 60 * 1_000 })
+
+function boundaryAwareRequest(request: z.infer<typeof askRoloRequestSchema>) {
+  const current = classifyRequest(request.message)
+  const cleanHistory: typeof request.history[number][] = []
+  let dropReplyToRefusedTurn = false
+  let latestHistoricalRefusals: typeof current.refusals = []
+  let safeUserTurnAfterLatestRefusal = false
+  for (const turn of request.history) {
+    if (turn.role === 'user') {
+      const historical = classifyRequest(turn.text)
+      if (historical.refusals.length > 0) {
+        latestHistoricalRefusals = historical.refusals
+        safeUserTurnAfterLatestRefusal = false
+        dropReplyToRefusedTurn = true
+        continue
+      }
+      if (latestHistoricalRefusals.length > 0) safeUserTurnAfterLatestRefusal = true
+      dropReplyToRefusedTurn = false
+      cleanHistory.push(turn)
+      continue
+    }
+    if (dropReplyToRefusedTurn) {
+      dropReplyToRefusedTurn = false
+      continue
+    }
+    cleanHistory.push(turn)
+  }
+  const sanitizedRequest = { ...request, history: cleanHistory }
+  if (current.refusals.length > 0) return { request: sanitizedRequest, refusals: current.refusals }
+
+  const last = request.history.at(-1)
+  const replyBoundary = last?.role === 'assistant'
+    ? homeAssistantBoundaryIdsFromAnswer(last.text)
+    : []
+  const activeBoundary = replyBoundary.length > 0
+    ? replyBoundary
+    : safeUserTurnAfterLatestRefusal ? [] : latestHistoricalRefusals
+  if (activeBoundary.length === 0) return { request: sanitizedRequest, refusals: [] }
+
+  const explicitTopic = request.message.match(/^\s*(?:new (?:question|topic)|different question)\s*:\s*(.+)$/is)?.[1]?.trim()
+  if (explicitTopic) {
+    const explicitClassification = classifyRequest(explicitTopic)
+    return {
+      request: { ...request, message: explicitTopic, history: [] },
+      refusals: explicitClassification.refusals,
+    }
+  }
+  if (current.educational) {
+    // General education is permitted, but the prohibited exchange is removed
+    // before a model sees the new standalone question.
+    return { request: { ...sanitizedRequest, history: [] }, refusals: [] }
+  }
+  // Ambiguous pressure after a boundary is still the same refused request.
+  // This is state-based rather than phrase-based, so wording cannot bypass it.
+  return { request: sanitizedRequest, refusals: activeBoundary }
+}
+
+export function assistantLocalityFromAddress(
+  address: { readonly city: string; readonly regionCode: string } | null,
+): string | null {
+  if (!address) return null
+  const city = address.city.trim()
+  const regionCode = address.regionCode.trim().toUpperCase()
+  return city && /^[A-Z]{2}$/.test(regionCode) ? `${city}, ${regionCode}` : null
+}
 
 function response(status: number, body: unknown, headers?: Readonly<Record<string, string>>) {
   return new Response(JSON.stringify(body), {
@@ -118,13 +185,9 @@ export async function handleHomeAssistantRequestWithDependencies(
   const rawBody = await boundedJson(request)
   const parsed = askRoloRequestSchema.safeParse(rawBody)
   if (!parsed.success) return response(400, { error: { code: 'invalid_request' } })
-  const homeownerText = [
-    ...parsed.data.history.filter(turn => turn.role === 'user').map(turn => turn.text),
-    parsed.data.message,
-  ].join('\n')
-  if (classifyRequest(homeownerText).refusals.length > 0) {
-    return response(400, { error: { code: 'invalid_request' } })
-  }
+  // Each new message is classified on its own. A safely answered boundary from
+  // an earlier turn must not poison the rest of a homeowner's conversation.
+  const boundaryDecision = boundaryAwareRequest(parsed.data)
   const sessionHandle = authentication.sessionHandle
   if (!sessionHandle) return response(401, { error: { code: 'signed_out' } })
 
@@ -135,8 +198,17 @@ export async function handleHomeAssistantRequestWithDependencies(
         'retry-after': String(allowance.retryAfterSeconds),
       })
     }
-    const context = await dependencies.readContext(sessionHandle, homeRef, parsed.data.projectRef)
-    const result = await dependencies.client.answer(parsed.data, context)
+    if (boundaryDecision.refusals.length > 0) {
+      return response(200, {
+        data: homeAssistantBoundaryResult(boundaryDecision.request, boundaryDecision.refusals),
+      })
+    }
+    const context = await dependencies.readContext(
+      sessionHandle,
+      homeRef,
+      boundaryDecision.request.projectRef,
+    )
+    const result = await dependencies.client.answer(boundaryDecision.request, context)
     return response(200, { data: result })
   } catch (error) {
     return mapped(error)
@@ -156,6 +228,7 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
       const projects = await service.listProjects(requestContext, requestedHomeRef)
       let files: Awaited<ReturnType<typeof service.listArtifacts>> = []
       let systems: HomeAssistantContext['systems'] = []
+      let locality: string | null = null
       try {
         files = await service.listArtifacts(requestContext, requestedHomeRef)
       } catch (error) {
@@ -163,6 +236,7 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
       }
       try {
         const record = await service.readHomeRecord(requestContext, requestedHomeRef)
+        locality = assistantLocalityFromAddress(record.address)
         systems = record.systems.map(system => ({
           kind: system.kind,
           present: system.present,
@@ -181,7 +255,9 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
       return {
         home: {
           label: home.displayLabel,
-          locality: home.privateLocationLabel,
+          // Never fall back to privateLocationLabel here. Older and native-created
+          // homes may store a full street address in that legacy display field.
+          locality,
           projectCount: home.projectCount,
           documentCount: home.documentCount,
         },
