@@ -12,6 +12,7 @@
   HOMESROLO_PRIVATE_UPLOADS_ENABLED = "true"
   HOMESROLO_PHOTO_CHECKUPS_ENABLED = "true"
   HOMESROLO_AI_ENABLED = "true"
+  HOMESROLO_ROLO_VISION_ENABLED = "true"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
