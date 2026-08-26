@@ -137,11 +137,10 @@ export default function RoloPage({
   const retryCheckups = checkups.retry
   const previousFilesReadable = useRef(filesReadable)
   const previousCheckupsReadable = useRef(checkupsReadable)
-  const [filter, setFilter] = useState<RoloFilter>(initialFilter)
+  const filter = initialFilter
   const [query, setQuery] = useState('')
 
   function chooseFilter(nextFilter: RoloFilter) {
-    setFilter(nextFilter)
     router.replace(
       `/home/${homeId}/rolo${nextFilter === 'all' ? '' : `?filter=${nextFilter}`}`,
       { scroll: false },
@@ -153,10 +152,6 @@ export default function RoloPage({
     previousCheckupsReadable.current = checkupsReadable
     retryCheckups()
   }, [checkupsReadable, retryCheckups])
-
-  useEffect(() => {
-    setFilter(initialFilter)
-  }, [initialFilter])
 
   useEffect(() => {
     if (previousFilesReadable.current === filesReadable) return

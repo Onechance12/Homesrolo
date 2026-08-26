@@ -76,15 +76,28 @@ export default function HomeRecordPage({
     retry()
   }, [recordsReadable, retry])
 
+  const retryCheckups = checkups.retry
+
   useEffect(() => {
     if (previousCheckupsEnabled.current === photoCheckupsEnabled) return
     previousCheckupsEnabled.current = photoCheckupsEnabled
-    checkups.retry()
-  }, [checkups.retry, photoCheckupsEnabled])
+    retryCheckups()
+  }, [photoCheckupsEnabled, retryCheckups])
 
-  const returnedRecords = state.status === 'ready' ? state.value : []
-  const returnedCheckups = checkups.state.status === 'ready' ? checkups.state.value : []
-  const returnedProjects = projects.state.status === 'ready' ? projects.state.value.filter(project => !project.archived) : []
+  const returnedRecords = useMemo(
+    () => state.status === 'ready' ? state.value : [],
+    [state],
+  )
+  const returnedCheckups = useMemo(
+    () => checkups.state.status === 'ready' ? checkups.state.value : [],
+    [checkups.state],
+  )
+  const returnedProjects = useMemo(
+    () => projects.state.status === 'ready'
+      ? projects.state.value.filter(project => !project.archived)
+      : [],
+    [projects.state],
+  )
   const libraryLoading = (recordsReadable && state.status === 'loading')
     || (photoCheckupsEnabled && checkups.state.status === 'loading')
   const projectLabels = useMemo(() => new Map(returnedProjects.map(project => [project.projectRef, project.title])), [returnedProjects])

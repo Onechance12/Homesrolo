@@ -254,11 +254,14 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   const activeStorageKey = useRef(storageKey)
   const assistantEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistant
   const visionEnabled = session.kind === 'signed_in' && session.capabilities.homeAssistantVision
+  const activeSelectedPhotoRef = visionEnabled ? selectedPhotoRef : null
   const destination = currentDestination(pathname, homeId)
   const currentProjectRef = projectRefFromPath(pathname)
 
   const closeAssistant = useCallback(() => {
     setOpen(false)
+    setSelectedPhotoRef(null)
+    setPhotoConsent(false)
     requestAnimationFrame(() => launchRef.current?.focus())
   }, [])
 
@@ -298,18 +301,20 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   useEffect(() => {
     const show = () => {
       if (document.activeElement instanceof HTMLElement) launchRef.current = document.activeElement
+      setSavedPhotos([])
+      setSelectedPhotoRef(null)
+      setPhotoConsent(false)
+      setPhotosError(false)
+      setPhotosLoading(visionEnabled)
       setOpen(true)
     }
     window.addEventListener('homesrolo:open-assistant', show)
     return () => window.removeEventListener('homesrolo:open-assistant', show)
-  }, [])
+  }, [visionEnabled])
 
   useEffect(() => {
     if (!open || !visionEnabled) return
     let active = true
-    setSavedPhotos([])
-    setPhotosLoading(true)
-    setPhotosError(false)
     void port.listDocuments(homeId).then(result => {
       if (!active) return
       setPhotosLoading(false)
@@ -329,13 +334,6 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
     })
     return () => { active = false }
   }, [homeId, open, port, visionEnabled])
-
-  useEffect(() => {
-    if (visionEnabled) return
-    setSavedPhotos([])
-    setSelectedPhotoRef(null)
-    setPhotoConsent(false)
-  }, [visionEnabled])
 
   useEffect(() => {
     if (!open) return
@@ -393,10 +391,10 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
   async function sendMessage(message: string) {
     const clean = message.trim()
     if (!clean || busy || sendInFlight.current || !assistantEnabled) return
-    const selectedPhoto = selectedPhotoRef
-      ? savedPhotos.find(photo => photo.documentRef === selectedPhotoRef) ?? null
+    const selectedPhoto = activeSelectedPhotoRef
+      ? savedPhotos.find(photo => photo.documentRef === activeSelectedPhotoRef) ?? null
       : null
-    if (selectedPhotoRef && (!visionEnabled || !selectedPhoto || !photoConsent)) {
+    if (activeSelectedPhotoRef && (!selectedPhoto || !photoConsent)) {
       setError('Check the photo permission box for this message, or remove the photo.')
       return
     }
@@ -776,7 +774,7 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                 />
                 <button
                   type="submit"
-                  disabled={!assistantEnabled || busy || !input.trim() || (!!selectedPhotoRef && !photoConsent)}
+                  disabled={!assistantEnabled || busy || !input.trim() || (!!activeSelectedPhotoRef && !photoConsent)}
                   aria-label="Send to Rolo"
                 >↑</button>
               </div>
