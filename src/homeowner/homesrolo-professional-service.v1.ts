@@ -54,8 +54,14 @@ const publicDirectoryQuerySchema = z.object({
 export const professionalApiCreateOrganizationInputSchema =
   createProfessionalOrganizationInputSchema.extend({ slug: organizationSlugSchema }).strict()
 export const professionalApiSaveProfileInputSchema = saveProfessionalProfileInputSchema
-export const professionalApiCreateInvitationInputSchema =
-  createProjectInvitationInputSchema.omit({ projectRef: true, requestedAt: true })
+export const professionalApiCreateInvitationInputSchema = z.object({
+  commandRef: createProjectInvitationInputSchema.shape.commandRef,
+  professionalOrganizationRef:
+    createProjectInvitationInputSchema.shape.professionalOrganizationRef,
+  message: createProjectInvitationInputSchema.shape.message,
+  selectedArtifactRefs: createProjectInvitationInputSchema.shape.selectedArtifactRefs,
+  expiresInDays: createProjectInvitationInputSchema.shape.expiresInDays,
+}).strict()
 export const professionalApiRespondInvitationInputSchema =
   respondToProjectInvitationInputSchema.omit({ invitationRef: true, requestedAt: true })
 export const professionalApiRevokeInvitationInputSchema =
