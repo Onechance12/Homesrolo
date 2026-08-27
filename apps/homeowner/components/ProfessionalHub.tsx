@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { usePort } from '../lib/port/provider.tsx'
@@ -101,24 +101,33 @@ function ProfessionalInvitationCard({
   const [responding, setResponding] = useState<'accepted' | 'declined' | null>(null)
   const [responseError, setResponseError] = useState<string | null>(null)
   const responseAttempts = useRef(new Map<string, string>())
-  const [proposalDate, setProposalDate] = useState(today())
-  const [amount, setAmount] = useState('')
-  const [summary, setSummary] = useState('')
-  const [scope, setScope] = useState<ScopeText>({})
+  const [proposalDraft, setProposalDraft] = useState<{
+    readonly sourceKey: string
+    readonly proposalDate: string
+    readonly amount: string
+    readonly summary: string
+    readonly scope: ScopeText
+  }>(() => ({ sourceKey: 'new', proposalDate: today(), amount: '', summary: '', scope: {} }))
   const [saving, setSaving] = useState(false)
   const [proposalError, setProposalError] = useState<string | null>(null)
   const [proposalNotice, setProposalNotice] = useState<string | null>(null)
   const proposalAttempt = useRef<string | null>(null)
   const proposal = currentProposal.state.status === 'ready' ? currentProposal.state.value : null
   const proposalLocked = proposal?.homeownerDecision === 'selected'
-
-  useEffect(() => {
-    if (!proposal) return
-    setProposalDate(proposal.proposalDate)
-    setAmount(proposal.totalAmountCents === undefined ? '' : (proposal.totalAmountCents / 100).toFixed(2))
-    setSummary(proposal.summary ?? '')
-    setScope(scopeText(proposal))
-  }, [proposal])
+  const proposalSourceKey = proposal
+    ? `${proposal.quoteRef}:${proposal.revision}:${proposal.decisionRevision}:${proposal.homeownerDecision}`
+    : 'new'
+  const draft = proposalDraft.sourceKey === proposalSourceKey
+    ? proposalDraft
+    : {
+        sourceKey: proposalSourceKey,
+        proposalDate: proposal?.proposalDate ?? today(),
+        amount: proposal?.totalAmountCents === undefined
+          ? ''
+          : (proposal.totalAmountCents / 100).toFixed(2),
+        summary: proposal?.summary ?? '',
+        scope: scopeText(proposal),
+      }
 
   async function respond(response: 'accepted' | 'declined') {
     if (responding) return
@@ -148,8 +157,10 @@ function ProfessionalInvitationCard({
 
   async function saveProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving || proposalLocked || !scope.project_scope?.trim()) return
-    const parsedAmount = amount.trim() ? Number(amount.replace(/[$,\s]/g, '')) : null
+    if (saving || proposalLocked || !draft.scope.project_scope?.trim()) return
+    const parsedAmount = draft.amount.trim()
+      ? Number(draft.amount.replace(/[$,\s]/g, ''))
+      : null
     if (parsedAmount !== null && (!Number.isFinite(parsedAmount) || parsedAmount < 0 || parsedAmount > 10_000_000)) {
       setProposalError('Enter a total from $0 through $10,000,000, or leave it blank.')
       return
@@ -160,10 +171,10 @@ function ProfessionalInvitationCard({
     setProposalNotice(null)
     const input = {
       commandRef: proposalAttempt.current,
-      proposalDate,
+      proposalDate: draft.proposalDate,
       ...(parsedAmount === null ? {} : { totalAmountCents: Math.round(parsedAmount * 100) }),
-      ...(summary.trim() ? { summary: summary.trim() } : {}),
-      scope: scopePayload(scope),
+      ...(draft.summary.trim() ? { summary: draft.summary.trim() } : {}),
+      scope: scopePayload(draft.scope),
     }
     const result = proposal
       ? await port.reviseProfessionalProposal(invitation.invitationRef, proposal.quoteRef, {
@@ -251,25 +262,25 @@ function ProfessionalInvitationCard({
                 <div className="cardgrid cardgrid--2">
                   <label className="field" style={{ marginTop: 0 }}>
                     <span>Proposal date</span>
-                    <input type="date" required disabled={proposalLocked} value={proposalDate} onChange={event => {
+                    <input type="date" required disabled={proposalLocked} value={draft.proposalDate} onChange={event => {
                       proposalAttempt.current = null
-                      setProposalDate(event.target.value)
+                      setProposalDraft({ ...draft, proposalDate: event.target.value })
                     }} />
                   </label>
                   <label className="field" style={{ marginTop: 0 }}>
                     <span>Total, optional</span>
-                    <input inputMode="decimal" disabled={proposalLocked} value={amount} onChange={event => {
+                    <input inputMode="decimal" disabled={proposalLocked} value={draft.amount} onChange={event => {
                       proposalAttempt.current = null
-                      setAmount(event.target.value)
+                      setProposalDraft({ ...draft, amount: event.target.value })
                     }} placeholder="12500.00" />
                     <small>The written scope matters more than a standalone number.</small>
                   </label>
                 </div>
                 <label className="field" style={{ marginTop: 0 }}>
                   <span>Short explanation, optional</span>
-                  <textarea maxLength={2_000} disabled={proposalLocked} value={summary} onChange={event => {
+                  <textarea maxLength={2_000} disabled={proposalLocked} value={draft.summary} onChange={event => {
                     proposalAttempt.current = null
-                    setSummary(event.target.value)
+                    setProposalDraft({ ...draft, summary: event.target.value })
                   }} placeholder="Explain the approach, important assumptions, or what makes this option fit." />
                 </label>
                 <div className="pro-proposal__scope">
@@ -280,10 +291,13 @@ function ProfessionalInvitationCard({
                         required={key === 'project_scope'}
                         disabled={proposalLocked}
                         maxLength={160}
-                        value={scope[key] ?? ''}
+                        value={draft.scope[key] ?? ''}
                         onChange={event => {
                           proposalAttempt.current = null
-                          setScope(current => ({ ...current, [key]: event.target.value }))
+                          setProposalDraft({
+                            ...draft,
+                            scope: { ...draft.scope, [key]: event.target.value },
+                          })
                         }}
                       />
                     </label>
@@ -300,7 +314,7 @@ function ProfessionalInvitationCard({
                 ) : null}
                 {proposalError ? <div className="notice" role="alert">{proposalError}</div> : null}
                 {proposalNotice ? <div className="notice notice--success" role="status">{proposalNotice}</div> : null}
-                <button className="btn btn--primary" type="submit" disabled={saving || proposalLocked || !scope.project_scope?.trim()}>
+                <button className="btn btn--primary" type="submit" disabled={saving || proposalLocked || !draft.scope.project_scope?.trim()}>
                   {saving ? 'Saving proposal…' : proposal ? 'Save revised proposal' : 'Submit proposal'}
                 </button>
               </form>
