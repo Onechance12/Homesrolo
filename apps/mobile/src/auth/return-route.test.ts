@@ -18,6 +18,11 @@ test('work detail creates a valid return path and restores its typed destination
   })
 })
 
+test('the exact Pro hub may survive sign-in without opening a general redirect', () => {
+  assert.equal(postSignInDestination('/pro'), '/pro')
+  assert.equal(postSignInDestination('/pro/anything'), DEFAULT_POST_SIGN_IN_DESTINATION)
+})
+
 test('post-sign-in routing rejects external, malformed, ambiguous, and unsupported targets', () => {
   const rejected: unknown[] = [
     undefined,

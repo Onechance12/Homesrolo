@@ -15,8 +15,8 @@ export const colors = Object.freeze({
   warning: '#ffd36d',
 })
 
-export const radius = Object.freeze({ small: 12, medium: 18, large: 28, pill: 999 })
-export const space = Object.freeze({ xs: 6, sm: 10, md: 16, lg: 24, xl: 32 })
+export const radius = Object.freeze({ small: 10, medium: 14, large: 20, pill: 999 })
+export const space = Object.freeze({ xs: 6, sm: 10, md: 14, lg: 20, xl: 28 })
 
 export const categoryLabel = Object.freeze({
   roofing: 'Roof',

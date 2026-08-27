@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { Brand, Eyebrow } from './ui.tsx'
+import { returnToHomeChooser } from '../home/navigation.ts'
 import { colors, space } from '../theme.ts'
 
 export function HomeHeader({ section, title, detail }: {
@@ -12,30 +12,28 @@ export function HomeHeader({ section, title, detail }: {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Brand compact />
-        <Pressable onPress={() => router.replace('/homes')} accessibilityLabel="Switch homes" style={styles.switcher}>
-          <Ionicons name="swap-horizontal" size={18} color={colors.slate} />
+        <Text style={styles.section}>{section}</Text>
+        <Pressable onPress={() => returnToHomeChooser(router)} accessibilityLabel="Switch homes" style={styles.switcher}>
+          <Ionicons name="home-outline" size={17} color={colors.slate} />
           <Text style={styles.switchText}>Homes</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.smoke} />
         </Pressable>
       </View>
-      <View style={styles.copy}>
-        <Eyebrow>{section}</Eyebrow>
-        <Text style={styles.title}>{title}</Text>
-        {detail ? <Text style={styles.detail}>{detail}</Text> : null}
-      </View>
+      <Text style={styles.title}>{title}</Text>
+      {detail ? <Text style={styles.detail}>{detail}</Text> : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space.md, marginBottom: 2 },
+  wrap: { gap: space.xs, marginBottom: 2 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  section: { color: colors.lime, fontSize: 12, fontWeight: '700' },
   switcher: {
-    minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 7,
-    borderRadius: 20, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 13,
+    minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 18, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 11,
   },
-  switchText: { color: colors.slate, fontWeight: '800', fontSize: 12 },
-  copy: { gap: space.xs },
-  title: { color: colors.cream, fontSize: 28, lineHeight: 32, fontWeight: '900', letterSpacing: -0.8 },
-  detail: { color: colors.slate, fontSize: 14, lineHeight: 20 },
+  switchText: { color: colors.slate, fontWeight: '700', fontSize: 12 },
+  title: { color: colors.cream, fontSize: 26, lineHeight: 31, fontWeight: '800', letterSpacing: -0.65 },
+  detail: { color: colors.slate, fontSize: 13, lineHeight: 18 },
 })

@@ -4,6 +4,7 @@ export const DEFAULT_POST_SIGN_IN_DESTINATION = '/homes' as const
 
 export type PostSignInDestination =
   | typeof DEFAULT_POST_SIGN_IN_DESTINATION
+  | '/pro'
   | {
       readonly pathname: '/home/[homeId]/work/[projectRef]'
       readonly params: { readonly homeId: string; readonly projectRef: string }
@@ -24,6 +25,7 @@ export function postSignInDestination(returnTo: unknown): PostSignInDestination 
   if (typeof returnTo !== 'string' || returnTo.length > 200) {
     return DEFAULT_POST_SIGN_IN_DESTINATION
   }
+  if (returnTo === '/pro') return '/pro'
   const match = /^\/home\/([^/]+)\/work\/([^/]+)$/.exec(returnTo)
   if (!match) return DEFAULT_POST_SIGN_IN_DESTINATION
   const [, homeId, projectRef] = match

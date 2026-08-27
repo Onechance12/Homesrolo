@@ -16,6 +16,7 @@ const messages: Readonly<Record<string, string>> = Object.freeze({
   photo_picker_recovery_failed: 'Android could not recover that camera result. Open the camera and try once more.',
   choose_jpeg_or_png: 'Choose a JPEG or PNG photo.',
   choose_pdf_jpeg_or_png: 'Choose a PDF, JPEG, or PNG file.',
+  artifact_open_unavailable: 'This device could not open that file. Try again from another device.',
 })
 
 export function friendlyError(error: unknown): string {

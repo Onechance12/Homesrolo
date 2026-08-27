@@ -1,17 +1,21 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
-import { Redirect, router, useGlobalSearchParams, useLocalSearchParams } from 'expo-router'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { NativeApiError } from '../../../../src/api/client.ts'
 import type { HomesroloApi } from '../../../../src/api/contract.ts'
 import { friendlyError } from '../../../../src/api/errors.ts'
-import type { WorkRecord } from '../../../../src/api/model.ts'
+import type { ProjectActivityRecord, WorkRecord } from '../../../../src/api/model.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
 import { workDetailReturnPath } from '../../../../src/auth/return-route.ts'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
+import { ProjectFiles } from '../../../../src/components/ProjectFiles.tsx'
+import { ProjectProfessionalWorkspace } from '../../../../src/components/ProjectProfessionalWorkspace.tsx'
 import {
   Button,
   Card,
   Chip,
+  Divider,
   Loading,
   Notice,
   Page,
@@ -20,6 +24,7 @@ import {
   TextField,
 } from '../../../../src/components/ui.tsx'
 import { useResource } from '../../../../src/hooks/useResource.ts'
+import { useHomeId } from '../../../../src/home/HomeRouteProvider.tsx'
 import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../../src/theme.ts'
 import {
   WORK_CATEGORIES,
@@ -40,12 +45,18 @@ type PendingCommand = {
 }
 
 export default function WorkDetailScreen() {
-  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
-  const { projectRef } = useLocalSearchParams<{ projectRef: string }>()
+  const homeId = useHomeId()
+  const { projectRef, professional } = useLocalSearchParams<{
+    projectRef: string
+    professional?: string
+  }>()
   const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(async () => {
     const work = await api.listWork(homeId)
-    return findExactWork(work, homeId, projectRef)
+    const current = findExactWork(work, homeId, projectRef)
+    if (!current) return { work: null, activity: [] as readonly ProjectActivityRecord[] }
+    const activity = await api.listProjectActivity(homeId, projectRef)
+    return { work: current, activity }
   }, [api, homeId, projectRef])
   const resource = useResource(loader, auth.kind === 'signed_in')
 
@@ -65,15 +76,15 @@ export default function WorkDetailScreen() {
   if (resource.state.kind === 'error') {
     return (
       <Page>
-        <Button label="Back" icon="arrow-back" onPress={() => goBack(homeId)} quiet />
+        <ProjectBack onPress={() => goBack(homeId)} />
         <Notice message="This work record could not load." actionLabel="Try again" onAction={resource.reload} />
       </Page>
     )
   }
-  if (!resource.state.value) {
+  if (!resource.state.value.work) {
     return (
       <Page>
-        <Button label="Back" icon="arrow-back" onPress={() => goBack(homeId)} quiet />
+        <ProjectBack onPress={() => goBack(homeId)} />
         <HomeHeader
           section="Work"
           title="That record is not here."
@@ -86,19 +97,23 @@ export default function WorkDetailScreen() {
 
   return (
     <WorkDetail
-      key={`${resource.state.value.projectRef}:${resource.state.value.revision}`}
+      key={`${resource.state.value.work.projectRef}:${resource.state.value.work.revision}:${resource.state.value.activity.at(-1)?.activityRef ?? 'none'}`}
       api={api}
       homeId={homeId}
-      work={resource.state.value}
+      work={resource.state.value.work}
+      initialActivity={resource.state.value.activity}
+      {...(professional ? { preselectedOrganizationRef: professional } : {})}
       onReload={resource.reload}
     />
   )
 }
 
-function WorkDetail({ api, homeId, work, onReload }: {
+function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizationRef, onReload }: {
   readonly api: HomesroloApi
   readonly homeId: string
   readonly work: WorkRecord
+  readonly initialActivity: readonly ProjectActivityRecord[]
+  readonly preselectedOrganizationRef?: string
   readonly onReload: () => void
 }) {
   const [current, setCurrent] = useState(work)
@@ -112,6 +127,7 @@ function WorkDetail({ api, homeId, work, onReload }: {
   const [addingNote, setAddingNote] = useState(false)
   const [noteError, setNoteError] = useState<string | null>(null)
   const [noteSuccess, setNoteSuccess] = useState<string | null>(null)
+  const [activity, setActivity] = useState<readonly ProjectActivityRecord[]>(initialActivity)
   const pendingSave = useRef<PendingCommand | null>(null)
   const pendingNote = useRef<PendingCommand | null>(null)
   const saveLock = useRef(false)
@@ -198,9 +214,16 @@ function WorkDetail({ api, homeId, work, onReload }: {
       if (!pendingNote.current || pendingNote.current.intent !== intent) {
         pendingNote.current = { intent, commandRef: await api.newCommandRef() }
       }
-      await api.addWorkNote(homeId, current.projectRef, body, pendingNote.current.commandRef)
+      const created = await api.addWorkNote(
+        homeId,
+        current.projectRef,
+        body,
+        pendingNote.current.commandRef,
+      )
       pendingNote.current = null
       lastCompletedNote.current = intent
+      setActivity(entries => [...entries.filter(entry => entry.activityRef !== created.activityRef), created]
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt)))
       setNote('')
       setNoteSuccess('Note added to this work record.')
     } catch (caught) {
@@ -213,12 +236,12 @@ function WorkDetail({ api, homeId, work, onReload }: {
 
   return (
     <Page>
+      <ProjectBack onPress={() => goBack(homeId)} />
       <HomeHeader
         section={kindLabel[current.workKind]}
         title={current.title}
         detail={`${categoryLabel[current.category]} · saved to this home`}
       />
-      <Button label="Back" icon="arrow-back" onPress={() => goBack(homeId)} quiet />
 
       <Card accent>
         <View style={styles.headingRow}>
@@ -227,8 +250,7 @@ function WorkDetail({ api, homeId, work, onReload }: {
           </Tag>
           <Text style={styles.status}>{statusLabel[current.status]}</Text>
         </View>
-        <Detail label="Status" value={statusLabel[current.status]} />
-        <Detail label="Date" value={current.occurredOn ?? 'Not recorded'} />
+        <Detail label="Date" value={displayDate(current.occurredOn)} />
         <Detail label="Person or company" value={current.professionalLabel ?? 'Not recorded'} />
         <View style={styles.summaryBlock}>
           <Text style={styles.detailLabel}>What the home remembers</Text>
@@ -238,6 +260,64 @@ function WorkDetail({ api, homeId, work, onReload }: {
         </View>
         {!editing ? <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} /> : null}
       </Card>
+
+      <Card>
+        <SectionTitle
+          title="Updates"
+          detail="Notes and milestones stay with this work."
+        />
+        {activity.length > 0 ? (
+          <View style={styles.timeline}>
+            {activity.map((entry, index) => (
+              <View key={entry.activityRef} style={styles.timelineRow}>
+                <View style={styles.timelineRail}>
+                  <View style={[styles.timelineDot, entry.kind === 'milestone' && styles.milestoneDot]}>
+                    <Ionicons
+                      name={entry.kind === 'milestone' ? 'flag' : 'chatbubble'}
+                      size={11}
+                      color={colors.ink}
+                    />
+                  </View>
+                  {index < activity.length - 1 ? <View style={styles.timelineLine} /> : null}
+                </View>
+                <View style={styles.timelineCopy}>
+                  <Text style={styles.timelineMeta}>
+                    {entry.kind === 'milestone' ? 'Milestone' : 'Note'} · {displayActivityDate(entry.createdAt)}
+                  </Text>
+                  <Text style={styles.timelineBody}>{entry.body}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyActivity}>No updates yet. Add the first decision, visit, or reminder.</Text>
+        )}
+        <Divider />
+        <TextField
+          label="Add an update"
+          value={note}
+          onChangeText={changeNote}
+          multiline
+          maxLength={2_000}
+          placeholder="The replacement part is ordered and should arrive Friday."
+        />
+        <Button
+          label={addingNote ? 'Saving…' : 'Save note'}
+          icon="chatbubble-ellipses-outline"
+          onPress={() => void addNote()}
+          disabled={addingNote || !note.trim()}
+        />
+        {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
+        {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
+      </Card>
+
+      <ProjectFiles homeId={homeId} projectRef={current.projectRef} />
+
+      <ProjectProfessionalWorkspace
+        homeId={homeId}
+        work={current}
+        {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
+      />
 
       {editing ? (
         <Card>
@@ -325,29 +405,22 @@ function WorkDetail({ api, homeId, work, onReload }: {
       ) : null}
       {saveSuccess ? <Text accessibilityRole="alert" style={styles.success}>{saveSuccess}</Text> : null}
 
-      <Card>
-        <SectionTitle
-          title="Add a note"
-          detail="Save a decision, update, observation, or reminder to this same record."
-        />
-        <TextField
-          label="Note"
-          value={note}
-          onChangeText={changeNote}
-          multiline
-          maxLength={2_000}
-          placeholder="The replacement part is ordered and should arrive Friday."
-        />
-        <Button
-          label={addingNote ? 'Adding note…' : 'Add note'}
-          icon="chatbubble-ellipses-outline"
-          onPress={() => void addNote()}
-          disabled={addingNote || !note.trim()}
-        />
-        {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
-        {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
-      </Card>
     </Page>
+  )
+}
+
+function ProjectBack({ onPress }: { readonly onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Back to Work"
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.back, pressed && styles.backPressed]}
+    >
+      <Ionicons name="chevron-back" size={21} color={colors.aqua} />
+      <Text style={styles.backText}>Work</Text>
+    </Pressable>
   )
 }
 
@@ -360,11 +433,20 @@ function Detail({ label, value }: { readonly label: string; readonly value: stri
   )
 }
 
+function displayDate(value: string | null): string {
+  if (!value) return 'Not recorded'
+  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
+function displayActivityDate(value: string): string {
+  return new Date(value).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
 function goBack(homeId: string) {
-  if (router.canGoBack()) {
-    router.back()
-    return
-  }
   openWork(homeId)
 }
 
@@ -373,6 +455,12 @@ function openWork(homeId: string) {
 }
 
 const styles = StyleSheet.create({
+  back: {
+    alignSelf: 'flex-start', minHeight: 40, marginLeft: -7, paddingHorizontal: 7,
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+  },
+  backPressed: { opacity: 0.6 },
+  backText: { color: colors.aqua, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,6 +474,19 @@ const styles = StyleSheet.create({
   summaryBlock: { gap: 5, paddingTop: space.xs },
   summary: { color: colors.cream, fontSize: 15, lineHeight: 22 },
   emptyValue: { color: colors.smoke, fontStyle: 'italic' },
+  timeline: { gap: 0 },
+  timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 },
+  timelineRail: { width: 24, alignItems: 'center' },
+  timelineDot: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.aqua,
+    alignItems: 'center', justifyContent: 'center', zIndex: 1,
+  },
+  milestoneDot: { backgroundColor: colors.lime },
+  timelineLine: { flex: 1, width: 1, minHeight: 18, backgroundColor: colors.line },
+  timelineCopy: { flex: 1, gap: 4, paddingBottom: space.md },
+  timelineMeta: { color: colors.aqua, fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  timelineBody: { color: colors.cream, fontSize: 14, lineHeight: 20 },
+  emptyActivity: { color: colors.slate, fontSize: 13, lineHeight: 19 },
   label: { color: colors.slate, fontSize: 13, fontWeight: '800', marginTop: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, fontWeight: '700' },
