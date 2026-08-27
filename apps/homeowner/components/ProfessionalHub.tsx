@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePortCall } from '../lib/port/hooks.ts'

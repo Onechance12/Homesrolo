@@ -80,13 +80,13 @@ export function ProfessionalInvitationPanel({
     ? directory.state.value.find(organization =>
         organization.organizationRef === selectedOrganizationRef)
     : null
-  const activeInvitations = invitations.state.status === 'ready'
-    ? invitations.state.value.filter(invitation =>
-      invitation.status === 'pending' || invitation.status === 'accepted')
-    : []
   const activeOrganizationRefs = useMemo(
-    () => new Set(activeInvitations.map(invitation => invitation.professionalOrganizationRef)),
-    [activeInvitations],
+    () => new Set(invitations.state.status === 'ready'
+      ? invitations.state.value
+          .filter(invitation => invitation.status === 'pending' || invitation.status === 'accepted')
+          .map(invitation => invitation.professionalOrganizationRef)
+      : []),
+    [invitations.state],
   )
 
   function toggleArtifact(artifactRef: string) {
