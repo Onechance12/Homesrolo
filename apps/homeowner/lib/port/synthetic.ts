@@ -370,6 +370,21 @@ export const syntheticPort: HomeownerDataPort = {
     return err('unavailable')
   },
 
+  async listProfessionals() { await wait(); return err('unavailable') },
+  async getProfessional() { await wait(); return err('unavailable') },
+  async getProfessionalProfile() { await wait(); return err('unavailable') },
+  async createProfessionalOrganization() { await wait(); return err('unavailable') },
+  async saveProfessionalProfile() { await wait(); return err('unavailable') },
+  async listProjectInvitations() { await wait(); return err('unavailable') },
+  async inviteProfessional() { await wait(); return err('unavailable') },
+  async revokeProjectInvitation() { await wait(); return err('unavailable') },
+  async listProfessionalInvitations() { await wait(); return err('unavailable') },
+  async getProfessionalProposal() { await wait(); return err('unavailable') },
+  async respondToProjectInvitation() { await wait(); return err('unavailable') },
+  async submitProfessionalProposal() { await wait(); return err('unavailable') },
+  async reviseProfessionalProposal() { await wait(); return err('unavailable') },
+  async decideProfessionalProposal() { await wait(); return err('unavailable') },
+
   async listDocuments(homeRef) {
     await wait()
     const gate = requireSession<readonly import('./types.ts').DocumentSummary[]>()

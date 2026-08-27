@@ -7,7 +7,7 @@
  */
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SYNTHETIC_NOTICE, homeLabel } from '../lib/port/types.ts'
 import { usePort, usePortMode, useSession } from '../lib/port/provider.tsx'
@@ -22,7 +22,7 @@ import { AssistantDock } from './AssistantDock.tsx'
 const PRIMARY_NAV = [
   { id: 'today', segment: '', label: 'Today', tabLabel: 'Today', icon: IconHome, query: '' },
   { id: 'plans', segment: 'projects', label: 'Plans & service', tabLabel: 'Plans', icon: IconProjects, query: '' },
-  { id: 'pros', segment: 'rolo', label: 'Pros', tabLabel: 'Pros', icon: IconPeople, query: 'filter=people' },
+  { id: 'pros', segment: 'pros', label: 'Pros', tabLabel: 'Pros', icon: IconPeople, query: '' },
   { id: 'my-home', segment: 'rolo', label: 'My Home', tabLabel: 'My Home', icon: HouseMark, query: '' },
 ] as const
 
@@ -65,20 +65,18 @@ function isCurrent(
   pathname: string,
   homeId: string,
   id: typeof PRIMARY_NAV[number]['id'],
-  selectedRoloFilter: string | null,
 ) {
   const base = `/home/${homeId}`
   if (id === 'today') return pathname === base
   if (id === 'plans') return pathname === `${base}/projects` || pathname.startsWith(`${base}/projects/`)
-  if (id === 'pros') return pathname === `${base}/rolo` && selectedRoloFilter === 'people'
-  if (pathname === `${base}/rolo`) return selectedRoloFilter !== 'people'
+  if (id === 'pros') return pathname === `${base}/pros` || pathname.startsWith(`${base}/pros/`)
+  if (pathname === `${base}/rolo`) return true
   return ['details', 'documents', 'timeline', 'checkups', 'warranties']
     .some(segment => pathname === `${base}/${segment}` || pathname.startsWith(`${base}/${segment}/`))
 }
 
 export function AppShell({ homeId, children }: { homeId: string; children: React.ReactNode }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const mode = usePortMode()
   const { state: session } = useSession()
   const port = usePort()
@@ -148,6 +146,9 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
 
   const alias = home.status === 'ready' ? homeLabel(home.value) : '…'
   const assistantEnabled = session.capabilities.homeAssistant
+  const professionalNavEnabled = session.capabilities.invitations
+  const secondaryNav = PRIMARY_NAV.slice(2).filter(({ id }) =>
+    id !== 'pros' || professionalNavEnabled)
 
   function openStartMenu() {
     if (document.activeElement instanceof HTMLElement) startLaunchRef.current = document.activeElement
@@ -199,7 +200,7 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
             <Link
               key={id}
               href={`${navHref(homeId, segment)}${query ? `?${query}` : ''}`}
-              aria-current={isCurrent(pathname, homeId, id, searchParams.get('filter')) ? 'page' : undefined}
+              aria-current={isCurrent(pathname, homeId, id) ? 'page' : undefined}
             >
               <Icon /> {label}
             </Link>
@@ -209,11 +210,11 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
               <HouseMark size={20} /> <span><strong>Start with Rolo</strong><small>Fix, plan, service, or ask</small></span>
             </button>
           ) : null}
-          {PRIMARY_NAV.slice(2).map(({ id, segment, label, icon: Icon, query }) => (
+          {secondaryNav.map(({ id, segment, label, icon: Icon, query }) => (
             <Link
               key={id}
               href={`${navHref(homeId, segment)}${query ? `?${query}` : ''}`}
-              aria-current={isCurrent(pathname, homeId, id, searchParams.get('filter')) ? 'page' : undefined}
+              aria-current={isCurrent(pathname, homeId, id) ? 'page' : undefined}
             >
               <Icon /> {label}
             </Link>
@@ -243,12 +244,12 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
         {children}
       </main>
 
-      <nav className="tabbar" aria-label="This home">
+      <nav className={`tabbar${professionalNavEnabled ? '' : ' tabbar--four'}`} aria-label="This home">
         {PRIMARY_NAV.slice(0, 2).map(({ id, segment, tabLabel, icon: Icon, query }) => (
           <Link
             key={id}
             href={`${navHref(homeId, segment)}${query ? `?${query}` : ''}`}
-              aria-current={isCurrent(pathname, homeId, id, searchParams.get('filter')) ? 'page' : undefined}
+              aria-current={isCurrent(pathname, homeId, id) ? 'page' : undefined}
           >
             <Icon size={22} /> {tabLabel}
           </Link>
@@ -259,11 +260,11 @@ export function AppShell({ homeId, children }: { homeId: string; children: React
             Start
           </button>
         ) : <Link href={`/home/${homeId}/rolo`}><HouseMark size={22} /> Rolo</Link>}
-        {PRIMARY_NAV.slice(2).map(({ id, segment, tabLabel, icon: Icon, query }) => (
+        {secondaryNav.map(({ id, segment, tabLabel, icon: Icon, query }) => (
           <Link
             key={id}
             href={`${navHref(homeId, segment)}${query ? `?${query}` : ''}`}
-            aria-current={isCurrent(pathname, homeId, id, searchParams.get('filter')) ? 'page' : undefined}
+            aria-current={isCurrent(pathname, homeId, id) ? 'page' : undefined}
           >
             <Icon size={22} /> {tabLabel}
           </Link>

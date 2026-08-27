@@ -39,6 +39,7 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
     photoCheckupsEnabled: false,
     roloVisionEnabled: false,
     jobroloAttachmentsEnabled: false,
+    professionalInvitationsEnabled: false,
   })
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
@@ -81,6 +82,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   })?.jobroloAttachmentsEnabled, true)
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
+    HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED: 'true',
+  })?.professionalInvitationsEnabled, true)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
     HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED: 'yes',
   }), null)
   assert.equal(readHomeownerRuntimeConfiguration({
@@ -102,6 +107,10 @@ test('runtime configuration is all-or-nothing and HTTPS-only outside local devel
   assert.equal(readHomeownerRuntimeConfiguration({
     ...CONFIG,
     HOMESROLO_PHOTO_CHECKUPS_ENABLED: 'yes',
+  }), null)
+  assert.equal(readHomeownerRuntimeConfiguration({
+    ...CONFIG,
+    HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED: 'yes',
   }), null)
 })
 

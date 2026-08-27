@@ -68,6 +68,19 @@ import {
   type HomeownerHomeRecordProfile,
   type HomeownerHomeRecordProfilePort,
 } from '../../../../src/homeowner/home-record-profile.v1.ts'
+import {
+  HOMESROLO_PROFESSIONAL_VERSION,
+  professionalCommandIntent,
+  professionalMembershipSchema,
+  professionalOrganizationSchema,
+  professionalProposalSchema,
+  projectInvitationSchema,
+  type HomesroloProfessionalPort,
+  type ProfessionalMembership,
+  type ProfessionalOrganization,
+  type ProfessionalProposal,
+  type ProjectInvitation,
+} from '../../../../src/homeowner/homesrolo-professional.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -100,6 +113,31 @@ function throwCheckupPhotoReserveError(error: { readonly message: string }): nev
     || error.message.includes('command_scope_mismatch')
     || error.message.includes('photo_deleted')) {
     throw new HomeownerApiError('conflict')
+  }
+  throw new HomeownerApiError('unavailable')
+}
+
+function throwProfessionalMutationError(error: { readonly message: string }): never {
+  if (error.message.includes('revision_conflict')
+    || error.message.includes('command_digest_mismatch')
+    || error.message.includes('active_invitation_exists')
+    || error.message.includes('proposal_already_submitted')
+    || error.message.includes('proposal_decision_unchanged')
+    || error.message.includes('professional_organization_limit_reached')
+    || error.message.includes('project_invitation_limit_reached')
+    || error.message.includes('profile_slug_unavailable')) {
+    throw new HomeownerApiError('conflict')
+  }
+  if (error.message.includes('not_found')
+    || error.message.includes('not_authorized')
+    || error.message.includes('membership_not_authorized')) {
+    throw new HomeownerApiError('not_found')
+  }
+  if (error.message.includes('invalid_')
+    || error.message.includes('reserved_profile_slug')
+    || error.message.includes('not_pending')
+    || error.message.includes('not_revocable')) {
+    throw new HomeownerApiError('invalid_request')
   }
   throw new HomeownerApiError('unavailable')
 }
@@ -374,19 +412,137 @@ function checkupPhotoFromRow(input: unknown): HomeownerCheckupPhotoMetadata {
 
 function quoteFromRow(input: unknown): HomeownerProjectQuote {
   const row = record(input)
-  return homeownerProjectQuoteSchema.parse({
+  const source = requiredString(row, 'source')
+  const base = {
     recordVersion: HOMEOWNER_PROJECT_QUOTE_VERSION,
     quoteRef: requiredString(row, 'quote_ref'),
     homeRef: requiredString(row, 'home_ref'),
     projectRef: requiredString(row, 'project_ref'),
     controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
     contractorLabel: requiredString(row, 'contractor_label'),
+    scope: row.scope,
+    source,
+    revision: requiredNumber(row, 'revision'),
+    createdAt: canonicalInstant(row, 'created_at'),
+    updatedAt: canonicalInstant(row, 'updated_at'),
+  }
+  if (source === 'professional_submission') {
+    return homeownerProjectQuoteSchema.parse({
+      ...base,
+      proposalDate: requiredString(row, 'proposal_date'),
+      professionalOrganizationRef: requiredString(row, 'professional_organization_ref'),
+      invitationRef: requiredString(row, 'invitation_ref'),
+      submittedByPrincipalRef: requiredString(row, 'submitted_by_principal_ref'),
+      ...(row.total_amount_cents === null
+        ? {}
+        : { totalAmountCents: requiredNumber(row, 'total_amount_cents') }),
+      currencyCode: requiredString(row, 'currency_code'),
+      ...(row.professional_summary === null
+        ? {}
+        : { summary: requiredString(row, 'professional_summary') }),
+      proposalState: requiredString(row, 'proposal_state'),
+      homeownerDecision: requiredString(row, 'homeowner_decision'),
+      decisionRevision: requiredNumber(row, 'decision_revision'),
+      latestVersionRef: requiredString(row, 'latest_version_ref'),
+      contentDigest: requiredString(row, 'content_digest'),
+    })
+  }
+  return homeownerProjectQuoteSchema.parse({
+    ...base,
     ...(row.proposal_date === null ? {} : { proposalDate: requiredString(row, 'proposal_date') }),
     ...(row.artifact_ref === null ? {} : { artifactRef: requiredString(row, 'artifact_ref') }),
-    scope: row.scope,
     ...(row.notes === null || row.notes === '' ? {} : { notes: requiredString(row, 'notes') }),
-    source: requiredString(row, 'source'),
+  })
+}
+
+function professionalOrganizationFromRow(input: unknown): ProfessionalOrganization {
+  const row = record(input)
+  return professionalOrganizationSchema.parse({
+    recordVersion: HOMESROLO_PROFESSIONAL_VERSION,
+    organizationRef: requiredString(row, 'organization_ref'),
+    slug: requiredString(row, 'slug'),
+    displayName: requiredString(row, 'display_name'),
+    ...(row.legal_name === null ? {} : { legalName: requiredString(row, 'legal_name') }),
+    ...(row.description === null ? {} : { description: requiredString(row, 'description') }),
+    ...(row.public_phone === null ? {} : { publicPhone: requiredString(row, 'public_phone') }),
+    ...(row.public_email === null ? {} : { publicEmail: requiredString(row, 'public_email') }),
+    ...(row.website_url === null ? {} : { websiteUrl: requiredString(row, 'website_url') }),
+    ...(row.logo_url === null ? {} : { logoUrl: requiredString(row, 'logo_url') }),
+    trades: row.trades,
+    serviceAreas: row.service_areas,
+    publicationState: requiredString(row, 'publication_state'),
+    provenance: requiredString(row, 'provenance'),
     revision: requiredNumber(row, 'revision'),
+    createdAt: canonicalInstant(row, 'created_at'),
+    updatedAt: canonicalInstant(row, 'updated_at'),
+  })
+}
+
+function professionalMembershipFromRow(input: unknown): ProfessionalMembership {
+  const row = record(input)
+  return professionalMembershipSchema.parse({
+    recordVersion: HOMESROLO_PROFESSIONAL_VERSION,
+    membershipRef: requiredString(row, 'membership_ref'),
+    organizationRef: requiredString(row, 'organization_ref'),
+    principalRef: requiredString(row, 'principal_ref'),
+    role: requiredString(row, 'role'),
+    state: requiredString(row, 'state'),
+    revision: requiredNumber(row, 'revision'),
+    createdAt: canonicalInstant(row, 'created_at'),
+    ...(row.revoked_at === null ? {} : { revokedAt: canonicalInstant(row, 'revoked_at') }),
+  })
+}
+
+function projectInvitationFromRow(input: unknown): ProjectInvitation {
+  const row = record(input)
+  const status = requiredString(row, 'status')
+  return projectInvitationSchema.parse({
+    recordVersion: HOMESROLO_PROFESSIONAL_VERSION,
+    invitationRef: requiredString(row, 'invitation_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    projectRef: requiredString(row, 'project_ref'),
+    controllerPrincipalRef: requiredString(row, 'project_controller_principal_ref'),
+    invitedByPrincipalRef: requiredString(row, 'invited_by_principal_ref'),
+    professionalOrganizationRef: requiredString(row, 'professional_organization_ref'),
+    status,
+    ...(row.message === null ? {} : { message: requiredString(row, 'message') }),
+    disclosure: row.disclosure,
+    disclosureDigest: requiredString(row, 'disclosure_digest'),
+    expiresAt: canonicalInstant(row, 'expires_at'),
+    revision: requiredNumber(row, 'revision'),
+    createdAt: canonicalInstant(row, 'created_at'),
+    ...(row.responded_at === null ? {} : { respondedAt: canonicalInstant(row, 'responded_at') }),
+    ...(row.revoked_at === null ? {} : { revokedAt: canonicalInstant(row, 'revoked_at') }),
+  })
+}
+
+function professionalProposalFromRow(input: unknown): ProfessionalProposal {
+  const row = record(input)
+  return professionalProposalSchema.parse({
+    recordVersion: HOMESROLO_PROFESSIONAL_VERSION,
+    quoteRef: requiredString(row, 'quote_ref'),
+    versionRef: requiredString(row, 'latest_version_ref'),
+    invitationRef: requiredString(row, 'invitation_ref'),
+    professionalOrganizationRef: requiredString(row, 'professional_organization_ref'),
+    submittedByPrincipalRef: requiredString(row, 'submitted_by_principal_ref'),
+    homeRef: requiredString(row, 'home_ref'),
+    projectRef: requiredString(row, 'project_ref'),
+    controllerPrincipalRef: requiredString(row, 'controller_principal_ref'),
+    contractorLabel: requiredString(row, 'contractor_label'),
+    proposalDate: requiredString(row, 'proposal_date'),
+    ...(row.total_amount_cents === null
+      ? {}
+      : { totalAmountCents: requiredNumber(row, 'total_amount_cents') }),
+    currencyCode: requiredString(row, 'currency_code'),
+    ...(row.professional_summary === null
+      ? {}
+      : { summary: requiredString(row, 'professional_summary') }),
+    scope: row.scope,
+    state: requiredString(row, 'proposal_state'),
+    homeownerDecision: requiredString(row, 'homeowner_decision'),
+    decisionRevision: requiredNumber(row, 'decision_revision'),
+    revision: requiredNumber(row, 'revision'),
+    contentDigest: requiredString(row, 'content_digest'),
     createdAt: canonicalInstant(row, 'created_at'),
     updatedAt: canonicalInstant(row, 'updated_at'),
   })
@@ -426,7 +582,7 @@ export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
   HomeownerPrivateObjectPort, HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
   HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort,
-  HomeownerHomeRecordProfilePort {
+  HomeownerHomeRecordProfilePort, HomesroloProfessionalPort {
   readonly #client: SupabaseClient
   readonly #now: () => string
   readonly #supabaseOrigin: string | null
@@ -588,6 +744,384 @@ export class SupabaseHomeownerProvider implements
       .limit(101)
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(checkupPhotoFromRow)
+  }
+
+  async listPublishedOrganizations(
+    input: Parameters<HomesroloProfessionalPort['listPublishedOrganizations']>[0] = {},
+  ) {
+    let query = this.#client
+      .from('homesrolo_professional_organizations')
+      .select('*')
+      .eq('publication_state', 'published')
+      .order('display_name', { ascending: true })
+      .order('organization_ref', { ascending: true })
+      .limit(200)
+    if (input.trade) query = query.contains('trades', [input.trade])
+    const { data, error } = await query
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    const organizations = data.map(professionalOrganizationFromRow)
+    if (!input.serviceArea) return organizations
+    const serviceArea = input.serviceArea.trim().toLocaleLowerCase('en-US')
+    return organizations.filter(organization => organization.serviceAreas.some(area =>
+      area.toLocaleLowerCase('en-US') === serviceArea))
+  }
+
+  async readPublishedOrganization(slug: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_professional_organizations')
+      .select('*')
+      .eq('slug', slug)
+      .eq('publication_state', 'published')
+      .maybeSingle()
+    if (error) throw new HomeownerApiError('unavailable')
+    return data === null ? null : professionalOrganizationFromRow(data)
+  }
+
+  async listOrganizationsForPrincipal(principalRef: string) {
+    const memberships = await this.listProfessionalMemberships(principalRef)
+    const organizationRefs = memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef)
+    if (organizationRefs.length === 0) return []
+    const { data, error } = await this.#client
+      .from('homesrolo_professional_organizations')
+      .select('*')
+      .in('organization_ref', organizationRefs)
+      .order('display_name', { ascending: true })
+      .order('organization_ref', { ascending: true })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(professionalOrganizationFromRow)
+  }
+
+  async listProfessionalMemberships(principalRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_professional_memberships')
+      .select('*')
+      .eq('principal_ref', principalRef)
+      .order('created_at', { ascending: true })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(professionalMembershipFromRow)
+  }
+
+  async createOrganization(
+    input: Parameters<HomesroloProfessionalPort['createOrganization']>[0],
+  ) {
+    const commandDigest = digest(professionalCommandIntent(input.command))
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_create_professional_organization',
+      {
+        p_principal_ref: input.principalRef,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: commandDigest,
+        p_organization_ref: mintOpaqueRef('horg'),
+        p_membership_ref: mintOpaqueRef('hpmr'),
+        p_slug: input.command.slug,
+        p_display_name: input.command.displayName,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    const result = record(data)
+    return {
+      organization: professionalOrganizationFromRow(result.organization),
+      membership: professionalMembershipFromRow(result.membership),
+    }
+  }
+
+  async saveProfile(input: Parameters<HomesroloProfessionalPort['saveProfile']>[0]) {
+    const commandDigest = digest(professionalCommandIntent(input.command))
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_save_professional_profile',
+      {
+        p_principal_ref: input.principalRef,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: commandDigest,
+        p_organization_ref: input.command.organizationRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_display_name: input.command.displayName,
+        p_legal_name: input.command.legalName,
+        p_description: input.command.description,
+        p_public_phone: input.command.publicPhone,
+        p_public_email: input.command.publicEmail,
+        p_website_url: input.command.websiteUrl,
+        p_logo_url: input.command.logoUrl,
+        p_trades: input.command.trades,
+        p_service_areas: input.command.serviceAreas,
+        p_publication_state: input.command.publicationState,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    return professionalOrganizationFromRow(data)
+  }
+
+  async createInvitation(input: Parameters<HomesroloProfessionalPort['createInvitation']>[0]) {
+    const commandDigest = digest({
+      command: professionalCommandIntent(input.command),
+      disclosureDigest: input.disclosureDigest,
+    })
+    const expiresAt = new Date(
+      Date.parse(input.command.requestedAt) + input.command.expiresInDays * 86_400_000,
+    ).toISOString()
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_create_project_invitation',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_project_ref: input.command.projectRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: commandDigest,
+        p_invitation_ref: mintOpaqueRef('hinv'),
+        p_professional_organization_ref: input.command.professionalOrganizationRef,
+        p_message: input.command.message ?? null,
+        p_disclosure: input.disclosure,
+        p_disclosure_digest: input.disclosureDigest,
+        p_expires_at: expiresAt,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    return projectInvitationFromRow(data)
+  }
+
+  async listHomeownerInvitations(
+    input: Parameters<HomesroloProfessionalPort['listHomeownerInvitations']>[0],
+  ) {
+    await this.#expireProjectInvitations()
+    const { data, error } = await this.#client
+      .from('homesrolo_project_invitations')
+      .select('*')
+      .eq('home_ref', input.grant.homeRef)
+      .eq('project_ref', input.projectRef)
+      .order('created_at', { ascending: false })
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(projectInvitationFromRow)
+  }
+
+  async listProfessionalInvitations(principalRef: string) {
+    await this.#expireProjectInvitations()
+    const memberships = await this.listProfessionalMemberships(principalRef)
+    const organizationRefs = memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef)
+    if (organizationRefs.length === 0) return []
+    const { data, error } = await this.#client
+      .from('homesrolo_project_invitations')
+      .select('*')
+      .in('professional_organization_ref', organizationRefs)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
+    return data.map(projectInvitationFromRow)
+  }
+
+  async readProposalForInvitation(
+    input: Parameters<HomesroloProfessionalPort['readProposalForInvitation']>[0],
+  ) {
+    const invitations = await this.listProfessionalInvitations(input.principalRef)
+    const invitation = invitations.find(row => row.invitationRef === input.invitationRef)
+    if (!invitation) throw new HomeownerApiError('not_found')
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_project_quotes')
+      .select('*')
+      .eq('invitation_ref', invitation.invitationRef)
+      .eq('source', 'professional_submission')
+      .maybeSingle()
+    if (error) throw new HomeownerApiError('unavailable')
+    if (data === null) return null
+    const proposal = professionalProposalFromRow(data)
+    if (proposal.professionalOrganizationRef !== invitation.professionalOrganizationRef
+      || proposal.homeRef !== invitation.homeRef
+      || proposal.projectRef !== invitation.projectRef) {
+      throw new HomeownerApiError('unavailable')
+    }
+    return proposal
+  }
+
+  async readInvitationArtifact(
+    input: Parameters<HomesroloProfessionalPort['readInvitationArtifact']>[0],
+  ) {
+    const invitations = await this.listProfessionalInvitations(input.principalRef)
+    const invitation = invitations.find(row => row.invitationRef === input.invitationRef)
+    if (!invitation
+      || invitation.status !== 'accepted'
+      || Date.parse(invitation.expiresAt) <= Date.parse(this.#now())
+      || !invitation.disclosure.selectedArtifactRefs.includes(input.artifactRef)) {
+      throw new HomeownerApiError('not_found')
+    }
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_artifacts')
+      .select('*')
+      .eq('artifact_ref', input.artifactRef)
+      .eq('home_ref', invitation.homeRef)
+      .eq('project_ref', invitation.projectRef)
+      .eq('controller_principal_ref', invitation.controllerPrincipalRef)
+      .eq('state', 'available')
+      .maybeSingle()
+    if (error) throw new HomeownerApiError('unavailable')
+    if (data === null) throw new HomeownerApiError('not_found')
+    const row = record(data)
+    const artifact = artifactFromRow(row)
+    if (artifact.contentClass !== 'homeowner_private'
+      || artifact.artifactRef !== input.artifactRef
+      || artifact.homeRef !== invitation.homeRef
+      || artifact.projectRef !== invitation.projectRef
+      || artifact.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const storageBucket = row.storage_bucket === undefined
+      ? LEGACY_PRIVATE_STORAGE_BUCKET
+      : requiredString(row, 'storage_bucket')
+    if (storageBucket !== LEGACY_PRIVATE_STORAGE_BUCKET
+      && storageBucket !== DEV_PRIVATE_UPLOAD_BUCKET) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const download = await this.#client.storage
+      .from(storageBucket)
+      .download(requiredString(row, 'storage_key'))
+    if (download.error || !download.data) throw new HomeownerApiError('unavailable')
+    const bytes = new Uint8Array(await download.data.arrayBuffer())
+    if (bytes.byteLength !== artifact.byteLength
+      || createHash('sha256').update(bytes).digest('hex') !== artifact.payloadSha256) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const currentInvitations = await this.listProfessionalInvitations(input.principalRef)
+    const current = currentInvitations.find(row => row.invitationRef === invitation.invitationRef)
+    if (!current
+      || current.revision !== invitation.revision
+      || current.status !== 'accepted'
+      || Date.parse(current.expiresAt) <= Date.parse(this.#now())
+      || !current.disclosure.selectedArtifactRefs.includes(input.artifactRef)) {
+      throw new HomeownerApiError('not_found')
+    }
+    return {
+      artifactRef: artifact.artifactRef,
+      displayName: artifact.displayName,
+      mediaType: artifact.mediaType,
+      byteLength: artifact.byteLength,
+      payloadSha256: artifact.payloadSha256,
+      bytes,
+    }
+  }
+
+  async #expireProjectInvitations(): Promise<void> {
+    const { error } = await this.#client.rpc('homesrolo_expire_project_invitations', {
+      p_now: this.#now(),
+    })
+    if (error) throw new HomeownerApiError('unavailable')
+  }
+
+  async respondToInvitation(
+    input: Parameters<HomesroloProfessionalPort['respondToInvitation']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_respond_project_invitation',
+      {
+        p_principal_ref: input.principalRef,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: digest(professionalCommandIntent(input.command)),
+        p_invitation_ref: input.command.invitationRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_response: input.command.response,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    return projectInvitationFromRow(data)
+  }
+
+  async revokeInvitation(input: Parameters<HomesroloProfessionalPort['revokeInvitation']>[0]) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_revoke_project_invitation',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_project_ref: input.projectRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: digest(professionalCommandIntent(input.command)),
+        p_invitation_ref: input.command.invitationRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    return projectInvitationFromRow(data)
+  }
+
+  async submitProposal(input: Parameters<HomesroloProfessionalPort['submitProposal']>[0]) {
+    return this.#writeProfessionalProposal('submit', input)
+  }
+
+  async reviseProposal(input: Parameters<HomesroloProfessionalPort['reviseProposal']>[0]) {
+    return this.#writeProfessionalProposal('revise', input)
+  }
+
+  async #writeProfessionalProposal(
+    mode: 'submit' | 'revise',
+    input: Parameters<HomesroloProfessionalPort['submitProposal']>[0]
+      | Parameters<HomesroloProfessionalPort['reviseProposal']>[0],
+  ) {
+    const content = {
+      proposalDate: input.command.proposalDate,
+      totalAmountCents: input.command.totalAmountCents ?? null,
+      currencyCode: 'USD' as const,
+      summary: input.command.summary ?? null,
+      scope: input.command.scope,
+    }
+    const commandDigest = digest(professionalCommandIntent(input.command))
+    const quoteRef = mode === 'revise' && 'quoteRef' in input.command
+      ? input.command.quoteRef
+      : mintOpaqueRef('hquo')
+    const args: Record<string, unknown> = {
+      p_principal_ref: input.principalRef,
+      p_command_ref: input.command.commandRef,
+      p_command_digest: commandDigest,
+      p_invitation_ref: input.command.invitationRef,
+      p_quote_ref: quoteRef,
+      p_version_ref: mintOpaqueRef('hpvr'),
+      p_proposal_date: input.command.proposalDate,
+      p_total_amount_cents: input.command.totalAmountCents ?? null,
+      p_summary: input.command.summary ?? null,
+      p_scope: input.command.scope,
+      p_content_digest: digest(content),
+      p_requested_at: input.command.requestedAt,
+    }
+    if (mode === 'revise' && 'expectedRevision' in input.command) {
+      args.p_expected_revision = input.command.expectedRevision
+    }
+    const { data, error } = await this.#client.rpc(
+      mode === 'submit'
+        ? 'homesrolo_submit_professional_proposal'
+        : 'homesrolo_revise_professional_proposal',
+      args,
+    )
+    if (error) throwProfessionalMutationError(error)
+    return professionalProposalFromRow(data)
+  }
+
+  async decideProposal(input: Parameters<HomesroloProfessionalPort['decideProposal']>[0]) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_decide_professional_proposal',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_project_ref: input.projectRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: digest(professionalCommandIntent(input.command)),
+        p_quote_ref: input.command.quoteRef,
+        p_expected_decision_revision: input.command.expectedDecisionRevision,
+        p_decision: input.command.decision,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwProfessionalMutationError(error)
+    return professionalProposalFromRow(data)
   }
 
   async #removeCheckupPhotoObjects(row: JsonRecord): Promise<void> {

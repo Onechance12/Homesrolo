@@ -112,27 +112,62 @@ export const saveHomeownerProjectQuoteInputSchema =
     expectedRevision: z.number().int().min(1),
   }).strict()
 
-export const homeownerProjectQuoteSchema = z.object({
+const homeownerProjectQuoteBaseShape = {
   recordVersion: z.literal(HOMEOWNER_PROJECT_QUOTE_VERSION),
   quoteRef: opaqueRef('hquo'),
   homeRef: opaqueRef('hhom'),
   projectRef: opaqueRef('hprj'),
   controllerPrincipalRef: opaqueRef('hprn'),
   contractorLabel: z.string().trim().min(1).max(120),
-  proposalDate: calendarDate.optional(),
-  artifactRef: opaqueRef('hart').optional(),
   scope: homeownerQuoteScopeSchema,
-  notes: z.string().trim().min(1).max(500).optional(),
-  source: z.literal('homeowner_entry'),
   revision: z.number().int().min(1),
   createdAt: utcInstant,
   updatedAt: utcInstant,
-}).strict().superRefine((quote, context) => {
+} as const
+
+export const homeownerEnteredProjectQuoteSchema = z.object({
+  ...homeownerProjectQuoteBaseShape,
+  proposalDate: calendarDate.optional(),
+  artifactRef: opaqueRef('hart').optional(),
+  notes: z.string().trim().min(1).max(500).optional(),
+  source: z.literal('homeowner_entry'),
+}).strict()
+
+export const professionalSubmittedProjectQuoteSchema = z.object({
+  ...homeownerProjectQuoteBaseShape,
+  proposalDate: calendarDate,
+  source: z.literal('professional_submission'),
+  professionalOrganizationRef: opaqueRef('horg'),
+  invitationRef: opaqueRef('hinv'),
+  submittedByPrincipalRef: opaqueRef('hprn'),
+  totalAmountCents: z.number().int().min(0).max(1_000_000_000).optional(),
+  currencyCode: z.literal('USD'),
+  summary: z.string().trim().min(1).max(2_000).optional(),
+  proposalState: z.enum(['submitted', 'withdrawn']),
+  homeownerDecision: z.enum(['undecided', 'shortlisted', 'selected', 'declined']),
+  decisionRevision: z.number().int().min(1),
+  latestVersionRef: opaqueRef('hpvr'),
+  contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict()
+
+export const homeownerProjectQuoteSchema = z.discriminatedUnion('source', [
+  homeownerEnteredProjectQuoteSchema,
+  professionalSubmittedProjectQuoteSchema,
+]).superRefine((quote, context) => {
   if (quote.updatedAt < quote.createdAt) {
     context.addIssue({
       code: 'custom',
       path: ['updatedAt'],
       message: 'updatedAt must be on or after createdAt',
+    })
+  }
+  if (quote.source === 'professional_submission'
+    && quote.proposalState === 'withdrawn'
+    && quote.homeownerDecision === 'selected') {
+    context.addIssue({
+      code: 'custom',
+      path: ['homeownerDecision'],
+      message: 'a selected proposal cannot be withdrawn',
     })
   }
 })

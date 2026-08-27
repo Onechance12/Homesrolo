@@ -6,7 +6,8 @@ Postgres persistence, home creation, optional progressive onboarding, generic
 whole-home projects, the roofing-specific project path, a private roof-proposal
 scope comparison, default-off PDF/JPEG/PNG artifact storage, a default-off
 sanitized seasonal-photo beta, a default-off public-source home research
-assistant, and the consent-bound Jobrolo review handoff are implemented.
+assistant, a default-off exact-project professional invitation/proposal lane,
+and the consent-bound Jobrolo review handoff are implemented.
 “Implemented” does not mean every capability is production-enabled: database
 migrations, server configuration, release gates, and the security conditions
 below still control what a deployed session may use.
@@ -141,6 +142,17 @@ The server fresh-checks the controller and uses command receipts for idempotent
 create/save operations. Saves include an expected revision so another session
 cannot be silently overwritten.
 
+The separate professional lane adds self-reported organizations, independent
+organization memberships, exact-project invitations, a selected-evidence
+allowlist, immutable proposal versions, and homeowner proposal decisions. It
+reuses the existing project, proposal, artifact, principal, session, and Home
+Record boundaries; it never turns a professional into a home member. The
+runtime remains false unless the proposal migrations plus migration
+`202608260002` are applied and both `HOMESROLO_PROJECT_QUOTES_ENABLED=true` and
+the server-only `HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED=true` gate are set.
+The release canary and rollback are documented in
+`docs/HOMESROLO_PROFESSIONAL_INVITATIONS.md`.
+
 ## Seasonal photo checkups
 
 The photo-checkup capability is independent of generic document uploads. It
@@ -237,7 +249,7 @@ receiver's malware-scanning gate is independently configured and verified.
 - account recovery beyond requesting a fresh email link;
 - malware scanning plus export, account/home deletion, and retention jobs for
   generic files and the broader private record;
-- invitations and co-owner/controller verification;
+- co-owner/controller verification and native professional invitation screens;
 - automatic matching, contractor routing, or professional distribution;
 - specialized structured workflows for every Home Library area shown in the
   information architecture;

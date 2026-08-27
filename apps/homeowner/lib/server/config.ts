@@ -28,6 +28,7 @@ const configurationSchema = z.object({
   photoCheckupsEnabled: z.enum(['true', 'false']).optional().default('false'),
   roloVisionEnabled: z.enum(['true', 'false']).optional().default('false'),
   jobroloAttachmentsEnabled: z.enum(['true', 'false']).optional().default('false'),
+  professionalInvitationsEnabled: z.enum(['true', 'false']).optional().default('false'),
 }).strict().superRefine((value, context) => {
   if (value.emailCodeSignInEnabled === 'true' && !value.emailCodeRateLimitSecret) {
     context.addIssue({
@@ -61,6 +62,7 @@ export interface HomeownerRuntimeConfiguration {
   readonly photoCheckupsEnabled: boolean
   readonly roloVisionEnabled: boolean
   readonly jobroloAttachmentsEnabled: boolean
+  readonly professionalInvitationsEnabled: boolean
 }
 
 function homeownerAppOriginAllowed(origin: URL, nodeEnvironment: string | undefined) {
@@ -99,6 +101,8 @@ export function readHomeownerRuntimeConfiguration(
     photoCheckupsEnabled: environment.HOMESROLO_PHOTO_CHECKUPS_ENABLED,
     roloVisionEnabled: environment.HOMESROLO_ROLO_VISION_ENABLED,
     jobroloAttachmentsEnabled: environment.HOMESROLO_JOBROLO_ATTACHMENTS_ENABLED,
+    professionalInvitationsEnabled:
+      environment.HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED,
   })
   if (!parsed.success) return null
   if (!homeownerAppOriginAllowed(parsed.data.appOrigin, environment.NODE_ENV)) return null
@@ -115,5 +119,7 @@ export function readHomeownerRuntimeConfiguration(
     photoCheckupsEnabled: parsed.data.photoCheckupsEnabled === 'true',
     roloVisionEnabled: parsed.data.roloVisionEnabled === 'true',
     jobroloAttachmentsEnabled: parsed.data.jobroloAttachmentsEnabled === 'true',
+    professionalInvitationsEnabled:
+      parsed.data.professionalInvitationsEnabled === 'true',
   })
 }

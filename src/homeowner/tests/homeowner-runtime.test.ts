@@ -60,10 +60,10 @@ test('runtime status names the implemented private foundation without claiming l
   assert.equal(HOMEOWNER_RUNTIME_STATUS.persistenceImplemented, true)
   assert.equal(HOMEOWNER_RUNTIME_STATUS.objectStorageImplemented, true)
   assert.equal(HOMEOWNER_RUNTIME_STATUS.uploadsImplemented, true)
+  assert.equal(HOMEOWNER_RUNTIME_STATUS.invitationsImplemented, true)
   assert.equal(HOMEOWNER_RUNTIME_STATUS.jobroloTransportImplemented, true)
   for (const name of [
-    'invitationsImplemented', 'publicSharingImplemented',
-    'productionReady',
+    'publicSharingImplemented', 'productionReady',
   ] as const) {
     assert.equal(HOMEOWNER_RUNTIME_STATUS[name], false, name)
   }

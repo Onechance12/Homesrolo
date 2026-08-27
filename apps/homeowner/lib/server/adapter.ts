@@ -13,12 +13,20 @@
 import { createHomeownerHttpHandler } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import type { HomeownerHttpResponse } from '../../../../src/homeowner/homeowner-http.v1.ts'
 import {
+  createHomesroloProfessionalHttpHandler,
+  type HomesroloProfessionalHttpResponse,
+} from '../../../../src/homeowner/homesrolo-professional-http.v1.ts'
+import {
   homeownerMutationRequestAllowed,
   homeownerRequestAuthentication,
 } from './request-auth.ts'
-import { homeownerApiService, homeownerRuntimeConfiguration } from './runtime.ts'
+import {
+  configuredHomesroloProfessionalService,
+  homeownerApiService,
+  homeownerRuntimeConfiguration,
+} from './runtime.ts'
 
-function toWebResponse(response: HomeownerHttpResponse): Response {
+function toWebResponse(response: HomeownerHttpResponse | HomesroloProfessionalHttpResponse): Response {
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     headers: response.headers,
@@ -106,6 +114,31 @@ export async function handleHomeownerRequest(request: Request): Promise<Response
     return forbiddenMutationResponse()
   }
   const handler = createHomeownerHttpHandler(homeownerApiService())
+  const hasBody = request.body !== null
+  const jsonBody = await boundedJsonBody(request)
+  const response = await handler({
+    method: request.method,
+    pathname: url.pathname,
+    search: url.search,
+    hasBody,
+    jsonBody,
+    sessionHandle: authentication.sessionHandle,
+  })
+  return toWebResponse(response)
+}
+
+export async function handleProfessionalRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const configuration = homeownerRuntimeConfiguration()
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return invalidAuthenticationResponse()
+  if (configuration && request.method === 'POST'
+    && !homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
+    return forbiddenMutationResponse()
+  }
+  const handler = createHomesroloProfessionalHttpHandler(
+    configuredHomesroloProfessionalService(),
+  )
   const hasBody = request.body !== null
   const jsonBody = await boundedJsonBody(request)
   const response = await handler({

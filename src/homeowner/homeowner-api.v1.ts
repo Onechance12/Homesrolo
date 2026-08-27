@@ -421,7 +421,15 @@ export const homeownerApiProjectQuoteViewSchema = z.object({
   artifactRef: opaqueRef('hart').nullable(),
   scope: homeownerQuoteScopeSchema,
   notes: z.string().trim().max(500),
-  source: z.literal('homeowner_entry'),
+  source: z.enum(['homeowner_entry', 'professional_submission']),
+  professionalOrganizationRef: opaqueRef('horg').nullable(),
+  invitationRef: opaqueRef('hinv').nullable(),
+  totalAmountCents: z.number().int().min(0).max(1_000_000_000).nullable(),
+  currencyCode: z.literal('USD').nullable(),
+  professionalSummary: z.string().trim().max(2_000),
+  proposalState: z.enum(['submitted', 'withdrawn']).nullable(),
+  homeownerDecision: z.enum(['undecided', 'shortlisted', 'selected', 'declined']),
+  decisionRevision: z.number().int().min(1).nullable(),
   revision: z.number().int().min(1),
   createdAt: homeownerUtcInstantSchema,
   updatedAt: homeownerUtcInstantSchema,
@@ -592,16 +600,26 @@ function safeCheckupPhoto(input: HomeownerCheckupPhotoMetadata): HomeownerApiChe
 
 function safeProjectQuote(input: HomeownerProjectQuote): HomeownerApiProjectQuoteView {
   const quote = homeownerProjectQuoteSchema.parse(input)
+  const professional = quote.source === 'professional_submission' ? quote : null
+  const homeowner = quote.source === 'homeowner_entry' ? quote : null
   return homeownerApiProjectQuoteViewSchema.parse({
     quoteRef: quote.quoteRef,
     homeRef: quote.homeRef,
     projectRef: quote.projectRef,
     contractorLabel: quote.contractorLabel,
     proposalDate: quote.proposalDate ?? null,
-    artifactRef: quote.artifactRef ?? null,
+    artifactRef: homeowner?.artifactRef ?? null,
     scope: quote.scope,
-    notes: quote.notes ?? '',
+    notes: homeowner?.notes ?? '',
     source: quote.source,
+    professionalOrganizationRef: professional?.professionalOrganizationRef ?? null,
+    invitationRef: professional?.invitationRef ?? null,
+    totalAmountCents: professional?.totalAmountCents ?? null,
+    currencyCode: professional?.currencyCode ?? null,
+    professionalSummary: professional?.summary ?? '',
+    proposalState: professional?.proposalState ?? null,
+    homeownerDecision: professional?.homeownerDecision ?? 'undecided',
+    decisionRevision: professional?.decisionRevision ?? null,
     revision: quote.revision,
     createdAt: quote.createdAt,
     updatedAt: quote.updatedAt,
@@ -1056,6 +1074,7 @@ export class HomeownerApiService {
     const created = homeownerProjectQuoteSchema.parse(
       await this.#projectQuotes.createProjectQuote({ grant, command }),
     )
+    if (created.source !== 'homeowner_entry') throw new HomeownerApiError('unavailable')
     const coherent = created.homeRef === grant.homeRef
       && created.projectRef === parsedProjectRef.data
       && created.controllerPrincipalRef === grant.principalRef
@@ -1064,7 +1083,6 @@ export class HomeownerApiService {
       && created.artifactRef === command.artifactRef
       && stableJson(created.scope) === stableJson(command.scope)
       && created.notes === command.notes
-      && created.source === 'homeowner_entry'
       && created.revision === 1
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeProjectQuote(created)
@@ -1114,6 +1132,7 @@ export class HomeownerApiService {
     const saved = homeownerProjectQuoteSchema.parse(
       await this.#projectQuotes.saveProjectQuote({ grant, command }),
     )
+    if (saved.source !== 'homeowner_entry') throw new HomeownerApiError('unavailable')
     const coherent = saved.quoteRef === command.quoteRef
       && saved.homeRef === grant.homeRef
       && saved.projectRef === command.projectRef
@@ -1123,7 +1142,6 @@ export class HomeownerApiService {
       && saved.artifactRef === command.artifactRef
       && stableJson(saved.scope) === stableJson(command.scope)
       && saved.notes === command.notes
-      && saved.source === 'homeowner_entry'
       && saved.revision === command.expectedRevision + 1
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeProjectQuote(saved)

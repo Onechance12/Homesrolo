@@ -48,8 +48,16 @@ import {
 } from './transport.ts'
 import { roofingIntent } from '../roofing-intent.ts'
 import {
-  decodeArtifact, decodeArtifactUploadReservation, decodeAskRoloResult, decodeDeletedPhotoCheckup, decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile, decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList, decodeProject, decodeProjectActivity, decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview, decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary, decodeServerHomeView, decodeSession,
-  portErrorForStatus, unwrapEnvelope,
+  decodeArtifact, decodeArtifactUploadReservation, decodeAskRoloResult,
+  decodeCreatedProfessionalOrganization, decodeDeletedPhotoCheckup,
+  decodeHomeRecordHandoffList, decodeHomeRecordHandoffPreview, decodeHomeRecordProfile,
+  decodeHomeResearchResult, decodeList, decodePhotoCheckup, decodePhotoCheckupList,
+  decodeProfessionalOrganization, decodeProfessionalProfileWorkspace,
+  decodeProfessionalProposal, decodeProject, decodeProjectActivity, decodeProjectInvitation,
+  decodeProjectItem, decodeProjectQuote, decodeProjectReviewPreview,
+  decodeProjectReviewSubmission, decodeRecordedHomeIntake, decodeServerHomeSummary,
+  decodeServerHomeView, decodeSession,
+  nullable, portErrorForStatus, unwrapEnvelope,
 } from './wire.ts'
 
 const API = '/api/v1'
@@ -65,11 +73,17 @@ const PROJECT_ITEM_REF = /^hpit_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF = /^hart_[A-Za-z0-9_-]{43}$/
 const PHOTO_REF = /^hpho_[A-Za-z0-9_-]{43}$/
 const QUOTE_REF = /^hquo_[A-Za-z0-9_-]{43}$/
+const ORGANIZATION_REF = /^horg_[A-Za-z0-9_-]{43}$/
+const INVITATION_REF = /^hinv_[A-Za-z0-9_-]{43}$/
+const PROFESSIONAL_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SHARE_REF = /^hshr_[A-Za-z0-9_-]{43}$/
 const HANDOFF_ARTIFACT_REF = /^hproj_[A-Za-z0-9_-]{43}$/
 const SHA256 = /^[a-f0-9]{64}$/
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
 const QUOTE_SCOPE_KEYS = new Set([
+  'project_scope', 'site_conditions', 'preparation', 'labor', 'materials_products',
+  'allowances', 'schedule', 'access_protection', 'inspection_closeout', 'warranty',
+  'change_orders',
   'measurement', 'roof_configuration', 'tear_off', 'decking', 'underlayment',
   'leak_barrier', 'primary_materials', 'starter_and_ridge', 'valleys',
   'flashing_transitions', 'penetrations', 'ventilation', 'permits', 'cleanup',
@@ -326,12 +340,30 @@ function quoteInputBody(input: {
     || contractorLabel.length < 1 || contractorLabel.length > 120
     || (date !== undefined && !validCalendarDate(date))
     || (input.artifactRef !== undefined && !ARTIFACT_REF.test(input.artifactRef))
-    || (notes !== undefined && notes.length > 500)
-    || !input.scope || typeof input.scope !== 'object' || Array.isArray(input.scope)) {
+    || (notes !== undefined && notes.length > 500)) {
     return null
   }
+  const scope = normalizedQuoteScope(input.scope)
+  if (!scope) return null
+  if (input.expectedRevision !== undefined
+    && (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)) {
+    return null
+  }
+  return {
+    commandRef: input.commandRef,
+    contractorLabel,
+    ...(date ? { proposalDate: date } : {}),
+    ...(input.artifactRef ? { artifactRef: input.artifactRef } : {}),
+    scope,
+    ...(notes ? { notes } : {}),
+    ...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
+  }
+}
+
+function normalizedQuoteScope(input: object) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const scope: Record<string, { status: string; detail?: string }> = {}
-  for (const [key, value] of Object.entries(input.scope)) {
+  for (const [key, value] of Object.entries(input)) {
     if (!QUOTE_SCOPE_KEYS.has(key) || !value || typeof value !== 'object' || Array.isArray(value)) {
       return null
     }
@@ -349,17 +381,101 @@ function quoteInputBody(input: {
       ...(item.detail ? { detail: item.detail } : {}),
     }
   }
-  if (input.expectedRevision !== undefined
-    && (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)) {
-    return null
+  return scope
+}
+
+function canonicalOptionalText(value: string | null, maximum: number, minimum = 1) {
+  if (value === null) return null
+  const text = value.trim()
+  return text.length >= minimum && text.length <= maximum ? text : undefined
+}
+
+function canonicalProfessionalUrl(value: string | null) {
+  if (value === null) return null
+  try {
+    const url = new URL(value.trim())
+    return ['http:', 'https:'].includes(url.protocol)
+      && !url.username && !url.password && url.href === value.trim()
+      ? url.href
+      : undefined
+  } catch {
+    return undefined
   }
+}
+
+function professionalProfileBody(
+  input: Parameters<HomeownerDataPort['saveProfessionalProfile']>[0],
+) {
+  const displayName = input.displayName.trim()
+  const legalName = canonicalOptionalText(input.legalName, 160)
+  const description = canonicalOptionalText(input.description, 1_200)
+  const publicPhone = canonicalOptionalText(input.publicPhone, 32, 7)
+  const publicEmail = input.publicEmail === null ? null : input.publicEmail.trim().toLowerCase()
+  const websiteUrl = canonicalProfessionalUrl(input.websiteUrl)
+  const logoUrl = canonicalProfessionalUrl(input.logoUrl)
+  const serviceAreas = input.serviceAreas.map(area => area.trim())
+  if (!COMMAND_REF_PATTERN.test(input.commandRef)
+    || !ORGANIZATION_REF.test(input.organizationRef)
+    || !Number.isInteger(input.expectedRevision) || input.expectedRevision < 1
+    || displayName.length < 1 || displayName.length > 120
+    || legalName === undefined || description === undefined || publicPhone === undefined
+    || websiteUrl === undefined || logoUrl === undefined
+    || (publicEmail !== null
+      && (publicEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(publicEmail)))
+    || input.trades.length > 12
+    || input.trades.some(trade => !PROJECT_CATEGORIES.includes(trade))
+    || new Set(input.trades).size !== input.trades.length
+    || serviceAreas.length > 40
+    || serviceAreas.some(area => area.length < 2 || area.length > 80)
+    || new Set(serviceAreas.map(area => area.toLocaleLowerCase('en-US'))).size
+      !== serviceAreas.length
+    || !['draft', 'published'].includes(input.publicationState)
+    || (input.publicationState === 'published'
+      && (input.trades.length === 0 || serviceAreas.length === 0))) return null
   return {
     commandRef: input.commandRef,
-    contractorLabel,
-    ...(date ? { proposalDate: date } : {}),
-    ...(input.artifactRef ? { artifactRef: input.artifactRef } : {}),
+    organizationRef: input.organizationRef,
+    expectedRevision: input.expectedRevision,
+    displayName,
+    legalName,
+    description,
+    publicPhone,
+    publicEmail,
+    websiteUrl,
+    logoUrl,
+    trades: [...input.trades],
+    serviceAreas,
+    publicationState: input.publicationState,
+  }
+}
+
+function professionalProposalBody(input: {
+  readonly commandRef: string
+  readonly proposalDate: string
+  readonly totalAmountCents?: number
+  readonly summary?: string
+  readonly scope: object
+  readonly expectedRevision?: number
+}) {
+  const summary = input.summary?.trim()
+  const scope = normalizedQuoteScope(input.scope)
+  if (!COMMAND_REF_PATTERN.test(input.commandRef)
+    || !validCalendarDate(input.proposalDate)
+    || (input.totalAmountCents !== undefined
+      && (!Number.isInteger(input.totalAmountCents)
+        || input.totalAmountCents < 0 || input.totalAmountCents > 1_000_000_000))
+    || (summary !== undefined && (summary.length < 1 || summary.length > 2_000))
+    || !scope
+    || (input.expectedRevision !== undefined
+      && (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1))) return null
+  return {
+    commandRef: input.commandRef,
+    proposalDate: input.proposalDate,
+    ...(input.totalAmountCents === undefined
+      ? {}
+      : { totalAmountCents: input.totalAmountCents }),
+    ...(summary ? { summary } : {}),
     scope,
-    ...(notes ? { notes } : {}),
     ...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
   }
 }
@@ -1020,6 +1136,253 @@ export function createRemotePort(
       }, decodeProjectQuote)
       if (result.ok && (result.value.quoteRef !== quoteRef
         || result.value.homeRef !== home || result.value.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProfessionals(filters = {}) {
+      const query = new URLSearchParams()
+      if (filters.trade !== undefined) {
+        if (!PROJECT_CATEGORIES.includes(filters.trade)) return { ok: false, error: 'invalid' }
+        query.set('trade', filters.trade)
+      }
+      if (filters.serviceArea !== undefined) {
+        const serviceArea = filters.serviceArea.trim()
+        if (serviceArea.length < 2 || serviceArea.length > 80) {
+          return { ok: false, error: 'invalid' }
+        }
+        query.set('serviceArea', serviceArea)
+      }
+      const search = query.toString()
+      return call({
+        method: 'GET',
+        path: `${API}/professionals${search ? `?${search}` : ''}`,
+      }, decodeList(decodeProfessionalOrganization))
+    },
+
+    async getProfessional(slug) {
+      const normalized = slug.trim().toLowerCase()
+      if (normalized.length < 3 || normalized.length > 80
+        || !PROFESSIONAL_SLUG.test(normalized)) return { ok: false, error: 'invalid' }
+      const result = await call(
+        { method: 'GET', path: `${API}/professionals/${normalized}` },
+        decodeProfessionalOrganization,
+      )
+      if (result.ok && result.value.slug !== normalized) return { ok: false, error: 'invalid' }
+      return result
+    },
+
+    async getProfessionalProfile() {
+      return call(
+        { method: 'GET', path: `${API}/professional/profile` },
+        decodeProfessionalProfileWorkspace,
+      )
+    },
+
+    async createProfessionalOrganization(input) {
+      const displayName = input.displayName.trim()
+      const slug = input.slug.trim().toLowerCase()
+      if (!COMMAND_REF_PATTERN.test(input.commandRef)
+        || displayName.length < 1 || displayName.length > 120
+        || slug.length < 3 || slug.length > 80
+        || !PROFESSIONAL_SLUG.test(slug)) return { ok: false, error: 'invalid' }
+      return call({
+        method: 'POST',
+        path: `${API}/professionals`,
+        body: { commandRef: input.commandRef, displayName, slug },
+      }, decodeCreatedProfessionalOrganization, 201)
+    },
+
+    async saveProfessionalProfile(input) {
+      const body = professionalProfileBody(input)
+      if (!body) return { ok: false, error: 'invalid' }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/professional/profile`,
+        body,
+      }, decodeProfessionalOrganization)
+      if (result.ok && (result.value.organizationRef !== input.organizationRef
+        || result.value.revision !== input.expectedRevision + 1)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProjectInvitations(homeRef, projectRef) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project) return { ok: false, error: 'not_found' }
+      const result = await call({
+        method: 'GET',
+        path: `${API}/homes/${home}/projects/${project}/invitations`,
+      }, decodeList(decodeProjectInvitation))
+      if (result.ok && result.value.some(invitation =>
+        invitation.homeRef !== home || invitation.projectRef !== project)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async inviteProfessional(homeRef, projectRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      const message = input.message?.trim()
+      if (!home || !project
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !ORGANIZATION_REF.test(input.professionalOrganizationRef)
+        || (message !== undefined && (message.length < 1 || message.length > 1_000))
+        || input.selectedArtifactRefs.length > 25
+        || input.selectedArtifactRefs.some(ref => !ARTIFACT_REF.test(ref))
+        || new Set(input.selectedArtifactRefs).size !== input.selectedArtifactRefs.length
+        || !Number.isInteger(input.expiresInDays)
+        || input.expiresInDays < 1 || input.expiresInDays > 30) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/invitations`,
+        body: {
+          commandRef: input.commandRef,
+          professionalOrganizationRef: input.professionalOrganizationRef,
+          ...(message ? { message } : {}),
+          selectedArtifactRefs: [...input.selectedArtifactRefs],
+          expiresInDays: input.expiresInDays,
+        },
+      }, decodeProjectInvitation, 201)
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project
+        || result.value.professionalOrganizationRef !== input.professionalOrganizationRef)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async revokeProjectInvitation(homeRef, projectRef, invitationRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project || !INVITATION_REF.test(invitationRef)
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/invitations/${invitationRef}/revoke`,
+        body: {
+          commandRef: input.commandRef,
+          expectedRevision: input.expectedRevision,
+        },
+      }, decodeProjectInvitation)
+      if (result.ok && (result.value.invitationRef !== invitationRef
+        || result.value.homeRef !== home || result.value.projectRef !== project
+        || result.value.status !== 'revoked'
+        || result.value.revision !== input.expectedRevision + 1)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async listProfessionalInvitations() {
+      return call(
+        { method: 'GET', path: `${API}/professional/invitations` },
+        decodeList(decodeProjectInvitation),
+      )
+    },
+
+    async getProfessionalProposal(invitationRef) {
+      if (!INVITATION_REF.test(invitationRef)) return { ok: false, error: 'invalid' }
+      const result = await call({
+        method: 'GET',
+        path: `${API}/professional/invitations/${invitationRef}/proposals`,
+      }, nullable(decodeProfessionalProposal))
+      if (result.ok && result.value !== null
+        && result.value.invitationRef !== invitationRef) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async respondToProjectInvitation(invitationRef, input) {
+      if (!INVITATION_REF.test(invitationRef)
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !Number.isInteger(input.expectedRevision) || input.expectedRevision < 1
+        || !['accepted', 'declined'].includes(input.response)) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/professional/invitations/${invitationRef}/respond`,
+        body: {
+          commandRef: input.commandRef,
+          expectedRevision: input.expectedRevision,
+          response: input.response,
+        },
+      }, decodeProjectInvitation)
+      if (result.ok && (result.value.invitationRef !== invitationRef
+        || result.value.status !== input.response
+        || result.value.revision !== input.expectedRevision + 1)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async submitProfessionalProposal(invitationRef, input) {
+      const body = professionalProposalBody(input)
+      if (!INVITATION_REF.test(invitationRef) || !body) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/professional/invitations/${invitationRef}/proposals`,
+        body,
+      }, decodeProfessionalProposal, 201)
+      if (result.ok && (result.value.invitationRef !== invitationRef
+        || result.value.revision !== 1)) return { ok: false, error: 'invalid' }
+      return result
+    },
+
+    async reviseProfessionalProposal(invitationRef, quoteRef, input) {
+      const body = professionalProposalBody(input)
+      if (!INVITATION_REF.test(invitationRef) || !QUOTE_REF.test(quoteRef) || !body) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/professional/invitations/${invitationRef}/proposals/${quoteRef}`,
+        body,
+      }, decodeProfessionalProposal)
+      if (result.ok && (result.value.invitationRef !== invitationRef
+        || result.value.quoteRef !== quoteRef
+        || result.value.revision !== input.expectedRevision + 1)) {
+        return { ok: false, error: 'invalid' }
+      }
+      return result
+    },
+
+    async decideProfessionalProposal(homeRef, projectRef, quoteRef, input) {
+      const home = homeRefSegment(homeRef)
+      const project = projectRefSegment(projectRef)
+      if (!home || !project || !QUOTE_REF.test(quoteRef)
+        || !COMMAND_REF_PATTERN.test(input.commandRef)
+        || !Number.isInteger(input.expectedDecisionRevision)
+        || input.expectedDecisionRevision < 1
+        || !['shortlisted', 'selected', 'declined'].includes(input.decision)) {
+        return { ok: false, error: 'invalid' }
+      }
+      const result = await call({
+        method: 'POST',
+        path: `${API}/homes/${home}/projects/${project}/proposals/${quoteRef}/decision`,
+        body: {
+          commandRef: input.commandRef,
+          expectedDecisionRevision: input.expectedDecisionRevision,
+          decision: input.decision,
+        },
+      }, decodeProfessionalProposal)
+      if (result.ok && (result.value.homeRef !== home
+        || result.value.projectRef !== project || result.value.quoteRef !== quoteRef
+        || result.value.homeownerDecision !== input.decision
+        || result.value.decisionRevision !== input.expectedDecisionRevision + 1)) {
         return { ok: false, error: 'invalid' }
       }
       return result
