@@ -76,6 +76,7 @@ import {
   professionalProposalSchema,
   projectInvitationSchema,
   type HomesroloProfessionalPort,
+  type ProfessionalInvitationArtifact,
   type ProfessionalMembership,
   type ProfessionalOrganization,
   type ProfessionalProposal,
@@ -942,7 +943,7 @@ export class SupabaseHomeownerProvider implements
 
   async readInvitationArtifact(
     input: Parameters<HomesroloProfessionalPort['readInvitationArtifact']>[0],
-  ) {
+  ): Promise<ProfessionalInvitationArtifact> {
     const invitations = await this.listProfessionalInvitations(input.principalRef)
     const invitation = invitations.find(row => row.invitationRef === input.invitationRef)
     if (!invitation
@@ -969,10 +970,12 @@ export class SupabaseHomeownerProvider implements
       || artifact.artifactRef !== input.artifactRef
       || artifact.homeRef !== invitation.homeRef
       || artifact.projectRef !== invitation.projectRef
-      || artifact.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES
-      || (mediaType !== 'application/pdf'
-        && mediaType !== 'image/jpeg'
-        && mediaType !== 'image/png')) {
+      || artifact.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES) {
+      throw new HomeownerApiError('unavailable')
+    }
+    if (mediaType !== 'application/pdf'
+      && mediaType !== 'image/jpeg'
+      && mediaType !== 'image/png') {
       throw new HomeownerApiError('unavailable')
     }
     const storageBucket = row.storage_bucket === undefined
