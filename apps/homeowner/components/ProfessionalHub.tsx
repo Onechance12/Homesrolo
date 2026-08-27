@@ -307,7 +307,7 @@ function ProfessionalInvitationCard({
                   <div className="notice notice--success">
                     The homeowner selected this proposal, so this version is locked. They can change the decision before you submit a revision.
                   </div>
-                ) : proposal?.homeownerDecision !== 'undecided' ? (
+                ) : proposal && proposal.homeownerDecision !== 'undecided' ? (
                   <div className="notice notice--success">
                     Homeowner decision: <strong>{proposal.homeownerDecision}</strong>. A revision changes the proposal facts, not that decision.
                   </div>

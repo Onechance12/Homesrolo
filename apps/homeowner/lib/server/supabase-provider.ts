@@ -964,11 +964,15 @@ export class SupabaseHomeownerProvider implements
     if (data === null) throw new HomeownerApiError('not_found')
     const row = record(data)
     const artifact = artifactFromRow(row)
+    const mediaType = artifact.mediaType
     if (artifact.contentClass !== 'homeowner_private'
       || artifact.artifactRef !== input.artifactRef
       || artifact.homeRef !== invitation.homeRef
       || artifact.projectRef !== invitation.projectRef
-      || artifact.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES) {
+      || artifact.byteLength > HOMEOWNER_ARTIFACT_MAX_BYTES
+      || (mediaType !== 'application/pdf'
+        && mediaType !== 'image/jpeg'
+        && mediaType !== 'image/png')) {
       throw new HomeownerApiError('unavailable')
     }
     const storageBucket = row.storage_bucket === undefined
@@ -999,7 +1003,7 @@ export class SupabaseHomeownerProvider implements
     return {
       artifactRef: artifact.artifactRef,
       displayName: artifact.displayName,
-      mediaType: artifact.mediaType,
+      mediaType,
       byteLength: artifact.byteLength,
       payloadSha256: artifact.payloadSha256,
       bytes,
