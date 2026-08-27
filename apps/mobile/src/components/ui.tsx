@@ -39,7 +39,7 @@ export function Brand({ compact = false }: { readonly compact?: boolean }) {
     <View style={styles.brand}>
       <Image
         accessibilityIgnoresInvertColors
-        source={require('../../../homeowner/public/icon-512.png')}
+        source={require('../../assets/icon-512.png')}
         style={[styles.brandMark, compact && styles.brandMarkCompact]}
       />
       <Text style={[styles.brandText, compact && styles.brandTextCompact]}>homesrolo</Text>

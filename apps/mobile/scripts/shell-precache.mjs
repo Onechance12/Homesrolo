@@ -19,7 +19,7 @@ export const FIXED_HOSTED_SHELL_ASSETS = Object.freeze([
 const GENERATED_PREFIXES = ['/_expo/static/', '/assets/']
 const FIXED_HOSTED_SHELL_ASSET_SET = new Set(FIXED_HOSTED_SHELL_ASSETS)
 const TEXT_DEPENDENCY_EXTENSIONS = new Set(['.css', '.html', '.js', '.json', '.mjs'])
-const GENERATED_ASSET_URL = /(?:\/_expo\/static\/|\/assets\/)[^"'`\\\s<>()]+/g
+const GENERATED_ASSET_URL = /(?<!\.)(?:\/_expo\/static\/|\/assets\/)[^"'`\\\s<>()]+/g
 
 function isGeneratedAssetPath(assetPath) {
   return GENERATED_PREFIXES.some(prefix => assetPath.startsWith(prefix))

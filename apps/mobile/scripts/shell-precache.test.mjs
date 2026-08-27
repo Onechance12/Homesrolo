@@ -33,6 +33,7 @@ test('collects only the exact recursive dependency graph emitted by Expo', async
       const logo = '/assets/logo.222bbb.png?platform=web'
       const chunk = '/_expo/static/js/web/chunk.333ccc.js'
       const privateData = '/api/v1/session'
+      const appConfig = '{"icon":"./assets/icon-512.png"}'
     `)
     await fixtureFile(exportDirectory, '/_expo/static/js/web/chunk.333ccc.js',
       `const styles = '/assets/theme.444ddd.css'`)
@@ -56,6 +57,7 @@ test('collects only the exact recursive dependency graph emitted by Expo', async
       '/assets/theme.444ddd.css',
     ])
     assert.ok(!dependencies.some(assetPath => assetPath.startsWith('/api/')))
+    assert.ok(!dependencies.includes('/assets/icon-512.png'))
   })
 })
 
