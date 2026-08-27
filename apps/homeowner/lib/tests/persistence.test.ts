@@ -233,6 +233,19 @@ test('email link and code completion mint only opaque hashed Homesrolo sessions'
   assert.equal(revocation.input.p_session_hash, hashSessionHandle(handle))
 })
 
+test('session revocation fails closed when persistence does not confirm it', async () => {
+  const configuration = readHomeownerRuntimeConfiguration(CONFIG)
+  assert.ok(configuration)
+  const service = new HomeownerAuthService({
+    auth: { auth: {} } as unknown as SupabaseClient,
+    service: {
+      async rpc() { return { data: null, error: { message: 'private database detail' } } },
+    } as unknown as SupabaseClient,
+    configuration,
+  })
+  await assert.rejects(service.revokeSession('r'.repeat(43)), /session_revocation_failed/)
+})
+
 test('email-code verification separates bad codes, throttling, and provider outages', async () => {
   const configuration = readHomeownerRuntimeConfiguration(CONFIG)
   assert.ok(configuration)

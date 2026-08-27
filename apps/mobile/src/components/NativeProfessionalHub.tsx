@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { router } from 'expo-router'
 import { NativeApiError } from '../api/client.ts'
 import type { HomesroloApi } from '../api/contract.ts'
@@ -113,16 +113,16 @@ function Header() {
       </View>
       <View style={styles.hero}>
         <Eyebrow>Homesrolo Pro</Eyebrow>
-        <Title small>One project. Only what the homeowner shared.</Title>
+        <Title small>One job. Only what the homeowner shared.</Title>
         <Body muted>
-          Use the same Homesrolo account for your company card, private invitations, and clear
-          written proposals. This is a homeowner-controlled project lane, not a contractor CRM.
+          Use the same Homesrolo account for your company card, invitations, and written
+          proposals. The homeowner chooses the job and exactly what you can see. This is not a CRM.
         </Body>
       </View>
       <View style={styles.ruleRow}>
-        <Tag tone="lime">Exact project</Tag>
+        <Tag tone="lime">One job</Tag>
         <Tag tone="aqua">Selected files</Tag>
-        <Tag>Self-reported profile</Tag>
+        <Tag>Company-provided profile</Tag>
       </View>
     </>
   )
@@ -204,7 +204,7 @@ function CreateOrganizationCard({ api, onCreated }: {
       onCreated('Company card created. Add the facts homeowners need before you list it.')
     } catch (caught) {
       setError(isConflict(caught)
-        ? 'That profile address is already in use. Make it more specific and try again.'
+        ? 'That profile URL is already in use. Make it more specific and try again.'
         : friendlyError(caught))
     } finally {
       setBusy(false)
@@ -227,7 +227,7 @@ function CreateOrganizationCard({ api, onCreated }: {
         placeholder="Clear Water Pools"
       />
       <TextField
-        label="Profile address"
+        label="Profile URL"
         value={slug}
         onChangeText={changeSlug}
         autoCapitalize="none"
@@ -619,7 +619,7 @@ function ProposalEditor({ api, invitation, proposal, onChanged }: {
       attempt.current = null
       onChanged(proposal
         ? 'Proposal revision saved. The homeowner can see the current written version.'
-        : 'Proposal delivered to the homeowner’s comparison workspace.', true)
+        : 'Proposal sent. The homeowner can review it with any others.', true)
     } catch (caught) {
       if (isConflict(caught)) {
         onChanged('This proposal changed or already exists. Its current version was reloaded.', true)
@@ -757,10 +757,10 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
     <Card style={styles.invitationCard}>
       <View style={styles.cardHeadingRow}>
         <View style={styles.flexCopy}>
-          <Eyebrow>{tradeLabel(invitation.disclosure.category)} · Exact project</Eyebrow>
+          <Eyebrow>{tradeLabel(invitation.disclosure.category)} · Homeowner invitation</Eyebrow>
           <Text style={styles.cardTitle}>{invitation.disclosure.title}</Text>
           <Text style={styles.meta}>
-            {organization?.displayName ?? 'Your professional organization'} · {invitationStatus(invitation)}
+            {organization?.displayName ?? 'Your company'} · {invitationStatus(invitation)}
           </Text>
         </View>
         <Tag tone={invitationTone(invitation.status)}>{invitation.status}</Tag>
@@ -773,7 +773,7 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
         </View>
       ) : null}
       <View style={styles.metricRow}>
-        <Metric value={1} label="exact project" />
+        <Metric value={1} label="shared job" />
         <Metric value={messageCount} label={messageCount === 1 ? 'message' : 'messages'} />
         <Metric value={fileCount} label={fileCount === 1 ? 'selected file' : 'selected files'} />
       </View>
@@ -783,7 +783,7 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
           <Text style={styles.factValue}>{kindLabel[invitation.disclosure.workKind]}</Text>
         </View>
         <View style={styles.fact}>
-          <Text style={styles.factLabel}>Project status</Text>
+          <Text style={styles.factLabel}>Work status</Text>
           <Text style={styles.factValue}>{statusLabel[invitation.disclosure.status]}</Text>
         </View>
         <View style={styles.fact}>
@@ -818,7 +818,7 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
       {invitation.status === 'pending' ? (
         <View style={styles.responseBlock}>
           <Body muted>
-            Accept to work from this exact brief and submit a proposal. Accepting does not expand
+            Accept to review this job and submit a proposal. Accepting does not expand
             what the homeowner shared.
           </Body>
           {responseError ? <Text style={styles.error}>{responseError}</Text> : null}
@@ -915,10 +915,10 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
       <Header />
       <HubTabs selected={tab} inboxCount={activeCount} onSelect={setTab} />
 
-      {workspace.state.kind === 'loading' ? <Loading label="Opening company workspace…" /> : null}
+      {workspace.state.kind === 'loading' ? <Loading label="Opening your company…" /> : null}
       {workspace.state.kind === 'error' ? (
         <Notice
-          message="Homesrolo could not load your company workspace."
+          message="Homesrolo could not load your company."
           actionLabel="Try again"
           onAction={workspace.reload}
         />
@@ -926,7 +926,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
 
       {workspace.state.kind === 'ready' && organizations.length === 0 ? (
         <>
-          <Notice message="Create your company card before a homeowner can address an invitation to you." />
+          <Notice message="Create your company card so homeowners can invite you to a job." />
           <CreateOrganizationCard api={api} onCreated={reloadWorkspace} />
         </>
       ) : null}
@@ -954,7 +954,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
         <>
           <SectionTitle
             title="Private project invitations"
-            detail="Only invitations addressed to one of your active company organizations appear here."
+            detail="Only invitations sent directly to your company appear here."
           />
           {invitations.state.kind === 'loading' ? <Loading label="Checking invitations…" /> : null}
           {invitations.state.kind === 'error' ? (
@@ -971,7 +971,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
               </View>
               <Text style={styles.cardTitle}>No invitations yet.</Text>
               <Body muted>
-                List your company card so a homeowner can choose it from one exact project. No
+                List your company card so a homeowner can choose it for a job. No
                 address or whole-home record is exposed by being listed.
               </Body>
               <Button label="Review company card" onPress={() => setTab('company')} quiet />

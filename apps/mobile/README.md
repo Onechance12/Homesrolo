@@ -34,9 +34,14 @@ homeowner app at `app.homesrolo.com`. A production export cannot activate the
 preview even if the public flag is present. Preview mode does not read or write
 SecureStore, construct a bearer API client, or call the Homesrolo server.
 
-The server must explicitly support the `native.v1` authentication contract.
-Native email-code completion returns one opaque bearer session, stored only in
-SecureStore. Browser sessions continue to use their HttpOnly cookie.
+The server keeps two deliberate transports. Expo iOS and Android send
+`x-homesrolo-client: native.v1` and store the opaque bearer in SecureStore. The
+production Expo web bundle uses the existing same-origin `HttpOnly`, `Secure`,
+`SameSite=Lax` session cookie; application JavaScript never receives or stores
+that raw handle. `pwa.v1` is retained only on a bodyless same-origin migration
+request that moves a bearer left by an older PWA release into the HttpOnly
+cookie and immediately clears browser storage. The external signed
+object-storage PUT receives neither internal authentication transport.
 
 The first app slice is deliberately useful: sign in, select a home, review its
 current work, talk to Rolo, save a reviewable Rolo draft, and capture private

@@ -22,7 +22,7 @@ export default function ProfessionalScreen() {
     return (
       <Page>
         <Brand compact />
-        <Notice message="Professional invitations and written proposals are not enabled for this app build." />
+        <Notice message="Homesrolo Pro isn’t available for this account right now." />
       </Page>
     )
   }

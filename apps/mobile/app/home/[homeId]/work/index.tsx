@@ -10,6 +10,7 @@ import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } fr
 import { useHomeId } from '../../../../src/home/HomeRouteProvider.tsx'
 import { useResource } from '../../../../src/hooks/useResource.ts'
 import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../../src/theme.ts'
+import { validOptionalWorkDate } from '../../../../src/work/detail.ts'
 
 const KINDS: readonly WorkKind[] = ['project', 'issue', 'repair', 'service', 'incident']
 const CATEGORIES: readonly WorkCategory[] = [
@@ -75,6 +76,10 @@ export default function WorkScreen() {
   }
 
   async function save() {
+    if (!validOptionalWorkDate(occurredOn)) {
+      setError('Use a real date as YYYY-MM-DD, or leave it blank.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -108,10 +113,10 @@ export default function WorkScreen() {
       {!creating ? (
         <>
           <Card accent>
-            <Text style={styles.formTitle}>Start something.</Text>
-            <Text style={styles.formCopy}>Describe the problem, project, or service in your own words. Review it before anything is saved.</Text>
+            <Text style={styles.formTitle}>What needs doing?</Text>
+            <Text style={styles.formCopy}>Tell Rolo about a problem, project, or regular service. You’ll review it before anything is saved.</Text>
             <Button
-              label="Talk it through"
+              label="Tell Rolo"
               icon="chatbubble-ellipses-outline"
               onPress={() => router.push({
                 pathname: '/home/[homeId]/rolo',
@@ -122,7 +127,7 @@ export default function WorkScreen() {
               })}
             />
           </Card>
-          <Button label="Add details myself" icon="create-outline" quiet onPress={() => setCreating(true)} />
+          <Button label="Enter it myself" icon="create-outline" quiet onPress={() => setCreating(true)} />
         </>
       ) : null}
       {creating ? (
@@ -131,14 +136,14 @@ export default function WorkScreen() {
           <TextField label="A clear name" value={title} onChangeText={setTitle} placeholder="Upstairs AC stopped cooling" />
           <Text style={styles.label}>What kind of entry is it?</Text>
           <View style={styles.chips}>{KINDS.map(value => <Chip key={value} label={kindLabel[value]} selected={kind === value} onPress={() => setKind(value)} />)}</View>
-          <Text style={styles.label}>Where in the home?</Text>
+          <Text style={styles.label}>What part of the home?</Text>
           <View style={styles.chips}>{CATEGORIES.map(value => <Chip key={value} label={categoryLabel[value]} selected={category === value} onPress={() => setCategory(value)} />)}</View>
           <Text style={styles.label}>Where does it stand?</Text>
           <View style={styles.chips}>{STATUSES.map(value => <Chip key={value} label={statusLabel[value]} selected={status === value} onPress={() => setStatus(value)} />)}</View>
-          <TextField label="Date (optional)" value={occurredOn} onChangeText={setOccurredOn} placeholder="2026-08-25" keyboardType="numbers-and-punctuation" hint="Use YYYY-MM-DD, or leave it blank if you do not know." />
+          <TextField label="Date (optional)" value={occurredOn} onChangeText={value => { setOccurredOn(value); setError(null) }} placeholder="2026-08-25" keyboardType="numbers-and-punctuation" hint={validOptionalWorkDate(occurredOn) ? 'Use YYYY-MM-DD, or leave it blank if you do not know.' : 'Enter a real date as YYYY-MM-DD.'} />
           <TextField label="What should the home remember?" value={summary} onChangeText={setSummary} multiline placeholder="What you saw, what was decided, materials, or anything useful later…" />
           <TextField label="Person or company (optional)" value={professional} onChangeText={setProfessional} placeholder="ABC Heating & Air" hint="This also adds them to the People Rolodex." />
-          <Button label={busy ? 'Saving…' : 'Save to this home'} onPress={() => void save()} disabled={busy || !title.trim()} />
+          <Button label={busy ? 'Saving…' : 'Save to this home'} onPress={() => void save()} disabled={busy || !title.trim() || !validOptionalWorkDate(occurredOn)} />
           <Button label="Cancel" onPress={reset} disabled={busy} quiet />
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </Card>

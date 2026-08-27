@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  apiPath, base64Url, boundedRoloConversation, commandRef, envelopeData, isHomeRef, isSessionToken,
+  apiPath, base64Url, boundedRoloConversation, browserCookieRequestHeaders,
+  clientContractForPlatform, commandRef,
+  envelopeData, isHomeRef, isPhotoRef,
+  isHomesroloClientContract, isSessionToken,
   nativeRequestHeaders, normalizedRoloSelectedPhoto, normalizeApiOrigin, problemCode,
+  pwaCookieBridgeRequestInit,
   roloPhotoReviewPresenceAllowed,
 } from './protocol.ts'
 
@@ -24,8 +28,16 @@ test('mints canonical command references without padding', () => {
 test('keeps identifier and session validation exact', () => {
   assert.equal(isHomeRef(`hhom_${'A'.repeat(43)}`), true)
   assert.equal(isHomeRef(`hprj_${'A'.repeat(43)}`), false)
+  assert.equal(isPhotoRef(`hpho_${'A'.repeat(43)}`), true)
+  assert.equal(isPhotoRef(`hart_${'A'.repeat(43)}`), false)
   assert.equal(isSessionToken('abc_1234567890-XYZ'), true)
   assert.equal(isSessionToken('contains a space'), false)
+  assert.equal(isHomesroloClientContract('native.v1'), true)
+  assert.equal(isHomesroloClientContract('pwa.v1'), true)
+  assert.equal(isHomesroloClientContract('web.v1'), false)
+  assert.equal(clientContractForPlatform('web'), 'pwa.v1')
+  assert.equal(clientContractForPlatform('ios'), 'native.v1')
+  assert.equal(clientContractForPlatform('android'), 'native.v1')
   assert.equal(apiPath('homes', `hhom_${'A'.repeat(43)}`, 'projects'),
     `/api/v1/homes/hhom_${'A'.repeat(43)}/projects`)
 })
@@ -67,7 +79,7 @@ test('accepts one-key data envelopes and bounded problems', () => {
   assert.deepEqual(problemCode({ nope: true }), { code: 'unavailable' })
 })
 
-test('builds the exact native bootstrap and bearer headers', () => {
+test('builds exact native and bounded legacy-PWA migration headers', () => {
   assert.deepEqual(nativeRequestHeaders(null, 'json'), {
     accept: 'application/json',
     'x-homesrolo-client': 'native.v1',
@@ -78,7 +90,47 @@ test('builds the exact native bootstrap and bearer headers', () => {
     'x-homesrolo-client': 'native.v1',
     authorization: 'Bearer abc_1234567890-XYZ',
   })
+  assert.deepEqual(nativeRequestHeaders(null, 'json', 'pwa.v1'), {
+    accept: 'application/json',
+    'x-homesrolo-client': 'pwa.v1',
+    'content-type': 'application/json',
+  })
+  assert.deepEqual(nativeRequestHeaders('abc_1234567890-XYZ', 'none', 'pwa.v1'), {
+    accept: 'application/json',
+    'x-homesrolo-client': 'pwa.v1',
+    authorization: 'Bearer abc_1234567890-XYZ',
+  })
   assert.throws(() => nativeRequestHeaders('bad token'))
+  assert.throws(() => nativeRequestHeaders(null, 'none', 'web.v1' as 'pwa.v1'))
+})
+
+test('ordinary PWA requests carry no script-readable credential or client marker', () => {
+  assert.deepEqual(browserCookieRequestHeaders(), { accept: 'application/json' })
+  assert.deepEqual(browserCookieRequestHeaders('json'), {
+    accept: 'application/json',
+    'content-type': 'application/json',
+  })
+})
+
+test('the one-time PWA migration bridge is same-origin, bodyless, and exact-contract', () => {
+  const upgrade = pwaCookieBridgeRequestInit(null)
+  assert.equal(upgrade.method, 'POST')
+  assert.equal(upgrade.credentials, 'same-origin')
+  assert.equal(upgrade.cache, 'no-store')
+  assert.equal(upgrade.redirect, 'error')
+  assert.equal(Object.hasOwn(upgrade, 'body'), false)
+  assert.deepEqual(upgrade.headers, {
+    accept: 'application/json',
+    'x-homesrolo-client': 'pwa.v1',
+  })
+
+  const migration = pwaCookieBridgeRequestInit('abc_1234567890-XYZ')
+  assert.equal(Object.hasOwn(migration, 'body'), false)
+  assert.deepEqual(migration.headers, {
+    accept: 'application/json',
+    'x-homesrolo-client': 'pwa.v1',
+    authorization: 'Bearer abc_1234567890-XYZ',
+  })
 })
 
 test('bounds Rolo context to the server contract while preserving newest turns', () => {

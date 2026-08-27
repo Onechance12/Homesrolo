@@ -9,6 +9,7 @@ import { projectReviewCapabilityEnabled } from '../server/runtime.ts'
 import {
   HOMEOWNER_NATIVE_CLIENT_HEADER,
   HOMEOWNER_NATIVE_CLIENT_V1,
+  HOMEOWNER_PWA_CLIENT_V1,
 } from '../server/request-auth.ts'
 
 /**
@@ -99,6 +100,7 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/auth/email-code/route.ts',
     '../../app/api/v1/auth/email-code/verify/route.ts',
     '../../app/api/v1/auth/magic-link/route.ts',
+    '../../app/api/v1/auth/pwa-upgrade/route.ts',
     '../../app/api/v1/auth/signout/route.ts',
     '../../app/api/v1/session/route.ts',
     '../../app/api/v1/homes/route.ts',
@@ -152,7 +154,7 @@ test('a well-formed cookie still reads signed_out: no identity provider exists',
     'an unconfigured runtime resolves every handle to nobody')
 })
 
-test('the route adapter accepts native.v1 bearer and rejects mixed credentials', async () => {
+test('the route adapter accepts native bearer only and rejects retired PWA or mixed credentials', async () => {
   const native = await get('/api/v1/session', {
     [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_NATIVE_CLIENT_V1,
     authorization: `Bearer ${HANDLE}`,
@@ -160,6 +162,23 @@ test('the route adapter accepts native.v1 bearer and rejects mixed credentials',
   assert.equal(native.status, 200)
   assert.equal((await native.json()).data.kind, 'signed_out',
     'the opaque native handle reaches the same server-side identity resolver')
+
+  const pwa = await get('/api/v1/session', {
+    [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+    authorization: `Bearer ${HANDLE}`,
+    'sec-fetch-site': 'same-origin',
+  })
+  assert.equal(pwa.status, 400)
+  assert.deepEqual(await pwa.json(), { error: { code: 'invalid_request' } },
+    'a browser bearer is accepted only by the bounded migration route')
+
+  const crossSitePwa = await get('/api/v1/session', {
+    [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+    authorization: `Bearer ${HANDLE}`,
+    origin: 'https://evil.test',
+    'sec-fetch-site': 'cross-site',
+  })
+  assert.equal(crossSitePwa.status, 400)
 
   const mixed = await get('/api/v1/session', {
     cookie: `${SESSION_COOKIE_NAME}=${HANDLE}`,

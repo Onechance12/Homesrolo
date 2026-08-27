@@ -151,10 +151,11 @@ export class HomeownerAuthService {
 
   async revokeSession(sessionHandle: string | null): Promise<void> {
     if (!sessionHandle) return
-    await this.#service.rpc('homesrolo_revoke_homeowner_session', {
+    const { error } = await this.#service.rpc('homesrolo_revoke_homeowner_session', {
       p_session_hash: hashSessionHandle(sessionHandle),
       p_now: this.#now().toISOString(),
     })
+    if (error) throw new Error('session_revocation_failed')
   }
 }
 

@@ -49,7 +49,6 @@ const config: ExpoConfig = {
   experiments: { typedRoutes: true },
   extra: {
     apiUrl,
-    clientContract: 'native.v1',
   },
 }
 

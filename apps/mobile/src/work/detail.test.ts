@@ -7,6 +7,7 @@ import {
   fieldsFromDraft,
   findExactWork,
   workHasChanges,
+  validOptionalWorkDate,
   workNoteIntent,
   workUpdateIntent,
 } from './detail.ts'
@@ -66,6 +67,14 @@ test('normalizes editable text and represents cleared optional fields as null', 
   })
   assert.equal(workHasChanges(work, draft), true)
   assert.equal(workHasChanges(work, draftFromWork(work)), false)
+})
+
+test('accepts blank or real work dates and rejects impossible calendar dates', () => {
+  assert.equal(validOptionalWorkDate(''), true)
+  assert.equal(validOptionalWorkDate('  '), true)
+  assert.equal(validOptionalWorkDate('2026-08-27'), true)
+  assert.equal(validOptionalWorkDate('2026-02-30'), false)
+  assert.equal(validOptionalWorkDate('08/27/2026'), false)
 })
 
 test('retry intents stay stable and include the optimistic revision', () => {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +13,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { colors, radius, space } from '../theme.ts'
 
 export function Page({ children, padded = true }: {
@@ -36,9 +37,11 @@ export function Page({ children, padded = true }: {
 export function Brand({ compact = false }: { readonly compact?: boolean }) {
   return (
     <View style={styles.brand}>
-      <View style={[styles.brandMark, compact && styles.brandMarkCompact]}>
-        <Ionicons name="home-outline" size={compact ? 18 : 24} color={colors.lime} />
-      </View>
+      <Image
+        accessibilityIgnoresInvertColors
+        source={require('../../../homeowner/public/icon-512.png')}
+        style={[styles.brandMark, compact && styles.brandMarkCompact]}
+      />
       <Text style={[styles.brandText, compact && styles.brandTextCompact]}>homesrolo</Text>
     </View>
   )
@@ -52,7 +55,7 @@ export function Title({ children, small = false }: {
   readonly children: ReactNode
   readonly small?: boolean
 }) {
-  return <Text style={[styles.title, small && styles.titleSmall]}>{children}</Text>
+  return <Text accessibilityRole="header" style={[styles.title, small && styles.titleSmall]}>{children}</Text>
 }
 
 export function Body({ children, muted = false }: {
@@ -76,22 +79,26 @@ export function SectionTitle({ title, detail }: {
 }) {
   return (
     <View style={styles.sectionTitle}>
-      <Text style={styles.sectionHeading}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.sectionHeading}>{title}</Text>
       {detail ? <Text style={styles.sectionDetail}>{detail}</Text> : null}
     </View>
   )
 }
 
-export function Button({ label, onPress, disabled = false, quiet = false, icon }: {
+export function Button({ label, onPress, disabled = false, quiet = false, icon, accessibilityHint }: {
   readonly label: string
   readonly onPress: () => void
   readonly disabled?: boolean
   readonly quiet?: boolean
   readonly icon?: keyof typeof Ionicons.glyphMap
+  readonly accessibilityHint?: string
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
@@ -126,16 +133,18 @@ export function TextField({ label, hint, ...props }: TextInputProps & {
   )
 }
 
-export function Chip({ label, selected, onPress }: {
+export function Chip({ label, selected, onPress, accessibilityHint }: {
   readonly label: string
   readonly selected: boolean
   readonly onPress: () => void
+  readonly accessibilityHint?: string
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >
@@ -166,7 +175,7 @@ export function Metric({ value, label }: { readonly value: string | number; read
 
 export function Loading({ label = 'Opening your home…' }: { readonly label?: string }) {
   return (
-    <View style={styles.center}>
+    <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.center}>
       <ActivityIndicator color={colors.lime} size="large" />
       <Text style={styles.loadingText}>{label}</Text>
     </View>
@@ -196,11 +205,8 @@ const styles = StyleSheet.create({
   page: { padding: space.lg, paddingBottom: 120, gap: space.md },
   noPadding: { paddingHorizontal: 0 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: {
-    width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colors.lime,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  brandMarkCompact: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5 },
+  brandMark: { width: 44, height: 44, borderRadius: 12 },
+  brandMarkCompact: { width: 32, height: 32, borderRadius: 9 },
   brandText: { color: colors.cream, fontSize: 28, fontWeight: '800', letterSpacing: -1.1 },
   brandTextCompact: { fontSize: 21 },
   eyebrow: { color: colors.lime, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
@@ -237,7 +243,8 @@ const styles = StyleSheet.create({
   fieldHint: { color: colors.smoke, fontSize: 12, lineHeight: 17 },
   chip: {
     borderRadius: radius.pill, borderColor: colors.line, borderWidth: 1,
-    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.inkRaised,
+    minHeight: 44, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.inkRaised,
+    justifyContent: 'center',
   },
   chipSelected: { borderColor: colors.lime, backgroundColor: colors.limeSoft },
   chipText: { color: colors.slate, fontSize: 13, fontWeight: '700' },

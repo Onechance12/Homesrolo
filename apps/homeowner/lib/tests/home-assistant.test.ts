@@ -10,6 +10,7 @@ import {
   type HomeAssistantContext,
 } from '../server/home-assistant.ts'
 import {
+  assistantCurrentProjectContext,
   assistantLocalityFromAddress,
   handleHomeAssistantRequestWithDependencies,
   type HomeAssistantHttpDependencies,
@@ -29,6 +30,28 @@ const VALID_BODY = Object.freeze({
   destination: 'home' as const,
 })
 
+const CURRENT_PROJECT_CONTEXT: NonNullable<HomeAssistantContext['currentProject']> = {
+  projectRef: PROJECT,
+  title: 'Spring AC service',
+  workKind: 'service',
+  category: 'hvac',
+  status: 'completed',
+  occurredOn: '2026-04-03',
+  summary: 'Seasonal service and filter replacement.',
+  professionalLabel: 'Cool Air',
+  recentActivity: [{
+    kind: 'milestone',
+    body: 'Service completed.',
+    createdAt: '2026-04-03T18:00:00.000Z',
+  }],
+  plansAndPicks: [{
+    kind: 'material',
+    label: 'MERV 8 filter',
+    detail: '16 x 25 x 1',
+    state: 'purchased',
+  }],
+}
+
 const CONTEXT: HomeAssistantContext = {
   home: { label: 'The Martin home', locality: 'Fort Worth, TX', projectCount: 1, documentCount: 2 },
   projects: [{
@@ -39,6 +62,7 @@ const CONTEXT: HomeAssistantContext = {
     occurredOn: '2026-04-03',
     professionalLabel: 'Cool Air',
   }],
+  currentProject: null,
   files: [{ displayName: 'AC invoice.pdf', kind: 'document', projectRef: PROJECT }],
   systems: [{ kind: 'cooling', present: 'yes', installedOrReplacedYear: 2021 }],
 }
@@ -51,6 +75,7 @@ test('Rolo input is bounded and carries no browser identity or address field', (
     { ...VALID_BODY, destination: 'https://evil.example' },
     { ...VALID_BODY, homeRef: HOME },
     { ...VALID_BODY, address: '123 Main Street' },
+    { ...VALID_BODY, projectRef: 'hprj_not-valid' },
     { ...VALID_BODY, selectedPhoto: { source: 'artifact', artifactRef: ARTIFACT, consentToAnalyze: false } },
     { ...VALID_BODY, selectedPhoto: { source: 'artifact', artifactRef: 'hart_short', consentToAnalyze: true } },
     { ...VALID_BODY, history: Array.from({ length: 17 }, () => ({ role: 'user', text: 'hello' })) },
@@ -234,6 +259,7 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   }
   const result = await client.answer({
     ...VALID_BODY,
+    projectRef: PROJECT,
     history: [
       { role: 'user', text: 'The AC stopped cooling.' },
       { role: 'assistant', text: 'I can help organize that.' },
@@ -242,7 +268,7 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
       pendingWork,
       unansweredFollowUpQuestion: 'Which unit is affected?',
     },
-  }, CONTEXT)
+  }, { ...CONTEXT, currentProject: CURRENT_PROJECT_CONTEXT })
   assert.ok(outbound)
   const captured = outbound as unknown as {
     readonly url: string
@@ -261,6 +287,11 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   const providerInput = JSON.parse(String(captured.body.input)) as Record<string, unknown>
   assert.deepEqual(providerInput.pendingWork, pendingWork)
   assert.equal(providerInput.unansweredFollowUpQuestion, 'Which unit is affected?')
+  assert.equal(providerInput.currentProjectRef, PROJECT)
+  assert.equal(
+    (providerInput.privateHomeContext as HomeAssistantContext).currentProject?.summary,
+    'Seasonal service and filter replacement.',
+  )
   assert.equal(Object.hasOwn(providerInput, 'requiredBoundaries'), false)
   assert.ok(!JSON.stringify(captured.body).includes(API_KEY), 'the key is header-only')
   assert.equal(result.proposedWork?.title, 'AC not cooling')
@@ -290,6 +321,42 @@ test('Rolo receives only structured city and state, never the legacy location la
   assert.equal(assistantLocalityFromAddress(null), null)
   assert.equal(assistantLocalityFromAddress({ city: ' Fort Worth ', regionCode: 'tx' }), 'Fort Worth, TX')
   assert.equal(assistantLocalityFromAddress({ city: 'Fort Worth', regionCode: 'Texas' }), null)
+})
+
+test('Rolo receives one bounded project projection from existing activity and Plans & Picks', () => {
+  const current = assistantCurrentProjectContext({
+    project: {
+      projectRef: PROJECT,
+      title: 'Kitchen refresh',
+      workKind: 'project',
+      category: 'interior',
+      status: 'planned',
+      occurredOn: null,
+      summary: 's'.repeat(1_300),
+      professionalLabel: null,
+    },
+    activity: Array.from({ length: 8 }, (_, index) => ({
+      kind: index % 2 === 0 ? 'note' : 'milestone',
+      body: `note-${index}-${'b'.repeat(700)}`,
+      createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`,
+    })),
+    items: Array.from({ length: 10 }, (_, index) => ({
+      kind: index % 2 === 0 ? 'material' : 'decision',
+      label: `choice-${index}`,
+      detail: 'd'.repeat(500),
+      state: 'considering',
+      updatedAt: `2026-08-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`,
+    })),
+  })
+  assert.equal(current.summary.length, 1_200)
+  assert.equal(current.recentActivity.length, 6)
+  assert.match(current.recentActivity[0]?.body ?? '', /^note-2-/)
+  assert.equal(current.recentActivity.every(entry => entry.body.length <= 600), true)
+  assert.equal(current.plansAndPicks.length, 8)
+  assert.equal(current.plansAndPicks[0]?.label, 'choice-9')
+  assert.equal(current.plansAndPicks.every(item => item.detail.length <= 400), true)
+  assert.equal(Object.hasOwn(current, 'address'), false)
+  assert.equal(Object.hasOwn(current, 'files'), false)
 })
 
 test('Rolo never exposes a work link unless the referenced project survives validation', async () => {

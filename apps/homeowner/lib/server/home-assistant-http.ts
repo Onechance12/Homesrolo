@@ -98,6 +98,73 @@ export function assistantLocalityFromAddress(
   return city && /^[A-Z]{2}$/.test(regionCode) ? `${city}, ${regionCode}` : null
 }
 
+const CURRENT_PROJECT_ACTIVITY_LIMIT = 6
+const CURRENT_PROJECT_ITEM_LIMIT = 8
+
+function assistantText(value: string, maximum: number): string {
+  return value.trim().slice(0, maximum)
+}
+
+/**
+ * Projects, updates, and Plans & Picks already have separate durable models.
+ * This is only their small read-only projection for one Rolo request.
+ */
+export function assistantCurrentProjectContext(input: {
+  readonly project: {
+    readonly projectRef: string
+    readonly title: string
+    readonly workKind: string
+    readonly category: string
+    readonly status: string
+    readonly occurredOn: string | null
+    readonly summary: string
+    readonly professionalLabel: string | null
+  }
+  readonly activity: readonly {
+    readonly kind: string
+    readonly body: string
+    readonly createdAt: string
+  }[]
+  readonly items: readonly {
+    readonly kind: string
+    readonly label: string
+    readonly detail: string
+    readonly state: string
+    readonly updatedAt: string
+  }[]
+}): NonNullable<HomeAssistantContext['currentProject']> {
+  const { project } = input
+  return {
+    projectRef: project.projectRef,
+    title: assistantText(project.title, 120),
+    workKind: project.workKind,
+    category: project.category,
+    status: project.status,
+    occurredOn: project.occurredOn,
+    summary: assistantText(project.summary, 1_200),
+    professionalLabel: project.professionalLabel
+      ? assistantText(project.professionalLabel, 160)
+      : null,
+    recentActivity: [...input.activity]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .slice(-CURRENT_PROJECT_ACTIVITY_LIMIT)
+      .map(entry => ({
+        kind: entry.kind,
+        body: assistantText(entry.body, 600),
+        createdAt: entry.createdAt,
+      })),
+    plansAndPicks: [...input.items]
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, CURRENT_PROJECT_ITEM_LIMIT)
+      .map(item => ({
+        kind: item.kind,
+        label: assistantText(item.label, 160),
+        detail: assistantText(item.detail, 400),
+        state: item.state,
+      })),
+  }
+}
+
 function response(status: number, body: unknown, headers?: Readonly<Record<string, string>>) {
   return new Response(JSON.stringify(body), {
     status,
@@ -308,6 +375,21 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
       const requestedProject = requestedProjectRef
         ? visibleProjects.find(project => project.projectRef === requestedProjectRef)
         : undefined
+      if (requestedProjectRef && !requestedProject) {
+        throw new HomeownerApiError('not_found')
+      }
+      let currentActivity: Awaited<ReturnType<typeof service.listProjectActivity>> = []
+      let currentItems: Awaited<ReturnType<typeof service.listProjectItems>> = []
+      if (requestedProject) {
+        try {
+          [currentActivity, currentItems] = await Promise.all([
+            service.listProjectActivity(requestContext, requestedHomeRef, requestedProject.projectRef),
+            service.listProjectItems(requestContext, requestedHomeRef, requestedProject.projectRef),
+          ])
+        } catch (error) {
+          if (!(error instanceof HomeownerApiError) || error.code !== 'unavailable') throw error
+        }
+      }
       const assistantProjects = requestedProject
         ? [requestedProject, ...visibleProjects.filter(project => project.projectRef !== requestedProjectRef)].slice(0, 24)
         : visibleProjects.slice(0, 24)
@@ -328,6 +410,15 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
           occurredOn: project.occurredOn ?? null,
           professionalLabel: project.professionalLabel ?? null,
         })),
+        currentProject: requestedProject ? assistantCurrentProjectContext({
+          project: {
+            ...requestedProject,
+            occurredOn: requestedProject.occurredOn ?? null,
+            professionalLabel: requestedProject.professionalLabel ?? null,
+          },
+          activity: currentActivity,
+          items: currentItems,
+        }) : null,
         files: files.slice(0, 24).map(file => ({
           displayName: file.displayName,
           kind: file.kind,

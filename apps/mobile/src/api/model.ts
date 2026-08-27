@@ -51,6 +51,56 @@ export interface HomeView extends HomeSummary {
   readonly updatedAt: string
 }
 
+export type HomeType = 'house' | 'townhouse' | 'condo' | 'other' | 'unknown'
+export type HomeSystemKind =
+  | 'roof'
+  | 'heating'
+  | 'cooling'
+  | 'water_heater'
+  | 'gutters'
+  | 'foundation'
+
+export interface ApproximateYear {
+  readonly value: number
+  readonly precision: 'exact' | 'approximate'
+}
+
+export interface HomeRecordAddress {
+  readonly line1: string
+  readonly line2: string | null
+  readonly city: string
+  readonly regionCode: string
+  readonly postalCode: string
+  readonly countryCode: 'US'
+}
+
+export interface HomeSystemRecord {
+  readonly kind: HomeSystemKind
+  readonly present: 'yes' | 'no' | 'unknown'
+  readonly installedOrReplacedYear: ApproximateYear | null
+}
+
+/** Controller-only facts already backed by the revisioned `/record` route. */
+export interface HomeRecordProfile {
+  readonly homeRef: string
+  readonly revision: number
+  readonly address: HomeRecordAddress | null
+  readonly homeType: HomeType
+  readonly yearBuilt: ApproximateYear | null
+  readonly systems: readonly HomeSystemRecord[]
+  readonly source: 'homeowner_recollection'
+  readonly updatedAt: string
+}
+
+export interface UpdateHomeRecordInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+  readonly address: HomeRecordAddress
+  readonly homeType: HomeType
+  readonly yearBuilt: ApproximateYear | null
+  readonly systems: readonly HomeSystemRecord[]
+}
+
 export type WorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident'
 export type WorkStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
 export type WorkCategory =
@@ -95,6 +145,34 @@ export interface ProjectActivityRecord {
   readonly body: string
   readonly source: 'homeowner_entry'
   readonly createdAt: string
+}
+
+export type ProjectItemKind = 'material' | 'decision' | 'wishlist'
+export type ProjectItemState = 'considering' | 'chosen' | 'purchased' | 'declined'
+
+/** One homeowner-entered product, decision, or wish attached to exact work. */
+export interface ProjectItem {
+  readonly itemRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly kind: ProjectItemKind
+  readonly label: string
+  readonly detail: string
+  readonly state: ProjectItemState
+  readonly source: 'homeowner_entry'
+  readonly revision: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface SaveProjectItemInput {
+  readonly commandRef: string
+  readonly itemRef?: string
+  readonly expectedRevision?: number
+  readonly kind: ProjectItemKind
+  readonly label: string
+  readonly detail?: string
+  readonly state: ProjectItemState
 }
 
 export interface CreateWorkInput {
@@ -186,6 +264,19 @@ export interface ProjectQuote {
   readonly revision: number
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface CreateProjectQuoteInput {
+  readonly commandRef: string
+  readonly contractorLabel: string
+  readonly proposalDate?: string
+  readonly artifactRef?: string
+  readonly scope: QuoteScope
+  readonly notes?: string
+}
+
+export interface SaveProjectQuoteInput extends CreateProjectQuoteInput {
+  readonly expectedRevision: number
 }
 
 export type ProfessionalTrade = WorkCategory
@@ -399,6 +490,47 @@ export interface ArtifactRecord {
   readonly createdAt: string
 }
 
+export type HomeCheckupArea =
+  | 'front_exterior'
+  | 'rear_exterior'
+  | 'roofline'
+  | 'attic'
+  | 'ceilings'
+  | 'hvac'
+  | 'water_heater'
+  | 'foundation'
+  | 'gutters'
+  | 'other'
+
+/** One sanitized, repeatable Home Watch view. Raw upload metadata is never exposed. */
+export interface HomeCheckupPhoto {
+  readonly photoRef: string
+  readonly homeRef: string
+  readonly observedOn: string
+  readonly area: HomeCheckupArea
+  readonly viewLabel: string
+  readonly caption: string
+  readonly fullUrl: string
+  readonly thumbnailUrl: string
+  readonly width: number
+  readonly height: number
+  readonly createdAt: string
+}
+
+export interface CreateHomeCheckupPhotoInput {
+  readonly commandRef: string
+  readonly observedOn: string
+  readonly area: HomeCheckupArea
+  readonly viewLabel: string
+  readonly caption: string
+  readonly file: DeviceFile
+}
+
+export interface DeletedHomeCheckupPhoto {
+  readonly photoRef: string
+  readonly state: 'deleted'
+}
+
 /** Authenticated artifact bytes. Session credentials never become part of this value or a URL. */
 export interface ArtifactContent {
   readonly artifactRef: string
@@ -428,6 +560,8 @@ export interface DeviceFile {
   readonly name: string
   readonly mediaType: ArtifactMediaType
   readonly byteLength: number
+  /** Web picker bytes only. Never serialize, log, queue, or persist this object. */
+  readonly browserFile?: Blob
   /** Unmarked inputs are external; only staged cache copies may be removed. */
   readonly lifecycle?: 'external-source' | 'staged-cache'
 }

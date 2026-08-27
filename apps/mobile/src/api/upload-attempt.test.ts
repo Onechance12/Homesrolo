@@ -81,3 +81,20 @@ test('cleanup requires confirmation, a staged marker, and an actual cache child 
     uri: 'file:///app/cache/../photos/original.jpg', lifecycle: 'staged-cache',
   }, cache, true), false)
 })
+
+test('retry metadata never retains an in-memory browser file', async () => {
+  const attempts = new ActiveArtifactUploadAttempts()
+  const browserBacked = {
+    uri: 'file:///app/cache/private.pdf',
+    lifecycle: 'staged-cache' as const,
+    browserFile: new Blob(['private']),
+  }
+  const attempt = await attempts.begin(intent, browserBacked, async () => `hcmd_${'z'.repeat(43)}`)
+  attempts.confirm(attempt)
+  const [candidate] = attempts.pendingCleanupCandidates()
+  assert.deepEqual(candidate, {
+    uri: browserBacked.uri,
+    lifecycle: 'staged-cache',
+  })
+  assert.equal(Object.hasOwn(candidate ?? {}, 'browserFile'), false)
+})

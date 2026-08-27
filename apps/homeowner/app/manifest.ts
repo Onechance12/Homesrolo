@@ -3,13 +3,13 @@ import type { MetadataRoute } from 'next'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: 'Homesrolo — Your Home Record',
+    name: 'Homesrolo — Your home, handled',
     short_name: 'Homesrolo',
-    description: 'Keep the projects, photos, documents, warranties, and seasonal checkups that make up your home record.',
+    description: 'Plan work, solve home problems, find pros, and keep the photos, files, and decisions that matter afterward.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: '#f4f7f6',
+    background_color: '#071c27',
     theme_color: '#071c27',
     categories: ['house-home', 'lifestyle', 'utilities'],
     prefer_related_applications: false,

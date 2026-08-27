@@ -6,6 +6,7 @@ import {
 import {
   configuredEmailCodeRateLimiter,
   configuredHomeownerAuthService,
+  homeownerApiService,
   homeownerRuntimeConfiguration,
 } from './runtime.ts'
 import type { EmailCodeRateLimiter } from './email-code-rate-limit.ts'
@@ -21,7 +22,12 @@ import {
 import {
   homeownerAuthenticationBootstrapChannel,
   homeownerMutationRequestAllowed,
+  homeownerPwaLegacyUpgradeEnvelope,
+  homeownerPwaSignOutEnvelope,
   homeownerRequestAuthentication,
+  HOMEOWNER_NATIVE_CLIENT_HEADER,
+  HOMEOWNER_PWA_CLIENT_V1,
+  type HomeownerRequestAuthentication,
 } from './request-auth.ts'
 
 const JSON_HEADERS = Object.freeze({
@@ -261,6 +267,63 @@ export async function verifyHomeownerEmailCode(request: Request): Promise<Respon
   return verifyHomeownerEmailCodeWithDependencies(request, runtimeEmailCodeDependencies())
 }
 
+export interface HomeownerPwaUpgradeHttpDependencies {
+  readonly appOrigin: string | null
+  readonly readSession: ((sessionHandle: string) => Promise<'signed_in' | 'signed_out'>) | null
+}
+
+function runtimePwaUpgradeDependencies(): HomeownerPwaUpgradeHttpDependencies {
+  const configuration = homeownerRuntimeConfiguration()
+  return {
+    appOrigin: configuration?.appOrigin ?? null,
+    readSession: configuration
+      ? async sessionHandle => (await homeownerApiService().readSession({ sessionHandle })).kind
+      : null,
+  }
+}
+
+/**
+ * Move one still-valid bearer from the previous PWA release into the existing
+ * HttpOnly browser cookie contract. The route also validates an already-set
+ * cookie, but never returns the opaque handle in JSON or a URL.
+ */
+export async function upgradeHomeownerPwaSessionWithDependencies(
+  request: Request,
+  dependencies: HomeownerPwaUpgradeHttpDependencies,
+): Promise<Response> {
+  if (!dependencies.appOrigin || !dependencies.readSession) {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  const envelope = homeownerPwaLegacyUpgradeEnvelope(request, dependencies.appOrigin)
+  if (!envelope) return json(403, { error: { code: 'forbidden' } })
+  if (!envelope.sessionHandle) {
+    return json(200, { data: { signedIn: false } }, {
+      'set-cookie': clearSessionCookie(),
+    })
+  }
+  let state: 'signed_in' | 'signed_out'
+  try {
+    state = await dependencies.readSession(envelope.sessionHandle)
+  } catch {
+    // An already-HttpOnly cookie remains intact on a transient identity-store
+    // failure. The client erases a legacy localStorage bearer before calling,
+    // intentionally preferring confidentiality over retry persistence.
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  if (state !== 'signed_in') {
+    return json(200, { data: { signedIn: false } }, {
+      'set-cookie': clearSessionCookie(),
+    })
+  }
+  return json(200, { data: { signedIn: true } }, {
+    'set-cookie': sessionCookie(envelope.sessionHandle),
+  })
+}
+
+export async function upgradeHomeownerPwaSession(request: Request): Promise<Response> {
+  return upgradeHomeownerPwaSessionWithDependencies(request, runtimePwaUpgradeDependencies())
+}
+
 export async function exchangeHomeownerProviderSession(request: Request): Promise<Response> {
   const configuration = homeownerRuntimeConfiguration()
   const auth = configuredHomeownerAuthService()
@@ -307,19 +370,72 @@ export async function completeHomeownerMagicLink(request: Request): Promise<Resp
   })
 }
 
-export async function signOutHomeowner(request: Request): Promise<Response> {
-  const configuration = homeownerRuntimeConfiguration()
-  const auth = configuredHomeownerAuthService()
-  if (!configuration || !auth) return json(503, { error: { code: 'unavailable' } })
+export function successfulHomeownerSignOutResponse(
+  authentication: Exclude<HomeownerRequestAuthentication, { readonly kind: 'invalid' }>,
+): Response {
+  return authentication.kind === 'native'
+    ? json(200, { data: { signedOut: true } })
+    : json(200, { data: { signedOut: true } }, { 'set-cookie': clearSessionCookie() })
+}
+
+export interface HomeownerSignOutHttpDependencies {
+  readonly appOrigin: string | null
+  readonly revokeSession: ((sessionHandle: string | null) => Promise<void>) | null
+}
+
+export async function signOutHomeownerWithDependencies(
+  request: Request,
+  dependencies: HomeownerSignOutHttpDependencies,
+): Promise<Response> {
+  if (!dependencies.appOrigin || !dependencies.revokeSession) {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+
+  // Only this exact same-origin action may combine the active PWA bearer with
+  // a residual legacy cookie. Revoke both, de-duplicated, then expire the
+  // browser cookie in the response.
+  if (request.headers.get(HOMEOWNER_NATIVE_CLIENT_HEADER) === HOMEOWNER_PWA_CLIENT_V1) {
+    const envelope = homeownerPwaSignOutEnvelope(request, dependencies.appOrigin)
+    if (!envelope) return json(400, { error: { code: 'invalid_request' } })
+    const handles = new Set([
+      envelope.bearerSessionHandle,
+      ...(envelope.legacySessionHandle ? [envelope.legacySessionHandle] : []),
+    ])
+    const revokeSession = dependencies.revokeSession
+    try {
+      await Promise.all([...handles].map(handle => revokeSession(handle)))
+    } catch {
+      // The installed app will discard its local bearer even on an outage. Do
+      // not let a retired cookie silently sign it back in on the next launch.
+      return json(503, { error: { code: 'unavailable' } }, {
+        'set-cookie': clearSessionCookie(),
+      })
+    }
+    return json(200, { data: { signedOut: true } }, {
+      'set-cookie': clearSessionCookie(),
+    })
+  }
+
   const authentication = homeownerRequestAuthentication(request)
   if (authentication.kind === 'invalid') {
     return json(400, { error: { code: 'invalid_request' } })
   }
-  if (!homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
+  if (!homeownerMutationRequestAllowed(request, dependencies.appOrigin, authentication)) {
     return json(403, { error: { code: 'forbidden' } })
   }
-  await auth.revokeSession(authentication.sessionHandle)
-  return authentication.kind === 'native'
-    ? json(200, { data: { signedOut: true } })
-    : json(200, { data: { signedOut: true } }, { 'set-cookie': clearSessionCookie() })
+  try {
+    await dependencies.revokeSession(authentication.sessionHandle)
+  } catch {
+    return json(503, { error: { code: 'unavailable' } })
+  }
+  return successfulHomeownerSignOutResponse(authentication)
+}
+
+export async function signOutHomeowner(request: Request): Promise<Response> {
+  const configuration = homeownerRuntimeConfiguration()
+  const auth = configuredHomeownerAuthService()
+  return signOutHomeownerWithDependencies(request, {
+    appOrigin: configuration?.appOrigin ?? null,
+    revokeSession: auth ? sessionHandle => auth.revokeSession(sessionHandle) : null,
+  })
 }

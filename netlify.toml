@@ -1,5 +1,5 @@
 [build]
-  command = "npm ci && npm --prefix apps/homeowner ci && npm --prefix apps/homeowner run build"
+  command = "npm ci && npm --prefix apps/homeowner ci && npm --prefix apps/mobile ci && npm --prefix apps/mobile run export:web:hosted && npm --prefix apps/homeowner run build"
   publish = "apps/homeowner/.next"
 
 [build.environment]
@@ -15,6 +15,8 @@
   HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED = "true"
   HOMESROLO_AI_ENABLED = "true"
   HOMESROLO_ROLO_VISION_ENABLED = "true"
+  EXPO_PUBLIC_HOMESROLO_API_URL = "https://app.homesrolo.com"
+  EXPO_PUBLIC_HOMESROLO_PREVIEW_MODE = "0"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
@@ -26,9 +28,15 @@
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(self), geolocation=(self), microphone=(self), payment=(), usb=()"
+    Content-Security-Policy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; worker-src 'self'; manifest-src 'self'"
 
 [[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
     Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/expo-shell-assets.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

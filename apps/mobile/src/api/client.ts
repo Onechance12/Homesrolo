@@ -1,6 +1,7 @@
 import Constants from 'expo-constants'
 import * as Crypto from 'expo-crypto'
 import { File, Paths } from 'expo-file-system'
+import { Platform } from 'react-native'
 import type { HomesroloApi } from './contract.ts'
 import type { ProtectedImageSource } from './image-source.ts'
 import type {
@@ -10,11 +11,16 @@ import type {
   ArtifactRecord,
   ArtifactReservation,
   Capabilities,
+  CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
+  CreateHomeCheckupPhotoInput,
   CreateWorkInput,
   CreatedProfessionalOrganization,
   DecideProfessionalProposalInput,
   DeviceFile,
+  DeletedHomeCheckupPhoto,
+  HomeCheckupPhoto,
+  HomeRecordProfile,
   HomeSummary,
   HomeView,
   NativeSessionCredential,
@@ -23,6 +29,7 @@ import type {
   ProfessionalProposal,
   ProfessionalTrade,
   ProjectActivityRecord,
+  ProjectItem,
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
@@ -33,17 +40,35 @@ import type {
   RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
+  SaveProjectItemInput,
+  SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
+  UpdateHomeRecordInput,
   WorkCategory,
   WorkKind,
   WorkRecord,
   WorkStatus,
 } from './model.ts'
+import {
+  homeCheckupUploadHeaders,
+  parseDeletedHomeCheckupPhoto,
+  parseHomeCheckupPhoto,
+} from './home-checkup.ts'
+import { homeRecordUpdateBody, parseHomeRecordProfile } from './home-record.ts'
 import { artifactContentFromResponse } from './artifact-content.ts'
+import {
+  browserDeviceFileBytes,
+  validatedArtifactPayloadMediaType,
+} from './device-file-payload.ts'
 import { parseProjectActivity } from './activity.ts'
+import {
+  homeownerProjectQuoteBody,
+  projectQuoteMatchesBody,
+} from './homeowner-quote.ts'
+import { parseProjectItem, projectItemBody } from './project-item.ts'
 import {
   createProfessionalOrganizationBody,
   decideProfessionalProposalBody,
@@ -66,18 +91,23 @@ import {
 } from './professional.ts'
 import {
   apiPath,
+  browserCookieRequestHeaders,
   boundedRoloConversation,
   commandRef,
   envelopeData,
   isArtifactRef,
   isHomeRef,
+  isHomesroloClientContract,
   isProjectRef,
+  isPhotoRef,
   isSessionToken,
   nativeRequestHeaders,
   normalizedRoloSelectedPhoto,
   normalizeApiOrigin,
+  pwaCookieBridgeRequestInit,
   problemCode,
   roloPhotoReviewPresenceAllowed,
+  type HomesroloClientContract,
 } from './protocol.ts'
 import {
   ActiveArtifactUploadAttempts,
@@ -362,16 +392,6 @@ function hex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function mediaTypeFor(bytes: Uint8Array): ArtifactMediaType | null {
-  if (bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50
-    && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'application/pdf'
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50
-    && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d
-    && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png'
-  return null
-}
-
 function assertSignedUpload(reservation: Extract<ArtifactReservation, { state: 'upload_required' }>) {
   const url = new URL(reservation.upload.signedUrl)
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
@@ -394,15 +414,44 @@ export class HomesroloNativeApi implements HomesroloApi {
   readonly #origin: string
   readonly #token: TokenProvider
   readonly #onSignedOut: () => void
+  readonly #clientContract: HomesroloClientContract
   readonly #uploadAttempts = new ActiveArtifactUploadAttempts()
 
   constructor(token: TokenProvider, options: {
     readonly origin?: string
     readonly onSignedOut?: () => void
+    readonly clientContract?: HomesroloClientContract
   } = {}) {
+    const clientContract = options.clientContract ?? 'native.v1'
+    if (!isHomesroloClientContract(clientContract)) throw new Error('invalid_client_contract')
     this.#origin = normalizeApiOrigin(options.origin ?? configuredOrigin())
     this.#token = token
     this.#onSignedOut = options.onSignedOut ?? (() => undefined)
+    this.#clientContract = clientContract
+  }
+
+  #usesCookieSession(): boolean {
+    return this.#clientContract === 'pwa.v1'
+  }
+
+  #authenticatedToken(): string | null {
+    if (this.#usesCookieSession()) return null
+    const token = this.#token()
+    if (!token || !isSessionToken(token)) throw new NativeApiError(401, 'signed_out')
+    return token
+  }
+
+  #authenticatedHeaders(
+    token: string | null,
+    content: 'none' | 'json' = 'none',
+  ): Record<string, string> {
+    return this.#usesCookieSession()
+      ? browserCookieRequestHeaders(content)
+      : nativeRequestHeaders(token, content, this.#clientContract)
+  }
+
+  #credentials(): RequestCredentials {
+    return this.#usesCookieSession() ? 'same-origin' : 'omit'
   }
 
   async newCommandRef(): Promise<string> {
@@ -444,22 +493,25 @@ export class HomesroloNativeApi implements HomesroloApi {
   }
 
   async #request(path: string, options: {
-    readonly method?: 'GET' | 'POST'
+    readonly method?: 'GET' | 'POST' | 'DELETE'
     readonly body?: unknown
     readonly authentication?: 'required' | 'bootstrap'
   } = {}): Promise<unknown> {
     const authentication = options.authentication ?? 'required'
-    const token = authentication === 'required' ? this.#token() : null
-    if (authentication === 'required' && (!token || !isSessionToken(token))) {
-      throw new NativeApiError(401, 'signed_out')
-    }
+    const token = authentication === 'required' ? this.#authenticatedToken() : null
     let response: Response
     try {
       const serialized = options.body === undefined ? null : JSON.stringify(options.body)
       response = await fetch(`${this.#origin}${path}`, {
         method: options.method ?? 'GET',
-        credentials: 'omit',
-        headers: nativeRequestHeaders(token, options.body === undefined ? 'none' : 'json'),
+        credentials: this.#credentials(),
+        cache: 'no-store',
+        redirect: 'error',
+        referrerPolicy: 'no-referrer',
+        headers: this.#authenticatedHeaders(
+          token,
+          options.body === undefined ? 'none' : 'json',
+        ),
         ...(serialized === null ? {} : { body: serialized }),
       })
     } catch {
@@ -475,22 +527,51 @@ export class HomesroloNativeApi implements HomesroloApi {
     try { return envelopeData(payload) } catch { throw new NativeApiError(response.status, 'invalid_response') }
   }
 
+  /**
+   * The browser-only migration action is the sole PWA request allowed to carry
+   * an old bearer. It is bodyless, same-origin, and immediately replaces that
+   * script-readable credential with the server's HttpOnly cookie.
+   */
+  async #pwaCookieBridge(path: string, token: string | null): Promise<unknown> {
+    if (this.#clientContract !== 'pwa.v1') throw new Error('invalid_client_contract')
+    let response: Response
+    try {
+      response = await fetch(`${this.#origin}${path}`, {
+        ...pwaCookieBridgeRequestInit(token),
+      })
+    } catch {
+      throw new NativeApiError(0, 'network_unavailable')
+    }
+    let payload: unknown
+    try { payload = await response.json() } catch { payload = null }
+    if (!response.ok) {
+      const problem = problemCode(payload)
+      if (response.status === 401) this.#onSignedOut()
+      throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
+    }
+    try { return envelopeData(payload) } catch {
+      throw new NativeApiError(response.status, 'invalid_response')
+    }
+  }
+
   async #readArtifactContent(
     path: string,
     artifactRef: string,
     fallbackDisplayName?: string,
   ): Promise<ArtifactContent> {
-    const token = this.#token()
-    if (!token || !isSessionToken(token)) throw new NativeApiError(401, 'signed_out')
+    const token = this.#authenticatedToken()
     let response: Response
     try {
       response = await fetch(`${this.#origin}${path}`, {
         method: 'GET',
-        credentials: 'omit',
+        credentials: this.#credentials(),
         cache: 'no-store',
         redirect: 'error',
         referrerPolicy: 'no-referrer',
-        headers: { ...nativeRequestHeaders(token), accept: '*/*' },
+        headers: {
+          ...this.#authenticatedHeaders(token),
+          accept: '*/*',
+        },
       })
     } catch {
       throw new NativeApiError(0, 'network_unavailable')
@@ -517,10 +598,16 @@ export class HomesroloNativeApi implements HomesroloApi {
     if (data.accepted !== true) throw new NativeApiError(200, 'invalid_response')
   }
 
-  async verifyEmailCode(email: string, code: string): Promise<NativeSessionCredential> {
+  async verifyEmailCode(email: string, code: string): Promise<NativeSessionCredential | null> {
     const data = record(await this.#request(apiPath('auth', 'email-code', 'verify'), {
       method: 'POST', body: { email: email.trim().toLowerCase(), code }, authentication: 'bootstrap',
     }))
+    if (this.#usesCookieSession()) {
+      if (Object.keys(data).length !== 1 || data.signedIn !== true) {
+        throw new NativeApiError(200, 'invalid_response')
+      }
+      return null
+    }
     const session = record(data.session)
     if (data.signedIn !== true || session.tokenType !== 'Bearer'
       || !isSessionToken(session.token) || typeof session.expiresInSeconds !== 'number'
@@ -531,6 +618,20 @@ export class HomesroloNativeApi implements HomesroloApi {
       token: session.token,
       tokenType: 'Bearer',
       expiresInSeconds: session.expiresInSeconds,
+    }
+  }
+
+  async upgradeLegacyPwaSession(legacyBearer: string | null): Promise<void> {
+    if (this.#clientContract !== 'pwa.v1') return
+    if (legacyBearer !== null && !isSessionToken(legacyBearer)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const data = record(await this.#pwaCookieBridge(
+      apiPath('auth', 'pwa-upgrade'),
+      legacyBearer,
+    ))
+    if (Object.keys(data).length !== 1 || typeof data.signedIn !== 'boolean') {
+      throw new NativeApiError(200, 'invalid_response')
     }
   }
 
@@ -567,6 +668,30 @@ export class HomesroloNativeApi implements HomesroloApi {
   async getHome(homeRef: string): Promise<HomeView> {
     if (!isHomeRef(homeRef)) throw new NativeApiError(400, 'invalid_request')
     return parseHomeView(await this.#request(apiPath('homes', homeRef)))
+  }
+
+  async getHomeRecord(homeRef: string): Promise<HomeRecordProfile> {
+    if (!isHomeRef(homeRef)) throw new NativeApiError(400, 'invalid_request')
+    const profile = parseHomeRecordProfile(
+      await this.#request(apiPath('homes', homeRef, 'record')),
+    )
+    if (profile.homeRef !== homeRef) throw new NativeApiError(200, 'invalid_response')
+    return profile
+  }
+
+  async updateHomeRecord(
+    homeRef: string,
+    input: UpdateHomeRecordInput,
+  ): Promise<HomeRecordProfile> {
+    const body = homeRecordUpdateBody(input)
+    if (!isHomeRef(homeRef) || !body) throw new NativeApiError(400, 'invalid_request')
+    const profile = parseHomeRecordProfile(await this.#request(
+      apiPath('homes', homeRef, 'record'), { method: 'POST', body },
+    ))
+    if (profile.homeRef !== homeRef || profile.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return profile
   }
 
   async listWork(homeRef: string): Promise<readonly WorkRecord[]> {
@@ -631,6 +756,70 @@ export class HomesroloNativeApi implements HomesroloApi {
     return activity
   }
 
+  async addWorkMilestone(
+    homeRef: string,
+    projectRef: string,
+    body: string,
+    milestoneCommandRef?: string,
+  ): Promise<ProjectActivityRecord> {
+    const cleanBody = body.trim()
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)
+      || cleanBody.length < 1 || cleanBody.length > 2_000) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const activity = parseProjectActivity(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
+      method: 'POST',
+      body: {
+        commandRef: milestoneCommandRef ?? await this.newCommandRef(),
+        kind: 'milestone',
+        body: cleanBody,
+      },
+    }))
+    if (activity.homeRef !== homeRef || activity.projectRef !== projectRef
+      || activity.kind !== 'milestone' || activity.body !== cleanBody) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return activity
+  }
+
+  async listProjectItems(homeRef: string, projectRef: string): Promise<readonly ProjectItem[]> {
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const data = await this.#request(apiPath('homes', homeRef, 'projects', projectRef, 'items'))
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    const items = data.map(parseProjectItem)
+    if (items.some(item => item.homeRef !== homeRef || item.projectRef !== projectRef)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return items
+  }
+
+  async saveProjectItem(
+    homeRef: string,
+    projectRef: string,
+    input: SaveProjectItemInput,
+  ): Promise<ProjectItem> {
+    const body = projectItemBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const item = parseProjectItem(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'items'),
+      { method: 'POST', body },
+    ))
+    const expectedRevision = input.expectedRevision === undefined
+      ? 1
+      : input.expectedRevision + 1
+    if (item.homeRef !== homeRef || item.projectRef !== projectRef
+      || (input.itemRef !== undefined && item.itemRef !== input.itemRef)
+      || item.revision !== expectedRevision) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return item
+  }
+
   async listProjectQuotes(homeRef: string, projectRef: string): Promise<readonly ProjectQuote[]> {
     if (!isHomeRef(homeRef) || !isProjectRef(projectRef)) {
       throw new NativeApiError(400, 'invalid_request')
@@ -642,6 +831,50 @@ export class HomesroloNativeApi implements HomesroloApi {
       throw new NativeApiError(200, 'invalid_response')
     }
     return quotes
+  }
+
+  async createProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    input: CreateProjectQuoteInput,
+  ): Promise<ProjectQuote> {
+    const body = homeownerProjectQuoteBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef) || !body
+      || body.expectedRevision !== undefined) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const quote = parseProjectQuote(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'quotes'),
+      { method: 'POST', body },
+    ))
+    if (quote.homeRef !== homeRef || quote.projectRef !== projectRef
+      || quote.revision !== 1 || !projectQuoteMatchesBody(quote, body)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return quote
+  }
+
+  async saveProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: SaveProjectQuoteInput,
+  ): Promise<ProjectQuote> {
+    const body = homeownerProjectQuoteBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef) || !isQuoteRef(quoteRef)
+      || !body || body.expectedRevision === undefined) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const quote = parseProjectQuote(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'quotes', quoteRef),
+      { method: 'POST', body },
+    ))
+    if (quote.quoteRef !== quoteRef || quote.homeRef !== homeRef
+      || quote.projectRef !== projectRef || quote.revision !== body.expectedRevision + 1
+      || !projectQuoteMatchesBody(quote, body)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return quote
   }
 
   async listProfessionals(filters: {
@@ -786,15 +1019,18 @@ export class HomesroloNativeApi implements HomesroloApi {
     invitationRef: string,
     artifactRef: string,
   ): ProtectedImageSource {
-    const token = this.#token()
-    if (!isInvitationRef(invitationRef) || !isArtifactRef(artifactRef) || !token) {
+    const token = this.#authenticatedToken()
+    if (!isInvitationRef(invitationRef) || !isArtifactRef(artifactRef)) {
       throw new NativeApiError(400, 'invalid_request')
     }
     return {
       uri: `${this.#origin}${apiPath(
         'professional', 'invitations', invitationRef, 'artifacts', artifactRef,
       )}`,
-      headers: { ...nativeRequestHeaders(token), accept: '*/*' },
+      headers: {
+        ...this.#authenticatedHeaders(token),
+        accept: '*/*',
+      },
     }
   }
 
@@ -885,8 +1121,12 @@ export class HomesroloNativeApi implements HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversationState: RoloConversationState,
+    projectRef?: string,
     selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply> {
+    if (!isHomeRef(homeRef) || (projectRef !== undefined && !isProjectRef(projectRef))) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
     let conversation: ReturnType<typeof boundedRoloConversation>
     try { conversation = boundedRoloConversation(message, history, conversationState) } catch {
       throw new NativeApiError(400, 'invalid_request')
@@ -902,6 +1142,7 @@ export class HomesroloNativeApi implements HomesroloApi {
       body: {
         ...conversation,
         destination: 'rolo',
+        ...(projectRef ? { projectRef } : {}),
         ...(photoSelection ? { selectedPhoto: photoSelection } : {}),
       },
     }))
@@ -918,13 +1159,16 @@ export class HomesroloNativeApi implements HomesroloApi {
   }
 
   artifactPreviewSource(homeRef: string, artifactRef: string): ProtectedImageSource {
-    const token = this.#token()
-    if (!isHomeRef(homeRef) || !isArtifactRef(artifactRef) || !token) {
+    const token = this.#authenticatedToken()
+    if (!isHomeRef(homeRef) || !isArtifactRef(artifactRef)) {
       throw new NativeApiError(400, 'invalid_request')
     }
     return {
       uri: `${this.#origin}${apiPath('homes', homeRef, 'artifacts', artifactRef, 'preview')}`,
-      headers: { ...nativeRequestHeaders(token), accept: 'image/*' },
+      headers: {
+        ...this.#authenticatedHeaders(token),
+        accept: 'image/*',
+      },
     }
   }
 
@@ -957,17 +1201,24 @@ export class HomesroloNativeApi implements HomesroloApi {
     }
     let payload: ArrayBuffer
     try {
-      const sourceFile = new File(deviceFile.uri)
-      if (!sourceFile.exists) throw new Error('missing_file')
-      payload = await sourceFile.arrayBuffer()
+      if (Platform.OS === 'web') {
+        payload = await browserDeviceFileBytes(deviceFile)
+      } else {
+        const sourceFile = new File(deviceFile.uri)
+        if (!sourceFile.exists) throw new Error('missing_file')
+        payload = await sourceFile.arrayBuffer()
+      }
     } catch {
       throw new NativeApiError(400, 'invalid_file')
     }
-    if (payload.byteLength !== deviceFile.byteLength) throw new NativeApiError(400, 'invalid_file')
-    const mediaType = mediaTypeFor(new Uint8Array(payload))
-    if (!mediaType || mediaType !== deviceFile.mediaType
-      || (kind === 'photo' && mediaType === 'application/pdf')) {
-      throw new NativeApiError(400, 'unsupported_file')
+    let mediaType: ArtifactMediaType
+    try {
+      mediaType = validatedArtifactPayloadMediaType(deviceFile, kind, payload)
+    } catch (error) {
+      const code = error instanceof Error && error.message === 'invalid_file'
+        ? 'invalid_file'
+        : 'unsupported_file'
+      throw new NativeApiError(400, code)
     }
     const digest = hex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, payload))
     const displayName = deviceFile.name.slice(0, 160)
@@ -979,7 +1230,10 @@ export class HomesroloNativeApi implements HomesroloApi {
       mediaType,
       byteLength: payload.byteLength,
       payloadSha256: digest,
-    }, deviceFile, () => this.newCommandRef())
+    }, {
+      uri: deviceFile.uri,
+      ...(deviceFile.lifecycle ? { lifecycle: deviceFile.lifecycle } : {}),
+    }, () => this.newCommandRef())
     if (attempt.artifactRef) {
       try {
         const artifact = await this.#completeArtifactUpload(homeRef, {
@@ -1036,5 +1290,119 @@ export class HomesroloNativeApi implements HomesroloApi {
     })
     this.#confirmUploadAttempt(attempt)
     return artifact
+  }
+
+  async listHomeCheckups(homeRef: string): Promise<readonly HomeCheckupPhoto[]> {
+    if (!isHomeRef(homeRef)) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(apiPath('homes', homeRef, 'photo-checkups'))
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    const photos = data.map(parseHomeCheckupPhoto)
+    if (photos.length > 100 || photos.some(photo => photo.homeRef !== homeRef)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return photos
+  }
+
+  homeCheckupPhotoSource(
+    homeRef: string,
+    photoRef: string,
+    variant: 'thumbnail' | 'full',
+  ): ProtectedImageSource {
+    const token = this.#authenticatedToken()
+    if (!isHomeRef(homeRef) || !isPhotoRef(photoRef)
+      || (variant !== 'thumbnail' && variant !== 'full')) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    return {
+      uri: `${this.#origin}${apiPath('homes', homeRef, 'photo-checkups', photoRef, variant)}`,
+      headers: {
+        ...this.#authenticatedHeaders(token),
+        accept: 'image/jpeg',
+      },
+    }
+  }
+
+  async uploadHomeCheckup(
+    homeRef: string,
+    input: CreateHomeCheckupPhotoInput,
+  ): Promise<HomeCheckupPhoto> {
+    const extraHeaders = homeCheckupUploadHeaders(input)
+    if (!isHomeRef(homeRef) || !extraHeaders || input.file.byteLength < 1
+      || input.file.byteLength > 10 * 1024 * 1024) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    let payload: ArrayBuffer
+    try {
+      if (Platform.OS === 'web') {
+        payload = await browserDeviceFileBytes(input.file)
+      } else {
+        const sourceFile = new File(input.file.uri)
+        if (!sourceFile.exists) throw new Error('missing_file')
+        payload = await sourceFile.arrayBuffer()
+      }
+    } catch {
+      throw new NativeApiError(400, 'invalid_file')
+    }
+    let mediaType: 'image/jpeg' | 'image/png'
+    try {
+      const detected = validatedArtifactPayloadMediaType(input.file, 'photo', payload)
+      if (detected === 'application/pdf') throw new Error('unsupported_file')
+      mediaType = detected
+    } catch (error) {
+      const code = error instanceof Error && error.message === 'invalid_file'
+        ? 'invalid_file'
+        : 'unsupported_file'
+      throw new NativeApiError(400, code)
+    }
+    const token = this.#authenticatedToken()
+    let response: Response
+    try {
+      response = await fetch(`${this.#origin}${apiPath('homes', homeRef, 'photo-checkups')}`, {
+        method: 'POST',
+        credentials: this.#credentials(),
+        cache: 'no-store',
+        redirect: 'error',
+        referrerPolicy: 'no-referrer',
+        headers: {
+          ...this.#authenticatedHeaders(token),
+          ...extraHeaders,
+          'content-type': mediaType,
+        },
+        body: payload,
+      })
+    } catch {
+      throw new NativeApiError(0, 'network_unavailable')
+    }
+    let responseBody: unknown
+    try { responseBody = await response.json() } catch { responseBody = null }
+    if (!response.ok) {
+      const problem = problemCode(responseBody)
+      if (response.status === 401) this.#onSignedOut()
+      throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
+    }
+    let photo: HomeCheckupPhoto
+    try { photo = parseHomeCheckupPhoto(envelopeData(responseBody)) } catch {
+      throw new NativeApiError(response.status, 'invalid_response')
+    }
+    if (response.status !== 201 || photo.homeRef !== homeRef
+      || photo.observedOn !== input.observedOn || photo.area !== input.area
+      || photo.viewLabel !== input.viewLabel.trim() || photo.caption !== input.caption.trim()) {
+      throw new NativeApiError(response.status, 'invalid_response')
+    }
+    return photo
+  }
+
+  async deleteHomeCheckup(
+    homeRef: string,
+    photoRef: string,
+  ): Promise<DeletedHomeCheckupPhoto> {
+    if (!isHomeRef(homeRef) || !isPhotoRef(photoRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const deleted = parseDeletedHomeCheckupPhoto(await this.#request(
+      apiPath('homes', homeRef, 'photo-checkups', photoRef), { method: 'DELETE' },
+    ))
+    if (deleted.photoRef !== photoRef) throw new NativeApiError(200, 'invalid_response')
+    return deleted
   }
 }

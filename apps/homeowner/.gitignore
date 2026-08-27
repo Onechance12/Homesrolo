@@ -3,3 +3,7 @@ node_modules/
 out/
 next-env.d.ts
 *.tsbuildinfo
+public/_expo/
+public/assets/
+public/expo-shell-assets.js
+public/expo-shell.html

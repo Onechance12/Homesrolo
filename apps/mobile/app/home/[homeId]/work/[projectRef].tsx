@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { NativeApiError } from '../../../../src/api/client.ts'
 import type { HomesroloApi } from '../../../../src/api/contract.ts'
@@ -10,6 +10,8 @@ import { useSession } from '../../../../src/auth/SessionProvider.tsx'
 import { workDetailReturnPath } from '../../../../src/auth/return-route.ts'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
 import { ProjectFiles } from '../../../../src/components/ProjectFiles.tsx'
+import { ProjectChoices } from '../../../../src/components/ProjectChoices.tsx'
+import { ProjectOutsideProposalWorkspace } from '../../../../src/components/ProjectOutsideProposalWorkspace.tsx'
 import { ProjectProfessionalWorkspace } from '../../../../src/components/ProjectProfessionalWorkspace.tsx'
 import {
   Button,
@@ -36,6 +38,7 @@ import {
   workHasChanges,
   workNoteIntent,
   workUpdateIntent,
+  validOptionalWorkDate,
   type WorkDraft,
 } from '../../../../src/work/detail.ts'
 
@@ -151,6 +154,10 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
 
   async function save() {
     if (saveLock.current || conflicted || !draft.title.trim() || !changed) return
+    if (!validOptionalWorkDate(draft.occurredOn)) {
+      setSaveError('Use a real date as YYYY-MM-DD, or leave it blank.')
+      return
+    }
     saveLock.current = true
     setSaving(true)
     setSaveError(null)
@@ -258,66 +265,17 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
             {current.summary || 'No summary saved yet.'}
           </Text>
         </View>
-        {!editing ? <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} /> : null}
+        {!editing ? (
+          <>
+            <Button
+              label="Ask Rolo about this work"
+              icon="chatbubble-ellipses-outline"
+              onPress={() => openProjectRolo(homeId, current.projectRef)}
+            />
+            <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} quiet />
+          </>
+        ) : null}
       </Card>
-
-      <Card>
-        <SectionTitle
-          title="Updates"
-          detail="Notes and milestones stay with this work."
-        />
-        {activity.length > 0 ? (
-          <View style={styles.timeline}>
-            {activity.map((entry, index) => (
-              <View key={entry.activityRef} style={styles.timelineRow}>
-                <View style={styles.timelineRail}>
-                  <View style={[styles.timelineDot, entry.kind === 'milestone' && styles.milestoneDot]}>
-                    <Ionicons
-                      name={entry.kind === 'milestone' ? 'flag' : 'chatbubble'}
-                      size={11}
-                      color={colors.ink}
-                    />
-                  </View>
-                  {index < activity.length - 1 ? <View style={styles.timelineLine} /> : null}
-                </View>
-                <View style={styles.timelineCopy}>
-                  <Text style={styles.timelineMeta}>
-                    {entry.kind === 'milestone' ? 'Milestone' : 'Note'} · {displayActivityDate(entry.createdAt)}
-                  </Text>
-                  <Text style={styles.timelineBody}>{entry.body}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.emptyActivity}>No updates yet. Add the first decision, visit, or reminder.</Text>
-        )}
-        <Divider />
-        <TextField
-          label="Add an update"
-          value={note}
-          onChangeText={changeNote}
-          multiline
-          maxLength={2_000}
-          placeholder="The replacement part is ordered and should arrive Friday."
-        />
-        <Button
-          label={addingNote ? 'Saving…' : 'Save note'}
-          icon="chatbubble-ellipses-outline"
-          onPress={() => void addNote()}
-          disabled={addingNote || !note.trim()}
-        />
-        {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
-        {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
-      </Card>
-
-      <ProjectFiles homeId={homeId} projectRef={current.projectRef} />
-
-      <ProjectProfessionalWorkspace
-        homeId={homeId}
-        work={current}
-        {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
-      />
 
       {editing ? (
         <Card>
@@ -369,7 +327,9 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
             keyboardType="numbers-and-punctuation"
             autoCorrect={false}
             maxLength={10}
-            hint="Use YYYY-MM-DD, or leave it blank if you do not know."
+            hint={validOptionalWorkDate(draft.occurredOn)
+              ? 'Use YYYY-MM-DD, or leave it blank if you do not know.'
+              : 'Enter a real date as YYYY-MM-DD.'}
           />
           <TextField
             label="What should the home remember?"
@@ -390,7 +350,7 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
             label={saving ? 'Saving…' : 'Save changes'}
             icon="checkmark"
             onPress={() => void save()}
-            disabled={saving || conflicted || !draft.title.trim() || !changed}
+            disabled={saving || conflicted || !draft.title.trim() || !changed || !validOptionalWorkDate(draft.occurredOn)}
           />
           <Button label="Cancel" onPress={cancelEdit} disabled={saving} quiet />
           {conflicted ? (
@@ -404,6 +364,80 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
         </Card>
       ) : null}
       {saveSuccess ? <Text accessibilityRole="alert" style={styles.success}>{saveSuccess}</Text> : null}
+
+      <Card>
+        <SectionTitle
+          title="Updates"
+          detail="Notes and milestones stay with this work."
+        />
+        {activity.length > 0 ? (
+          <View style={styles.timeline}>
+            {activity.map((entry, index) => (
+              <View key={entry.activityRef} style={styles.timelineRow}>
+                <View style={styles.timelineRail}>
+                  <View style={[styles.timelineDot, entry.kind === 'milestone' && styles.milestoneDot]}>
+                    <Ionicons
+                      name={entry.kind === 'milestone' ? 'flag' : 'chatbubble'}
+                      size={11}
+                      color={colors.ink}
+                    />
+                  </View>
+                  {index < activity.length - 1 ? <View style={styles.timelineLine} /> : null}
+                </View>
+                <View style={styles.timelineCopy}>
+                  <Text style={styles.timelineMeta}>
+                    {entry.kind === 'milestone' ? 'Milestone' : 'Note'} · {displayActivityDate(entry.createdAt)}
+                  </Text>
+                  <Text style={styles.timelineBody}>{entry.body}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyActivity}>No updates yet. Add the first decision, visit, or reminder.</Text>
+        )}
+        <Divider />
+        <TextField
+          label="Add an update"
+          value={note}
+          onChangeText={changeNote}
+          multiline
+          maxLength={2_000}
+          placeholder="The replacement part is ordered and should arrive Friday."
+        />
+        <Button
+          label={addingNote ? 'Saving…' : 'Save note'}
+          icon="chatbubble-ellipses-outline"
+          onPress={() => void addNote()}
+          disabled={addingNote || !note.trim()}
+        />
+        {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
+        {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
+      </Card>
+
+      <ProjectChoices homeId={homeId} projectRef={current.projectRef} />
+
+      <ProjectFiles homeId={homeId} projectRef={current.projectRef} />
+
+      <SectionTitle
+        title="Proposals"
+        detail="Invite a company here, or keep a written proposal you received somewhere else."
+      />
+
+      <ProjectProfessionalWorkspace
+        homeId={homeId}
+        work={current}
+        {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
+      />
+
+      <ProjectOutsideProposalWorkspace
+        homeId={homeId}
+        work={current}
+        onVisitSaved={created => setActivity(entries => [
+          ...entries.filter(entry => entry.activityRef !== created.activityRef),
+          created,
+        ].sort((left, right) => left.createdAt.localeCompare(right.createdAt)))}
+      />
 
     </Page>
   )
@@ -454,9 +488,20 @@ function openWork(homeId: string) {
   router.replace({ pathname: '/home/[homeId]/work', params: { homeId } })
 }
 
+function openProjectRolo(homeId: string, projectRef: string) {
+  router.push({
+    pathname: '/home/[homeId]/rolo',
+    params: {
+      homeId,
+      projectRef,
+      prompt: 'Help me review this work record. What looks incomplete or worth deciding next?',
+    },
+  })
+}
+
 const styles = StyleSheet.create({
   back: {
-    alignSelf: 'flex-start', minHeight: 40, marginLeft: -7, paddingHorizontal: 7,
+    alignSelf: 'flex-start', minHeight: 44, marginLeft: -7, paddingHorizontal: 7,
     flexDirection: 'row', alignItems: 'center', gap: 2,
   },
   backPressed: { opacity: 0.6 },

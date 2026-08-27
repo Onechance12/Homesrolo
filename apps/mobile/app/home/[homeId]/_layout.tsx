@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { Tabs, useLocalSearchParams } from 'expo-router'
 import type { ColorValue } from 'react-native'
 import { StyleSheet, View } from 'react-native'
@@ -42,6 +42,16 @@ export default function HomeTabs() {
         }} />
         <Tabs.Screen name="people" options={{ title: 'Pros', tabBarIcon: icon('people-outline') }} />
         <Tabs.Screen name="care" options={{ title: 'Home', tabBarIcon: icon('home-outline') }} />
+        <Tabs.Screen name="details" options={{ href: null }} />
+        <Tabs.Screen name="checkups" options={{ href: null }} />
+        <Tabs.Screen name="timeline" options={{ href: null }} />
+        <Tabs.Screen name="projects" options={{ href: null }} />
+        <Tabs.Screen name="projects/[projectId]" options={{ href: null }} />
+        <Tabs.Screen name="documents" options={{ href: null }} />
+        <Tabs.Screen name="warranties" options={{ href: null }} />
+        <Tabs.Screen name="pros" options={{ href: null }} />
+        <Tabs.Screen name="pros/[slug]" options={{ href: null }} />
+        <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
     </HomeRouteProvider>
   )

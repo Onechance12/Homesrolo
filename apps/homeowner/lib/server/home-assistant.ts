@@ -137,6 +137,32 @@ export interface HomeAssistantContext {
     readonly occurredOn: string | null
     readonly professionalLabel: string | null
   }[]
+  /**
+   * A bounded projection of the exact work record the homeowner opened Rolo
+   * from. This is structured working data only: no address, document bytes,
+   * invitation details, or private contact information belong here.
+   */
+  readonly currentProject: {
+    readonly projectRef: string
+    readonly title: string
+    readonly workKind: string
+    readonly category: string
+    readonly status: string
+    readonly occurredOn: string | null
+    readonly summary: string
+    readonly professionalLabel: string | null
+    readonly recentActivity: readonly {
+      readonly kind: string
+      readonly body: string
+      readonly createdAt: string
+    }[]
+    readonly plansAndPicks: readonly {
+      readonly kind: string
+      readonly label: string
+      readonly detail: string
+      readonly state: string
+    }[]
+  } | null
   readonly files: readonly {
     readonly displayName: string
     readonly kind: string
@@ -380,6 +406,7 @@ What you do:
 - Explain general home care and safe, observable checks when useful. Label general guidance as general; never turn it into a fact about this home.
 - Carry the conversation forward. recentConversation is chronological. If unansweredFollowUpQuestion is present, the new homeowner message may be answering it.
 - If pendingWork is present and the homeowner corrects or adds a detail about that same event, revise that draft and return the revised draft. Do not create a second draft.
+- When currentProject is present and the homeowner is talking about that work, use its summary, recentActivity, and plansAndPicks as the source of truth. Help them spot a missing decision or sensible next step; do not create a duplicate work draft for the same record.
 - Ask at most one useful question when a missing detail changes what should be recorded or what safe next step makes sense. Do not repeat a question the homeowner answered.
 - When the homeowner clearly describes one repair, issue, service visit, incident, or improvement, prepare one proposedWork draft. Never create duplicate records for the same event.
 - Choose project for a planned improvement, issue for an unresolved problem, repair for repair work, service for a one-time service visit, and incident for an event such as a leak or storm.

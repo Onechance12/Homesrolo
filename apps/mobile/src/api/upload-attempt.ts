@@ -66,7 +66,12 @@ export class ActiveArtifactUploadAttempts {
       this.#attempts.set(key, active)
     }
     if (file.lifecycle === 'staged-cache') {
-      active.cleanupCandidates.set(file.uri, file)
+      // Retain cleanup coordinates only. A web DeviceFile may also carry an
+      // in-memory Blob; it must never enter retry metadata or cleanup state.
+      active.cleanupCandidates.set(file.uri, {
+        uri: file.uri,
+        lifecycle: 'staged-cache',
+      })
     }
     try {
       const commandRef = await active.commandRef

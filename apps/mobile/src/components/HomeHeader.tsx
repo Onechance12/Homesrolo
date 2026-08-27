@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { router } from 'expo-router'
 import { returnToHomeChooser } from '../home/navigation.ts'
 import { colors, space } from '../theme.ts'
@@ -13,13 +13,19 @@ export function HomeHeader({ section, title, detail }: {
     <View style={styles.wrap}>
       <View style={styles.row}>
         <Text style={styles.section}>{section}</Text>
-        <Pressable onPress={() => returnToHomeChooser(router)} accessibilityLabel="Switch homes" style={styles.switcher}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Switch homes"
+          accessibilityHint="Opens your home list"
+          onPress={() => returnToHomeChooser(router)}
+          style={styles.switcher}
+        >
           <Ionicons name="home-outline" size={17} color={colors.slate} />
           <Text style={styles.switchText}>Homes</Text>
           <Ionicons name="chevron-down" size={14} color={colors.smoke} />
         </Pressable>
       </View>
-      <Text style={styles.title}>{title}</Text>
+      <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       {detail ? <Text style={styles.detail}>{detail}</Text> : null}
     </View>
   )
@@ -30,8 +36,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   section: { color: colors.lime, fontSize: 12, fontWeight: '700' },
   switcher: {
-    minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 18, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 11,
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 22, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 11,
   },
   switchText: { color: colors.slate, fontWeight: '700', fontSize: 12 },
   title: { color: colors.cream, fontSize: 26, lineHeight: 31, fontWeight: '800', letterSpacing: -0.65 },

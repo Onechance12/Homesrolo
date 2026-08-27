@@ -2,11 +2,16 @@ import type {
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
+  CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
   CreateWorkInput,
   CreatedProfessionalOrganization,
   DecideProfessionalProposalInput,
   DeviceFile,
+  DeletedHomeCheckupPhoto,
+  CreateHomeCheckupPhotoInput,
+  HomeCheckupPhoto,
+  HomeRecordProfile,
   HomeSummary,
   HomeView,
   NativeSessionCredential,
@@ -15,6 +20,7 @@ import type {
   ProfessionalProposal,
   ProfessionalTrade,
   ProjectActivityRecord,
+  ProjectItem,
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
@@ -25,10 +31,13 @@ import type {
   RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
+  SaveProjectItemInput,
+  SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
+  UpdateHomeRecordInput,
   WorkRecord,
 } from './model.ts'
 import type { ProtectedImageSource } from './image-source.ts'
@@ -37,7 +46,10 @@ import type { ProtectedImageSource } from './image-source.ts'
 export interface HomesroloApi {
   newCommandRef(): Promise<string>
   requestEmailCode(email: string): Promise<void>
-  verifyEmailCode(email: string, code: string): Promise<NativeSessionCredential>
+  /** Native receives a bearer; web establishes an HttpOnly cookie and returns null. */
+  verifyEmailCode(email: string, code: string): Promise<NativeSessionCredential | null>
+  /** One-way migration for a bearer persisted by an older PWA release. */
+  upgradeLegacyPwaSession(legacyBearer: string | null): Promise<void>
   session(): Promise<ServerSession>
   signOut(): Promise<void>
   listHomes(): Promise<readonly HomeSummary[]>
@@ -47,6 +59,8 @@ export interface HomesroloApi {
     createCommandRef?: string,
   ): Promise<HomeSummary>
   getHome(homeRef: string): Promise<HomeView>
+  getHomeRecord(homeRef: string): Promise<HomeRecordProfile>
+  updateHomeRecord(homeRef: string, input: UpdateHomeRecordInput): Promise<HomeRecordProfile>
   listWork(homeRef: string): Promise<readonly WorkRecord[]>
   createWork(homeRef: string, input: CreateWorkInput): Promise<WorkRecord>
   updateWork(homeRef: string, projectRef: string, input: UpdateWorkInput): Promise<WorkRecord>
@@ -60,7 +74,30 @@ export interface HomesroloApi {
     body: string,
     commandRef?: string,
   ): Promise<ProjectActivityRecord>
+  addWorkMilestone(
+    homeRef: string,
+    projectRef: string,
+    body: string,
+    commandRef?: string,
+  ): Promise<ProjectActivityRecord>
+  listProjectItems(homeRef: string, projectRef: string): Promise<readonly ProjectItem[]>
+  saveProjectItem(
+    homeRef: string,
+    projectRef: string,
+    input: SaveProjectItemInput,
+  ): Promise<ProjectItem>
   listProjectQuotes(homeRef: string, projectRef: string): Promise<readonly ProjectQuote[]>
+  createProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    input: CreateProjectQuoteInput,
+  ): Promise<ProjectQuote>
+  saveProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: SaveProjectQuoteInput,
+  ): Promise<ProjectQuote>
   listProfessionals(filters?: {
     readonly trade?: ProfessionalTrade
     readonly serviceArea?: string
@@ -117,6 +154,7 @@ export interface HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversation: RoloConversationState,
+    projectRef?: string,
     selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply>
   listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]>
@@ -128,4 +166,15 @@ export interface HomesroloApi {
     deviceFile: DeviceFile,
     projectRef?: string,
   ): Promise<ArtifactRecord>
+  listHomeCheckups(homeRef: string): Promise<readonly HomeCheckupPhoto[]>
+  homeCheckupPhotoSource(
+    homeRef: string,
+    photoRef: string,
+    variant: 'thumbnail' | 'full',
+  ): ProtectedImageSource
+  uploadHomeCheckup(
+    homeRef: string,
+    input: CreateHomeCheckupPhotoInput,
+  ): Promise<HomeCheckupPhoto>
+  deleteHomeCheckup(homeRef: string, photoRef: string): Promise<DeletedHomeCheckupPhoto>
 }
