@@ -5,7 +5,19 @@ const SESSION_PATTERN = /^[A-Za-z0-9_-]{16,256}$/
 const HOME_REF_PATTERN = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF_PATTERN = /^hprj_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF_PATTERN = /^hart_[A-Za-z0-9_-]{43}$/
+const PHOTO_REF_PATTERN = /^hpho_[A-Za-z0-9_-]{43}$/
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
+
+export const HOMESROLO_CLIENT_CONTRACTS = ['native.v1', 'pwa.v1'] as const
+export type HomesroloClientContract = typeof HOMESROLO_CLIENT_CONTRACTS[number]
+
+export function isHomesroloClientContract(value: unknown): value is HomesroloClientContract {
+  return value === 'native.v1' || value === 'pwa.v1'
+}
+
+export function clientContractForPlatform(platform: string): HomesroloClientContract {
+  return platform === 'web' ? 'pwa.v1' : 'native.v1'
+}
 
 export interface BoundedRoloTurn {
   readonly role: 'user' | 'assistant'
@@ -36,6 +48,10 @@ export function isProjectRef(value: unknown): value is string {
 
 export function isArtifactRef(value: unknown): value is string {
   return typeof value === 'string' && ARTIFACT_REF_PATTERN.test(value)
+}
+
+export function isPhotoRef(value: unknown): value is string {
+  return typeof value === 'string' && PHOTO_REF_PATTERN.test(value)
 }
 
 /** Keeps the native vision boundary to one exact, consented private artifact. */
@@ -118,13 +134,42 @@ export function problemCode(value: unknown): { code: string; retryAfterSeconds?:
 export function nativeRequestHeaders(
   token: string | null,
   content: 'none' | 'json' = 'none',
+  clientContract: HomesroloClientContract = 'native.v1',
 ): Record<string, string> {
   if (token !== null && !isSessionToken(token)) throw new Error('invalid_session_token')
+  if (!isHomesroloClientContract(clientContract)) throw new Error('invalid_client_contract')
   return {
     accept: 'application/json',
-    'x-homesrolo-client': 'native.v1',
+    'x-homesrolo-client': clientContract,
     ...(content === 'json' ? { 'content-type': 'application/json' } : {}),
     ...(token ? { authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+/** Ordinary browser requests use only the HttpOnly cookie supplied by fetch.
+ * Keeping the PWA marker and Authorization header out of this shape prevents
+ * application code from accidentally reviving browser bearer auth. */
+export function browserCookieRequestHeaders(
+  content: 'none' | 'json' = 'none',
+): Record<string, string> {
+  return {
+    accept: 'application/json',
+    ...(content === 'json' ? { 'content-type': 'application/json' } : {}),
+  }
+}
+
+/** Browser-only request shape for the narrowly scoped migration action.
+ * Fetch supplies the same-origin Origin/Fetch-Metadata headers; this helper
+ * supplies no body or content type. A bearer is accepted here only to move a
+ * previously deployed localStorage session into an HttpOnly cookie. */
+export function pwaCookieBridgeRequestInit(legacyBearer: string | null): RequestInit {
+  return {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
+    headers: nativeRequestHeaders(legacyBearer, 'none', 'pwa.v1'),
   }
 }
 

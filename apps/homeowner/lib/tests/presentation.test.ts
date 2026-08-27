@@ -302,6 +302,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/auth/email-code/verify/route.ts',
     'app/api/v1/auth/exchange/route.ts',
     'app/api/v1/auth/magic-link/route.ts',
+    'app/api/v1/auth/pwa-upgrade/route.ts',
     'app/api/v1/auth/signout/route.ts',
     'app/api/v1/session/route.ts',
     'app/api/v1/homes/route.ts',
@@ -403,6 +404,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/auth/magic-link/route.ts') {
       assert.match(content, /export async function POST/, `${rel} requests one magic link`)
       assert.match(content, /requestHomeownerMagicLink/, `${rel} only delegates to the auth boundary`)
+    } else if (rel === 'app/api/v1/auth/pwa-upgrade/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} upgrades one legacy PWA session`)
+      assert.match(content, /upgradeHomeownerPwaSession/,
+        `${rel} only delegates to the auth boundary`)
     } else if (rel === 'app/api/v1/auth/signout/route.ts') {
       assert.match(content, /export async function POST/, `${rel} revokes one session`)
       assert.match(content, /signOutHomeowner/, `${rel} only delegates to the auth boundary`)

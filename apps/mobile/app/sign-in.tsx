@@ -4,18 +4,28 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { useSession } from '../src/auth/SessionProvider.tsx'
 import { friendlyError } from '../src/api/errors.ts'
 import { postSignInDestination } from '../src/auth/return-route.ts'
+import { publicRoofingIntent } from '../src/auth/entry-intent.ts'
 import { Body, Brand, Button, Card, Eyebrow, Page, TextField, Title } from '../src/components/ui.tsx'
 import { colors, space } from '../src/theme.ts'
 
 export default function SignInScreen() {
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>()
+  const { returnTo, intent } = useLocalSearchParams<{
+    returnTo?: string | string[]
+    intent?: string | string[]
+  }>()
   const { state, requestCode, verifyCode } = useSession()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'email' | 'code'>('email')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const destination = useMemo(() => postSignInDestination(returnTo), [returnTo])
+  const destination = useMemo(() => {
+    const typedDestination = postSignInDestination(returnTo)
+    const entryIntent = publicRoofingIntent(intent)
+    return typedDestination === '/homes' && entryIntent
+      ? { pathname: '/homes' as const, params: { intent: entryIntent } }
+      : typedDestination
+  }, [intent, returnTo])
 
   useEffect(() => {
     if (state.kind === 'signed_in') router.replace(destination)

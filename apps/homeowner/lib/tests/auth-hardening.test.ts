@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   requestHomeownerEmailCodeWithDependencies,
+  signOutHomeownerWithDependencies,
+  successfulHomeownerSignOutResponse,
+  upgradeHomeownerPwaSessionWithDependencies,
   verifyHomeownerEmailCodeWithDependencies,
   type EmailCodeHttpDependencies,
 } from '../server/auth-http.ts'
@@ -20,7 +23,9 @@ import {
 import {
   HOMEOWNER_NATIVE_CLIENT_HEADER,
   HOMEOWNER_NATIVE_CLIENT_V1,
+  HOMEOWNER_PWA_CLIENT_V1,
 } from '../server/request-auth.ts'
+import { SESSION_COOKIE_NAME } from '../server/cookie.ts'
 
 const APP_ORIGIN = 'https://app.homesrolo.com'
 const SECRET = `rate_${'r'.repeat(43)}`
@@ -303,7 +308,7 @@ test('verification has a generic invalid response and stops before a ninth provi
   assert.equal(calls.verifications, 9)
 })
 
-test('email-code verification never leaks a browser session and returns native bearer only by contract', async () => {
+test('email-code verification returns a bearer only to native and cookies every browser surface', async () => {
   const handle = 'n'.repeat(43)
   const browserResponse = await verifyHomeownerEmailCodeWithDependencies(
     post({ email: 'person@example.com', code: '012345' }),
@@ -339,6 +344,26 @@ test('email-code verification never leaks a browser session and returns native b
     },
   })
 
+  const pwaRequest = new Request(`${APP_ORIGIN}/api/v1/auth/email-code/verify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+      origin: APP_ORIGIN,
+      'sec-fetch-site': 'same-origin',
+      'cf-connecting-ip': '203.0.113.12',
+    },
+    body: JSON.stringify({ email: 'person@example.com', code: '012345' }),
+  })
+  const pwaResponse = await verifyHomeownerEmailCodeWithDependencies(
+    pwaRequest,
+    dependencies({ completion: { kind: 'complete', sessionHandle: handle } }),
+  )
+  assert.equal(pwaResponse.status, 200)
+  assert.match(pwaResponse.headers.get('set-cookie') ?? '', /hrolo_session=/)
+  assert.match(pwaResponse.headers.get('set-cookie') ?? '', /HttpOnly/)
+  assert.deepEqual(await pwaResponse.json(), { data: { signedIn: true } })
+
   const browserDisguisedAsNative = new Request(
     `${APP_ORIGIN}/api/v1/auth/email-code/verify`,
     {
@@ -357,4 +382,214 @@ test('email-code verification never leaks a browser session and returns native b
   )
   assert.equal(rejected.status, 403)
   assert.deepEqual(await rejected.json(), { error: { code: 'forbidden' } })
+
+  const crossSitePwa = new Request(`${APP_ORIGIN}/api/v1/auth/email-code/verify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'https://evil.test',
+      'sec-fetch-site': 'cross-site',
+      [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+    },
+    body: JSON.stringify({ email: 'person@example.com', code: '012345' }),
+  })
+  const rejectedPwa = await verifyHomeownerEmailCodeWithDependencies(
+    crossSitePwa,
+    dependencies({ completion: { kind: 'complete', sessionHandle: handle } }),
+  )
+  assert.equal(rejectedPwa.status, 403)
+  assert.equal(rejectedPwa.headers.get('set-cookie'), null)
+})
+
+test('native signout remains cookieless while browser-bearing responses expire the cookie', async () => {
+  const native = successfulHomeownerSignOutResponse({
+    kind: 'native', sessionHandle: 'n'.repeat(43),
+  })
+  assert.equal(native.status, 200)
+  assert.equal(native.headers.get('set-cookie'), null)
+  assert.deepEqual(await native.json(), { data: { signedOut: true } })
+
+  const web = successfulHomeownerSignOutResponse({
+    kind: 'web', sessionHandle: 'w'.repeat(43),
+  })
+  assert.match(web.headers.get('set-cookie') ?? '', /Max-Age=0/)
+})
+
+test('ordinary PWA signout revokes its HttpOnly-cookie session under exact-Origin CSRF checks', async () => {
+  const handle = 'w'.repeat(43)
+  const revoked: Array<string | null> = []
+  const response = await signOutHomeownerWithDependencies(
+    new Request(`${APP_ORIGIN}/api/v1/auth/signout`, {
+      method: 'POST',
+      headers: {
+        origin: APP_ORIGIN,
+        cookie: `${SESSION_COOKIE_NAME}=${handle}`,
+        'sec-fetch-site': 'same-origin',
+      },
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async revokeSession(sessionHandle) { revoked.push(sessionHandle) },
+    },
+  )
+  assert.deepEqual(revoked, [handle])
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('set-cookie') ?? '', /Max-Age=0/)
+
+  const rejected = await signOutHomeownerWithDependencies(
+    new Request(`${APP_ORIGIN}/api/v1/auth/signout`, {
+      method: 'POST',
+      headers: {
+        origin: 'https://evil.test',
+        cookie: `${SESSION_COOKIE_NAME}=${handle}`,
+        'sec-fetch-site': 'cross-site',
+      },
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async revokeSession() { throw new Error('must not revoke across origins') },
+    },
+  )
+  assert.equal(rejected.status, 403)
+  assert.equal(rejected.headers.get('set-cookie'), null)
+})
+
+function pwaBridgeRequest(path: string, headers: Record<string, string> = {}): Request {
+  return new Request(`${APP_ORIGIN}${path}`, {
+    method: 'POST',
+    headers: {
+      [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+      origin: APP_ORIGIN,
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
+      ...headers,
+    },
+  })
+}
+
+test('PWA upgrade validates a cookie without ever returning its value', async () => {
+  const handle = 'm'.repeat(43)
+  const request = pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+    cookie: `${SESSION_COOKIE_NAME}=${handle}`,
+  })
+  const reads: string[] = []
+  const response = await upgradeHomeownerPwaSessionWithDependencies(request, {
+    appOrigin: APP_ORIGIN,
+    async readSession(sessionHandle) { reads.push(sessionHandle); return 'signed_in' },
+  })
+  assert.deepEqual(reads, [handle])
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.match(response.headers.get('set-cookie') ?? '', /HttpOnly/)
+  assert.doesNotMatch(response.headers.get('set-cookie') ?? '', /Max-Age=0/)
+  assert.equal(new URL(request.url).search, '')
+  assert.ok(!request.url.includes(handle), 'the opaque session never enters the URL')
+  const payload = await response.json()
+  assert.deepEqual(payload, { data: { signedIn: true } })
+  assert.doesNotMatch(JSON.stringify(payload), new RegExp(handle))
+})
+
+test('PWA upgrade exchanges one legacy localStorage bearer for an HttpOnly cookie', async () => {
+  const handle = 'b'.repeat(43)
+  const reads: string[] = []
+  const response = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      authorization: `Bearer ${handle}`,
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async readSession(sessionHandle) { reads.push(sessionHandle); return 'signed_in' },
+    },
+  )
+  assert.deepEqual(reads, [handle])
+  assert.deepEqual(await response.json(), { data: { signedIn: true } })
+  assert.match(response.headers.get('set-cookie') ?? '', /HttpOnly/)
+  assert.doesNotMatch(response.headers.get('set-cookie') ?? '', /Max-Age=0/)
+})
+
+test('PWA upgrade clears stale cookies but retains a valid cookie on identity outage', async () => {
+  const handle = 's'.repeat(43)
+  const stale = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      cookie: `${SESSION_COOKIE_NAME}=${handle}`,
+    }),
+    { appOrigin: APP_ORIGIN, async readSession() { return 'signed_out' } },
+  )
+  assert.deepEqual(await stale.json(), { data: { signedIn: false } })
+  assert.match(stale.headers.get('set-cookie') ?? '', /Max-Age=0/)
+
+  const outage = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      cookie: `${SESSION_COOKIE_NAME}=${handle}`,
+    }),
+    { appOrigin: APP_ORIGIN, async readSession() { throw new Error('database unavailable') } },
+  )
+  assert.equal(outage.status, 503)
+  assert.equal(outage.headers.get('set-cookie'), null,
+    'a retryable failure preserves the only credential for a later upgrade')
+
+  const ambiguous = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      cookie: `${SESSION_COOKIE_NAME}=${handle}; ${SESSION_COOKIE_NAME}=${handle}`,
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async readSession() { throw new Error('an ambiguous cookie must never be read') },
+    },
+  )
+  assert.deepEqual(await ambiguous.json(), { data: { signedIn: false } })
+  assert.match(ambiguous.headers.get('set-cookie') ?? '', /Max-Age=0/)
+})
+
+test('exact PWA signout revokes bearer and residual legacy cookie then expires it', async () => {
+  const bearer = 'b'.repeat(43)
+  const legacy = 'l'.repeat(43)
+  const revoked: string[] = []
+  const response = await signOutHomeownerWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/signout', {
+      authorization: `Bearer ${bearer}`,
+      cookie: `${SESSION_COOKIE_NAME}=${legacy}; theme=dark`,
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async revokeSession(handle) { if (handle) revoked.push(handle) },
+    },
+  )
+  assert.deepEqual(new Set(revoked), new Set([bearer, legacy]))
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.match(response.headers.get('set-cookie') ?? '', /Max-Age=0/)
+  assert.deepEqual(await response.json(), { data: { signedOut: true } })
+
+  const missingFetchMetadata = await signOutHomeownerWithDependencies(
+    new Request(`${APP_ORIGIN}/api/v1/auth/signout`, {
+      method: 'POST',
+      headers: {
+        [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+        origin: APP_ORIGIN,
+        authorization: `Bearer ${bearer}`,
+      },
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async revokeSession() { throw new Error('must not be called') },
+    },
+  )
+  assert.equal(missingFetchMetadata.status, 400)
+  assert.equal(missingFetchMetadata.headers.get('set-cookie'), null)
+
+  const revocationOutage = await signOutHomeownerWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/signout', {
+      authorization: `Bearer ${bearer}`,
+      cookie: `${SESSION_COOKIE_NAME}=${legacy}`,
+    }),
+    {
+      appOrigin: APP_ORIGIN,
+      async revokeSession() { throw new Error('database unavailable') },
+    },
+  )
+  assert.equal(revocationOutage.status, 503)
+  assert.match(revocationOutage.headers.get('set-cookie') ?? '', /Max-Age=0/,
+    'a failed revocation cannot let the retired cookie restore the local session')
 })

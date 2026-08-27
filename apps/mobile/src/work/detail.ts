@@ -90,6 +90,14 @@ export function fieldsFromDraft(draft: WorkDraft): WorkUpdateFields {
   }
 }
 
+export function validOptionalWorkDate(value: string): boolean {
+  const clean = value.trim()
+  if (!clean) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return false
+  const parsed = new Date(`${clean}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === clean
+}
+
 export function workHasChanges(work: WorkRecord, draft: WorkDraft): boolean {
   const fields = fieldsFromDraft(draft)
   return fields.title !== work.title

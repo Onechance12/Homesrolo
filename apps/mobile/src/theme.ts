@@ -10,7 +10,7 @@ export const colors = Object.freeze({
   cream: '#f5f2e8',
   paper: '#ffffff',
   slate: '#a7bcc4',
-  smoke: '#6f8b96',
+  smoke: '#87a2ab',
   danger: '#ff8d7d',
   warning: '#ffd36d',
 })

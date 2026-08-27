@@ -9,7 +9,7 @@ export const metadata = publicPageMetadata({
   canonical: '/privacy/',
 })
 
-const LAST_UPDATED = 'August 26, 2026'
+const LAST_UPDATED = 'August 27, 2026'
 
 export default function PrivacyPage() {
   return (
@@ -35,8 +35,8 @@ export default function PrivacyPage() {
             </section>
             <section className="prose">
               <h2>The homeowner application</h2>
-              <p>When you request a sign-in link, Homesrolo uses your email address to authenticate you. Inside the account, you may enter home details, project titles, categories, timing, status, and notes. The application stores the information you choose to enter so it can show the home workspace back to you.</p>
-              <p>A session cookie keeps the browser signed in. It is used for authentication, not advertising.</p>
+              <p>When you request a sign-in code, Homesrolo uses your email address to authenticate you. Inside the account, you may enter home details, project titles, categories, timing, status, and notes. The application stores the information you choose to enter so it can show the home workspace back to you.</p>
+              <p>An opaque session keeps the app signed in. The installed phone app uses protected device storage. The web app uses a Secure, HttpOnly cookie scoped to app.homesrolo.com, so page code cannot read the session handle. The session is used for authentication, not advertising, and is never placed in a URL.</p>
             </section>
             <section className="prose">
               <h2>Photo checkups</h2>
@@ -51,7 +51,7 @@ export default function PrivacyPage() {
             <section className="prose">
               <h2>Sharing and selling data</h2>
               <p>Homesrolo does not publish the private Home Record, sell its contents, sell a project as a lead, or give a professional access merely because the homeowner created a project. Where a specific professional handoff is available, the homeowner reviews the exact information and selected files before sending it.</p>
-              <p>Do not forward a passwordless sign-in link; it is an account credential.</p>
+              <p>Do not share a passwordless sign-in code; it is an account credential.</p>
             </section>
             <section className="prose">
               <h2>Access, correction, export, and deletion</h2>
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
             </section>
             <section className="prose">
               <h2>Questions or corrections</h2>
-              <p>Text <strong>{HOMESROLO_TEXT_NUMBER_DISPLAY}</strong> and begin the message with <strong>PRIVACY</strong>. Do not include a password, sign-in link, insurance policy number, or other sensitive document in the first message.</p>
+              <p>Text <strong>{HOMESROLO_TEXT_NUMBER_DISPLAY}</strong> and begin the message with <strong>PRIVACY</strong>. Do not include a password, sign-in code, insurance policy number, or other sensitive document in the first message.</p>
               <p><Link href="/security/">Read how the current account is protected</Link>.</p>
             </section>
           </div>

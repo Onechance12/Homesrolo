@@ -36,17 +36,24 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apps/homeowner/package-lock.json
+            apps/mobile/package-lock.json
       - name: Install shared contract dependencies
         working-directory: .
         run: npm ci
       - name: Install homeowner app dependencies
         run: npm ci
+      - name: Install shared mobile app dependencies
+        working-directory: .
+        run: npm --prefix apps/mobile ci
       - name: Lint
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Port, fixture, and presentation tests
         run: npm test
+      - name: Build shared Expo web shell
+        working-directory: .
+        run: npm --prefix apps/mobile run export:web:hosted
       - name: Production build
         run: npm run build
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import type { ArtifactContent, ArtifactKind } from '../api/model.ts'
 import { friendlyError } from '../api/errors.ts'
 import { openArtifactContent } from '../native/artifact-opener.ts'

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import type {
   ArtifactRecord,
   ProfessionalOrganization,
@@ -70,6 +70,9 @@ export function ProjectProfessionalWorkspace({
       : [],
   ), [resource.state])
   const readyValue = resource.state.kind === 'ready' ? resource.state.value : null
+  const submittedQuotes = readyValue?.quotes.filter(
+    quote => quote.source === 'professional_submission',
+  ) ?? []
 
   useEffect(() => {
     if (!readyValue || !selectedOrganizationRef || !activeOrganizations.has(selectedOrganizationRef)) return
@@ -80,7 +83,7 @@ export function ProjectProfessionalWorkspace({
     setSelectedArtifactRefs([])
     setMessage('')
     setComposing(false)
-    setNotice(`${organization?.displayName ?? 'That company'} already has access to this plan.`)
+    setNotice(`${organization?.displayName ?? 'That company'} already has access to this work.`)
   }, [activeOrganizations, readyValue, selectedOrganizationRef])
 
   if (!enabled) return null
@@ -127,7 +130,7 @@ export function ProjectProfessionalWorkspace({
       setSelectedArtifactRefs([])
       setMessage('')
       setComposing(false)
-      setNotice(`Invitation sent to ${organization.displayName}. Only this plan and the files you checked were shared.`)
+      setNotice(`Invitation sent to ${organization.displayName}. Only this work and the files you checked were shared.`)
       resource.reload()
     } catch (caught) {
       setError(friendlyError(caught))
@@ -151,7 +154,7 @@ export function ProjectProfessionalWorkspace({
         expectedRevision: invitation.revision,
       })
       revokeAttempts.current.delete(invitation.invitationRef)
-      setNotice('Project access removed. Your plan and files are still here.')
+      setNotice('Access removed. Your work and files are still here.')
       resource.reload()
     } catch (caught) {
       setError(friendlyError(caught))
@@ -178,7 +181,7 @@ export function ProjectProfessionalWorkspace({
       })
       decisionAttempts.current.delete(key)
       setNotice(decision === 'selected'
-        ? `${quote.contractorLabel} selected for this plan.`
+        ? `${quote.contractorLabel} selected for this work.`
         : 'Your proposal decision was saved privately.')
       resource.reload()
     } catch (caught) {
@@ -190,7 +193,7 @@ export function ProjectProfessionalWorkspace({
 
   return (
     <View style={styles.wrap}>
-      <SectionTitle title="Get proposals" detail="Invite companies into this plan without opening the rest of your home." />
+      <SectionTitle title="Invite through Homesrolo" detail="Choose a company and exactly which files it may review." />
       {resource.state.kind === 'loading' ? <Loading label="Opening private invitations…" /> : null}
       {resource.state.kind === 'error' ? (
         <Notice message="Invitations and proposals could not load." actionLabel="Try again" onAction={resource.reload} />
@@ -222,7 +225,7 @@ export function ProjectProfessionalWorkspace({
             <Card accent>
               <SectionTitle title={`Invite a ${tradeLabel(work.category)} pro`} detail="The invitation expires in seven days. You can remove access sooner." />
               {readyValue.organizations.length === 0 ? (
-                <Notice message="No listed companies match this kind of work yet. The plan and photos stay ready while the directory grows." />
+                <Notice message="No listed companies match this kind of work yet. Your details and photos stay here while the directory grows." />
               ) : (
                 <View style={styles.choiceList}>
                   {readyValue.organizations.map(organization => {
@@ -261,7 +264,7 @@ export function ProjectProfessionalWorkspace({
               />
               <Text style={styles.label}>Files this company may see</Text>
               {readyValue.artifacts.length === 0 ? (
-                <Text style={styles.meta}>No files are attached to this plan. The company receives only the written summary.</Text>
+                <Text style={styles.meta}>No files are attached to this work. The company receives only the written summary.</Text>
               ) : readyValue.artifacts.map(artifact => (
                 <ArtifactChoice
                   key={artifact.artifactRef}
@@ -270,7 +273,7 @@ export function ProjectProfessionalWorkspace({
                   onPress={() => toggleArtifact(artifact.artifactRef)}
                 />
               ))}
-              <Text style={styles.privacy}>The company receives your written project details and only the files you select. Homesrolo does not automatically add your home address, other plans, library, insurance records, or household access.</Text>
+              <Text style={styles.privacy}>The company receives your written work details and only the files you select. Homesrolo does not automatically add your home address, other work, library, insurance records, or household access.</Text>
               <Button
                 label={busy === 'invite' ? 'Sending…' : 'Send private invitation'}
                 disabled={busy !== null || !selectedOrganizationRef || activeOrganizations.has(selectedOrganizationRef)}
@@ -280,12 +283,12 @@ export function ProjectProfessionalWorkspace({
             </Card>
           )}
 
-          <SectionTitle title="Written proposals" detail="Compare the actual scope first. A total without details is not the whole proposal." />
-          {readyValue.quotes.map(quote => (
+          <SectionTitle title="Company proposals" detail="Compare the written scope first. A total without details is not the whole proposal." />
+          {submittedQuotes.map(quote => (
             <ProposalCard key={quote.quoteRef} quote={quote} busy={busy} onDecision={decision => void decide(quote, decision)} />
           ))}
-          {readyValue.quotes.length === 0 ? (
-            <Notice message="No proposals have been submitted for this plan yet." />
+          {submittedQuotes.length === 0 ? (
+            <Notice message="No proposals have been submitted for this work yet." />
           ) : null}
         </>
       ) : null}

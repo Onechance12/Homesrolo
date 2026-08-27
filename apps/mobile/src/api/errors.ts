@@ -25,5 +25,5 @@ export function friendlyError(error: unknown): string {
     : error instanceof Error
       ? error.message
       : 'unavailable'
-  return messages[code] || 'Homesrolo hit a snag. Nothing was lost—try again.'
+  return messages[code] || 'That didn’t go through. Try once more.'
 }

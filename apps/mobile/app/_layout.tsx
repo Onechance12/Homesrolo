@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { SessionProvider, useSession } from '../src/auth/SessionProvider.tsx'
 import { colors } from '../src/theme.ts'
@@ -24,7 +24,7 @@ function Navigation() {
           <Text style={styles.previewText}>Local UI preview · fixture data only · nothing leaves this browser</Text>
         </View>
       ) : null}
-      <View style={[styles.app, previewMode && styles.previewViewport]}>
+      <View style={[styles.app, Platform.OS === 'web' && styles.webViewport]}>
         <StatusBar style="light" />
         <Stack screenOptions={{
           headerShown: false,
@@ -39,7 +39,7 @@ function Navigation() {
 const styles = StyleSheet.create({
   shell: { flex: 1, backgroundColor: '#031119' },
   app: { flex: 1 },
-  previewViewport: {
+  webViewport: {
     width: '100%', maxWidth: 520, alignSelf: 'center',
     borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.line,
   },

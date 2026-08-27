@@ -1,17 +1,21 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import type { ArtifactKind } from '../api/model.ts'
 import { friendlyError } from '../api/errors.ts'
 import { useSession } from '../auth/SessionProvider.tsx'
 import { useResource } from '../hooks/useResource.ts'
 import { pickDocument, pickPhoto } from '../native/pickers.ts'
+import { revokeBrowserDeviceFileUrl } from '../native/device-file-url.ts'
 import { PREVIEW_UPLOAD_NOTICE } from '../preview/api.ts'
 import { colors, radius, space } from '../theme.ts'
-import { Loading, Notice, SectionTitle } from './ui.tsx'
+import { Button, Loading, Notice, SectionTitle } from './ui.tsx'
 import { PhotoPreview } from './PhotoPreview.tsx'
 import { ArtifactFileCard } from './ArtifactFileCard.tsx'
 import { ProtectedImage } from './ProtectedImage.tsx'
+
+const PHOTO_PAGE_SIZE = 10
+const FILE_PAGE_SIZE = 8
 
 export function ProjectFiles({ homeId, projectRef }: {
   readonly homeId: string
@@ -24,22 +28,34 @@ export function ProjectFiles({ homeId, projectRef }: {
   const [uploading, setUploading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [previewPhotoRef, setPreviewPhotoRef] = useState<string | null>(null)
+  const [photoLimit, setPhotoLimit] = useState(PHOTO_PAGE_SIZE)
+  const [fileLimit, setFileLimit] = useState(FILE_PAGE_SIZE)
 
-  async function upload(kind: ArtifactKind, source: 'camera' | 'library' | 'document') {
+  useEffect(() => {
+    setPhotoLimit(PHOTO_PAGE_SIZE)
+    setFileLimit(FILE_PAGE_SIZE)
+    setPreviewPhotoRef(null)
+  }, [projectRef])
+
+  async function upload(kind: ArtifactKind, source: 'camera' | 'library' | 'document' | 'warranty') {
     if (previewMode) {
       setError(PREVIEW_UPLOAD_NOTICE)
       return
     }
     setUploading(source)
     setError(null)
+    let file: Awaited<ReturnType<typeof pickPhoto>> = null
     try {
-      const file = source === 'document' ? await pickDocument() : await pickPhoto(source)
+      file = source === 'document' || source === 'warranty'
+        ? await pickDocument()
+        : await pickPhoto(source)
       if (!file) return
       await api.uploadArtifact(homeId, kind, file, projectRef)
       resource.reload()
     } catch (caught) {
       setError(friendlyError(caught))
     } finally {
+      if (file) revokeBrowserDeviceFileUrl(file)
       setUploading(null)
     }
   }
@@ -55,6 +71,7 @@ export function ProjectFiles({ homeId, projectRef }: {
         <FileAction icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
         <FileAction icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
         <FileAction icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
+        <FileAction icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
       </View>
       {resource.state.kind === 'loading' ? <Loading label="Opening project files…" /> : null}
       {resource.state.kind === 'error' ? <Notice message="Project files could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
@@ -62,7 +79,7 @@ export function ProjectFiles({ homeId, projectRef }: {
 
       {photos.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
-          {photos.map(photo => (
+          {photos.slice(0, photoLimit).map(photo => (
             <Pressable
               key={photo.artifactRef}
               accessibilityRole="button"
@@ -76,7 +93,15 @@ export function ProjectFiles({ homeId, projectRef }: {
           ))}
         </ScrollView>
       ) : null}
-      {files.map(file => (
+      {photos.length > photoLimit ? (
+        <Button
+          label={`Show ${Math.min(PHOTO_PAGE_SIZE, photos.length - photoLimit)} more photos`}
+          accessibilityHint={`${photos.length - photoLimit} more project photos are available`}
+          onPress={() => setPhotoLimit(current => current + PHOTO_PAGE_SIZE)}
+          quiet
+        />
+      ) : null}
+      {files.slice(0, fileLimit).map(file => (
         <ArtifactFileCard
           key={file.artifactRef}
           title={file.displayName}
@@ -85,6 +110,14 @@ export function ProjectFiles({ homeId, projectRef }: {
           load={() => api.readArtifactContent(homeId, file)}
         />
       ))}
+      {files.length > fileLimit ? (
+        <Button
+          label={`Show ${Math.min(FILE_PAGE_SIZE, files.length - fileLimit)} more files`}
+          accessibilityHint={`${files.length - fileLimit} more project files are available`}
+          onPress={() => setFileLimit(current => current + FILE_PAGE_SIZE)}
+          quiet
+        />
+      ) : null}
       {resource.state.kind === 'ready' && artifacts.length === 0 ? (
         <Text style={styles.empty}>Nothing attached yet. Add the first photo, estimate, receipt, or warranty when it matters.</Text>
       ) : null}
@@ -106,7 +139,14 @@ function FileAction({ icon, label, busy, onPress }: {
   readonly onPress: () => void
 }) {
   return (
-    <Pressable disabled={busy} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: busy }}
+      disabled={busy}
+      onPress={onPress}
+      style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+    >
       <Ionicons name={icon} size={22} color={colors.lime} />
       <Text style={styles.actionText}>{busy ? 'Saving…' : label}</Text>
     </Pressable>
@@ -115,8 +155,8 @@ function FileAction({ icon, label, busy, onPress }: {
 
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
-  actions: { flexDirection: 'row', gap: 8 },
-  action: { flex: 1, minHeight: 72, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised, alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 6 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  action: { flexGrow: 1, flexBasis: '47%', minHeight: 72, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised, alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 6 },
   actionText: { color: colors.cream, fontSize: 11, lineHeight: 14, fontWeight: '800', textAlign: 'center' },
   pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
   photoStrip: { gap: 10, paddingRight: space.md },

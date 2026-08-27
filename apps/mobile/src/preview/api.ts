@@ -3,11 +3,16 @@ import type {
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
+  CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
+  CreateHomeCheckupPhotoInput,
   CreateWorkInput,
   CreatedProfessionalOrganization,
   DecideProfessionalProposalInput,
   DeviceFile,
+  DeletedHomeCheckupPhoto,
+  HomeCheckupPhoto,
+  HomeRecordProfile,
   HomeSummary,
   HomeView,
   NativeSessionCredential,
@@ -18,6 +23,7 @@ import type {
   ProfessionalTrade,
   ProjectActivityKind,
   ProjectActivityRecord,
+  ProjectItem,
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
@@ -28,13 +34,22 @@ import type {
   RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
+  SaveProjectItemInput,
+  SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
+  UpdateHomeRecordInput,
   WorkRecord,
 } from '../api/model.ts'
 import { normalizedRoloSelectedPhoto } from '../api/protocol.ts'
+import { HOME_SYSTEM_KINDS } from '../api/home-record.ts'
+import {
+  homeownerProjectQuoteBody,
+  projectQuoteCommandIntent,
+} from '../api/homeowner-quote.ts'
+import { projectItemBody, projectItemIntent } from '../api/project-item.ts'
 
 const FIXTURE_NOW = '2026-08-26T14:30:00.000Z'
 
@@ -77,7 +92,7 @@ function previewArtifactContent(record: ArtifactRecord): ArtifactContent {
 
 function fixtureRef(
   prefix: 'hhom' | 'hprj' | 'hact' | 'hart' | 'hcmd' | 'hask' | 'hprn'
-    | 'horg' | 'hpmr' | 'hinv' | 'hquo' | 'hpvr',
+    | 'horg' | 'hpmr' | 'hinv' | 'hquo' | 'hpvr' | 'hpho' | 'hpit',
   number: number,
 ): string {
   const serial = Number.isSafeInteger(number) && number >= 0
@@ -264,6 +279,44 @@ const PRIMARY_ACTIVITY: readonly ProjectActivityRecord[] = Object.freeze([
   ),
 ])
 
+function projectItem(
+  number: number,
+  projectRef: string,
+  values: Pick<ProjectItem, 'kind' | 'label' | 'detail' | 'state'>,
+): ProjectItem {
+  return {
+    itemRef: fixtureRef('hpit', number),
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    projectRef,
+    ...values,
+    source: 'homeowner_entry',
+    revision: 1,
+    createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
+  }
+}
+
+const PRIMARY_PROJECT_ITEMS: readonly ProjectItem[] = Object.freeze([
+  Object.freeze(projectItem(1, fixtureRef('hprj', 6), {
+    kind: 'decision',
+    label: 'Drain water away from the back step',
+    detail: 'Compare a channel drain with regrading before choosing the final scope.',
+    state: 'considering',
+  })),
+  Object.freeze(projectItem(2, fixtureRef('hprj', 6), {
+    kind: 'material',
+    label: 'Charcoal permeable paver',
+    detail: 'Saved as one finish option for the patio edge.',
+    state: 'considering',
+  })),
+  Object.freeze(projectItem(3, fixtureRef('hprj', 6), {
+    kind: 'wishlist',
+    label: 'Cedar bench planter',
+    detail: '',
+    state: 'considering',
+  })),
+])
+
 function artifact(
   number: number,
   values: Omit<ArtifactRecord, 'artifactRef' | 'homeRef' | 'createdAt'>,
@@ -319,6 +372,61 @@ const PRIMARY_ARTIFACTS: readonly ArtifactRecord[] = Object.freeze([
     mediaType: 'image/jpeg',
     byteLength: 334_820,
   }),
+])
+
+const PRIMARY_HOME_RECORD: HomeRecordProfile = Object.freeze({
+  homeRef: PREVIEW_PRIMARY_HOME_REF,
+  revision: 3,
+  address: Object.freeze({
+    line1: '1427 Cedar Ridge Lane',
+    line2: null,
+    city: 'Dallas',
+    regionCode: 'TX',
+    postalCode: '75201',
+    countryCode: 'US',
+  }),
+  homeType: 'house',
+  yearBuilt: Object.freeze({ value: 2004, precision: 'exact' }),
+  systems: Object.freeze([
+    Object.freeze({ kind: 'roof', present: 'yes', installedOrReplacedYear: Object.freeze({ value: 2018, precision: 'approximate' }) }),
+    Object.freeze({ kind: 'heating', present: 'yes', installedOrReplacedYear: Object.freeze({ value: 2019, precision: 'exact' }) }),
+    Object.freeze({ kind: 'cooling', present: 'yes', installedOrReplacedYear: Object.freeze({ value: 2019, precision: 'exact' }) }),
+    Object.freeze({ kind: 'water_heater', present: 'yes', installedOrReplacedYear: Object.freeze({ value: 2025, precision: 'exact' }) }),
+    Object.freeze({ kind: 'gutters', present: 'yes', installedOrReplacedYear: null }),
+    Object.freeze({ kind: 'foundation', present: 'yes', installedOrReplacedYear: null }),
+  ]),
+  source: 'homeowner_recollection',
+  updatedAt: FIXTURE_NOW,
+})
+
+function checkup(
+  number: number,
+  observedOn: string,
+  area: HomeCheckupPhoto['area'],
+  viewLabel: string,
+  caption: string,
+): HomeCheckupPhoto {
+  const photoRef = fixtureRef('hpho', number)
+  const base = `/api/v1/homes/${PREVIEW_PRIMARY_HOME_REF}/photo-checkups/${photoRef}`
+  return {
+    photoRef,
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    observedOn,
+    area,
+    viewLabel,
+    caption,
+    fullUrl: `${base}/full`,
+    thumbnailUrl: `${base}/thumbnail`,
+    width: 1600,
+    height: 1200,
+    createdAt: `${observedOn}T15:00:00.000Z`,
+  }
+}
+
+const PRIMARY_CHECKUPS: readonly HomeCheckupPhoto[] = Object.freeze([
+  Object.freeze(checkup(1, '2026-08-09', 'roofline', 'Garage roofline', 'Sealant near the sidewall is easy to compare from this spot.')),
+  Object.freeze(checkup(2, '2026-04-12', 'roofline', 'Garage roofline', 'Spring reference photo.')),
+  Object.freeze(checkup(3, '2026-08-09', 'hvac', 'Upstairs return', 'Filter label and return grille saved before seasonal service.')),
 ])
 
 export const PREVIEW_OWN_ORGANIZATION_REF = fixtureRef('horg', 10)
@@ -506,7 +614,22 @@ const PHOTO_URI = `data:image/svg+xml;charset=utf-8,${PHOTO_SVG}`
 function cloneHome(home: HomeSummary): HomeSummary { return { ...home } }
 function cloneWork(item: WorkRecord): WorkRecord { return { ...item } }
 function cloneActivity(item: ProjectActivityRecord): ProjectActivityRecord { return { ...item } }
+function cloneProjectItem(item: ProjectItem): ProjectItem { return { ...item } }
 function cloneArtifact(item: ArtifactRecord): ArtifactRecord { return { ...item } }
+function cloneHomeRecord(item: HomeRecordProfile): HomeRecordProfile {
+  return {
+    ...item,
+    address: item.address ? { ...item.address } : null,
+    yearBuilt: item.yearBuilt ? { ...item.yearBuilt } : null,
+    systems: item.systems.map(system => ({
+      ...system,
+      installedOrReplacedYear: system.installedOrReplacedYear
+        ? { ...system.installedOrReplacedYear }
+        : null,
+    })),
+  }
+}
+function cloneCheckup(item: HomeCheckupPhoto): HomeCheckupPhoto { return { ...item } }
 function cloneOrganization(item: ProfessionalOrganization): ProfessionalOrganization {
   return { ...item, trades: [...item.trades], serviceAreas: [...item.serviceAreas] }
 }
@@ -567,8 +690,26 @@ export class PreviewHomesroloApi implements HomesroloApi {
   readonly #activity = new Map<string, ProjectActivityRecord[]>([
     [fixtureRef('hprj', 2), PRIMARY_ACTIVITY.map(cloneActivity)],
   ])
+  readonly #items = new Map<string, ProjectItem[]>([
+    [fixtureRef('hprj', 6), PRIMARY_PROJECT_ITEMS.map(cloneProjectItem)],
+  ])
+  readonly #itemCommands = new Map<string, {
+    readonly intent: string
+    readonly item: ProjectItem
+  }>()
+  readonly #activityCommands = new Map<string, {
+    readonly intent: string
+    readonly activity: ProjectActivityRecord
+  }>()
   readonly #artifacts = new Map<string, ArtifactRecord[]>([
     [PREVIEW_PRIMARY_HOME_REF, PRIMARY_ARTIFACTS.map(cloneArtifact)],
+    [PREVIEW_SECONDARY_HOME_REF, []],
+  ])
+  readonly #homeRecords = new Map<string, HomeRecordProfile>([
+    [PREVIEW_PRIMARY_HOME_REF, cloneHomeRecord(PRIMARY_HOME_RECORD)],
+  ])
+  readonly #checkups = new Map<string, HomeCheckupPhoto[]>([
+    [PREVIEW_PRIMARY_HOME_REF, PRIMARY_CHECKUPS.map(cloneCheckup)],
     [PREVIEW_SECONDARY_HOME_REF, []],
   ])
   readonly #organizations = PROFESSIONAL_ORGANIZATIONS.map(cloneOrganization)
@@ -579,6 +720,10 @@ export class PreviewHomesroloApi implements HomesroloApi {
     proposal.projectRef,
     [proposalQuote(proposal)],
   ]))
+  readonly #quoteCommands = new Map<string, {
+    readonly intent: string
+    readonly quote: ProjectQuote
+  }>()
   #signedIn = true
   #sequence = 100
 
@@ -596,6 +741,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
     this.#signedIn = true
     return { token: 'preview_session_local_only_123456', tokenType: 'Bearer', expiresInSeconds: 3_600 }
   }
+
+  async upgradeLegacyPwaSession(_legacyBearer: string | null): Promise<void> {}
 
   async session(): Promise<ServerSession> {
     return this.#signedIn
@@ -622,6 +769,19 @@ export class PreviewHomesroloApi implements HomesroloApi {
     this.#homes.push(created)
     this.#work.set(created.homeRef, [])
     this.#artifacts.set(created.homeRef, [])
+    this.#checkups.set(created.homeRef, [])
+    this.#homeRecords.set(created.homeRef, {
+      homeRef: created.homeRef,
+      revision: 1,
+      address: null,
+      homeType: 'unknown',
+      yearBuilt: null,
+      systems: HOME_SYSTEM_KINDS.map(kind => ({
+        kind, present: 'unknown', installedOrReplacedYear: null,
+      })),
+      source: 'homeowner_recollection',
+      updatedAt: FIXTURE_NOW,
+    })
     return cloneHome(created)
   }
 
@@ -638,6 +798,39 @@ export class PreviewHomesroloApi implements HomesroloApi {
       maintenanceCount: records.filter(item => ['service', 'repair'].includes(item.workKind)).length,
       updatedAt: FIXTURE_NOW,
     }
+  }
+
+  async getHomeRecord(homeRef: string): Promise<HomeRecordProfile> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    const profile = this.#homeRecords.get(homeRef)
+    if (!profile) throw new Error('forbidden')
+    return cloneHomeRecord(profile)
+  }
+
+  async updateHomeRecord(
+    homeRef: string,
+    input: UpdateHomeRecordInput,
+  ): Promise<HomeRecordProfile> {
+    const current = await this.getHomeRecord(homeRef)
+    if (input.expectedRevision !== current.revision) throw new Error('conflict')
+    const updated: HomeRecordProfile = {
+      homeRef,
+      revision: current.revision + 1,
+      address: { ...input.address },
+      homeType: input.homeType,
+      yearBuilt: input.yearBuilt ? { ...input.yearBuilt } : null,
+      systems: input.systems.map(system => ({
+        ...system,
+        installedOrReplacedYear: system.installedOrReplacedYear
+          ? { ...system.installedOrReplacedYear }
+          : null,
+      })),
+      source: 'homeowner_recollection',
+      updatedAt: FIXTURE_NOW,
+    }
+    this.#homeRecords.set(homeRef, updated)
+    return cloneHomeRecord(updated)
   }
 
   async listWork(homeRef: string): Promise<readonly WorkRecord[]> {
@@ -672,6 +865,7 @@ export class PreviewHomesroloApi implements HomesroloApi {
       ))
     }
     this.#activity.set(created.projectRef, activity)
+    this.#items.set(created.projectRef, [])
     return cloneWork(created)
   }
 
@@ -736,10 +930,201 @@ export class PreviewHomesroloApi implements HomesroloApi {
     return cloneActivity(created)
   }
 
+  async addWorkMilestone(
+    homeRef: string,
+    projectRef: string,
+    body: string,
+    commandRef?: string,
+  ): Promise<ProjectActivityRecord> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    const cleanBody = body.trim()
+    if (cleanBody.length < 1 || cleanBody.length > 2_000) {
+      throw new Error('preview_activity_invalid')
+    }
+    const stableCommandRef = commandRef ?? await this.newCommandRef()
+    const intent = JSON.stringify({ homeRef, projectRef, kind: 'milestone', body: cleanBody })
+    const prior = this.#activityCommands.get(stableCommandRef)
+    if (prior) {
+      if (prior.intent !== intent) throw new Error('preview_command_conflict')
+      return cloneActivity(prior.activity)
+    }
+    this.#sequence += 1
+    const created = projectActivity(
+      this.#sequence,
+      homeRef,
+      projectRef,
+      'milestone',
+      cleanBody,
+    )
+    const activity = this.#activity.get(projectRef) ?? []
+    activity.push(created)
+    this.#activity.set(projectRef, activity)
+    this.#activityCommands.set(stableCommandRef, { intent, activity: cloneActivity(created) })
+    return cloneActivity(created)
+  }
+
+  async listProjectItems(homeRef: string, projectRef: string): Promise<readonly ProjectItem[]> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    return (this.#items.get(projectRef) ?? []).map(cloneProjectItem)
+  }
+
+  async saveProjectItem(
+    homeRef: string,
+    projectRef: string,
+    input: SaveProjectItemInput,
+  ): Promise<ProjectItem> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    const normalized = projectItemBody(input)
+    if (!normalized) throw new Error('invalid_request')
+    const { commandRef, ...fields } = normalized
+    const intent = projectItemIntent(projectRef, fields)
+    const prior = this.#itemCommands.get(commandRef)
+    if (prior) {
+      if (prior.intent !== intent || prior.item.homeRef !== homeRef
+        || prior.item.projectRef !== projectRef) throw new Error('preview_command_conflict')
+      return cloneProjectItem(prior.item)
+    }
+
+    const items = this.#items.get(projectRef) ?? []
+    let saved: ProjectItem
+    if (normalized.itemRef !== undefined) {
+      const index = items.findIndex(item => item.itemRef === normalized.itemRef)
+      const current = items[index]
+      if (!current) throw new Error('preview_item_not_found')
+      if (normalized.expectedRevision !== current.revision) throw new Error('conflict')
+      saved = {
+        ...current,
+        kind: normalized.kind,
+        label: normalized.label,
+        detail: normalized.detail ?? '',
+        state: normalized.state,
+        revision: current.revision + 1,
+        updatedAt: FIXTURE_NOW,
+      }
+      items[index] = saved
+    } else {
+      this.#sequence += 1
+      saved = {
+        itemRef: fixtureRef('hpit', this.#sequence),
+        homeRef,
+        projectRef,
+        kind: normalized.kind,
+        label: normalized.label,
+        detail: normalized.detail ?? '',
+        state: normalized.state,
+        source: 'homeowner_entry',
+        revision: 1,
+        createdAt: FIXTURE_NOW,
+        updatedAt: FIXTURE_NOW,
+      }
+      items.unshift(saved)
+    }
+    this.#items.set(projectRef, items)
+    this.#itemCommands.set(commandRef, { intent, item: cloneProjectItem(saved) })
+    return cloneProjectItem(saved)
+  }
+
   async listProjectQuotes(homeRef: string, projectRef: string): Promise<readonly ProjectQuote[]> {
     this.#assertSignedIn()
     this.#project(homeRef, projectRef)
     return (this.#quotes.get(projectRef) ?? []).map(cloneQuote)
+  }
+
+  async createProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    input: CreateProjectQuoteInput,
+  ): Promise<ProjectQuote> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    const body = homeownerProjectQuoteBody(input)
+    if (!body || body.expectedRevision !== undefined) throw new Error('invalid_request')
+    const intent = projectQuoteCommandIntent(projectRef, null, body)
+    const prior = this.#quoteCommands.get(body.commandRef)
+    if (prior) {
+      if (prior.intent !== intent || prior.quote.homeRef !== homeRef) {
+        throw new Error('preview_command_conflict')
+      }
+      return cloneQuote(prior.quote)
+    }
+    if (body.artifactRef && !(this.#artifacts.get(homeRef) ?? []).some(artifact => (
+      artifact.artifactRef === body.artifactRef && artifact.projectRef === projectRef
+        && artifact.kind === 'document' && artifact.mediaType === 'application/pdf'
+    ))) throw new Error('preview_artifact_not_found')
+    this.#sequence += 1
+    const quote: ProjectQuote = {
+      quoteRef: fixtureRef('hquo', this.#sequence),
+      homeRef,
+      projectRef,
+      contractorLabel: body.contractorLabel,
+      proposalDate: body.proposalDate ?? null,
+      artifactRef: body.artifactRef ?? null,
+      scope: cloneScope(body.scope),
+      notes: body.notes ?? '',
+      source: 'homeowner_entry',
+      professionalOrganizationRef: null,
+      invitationRef: null,
+      totalAmountCents: null,
+      currencyCode: null,
+      professionalSummary: '',
+      proposalState: null,
+      homeownerDecision: 'undecided',
+      decisionRevision: null,
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+      updatedAt: FIXTURE_NOW,
+    }
+    const quotes = this.#quotes.get(projectRef) ?? []
+    quotes.unshift(quote)
+    this.#quotes.set(projectRef, quotes)
+    this.#quoteCommands.set(body.commandRef, { intent, quote: cloneQuote(quote) })
+    return cloneQuote(quote)
+  }
+
+  async saveProjectQuote(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: SaveProjectQuoteInput,
+  ): Promise<ProjectQuote> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    const body = homeownerProjectQuoteBody(input)
+    if (!body || body.expectedRevision === undefined) throw new Error('invalid_request')
+    const intent = projectQuoteCommandIntent(projectRef, quoteRef, body)
+    const prior = this.#quoteCommands.get(body.commandRef)
+    if (prior) {
+      if (prior.intent !== intent || prior.quote.homeRef !== homeRef) {
+        throw new Error('preview_command_conflict')
+      }
+      return cloneQuote(prior.quote)
+    }
+    if (body.artifactRef && !(this.#artifacts.get(homeRef) ?? []).some(artifact => (
+      artifact.artifactRef === body.artifactRef && artifact.projectRef === projectRef
+        && artifact.kind === 'document' && artifact.mediaType === 'application/pdf'
+    ))) throw new Error('preview_artifact_not_found')
+    const quotes = this.#quotes.get(projectRef) ?? []
+    const index = quotes.findIndex(quote => quote.quoteRef === quoteRef)
+    const current = quotes[index]
+    if (!current || current.source !== 'homeowner_entry') throw new Error('preview_quote_not_found')
+    if (current.revision !== body.expectedRevision) throw new Error('conflict')
+    const quote: ProjectQuote = {
+      ...current,
+      contractorLabel: body.contractorLabel,
+      proposalDate: body.proposalDate ?? null,
+      artifactRef: body.artifactRef ?? null,
+      scope: cloneScope(body.scope),
+      notes: body.notes ?? '',
+      revision: current.revision + 1,
+      updatedAt: FIXTURE_NOW,
+    }
+    quotes[index] = quote
+    this.#quotes.set(projectRef, quotes)
+    this.#quoteCommands.set(body.commandRef, { intent, quote: cloneQuote(quote) })
+    return cloneQuote(quote)
   }
 
   async listProfessionals(filters: {
@@ -1119,10 +1504,12 @@ export class PreviewHomesroloApi implements HomesroloApi {
     message: string,
     history: readonly RoloTurn[],
     conversation: RoloConversationState,
+    projectRef?: string,
     selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply> {
     this.#assertSignedIn()
     this.#home(homeRef)
+    const scopedProject = projectRef ? this.#project(homeRef, projectRef) : null
     const clean = message.trim()
     if (!clean) throw new Error('invalid_rolo_message')
     const photoSelection = selectedPhoto === undefined
@@ -1138,12 +1525,25 @@ export class PreviewHomesroloApi implements HomesroloApi {
     this.#sequence += 1
 
     const boundaryRefusal = /decide (?:my )?insurance|coverage decision|legal advice/i.test(clean)
-    const homeWatch = /home watch|checkup|season/i.test(clean)
+    const homeWatch = conversation.pendingWork?.title === 'Seasonal Home Watch checkup'
+      || (!conversation.pendingWork && /home watch|checkup|season|maintain|maintenance/i.test(clean))
     const cooling = /\bac\b|air condition|cool/i.test(clean)
       || conversation.pendingWork?.category === 'hvac'
       || history.some(turn => /\bac\b|air condition|cool/i.test(turn.text))
+    const poolPlanning = /\bpool\b|swimming|hot tub/i.test(clean)
+      || conversation.pendingWork?.category === 'pool'
+      || history.some(turn => /\bpool\b|swimming|hot tub/i.test(turn.text))
+    const homeHistory = /home history|home record|what (?:was|is) saved|find something|when was|who (?:installed|worked)|warrant(?:y|ies)/i.test(clean)
+      && !conversation.pendingWork
     const proposedWork: RoloReply['proposedWork'] = boundaryRefusal
       ? null
+      : homeHistory || scopedProject || (selectedArtifact && !conversation.pendingWork)
+      ? null
+      : conversation.pendingWork
+        ? {
+            ...conversation.pendingWork,
+            summary: `${conversation.pendingWork.summary} Follow-up: ${clean.slice(0, 240)}`.trim(),
+          }
       : homeWatch
       ? {
           kind: 'service',
@@ -1155,12 +1555,18 @@ export class PreviewHomesroloApi implements HomesroloApi {
           professionalLabel: null,
           firstUpdate: 'Started from the Rolo preview checkup guide.',
         }
-      : conversation.pendingWork
-        ? {
-            ...conversation.pendingWork,
-            summary: `${conversation.pendingWork.summary} Follow-up: ${clean.slice(0, 240)}`.trim(),
-          }
-        : {
+      : poolPlanning
+      ? {
+          kind: 'project',
+          title: 'Plan a backyard pool',
+          category: 'pool',
+          status: 'planned',
+          occurredOn: null,
+          summary: 'Organize how the pool should be used, the yard constraints, a comfortable budget range, finishes, safety needs, and the details companies should price.',
+          professionalLabel: null,
+          firstUpdate: 'Started with Rolo and saved only after homeowner review.',
+        }
+      : {
           kind: cooling ? 'issue' : 'repair',
           title: cooling ? 'Upstairs AC is not cooling' : 'Follow up on the home concern',
           category: cooling ? 'hvac' : 'other',
@@ -1177,21 +1583,39 @@ export class PreviewHomesroloApi implements HomesroloApi {
       requestRef: fixtureRef('hask', this.#sequence),
       answer: boundaryRefusal
         ? 'I cannot decide insurance coverage or provide legal advice. I did not open the attached photo. I can help you organize the facts and questions for a licensed professional.'
+        : homeHistory
+        ? 'I can help you look through saved work, companies, photos, files, and warranties without creating a new project. Tell me what you remember—even roughly—and we can narrow it down.'
         : selectedArtifact
         ? 'I can describe what is visible in this photo, but I cannot confirm hidden damage or diagnose the cause from one image. I do not see smoke, exposed wiring, or anything obviously displaced in this sample.'
+        : scopedProject
+        ? `I’m looking at “${scopedProject.title}.” ${scopedProject.summary
+            ? `The saved summary says: ${scopedProject.summary}`
+            : 'It does not have a summary yet.'} We can work through what is missing without creating another copy of this work.`
         : homeWatch
           ? 'Start with a calm, repeatable walk-through. Compare the same views each season, note only what you can safely observe, and call a qualified professional for anything energized, leaking, unstable, or unsafe.'
+          : poolPlanning
+            ? conversation.pendingWork
+              ? 'Got it. I kept that with the pool plan so the next decision builds on what you already told me. Nothing changes in Work until you approve the draft.'
+              : 'Let’s shape the idea before asking anyone to price it. Start with how you want to use the pool, what must fit in the yard, and the budget range you would actually be comfortable with. I made a planning draft for you to review.'
           : cooling
             ? conversation.pendingWork
               ? 'Good—that lowers the immediate urgency. I added when it started and the absence of leaks, sparks, or other safety signs to the draft. If the simple checks do not restore cooling, the next step is an HVAC visit.'
               : 'You can safely confirm the thermostat mode and set point, look at the filter, make sure supply vents are open, and check that the outdoor unit is not blocked. Do not open electrical panels or equipment covers. I made a draft you can review.'
             : 'I organized that into a reviewable Work draft. You can approve it, discard it, or keep talking before anything is saved.',
       proposedWork,
-      destination: boundaryRefusal ? null : 'work',
-      projectRef: null,
+      destination: boundaryRefusal || homeHistory || (!proposedWork && !scopedProject) ? null : 'work',
+      projectRef: scopedProject?.projectRef ?? null,
       followUpQuestions: boundaryRefusal || conversation.unansweredFollowUpQuestion
         ? []
-        : ['When did you first notice it, and is anything leaking, sparking, or unsafe right now?'],
+        : homeHistory
+          ? ['What are you trying to find—a date, company, product, warranty, photo, or past repair?']
+          : scopedProject
+            ? ['Do you want to work through the scope, the next decision, or who needs to be involved?']
+          : poolPlanning
+            ? ['What matters most for this pool: family use, entertaining, exercise, low maintenance, or a particular look?']
+            : homeWatch
+              ? ['Would you rather start outside, inside, or with one system such as HVAC or plumbing?']
+              : ['When did you first notice it, and is anything leaking, sparking, or unsafe right now?'],
       photoReview: selectedArtifact && !boundaryRefusal ? {
         visibleObservations: [
           'The photo shows a daylight exterior view with the roofline and part of the front elevation visible.',
@@ -1243,6 +1667,41 @@ export class PreviewHomesroloApi implements HomesroloApi {
     void deviceFile
     void projectRef
     throw new Error('preview_upload_disabled')
+  }
+
+  async listHomeCheckups(homeRef: string): Promise<readonly HomeCheckupPhoto[]> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    return (this.#checkups.get(homeRef) ?? []).map(cloneCheckup)
+  }
+
+  homeCheckupPhotoSource(
+    homeRef: string,
+    photoRef: string,
+    variant: 'thumbnail' | 'full',
+  ): import('../api/image-source.ts').ProtectedImageSource {
+    void variant
+    const found = (this.#checkups.get(homeRef) ?? []).some(photo => photo.photoRef === photoRef)
+    if (!found) throw new Error('preview_checkup_not_found')
+    return { uri: PHOTO_URI, headers: {} }
+  }
+
+  async uploadHomeCheckup(
+    homeRef: string,
+    input: CreateHomeCheckupPhotoInput,
+  ): Promise<HomeCheckupPhoto> {
+    void homeRef
+    void input
+    throw new Error('preview_upload_disabled')
+  }
+
+  async deleteHomeCheckup(
+    homeRef: string,
+    photoRef: string,
+  ): Promise<DeletedHomeCheckupPhoto> {
+    void homeRef
+    void photoRef
+    throw new Error('preview_write_disabled')
   }
 
   #project(homeRef: string, projectRef: string): WorkRecord {

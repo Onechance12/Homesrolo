@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router } from 'expo-router'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
@@ -27,7 +27,7 @@ const ACTIONS = [
   },
   {
     icon: 'repeat-outline' as const,
-    title: 'Schedule care',
+    title: 'Plan regular care',
     detail: 'Yard, cleaning, pest, or a tune-up',
     tone: colors.mint,
     prompt: 'I need routine help at my home.',
@@ -78,8 +78,8 @@ export default function TodayScreen() {
     <Page>
       <HomeHeader
         section="Today"
-        title="What’s going on?"
-        detail={`${home.displayLabel} · ${home.privateLocationLabel}`}
+        title={home.displayLabel}
+        detail={`What do you want to take care of? · ${home.privateLocationLabel}`}
       />
 
       <Pressable
@@ -90,8 +90,8 @@ export default function TodayScreen() {
       >
         <View style={styles.roloMark}><Ionicons name="chatbubble-ellipses" size={21} color={colors.ink} /></View>
         <View style={styles.roloCopy}>
-          <Text style={styles.roloTitle}>What’s going on at home?</Text>
-          <Text style={styles.roloDetail}>Tell Rolo, or choose a shortcut below.</Text>
+          <Text style={styles.roloTitle}>Tell Rolo what you need</Text>
+          <Text style={styles.roloDetail}>Talk it through, add a photo, or choose a shortcut.</Text>
         </View>
         <Ionicons name="arrow-forward" size={20} color={colors.lime} />
       </Pressable>

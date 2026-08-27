@@ -8,10 +8,11 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "export:web:hosted": "node scripts/export-web-for-homeowner.mjs",
     "preview:web": "EXPO_PUBLIC_HOMESROLO_PREVIEW_MODE=1 expo start --web",
     "doctor": "expo-doctor",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'"
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts' 'scripts/**/*.test.mjs'"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.13",

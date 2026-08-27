@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'apps/homeowner/**'
+      - 'apps/mobile/**'
       - 'src/constitution/**'
       - 'src/contracts/**'
       - 'src/homeowner/**'
@@ -35,6 +36,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apps/homeowner/package-lock.json
+            apps/mobile/package-lock.json
 
       - name: Install shared contract dependencies
         run: npm ci
@@ -42,18 +44,28 @@ jobs:
       - name: Install homeowner app dependencies
         run: npm --prefix apps/homeowner ci
 
+      - name: Install shared mobile app dependencies
+        run: npm --prefix apps/mobile ci
+
       - name: Verify homeowner app
         run: |
           npm --prefix apps/homeowner run lint
           npm --prefix apps/homeowner run typecheck
           npm --prefix apps/homeowner test
 
+      - name: Verify and stage the shared web app
+        run: |
+          npm --prefix apps/mobile run typecheck
+          npm --prefix apps/mobile test
+          npm --prefix apps/mobile run doctor
+          npm --prefix apps/mobile run export:web:hosted
+
       - name: Build and deploy to Netlify production
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: >-
-          npx --yes netlify-cli@27.3.0 deploy
+          npx --yes netlify-cli@27.1.0 deploy
           --build
           --prod
           --site "$NETLIFY_SITE_ID"

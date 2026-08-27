@@ -11,7 +11,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   newArchEnabled: true,
-  icon: '../homeowner/public/icon-512.png',
+  icon: './assets/icon-512.png',
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.homesrolo.app',
@@ -24,7 +24,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.homesrolo.app',
     adaptiveIcon: {
-      foregroundImage: '../homeowner/public/icon-maskable-512.png',
+      foregroundImage: './assets/icon-maskable-512.png',
       backgroundColor: '#071c27',
     },
     intentFilters: [{
@@ -49,7 +49,6 @@ const config: ExpoConfig = {
   experiments: { typedRoutes: true },
   extra: {
     apiUrl,
-    clientContract: 'native.v1',
   },
 }
 

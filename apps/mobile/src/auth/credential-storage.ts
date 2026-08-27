@@ -22,26 +22,30 @@ function browserLocalStorage(): OriginStorage {
 }
 
 /**
- * Browser sessions stay in origin-scoped storage. The credential never enters a
- * URL, cookie, route state, or rendered element, and corrupt values are removed
- * before the API can see them.
+ * Read and remove the credential left by the previous PWA release so it can be
+ * exchanged once for the server's HttpOnly cookie. New browser credentials are
+ * never written into script-readable storage.
  */
 export function webCredentialStorage(
   storageProvider: () => OriginStorage = browserLocalStorage,
 ): CredentialStorage {
   return {
     read: async () => {
-      const storage = storageProvider()
-      const token = storage.getItem(WEB_SESSION_KEY)
-      if (token === null) return null
-      if (isSessionToken(token)) return token
-      storage.removeItem(WEB_SESSION_KEY)
-      return null
+      try {
+        const storage = storageProvider()
+        const token = storage.getItem(WEB_SESSION_KEY)
+        if (token === null) return null
+        if (isSessionToken(token)) return token
+        storage.removeItem(WEB_SESSION_KEY)
+        return null
+      } catch {
+        // Cookie authentication does not depend on script-readable storage.
+        return null
+      }
     },
-    write: async token => {
-      if (!isSessionToken(token)) throw new Error('invalid_session_token')
-      storageProvider().setItem(WEB_SESSION_KEY, token)
+    write: async () => { throw new Error('web_sessions_are_cookie_only') },
+    remove: async () => {
+      try { storageProvider().removeItem(WEB_SESSION_KEY) } catch { /* Already unavailable. */ }
     },
-    remove: async () => storageProvider().removeItem(WEB_SESSION_KEY),
   }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -10,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type {
@@ -25,11 +26,20 @@ import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
 import { Button, Card, Loading, Notice, Page, Tag } from '../../../src/components/ui.tsx'
 import { pickPhoto } from '../../../src/native/pickers.ts'
+import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
+import { oneRouteParam } from '../../../src/home/legacy-route.ts'
+import { isProjectRef } from '../../../src/api/protocol.ts'
 import {
   roloPhotoConsentKey,
   type RoloPhotoAttachment,
 } from '../../../src/rolo/photo-consent.ts'
+import {
+  planRoloHydration,
+  projectRoloConversation,
+  type PersistedRoloPhoto,
+} from '../../../src/rolo/conversation-persistence.ts'
+import { roloRequestCanCommit } from '../../../src/rolo/request-generation.ts'
 import { categoryLabel, colors, kindLabel, radius, space, statusLabel } from '../../../src/theme.ts'
 
 const STARTERS: readonly {
@@ -70,8 +80,20 @@ type RoloSuggestion = Readonly<Pick<RoloReply, 'destination' | 'projectRef'>>
 
 export default function RoloScreen() {
   const homeId = useHomeId()
-  const { prompt } = useLocalSearchParams<{ prompt?: string }>()
-  const { state: auth, api, previewMode, refreshSession } = useSession()
+  const { prompt: rawPrompt, filter: rawFilter, projectRef: rawProjectRef } = useLocalSearchParams<{
+    prompt?: string | string[]
+    filter?: string | string[]
+    projectRef?: string | string[]
+  }>()
+  const promptValue = oneRouteParam(rawPrompt)
+  const prompt = promptValue === null ? undefined : promptValue.slice(0, 1_600)
+  const filter = oneRouteParam(rawFilter)
+  const projectRefValue = oneRouteParam(rawProjectRef)
+  const routeProjectRef = projectRefValue && isProjectRef(projectRefValue)
+    ? projectRefValue
+    : undefined
+  const redirectToPeople = filter === 'people'
+  const { state: auth, api, roloStorage, previewMode, refreshSession } = useSession()
   const [input, setInput] = useState('')
   const [turns, setTurns] = useState<ScreenTurn[]>([])
   const [proposal, setProposal] = useState<RoloReply['proposedWork']>(null)
@@ -83,6 +105,7 @@ export default function RoloScreen() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<WorkRecord | null>(null)
   const [attachment, setAttachment] = useState<RoloPhotoAttachment | null>(null)
+  const [rememberedAttachment, setRememberedAttachment] = useState<PersistedRoloPhoto | null>(null)
   const [approvedPhotoMessage, setApprovedPhotoMessage] = useState<string | null>(null)
   const [savedPhotos, setSavedPhotos] = useState<readonly ArtifactRecord[]>([])
   const [photosLoading, setPhotosLoading] = useState(false)
@@ -92,38 +115,116 @@ export default function RoloScreen() {
   const [photoReviewRef, setPhotoReviewRef] = useState<string | null>(null)
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [conversationProjectRef, setConversationProjectRef] = useState<string | null>(null)
+  const [hydratedScope, setHydratedScope] = useState<string | null>(null)
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
+  const mounted = useRef(true)
   const conversationVersion = useRef(0)
+  const hydrationGeneration = useRef(0)
+  const consumedPrompt = useRef<string | null>(null)
   const threadScrollRef = useRef<ScrollView>(null)
-  const visionEnabled = auth.kind === 'signed_in' && auth.session.capabilities.homeAssistantVision
+  const visionEnabled = !redirectToPeople
+    && auth.kind === 'signed_in' && auth.session.capabilities.homeAssistantVision
   const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
   const currentPhotoConsentKey = roloPhotoConsentKey(attachment, input)
   const photoConsent = currentPhotoConsentKey !== null
     && approvedPhotoMessage === currentPhotoConsentKey
+  const principalRef = auth.kind === 'signed_in' ? auth.session.principalRef : null
+  const persistenceScope = principalRef ? { principalRef, homeRef: homeId } : null
+  const persistenceKey = persistenceScope
+    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}`
+    : null
 
   useEffect(() => {
-    if (!prompt) return
+    if (!persistenceScope || redirectToPeople) return
+    const generation = hydrationGeneration.current + 1
+    hydrationGeneration.current = generation
     conversationVersion.current += 1
-    pendingCreate.current = null
-    setTurns([])
-    setProposal(null)
-    setSuggestion(null)
-    setFollowUpQuestions([])
-    setSaved(null)
-    setError(null)
-    setBusy(false)
-    setPhotoBusy(false)
-    setAttachment(null)
-    setApprovedPhotoMessage(null)
-    setPhotoReview(null)
-    setPhotoReviewTitle(null)
-    setPhotoReviewRef(null)
-    setPhotoPickerOpen(false)
-    sendInFlight.current = false
-    setInput(prompt.slice(0, 1_600))
-    router.setParams({ prompt: undefined })
-  }, [prompt])
+    resetConversationState('', routeProjectRef ?? null)
+    setHydratedScope(null)
+    // The prompt effect below owns an explicit incoming conversation. Starting
+    // a read here would let old state briefly win that race.
+    if (prompt !== undefined) return
+    void roloStorage.read(persistenceScope).then(stored => {
+      if (generation !== hydrationGeneration.current || !mounted.current) return
+      const plan = planRoloHydration(undefined, stored, routeProjectRef)
+      if (plan.kind === 'stored') {
+        const conversation = plan.conversation
+        setConversationProjectRef(conversation.projectRef)
+        setTurns(conversation.turns.map(turn => ({
+          role: turn.role,
+          text: turn.text,
+          ...(turn.photo ? {
+            photoTitle: turn.photo.title,
+            photoArtifactRef: turn.photo.artifactRef,
+          } : {}),
+        })))
+        setProposal(conversation.proposedWork)
+        setSuggestion(conversation.suggestion)
+        setFollowUpQuestions(conversation.followUp ? [conversation.followUp] : [])
+        setRememberedAttachment(conversation.attachment)
+        setPhotoReview(conversation.photoReview?.projection ?? null)
+        setPhotoReviewTitle(conversation.photoReview?.photo.title ?? null)
+        setPhotoReviewRef(conversation.photoReview?.photo.artifactRef ?? null)
+      } else {
+        setConversationProjectRef(routeProjectRef ?? null)
+      }
+      setHydratedScope(persistenceKey)
+    }).catch(() => {
+      if (generation === hydrationGeneration.current && mounted.current) {
+        setHydratedScope(persistenceKey)
+      }
+    })
+    return () => { hydrationGeneration.current += 1 }
+    // `prompt` is intentionally read only at scope entry. Later prompts are
+    // handled below without re-running storage hydration after the URL clears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeId, principalRef, redirectToPeople, roloStorage, routeProjectRef])
+
+  useEffect(() => {
+    if (prompt === undefined) {
+      consumedPrompt.current = null
+      return
+    }
+    if (!persistenceScope || redirectToPeople) return
+    const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${prompt}`
+    if (consumedPrompt.current === promptIdentity) return
+    consumedPrompt.current = promptIdentity
+    hydrationGeneration.current += 1
+    conversationVersion.current += 1
+    const plan = planRoloHydration(prompt, null)
+    resetConversationState(
+      plan.kind === 'prompt' ? plan.input : '',
+      routeProjectRef ?? null,
+    )
+    setHydratedScope(persistenceKey)
+    void roloStorage.remove(persistenceScope).catch(() => undefined)
+  }, [homeId, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeProjectRef])
+
+  useEffect(() => {
+    if (!persistenceScope || !persistenceKey || hydratedScope !== persistenceKey || redirectToPeople) return
+    const value = projectRoloConversation({
+      ...persistenceScope,
+      projectRef: conversationProjectRef,
+      turns,
+      proposedWork: proposal,
+      followUp: followUpQuestions[0] ?? null,
+      suggestion,
+      attachment: rememberedAttachment,
+      photoReview,
+      photoReviewTitle,
+      photoReviewRef,
+    })
+    const operation = value
+      ? roloStorage.write(value)
+      : roloStorage.remove(persistenceScope)
+    void operation.catch(() => undefined)
+  }, [
+    conversationProjectRef, followUpQuestions, hydratedScope, homeId, persistenceKey, photoReview,
+    photoReviewRef, photoReviewTitle, principalRef, proposal, redirectToPeople,
+    rememberedAttachment, roloStorage, suggestion, turns,
+  ])
 
   useEffect(() => {
     let active = true
@@ -153,11 +254,33 @@ export default function RoloScreen() {
   }, [api, homeId, visionEnabled])
 
   useEffect(() => {
+    if (!rememberedAttachment || attachment || !visionEnabled) return
+    const artifact = savedPhotos.find(item => item.homeRef === homeId
+      && item.kind === 'photo'
+      && item.artifactRef === rememberedAttachment.artifactRef)
+    if (artifact) setAttachment({ state: 'saved', artifact })
+  }, [attachment, homeId, rememberedAttachment, savedPhotos, visionEnabled])
+
+  useEffect(() => {
     if (turns.length === 0 && !busy && !photoPickerOpen && !attachment) return
     const frame = requestAnimationFrame(() => threadScrollRef.current?.scrollToEnd({ animated: true }))
     return () => cancelAnimationFrame(frame)
   }, [attachment, busy, photoPickerOpen, photoReviewRef, proposal, turns.length])
 
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  useEffect(() => {
+    if (attachment?.state !== 'pending') return undefined
+    const file = attachment.file
+    return () => { revokeBrowserDeviceFileUrl(file) }
+  }, [attachment])
+
+  if (redirectToPeople) {
+    return <Redirect href={{ pathname: '/home/[homeId]/people', params: { homeId } }} />
+  }
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
   if (auth.kind === 'error') {
@@ -166,7 +289,7 @@ export default function RoloScreen() {
   if (!auth.session.capabilities.homeAssistant) {
     return (
       <Page>
-        <HomeHeader section="Rolo Live" title="Rolo is unavailable." detail="Your saved home records and uploads still work normally." />
+        <HomeHeader section="Rolo Live" title="Rolo can’t answer right now." detail="Your home, work, photos, and files are still here." />
       </Page>
     )
   }
@@ -178,24 +301,35 @@ export default function RoloScreen() {
     setError(null)
     try {
       const file = await pickPhoto(source)
-      if (!file || version !== conversationVersion.current) return
+      if (!file) return
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        revokeBrowserDeviceFileUrl(file)
+        return
+      }
       if (file.byteLength > MAX_PHOTO_BYTES) {
+        revokeBrowserDeviceFileUrl(file)
         setError('That photo is larger than 10 MB. Choose a smaller JPEG or PNG.')
         return
       }
       setAttachment({ state: 'pending', file })
+      setRememberedAttachment(null)
       setApprovedPhotoMessage(null)
       setPhotoPickerOpen(false)
     } catch (caught) {
-      if (version === conversationVersion.current) setError(friendlyError(caught))
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        setError(friendlyError(caught))
+      }
     } finally {
-      if (version === conversationVersion.current) setPhotoBusy(false)
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        setPhotoBusy(false)
+      }
     }
   }
 
   function chooseSavedPhoto(artifact: ArtifactRecord) {
     if (busy || photoBusy || artifact.kind !== 'photo') return
     setAttachment({ state: 'saved', artifact })
+    setRememberedAttachment({ artifactRef: artifact.artifactRef, title: artifact.displayName })
     setApprovedPhotoMessage(null)
     setPhotoPickerOpen(false)
     setError(null)
@@ -204,6 +338,7 @@ export default function RoloScreen() {
   function removePhoto() {
     if (busy) return
     setAttachment(null)
+    setRememberedAttachment(null)
     setApprovedPhotoMessage(null)
   }
 
@@ -224,6 +359,7 @@ export default function RoloScreen() {
     setPhotoReview(null)
     setPhotoReviewTitle(null)
     setPhotoReviewRef(null)
+    if (prompt !== undefined) router.setParams({ prompt: undefined })
     let selectedPhoto = attachment?.state === 'saved' ? attachment.artifact : null
     let photoSavedDuringSend = false
     try {
@@ -231,23 +367,27 @@ export default function RoloScreen() {
         const uploadedPhoto = await api.uploadArtifact(homeId, 'photo', attachment.file)
         selectedPhoto = uploadedPhoto
         photoSavedDuringSend = true
-        if (version !== conversationVersion.current) return
+        if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
         setAttachment({ state: 'saved', artifact: uploadedPhoto })
+        setRememberedAttachment({
+          artifactRef: uploadedPhoto.artifactRef,
+          title: uploadedPhoto.displayName,
+        })
         setSavedPhotos(current => [
           uploadedPhoto,
           ...current.filter(photo => photo.artifactRef !== uploadedPhoto.artifactRef),
         ].slice(0, 12))
       }
-      if (version !== conversationVersion.current) return
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
       const reply = await api.askRolo(homeId, clean, turns, {
         pendingWork: proposal,
         unansweredFollowUpQuestion: followUpQuestions[0] ?? null,
-      }, selectedPhoto ? {
+      }, conversationProjectRef ?? undefined, selectedPhoto ? {
         source: 'artifact',
         artifactRef: selectedPhoto.artifactRef,
         consentToAnalyze: true,
       } : undefined)
-      if (version !== conversationVersion.current) return
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
       const exchange: ScreenTurn[] = [
         {
           role: 'user',
@@ -269,17 +409,22 @@ export default function RoloScreen() {
         setPhotoReviewTitle(selectedPhoto.displayName)
         setPhotoReviewRef(selectedPhoto.artifactRef)
         setAttachment(null)
+        setRememberedAttachment(null)
         setApprovedPhotoMessage(null)
         setPhotoPickerOpen(false)
       }
       if (selectedPhoto && !reply.photoReview) {
         setAttachment({ state: 'saved', artifact: selectedPhoto })
+        setRememberedAttachment({
+          artifactRef: selectedPhoto.artifactRef,
+          title: selectedPhoto.displayName,
+        })
         setApprovedPhotoMessage(null)
         setPhotoPickerOpen(true)
-        setError('The photo was not opened. It is still private and attached. Write a new question, approve that exact message, and try again.')
+        setError('The photo was not opened. It is still private and attached. Ask again, then approve that photo for the new message.')
       }
     } catch (caught) {
-      if (version !== conversationVersion.current) return
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
       setInput(clean)
       const message = previewMode && caught instanceof Error
         ? `Preview error: ${caught.message}`
@@ -288,8 +433,10 @@ export default function RoloScreen() {
         ? `The photo is safely saved to this home, but it could not be reviewed. You can approve it again and retry without uploading it twice. ${message}`
         : message)
     } finally {
-      sendInFlight.current = false
-      if (version === conversationVersion.current) setBusy(false)
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        sendInFlight.current = false
+        setBusy(false)
+      }
     }
   }
 
@@ -328,7 +475,17 @@ export default function RoloScreen() {
 
   function startFreshConversation() {
     conversationVersion.current += 1
-    setInput('')
+    hydrationGeneration.current += 1
+    resetConversationState()
+    if (persistenceScope) void roloStorage.remove(persistenceScope).catch(() => undefined)
+    if (conversationProjectRef || routeProjectRef || prompt !== undefined) {
+      router.replace({ pathname: '/home/[homeId]/rolo', params: { homeId } })
+    }
+  }
+
+  function resetConversationState(nextInput = '', nextProjectRef: string | null = null) {
+    setConversationProjectRef(nextProjectRef)
+    setInput(nextInput)
     setTurns([])
     setProposal(null)
     setSuggestion(null)
@@ -338,6 +495,7 @@ export default function RoloScreen() {
     setBusy(false)
     setPhotoBusy(false)
     setAttachment(null)
+    setRememberedAttachment(null)
     setApprovedPhotoMessage(null)
     setPhotoReview(null)
     setPhotoReviewTitle(null)
@@ -367,6 +525,7 @@ export default function RoloScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start a new conversation"
+            accessibilityState={{ disabled: busy || saving }}
             disabled={busy || saving}
             onPress={startFreshConversation}
             style={({ pressed }) => [styles.newChat, pressed && styles.pressed]}
@@ -376,7 +535,20 @@ export default function RoloScreen() {
           </Pressable>
         ) : null}
 
-        {turns.length === 0 ? (
+        {turns.length === 0 && conversationProjectRef ? (
+          <Card accent style={styles.introCard}>
+            <View style={styles.introTop}>
+              <View style={styles.roloMark}><Ionicons name="chatbubble-ellipses" size={21} color={colors.ink} /></View>
+              <View style={styles.introHeading}>
+                <Text style={styles.introTitle}>Let’s look at this work.</Text>
+                <Text style={styles.introCopy}>A starting question is ready below. Send it as-is, or change it first.</Text>
+              </View>
+            </View>
+            <Button label="Talk about something else" quiet onPress={startFreshConversation} />
+          </Card>
+        ) : null}
+
+        {turns.length === 0 && !conversationProjectRef ? (
           <Card style={styles.introCard}>
             <View style={styles.introTop}>
               <View style={styles.roloMark}><Ionicons name="chatbubble-ellipses" size={21} color={colors.ink} /></View>
@@ -386,15 +558,21 @@ export default function RoloScreen() {
               </View>
             </View>
             {STARTERS.map(starter => (
-              <Pressable key={starter.label} onPress={() => {
-                if (attachment) {
-                  setInput(starter.prompt)
-                  setApprovedPhotoMessage(null)
-                  setError(null)
-                  return
-                }
-                void send(starter.prompt)
-              }} style={styles.starter}>
+              <Pressable
+                key={starter.label}
+                accessibilityRole="button"
+                accessibilityLabel={starter.label}
+                onPress={() => {
+                  if (attachment) {
+                    setInput(starter.prompt)
+                    setApprovedPhotoMessage(null)
+                    setError(null)
+                    return
+                  }
+                  void send(starter.prompt)
+                }}
+                style={({ pressed }) => [styles.starter, pressed && styles.pressed]}
+              >
                 <Ionicons name={starter.icon} size={18} color={colors.aqua} />
                 <Text style={styles.starterText}>{starter.label}</Text>
                 <Ionicons name="chevron-forward" size={16} color={colors.smoke} />
@@ -415,7 +593,16 @@ export default function RoloScreen() {
             ) : null}
           </View>
         ))}
-        {busy ? <View style={styles.thinking}><Loading label={attachment ? 'Reviewing your photo…' : 'Rolo is thinking…'} /></View> : null}
+        {busy ? (
+          <View
+            style={styles.thinking}
+            accessibilityRole="progressbar"
+            accessibilityLabel={attachment ? 'Reviewing your photo' : 'Rolo is thinking'}
+          >
+            <ActivityIndicator color={colors.lime} />
+            <Text style={styles.thinkingText}>{attachment ? 'Reviewing your photo…' : 'Rolo is thinking…'}</Text>
+          </View>
+        ) : null}
 
         {photoReview ? (
           <Card accent>
@@ -509,12 +696,14 @@ export default function RoloScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Close photo picker"
+                  accessibilityState={{ disabled: busy }}
                   disabled={busy}
                   onPress={() => {
                     if (attachment) removePhoto()
                     setPhotoPickerOpen(false)
                   }}
                   hitSlop={8}
+                  style={styles.iconButton}
                 >
                   <Ionicons name="close" size={22} color={colors.slate} />
                 </Pressable>
@@ -549,9 +738,11 @@ export default function RoloScreen() {
                     </Text>
                     <Pressable
                       accessibilityRole="button"
+                      accessibilityLabel="Remove attached photo"
+                      accessibilityState={{ disabled: busy }}
                       disabled={busy}
                       onPress={removePhoto}
-                      hitSlop={8}
+                      style={styles.removePhotoButton}
                     >
                       <Text style={styles.removePhoto}>Remove photo</Text>
                     </Pressable>
@@ -653,6 +844,7 @@ export default function RoloScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add a photo"
+                accessibilityState={{ disabled: busy || photoBusy }}
                 disabled={busy || photoBusy}
                 onPress={() => setPhotoPickerOpen(current => !current)}
                 style={({ pressed }) => [styles.composerAction, pressed && styles.pressed]}
@@ -678,6 +870,7 @@ export default function RoloScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={busy ? 'Sending message' : 'Send message'}
+            accessibilityState={{ disabled: busy || photoBusy || !input.trim() || (!!attachment && !photoConsent) }}
             onPress={() => void send()}
             disabled={busy || photoBusy || !input.trim() || (!!attachment && !photoConsent)}
             style={({ pressed }) => [
@@ -695,6 +888,7 @@ export default function RoloScreen() {
 
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="How this chat uses your information"
             accessibilityState={{ expanded: privacyOpen }}
             onPress={() => setPrivacyOpen(current => !current)}
             style={({ pressed }) => [styles.privacyToggle, pressed && styles.pressed]}
@@ -705,8 +899,8 @@ export default function RoloScreen() {
           </Pressable>
           {privacyOpen ? (
             <Text style={styles.safety}>
-              Your message and a limited home index may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
-              {visionEnabled ? ' A new photo is saved privately first; a fresh copy with metadata removed is used for that request.' : ''}
+              Your message and a limited list of what this home has saved may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
+              {visionEnabled ? ' A new photo is saved privately first; Homesrolo removes details such as its location before sending a fresh copy for that request.' : ''}
               {' '}Rolo can help you think through what is visible, but it is not a licensed professional or emergency service.
             </Text>
           ) : null}
@@ -727,7 +921,7 @@ function suggestionLabel(suggestion: RoloSuggestion): string {
   if (suggestion.destination === 'work' && suggestion.projectRef) return 'Open this work record'
   if (suggestion.destination === 'work' || suggestion.destination === 'activity') return 'Open Work'
   if (suggestion.destination === 'library') return 'Open photos & files'
-  if (suggestion.destination === 'details') return 'Open home details'
+  if (suggestion.destination === 'details') return 'Open Home'
   return 'Open Today'
 }
 
@@ -743,8 +937,12 @@ function openSuggestion(homeId: string, suggestion: RoloSuggestion) {
     router.push({ pathname: '/home/[homeId]/work', params: { homeId } })
     return
   }
-  if (suggestion.destination === 'library' || suggestion.destination === 'details') {
+  if (suggestion.destination === 'library') {
     router.push({ pathname: '/home/[homeId]/care', params: { homeId } })
+    return
+  }
+  if (suggestion.destination === 'details') {
+    router.push({ pathname: '/home/[homeId]/details', params: { homeId } })
     return
   }
   router.push({ pathname: '/home/[homeId]', params: { homeId } })
@@ -760,6 +958,7 @@ function PhotoAction({ icon, label, disabled, onPress }: {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
@@ -784,7 +983,7 @@ const styles = StyleSheet.create({
   roloMark: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   introTitle: { color: colors.cream, fontSize: 18, lineHeight: 23, fontWeight: '800' },
   introCopy: { color: colors.slate, fontSize: 13, lineHeight: 19 },
-  newChat: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 3, paddingHorizontal: 2 },
+  newChat: { minHeight: 44, alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10 },
   newChatText: { color: colors.aqua, fontSize: 12, fontWeight: '700' },
   pressed: { opacity: 0.72 },
   starter: {
@@ -799,7 +998,12 @@ const styles = StyleSheet.create({
   bubbleText: { color: colors.cream, fontSize: 15, lineHeight: 22 },
   threadPhoto: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 3 },
   threadPhotoText: { color: colors.aqua, flexShrink: 1, fontSize: 12, fontWeight: '800' },
-  thinking: { maxHeight: 150, overflow: 'hidden' },
+  thinking: {
+    minHeight: 64, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.inkRaised, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  thinkingText: { color: colors.slate, fontSize: 13, fontWeight: '700' },
   reviewTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   reviewHeading: { flex: 1, gap: 3 },
   reviewEyebrow: { color: colors.lime, fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
@@ -820,6 +1024,7 @@ const styles = StyleSheet.create({
   photoPanel: { gap: 0 },
   photoAttach: { gap: 11, paddingBottom: 3 },
   photoAttachHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  iconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   photoAttachTitle: { color: colors.cream, fontSize: 16, fontWeight: '900' },
   photoAttachHint: { color: colors.smoke, fontSize: 11, lineHeight: 16, marginTop: 2 },
   photoActions: { flexDirection: 'row', gap: 9 },
@@ -840,6 +1045,7 @@ const styles = StyleSheet.create({
   attachmentName: { color: colors.cream, fontSize: 14, lineHeight: 18, fontWeight: '900' },
   attachmentState: { color: colors.slate, fontSize: 11, lineHeight: 15 },
   removePhoto: { color: colors.aqua, fontSize: 12, fontWeight: '900' },
+  removePhotoButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
   consentRow: {
     minHeight: 58, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
     padding: 11, backgroundColor: colors.inkSoft, flexDirection: 'row', alignItems: 'flex-start', gap: 10,
@@ -865,7 +1071,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: 5,
   },
   composerAction: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: colors.inkSoft,
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.inkSoft,
     alignItems: 'center', justifyContent: 'center',
   },
   composerActionAttached: { backgroundColor: colors.lime },
@@ -874,12 +1080,12 @@ const styles = StyleSheet.create({
     color: colors.cream, fontSize: 15, lineHeight: 21, textAlignVertical: 'center',
   },
   sendButton: {
-    width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime,
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.lime,
     alignItems: 'center', justifyContent: 'center',
   },
   sendButtonDisabled: { opacity: 0.35 },
   composerHint: { color: colors.warning, fontSize: 11, lineHeight: 16, paddingHorizontal: 8, marginTop: -7 },
-  privacyToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+  privacyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
   privacyToggleText: { color: colors.smoke, fontSize: 10, lineHeight: 14, flexShrink: 1 },
   safety: { color: colors.smoke, fontSize: 11, lineHeight: 16, textAlign: 'center', paddingHorizontal: space.lg },
 })
