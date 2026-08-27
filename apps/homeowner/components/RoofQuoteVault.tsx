@@ -5,6 +5,7 @@ import { usePort } from '../lib/port/provider.tsx'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import { ErrorState, Skeleton } from './states.tsx'
+import { ProfessionalInvitationPanel } from './ProfessionalInvitationPanel.tsx'
 import type {
   DocumentSummary,
   ProjectCategory,
@@ -122,6 +123,15 @@ function readableCategory(category: ProjectCategory): string {
   } as const)[category]
 }
 
+function readableMoney(cents: number | null): string {
+  if (cents === null) return 'Not stated'
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(cents / 100)
+}
+
 function calendarHref(title: string, company: string, startsAt: string): string | null {
   const starts = new Date(startsAt)
   if (Number.isNaN(starts.getTime())) return null
@@ -150,6 +160,7 @@ export function ProjectProposalWorkspace({
   projectPhotoCount,
   projectFiles,
   uploadsEnabled,
+  invitationsEnabled,
   onVisitSaved,
 }: {
   readonly homeRef: string
@@ -162,6 +173,7 @@ export function ProjectProposalWorkspace({
   readonly projectPhotoCount: number
   readonly projectFiles: readonly DocumentSummary[]
   readonly uploadsEnabled: boolean
+  readonly invitationsEnabled: boolean
   readonly onVisitSaved?: () => void
 }) {
   const port = usePort()
@@ -187,6 +199,9 @@ export function ProjectProposalWorkspace({
   const [visitBusy, setVisitBusy] = useState(false)
   const [visitError, setVisitError] = useState<string | null>(null)
   const [savedVisit, setSavedVisit] = useState<{ readonly company: string; readonly startsAt: string } | null>(null)
+  const [decisionBusyRef, setDecisionBusyRef] = useState<string | null>(null)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
+  const decisionAttempts = useRef(new Map<string, string>())
 
   const generatedRequestText = useMemo(() => {
     const choices = projectItems
@@ -233,6 +248,7 @@ export function ProjectProposalWorkspace({
   }
 
   function editQuote(quote: ProjectQuote) {
+    if (quote.source !== 'homeowner_entry') return
     if (proposalDetails.current) proposalDetails.current.open = true
     setEditingRef(quote.quoteRef)
     setEditingRevision(quote.revision)
@@ -245,6 +261,38 @@ export function ProjectProposalWorkspace({
     setSaveError(null)
     setSaveMessage(null)
     commandAttempt.current = null
+  }
+
+  async function decideProfessionalQuote(
+    quote: ProjectQuote,
+    decision: 'shortlisted' | 'selected' | 'declined',
+  ) {
+    if (quote.source !== 'professional_submission'
+      || quote.decisionRevision === null
+      || decisionBusyRef !== null) return
+    const attemptKey = `${quote.quoteRef}:${quote.decisionRevision}:${decision}`
+    let commandRef = decisionAttempts.current.get(attemptKey)
+    if (!commandRef) {
+      commandRef = mintCommandRef()
+      decisionAttempts.current.set(attemptKey, commandRef)
+    }
+    setDecisionBusyRef(quote.quoteRef)
+    setDecisionError(null)
+    const result = await port.decideProfessionalProposal(homeRef, projectRef, quote.quoteRef, {
+      commandRef,
+      expectedDecisionRevision: quote.decisionRevision,
+      decision,
+    })
+    setDecisionBusyRef(null)
+    if (!result.ok) {
+      setDecisionError(result.error === 'conflict'
+        ? 'That proposal decision changed in another session. The current version is reloading.'
+        : 'Homesrolo could not save that decision. No company was selected.')
+      if (result.error === 'conflict') quotes.retry()
+      return
+    }
+    decisionAttempts.current.delete(attemptKey)
+    quotes.retry()
   }
 
   async function saveQuote(event: FormEvent<HTMLFormElement>) {
@@ -362,6 +410,15 @@ export function ProjectProposalWorkspace({
         </div>
       </div>
 
+      {invitationsEnabled ? (
+        <ProfessionalInvitationPanel
+          homeRef={homeRef}
+          projectRef={projectRef}
+          projectCategory={projectCategory}
+          projectFiles={projectFiles}
+        />
+      ) : null}
+
       <section className="proposal-request" aria-labelledby="proposal-request-title">
         <div>
           <span className="proposal-request__mark" aria-hidden="true">↗</span>
@@ -411,11 +468,15 @@ export function ProjectProposalWorkspace({
                 {quoteRecords.map(quote => (
                   <th scope="col" key={quote.quoteRef}>
                     <span>{quote.contractorLabel}</span>
-                    <button className="btn btn--quiet" type="button"
-                      aria-label={`Edit proposal record: ${quote.contractorLabel}`}
-                      onClick={() => editQuote(quote)}>
-                      Edit proposal
-                    </button>
+                    {quote.source === 'professional_submission' ? (
+                      <span className="pill pill--recorded">Submitted in Homesrolo</span>
+                    ) : (
+                      <button className="btn btn--quiet" type="button"
+                        aria-label={`Edit proposal record: ${quote.contractorLabel}`}
+                        onClick={() => editQuote(quote)}>
+                        Edit proposal
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -425,6 +486,16 @@ export function ProjectProposalWorkspace({
                 <th scope="row">Proposal date</th>
                 {quoteRecords.map(quote => (
                   <td key={quote.quoteRef}>{quote.proposalDate ?? 'Not recorded'}</td>
+                ))}
+              </tr>
+              <tr>
+                <th scope="row">Proposal total</th>
+                {quoteRecords.map(quote => (
+                  <td key={quote.quoteRef}>
+                    {quote.source === 'professional_submission'
+                      ? readableMoney(quote.totalAmountCents)
+                      : 'Check the written proposal'}
+                  </td>
                 ))}
               </tr>
               <tr>
@@ -443,7 +514,45 @@ export function ProjectProposalWorkspace({
               <tr>
                 <th scope="row">General notes</th>
                 {quoteRecords.map(quote => (
-                  <td key={quote.quoteRef}>{quote.notes || 'No notes recorded'}</td>
+                  <td key={quote.quoteRef}>
+                    {quote.source === 'professional_submission'
+                      ? quote.professionalSummary || 'No company summary provided'
+                      : quote.notes || 'No notes recorded'}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <th scope="row">Your decision</th>
+                {quoteRecords.map(quote => (
+                  <td key={quote.quoteRef}>
+                    {quote.source !== 'professional_submission' ? (
+                      <span className="pill pill--muted">Private record</span>
+                    ) : (
+                      <div className="proposal-decision">
+                        <span className={quote.homeownerDecision === 'selected'
+                          ? 'pill pill--recorded'
+                          : quote.homeownerDecision === 'shortlisted'
+                            ? 'pill pill--progress'
+                            : 'pill pill--muted'}>
+                          {quote.homeownerDecision === 'undecided'
+                            ? 'Not decided'
+                            : quote.homeownerDecision === 'shortlisted'
+                              ? 'Shortlisted'
+                              : quote.homeownerDecision === 'selected'
+                                ? 'Selected'
+                                : 'Not moving forward'}
+                        </span>
+                        <div>
+                          <button type="button" disabled={decisionBusyRef !== null || quote.homeownerDecision === 'shortlisted'}
+                            onClick={() => void decideProfessionalQuote(quote, 'shortlisted')}>Shortlist</button>
+                          <button type="button" disabled={decisionBusyRef !== null || quote.homeownerDecision === 'selected'}
+                            onClick={() => void decideProfessionalQuote(quote, 'selected')}>Select</button>
+                          <button type="button" disabled={decisionBusyRef !== null || quote.homeownerDecision === 'declined'}
+                            onClick={() => void decideProfessionalQuote(quote, 'declined')}>Pass</button>
+                        </div>
+                      </div>
+                    )}
+                  </td>
                 ))}
               </tr>
               {scopeRows.map(([key, label]) => (
@@ -466,6 +575,8 @@ export function ProjectProposalWorkspace({
           </table>
         </div>
       ) : null}
+
+      {decisionError ? <div className="notice" role="alert">{decisionError}</div> : null}
 
       <details className="proposal-tool" ref={proposalDetails}>
         <summary>

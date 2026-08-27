@@ -48,6 +48,7 @@ import {
   OpenAIHomeAssistantClient,
   readHomeAssistantConfiguration,
 } from './home-assistant.ts'
+import { HomesroloProfessionalService } from '../../../../src/homeowner/homesrolo-professional-service.v1.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -145,6 +146,7 @@ const homeRecordHandoffSecurity = homeRecordHandoffSecurityConfiguration
   ? homeRecordHandoffSecurityProviders(homeRecordHandoffSecurityConfiguration)
   : null
 let homeRecordHandoffService: HomeRecordHandoffService | null = null
+let professionalService: HomesroloProfessionalService | null = null
 
 export function projectReviewCapabilityEnabled(
   providerConfigured: boolean,
@@ -208,7 +210,8 @@ export function homeownerApiService(): HomeownerApiService {
           && jobroloHandoffClient !== null
           && homeRecordHandoffSecurity !== null
           && homeRecordHandoffSecurityConfiguration !== null,
-        invitations: false,
+        invitations: configuration?.projectQuotesEnabled === true
+          && configuration?.professionalInvitationsEnabled === true,
         sharing: false,
       }) : UNCONFIGURED_CAPABILITIES,
     })
@@ -226,6 +229,19 @@ export function configuredProjectReviewService(): HomeownerProjectReviewService 
     attachmentsEnabled: configuration?.jobroloAttachmentsEnabled === true,
   })
   return projectReviewService
+}
+
+export function configuredHomesroloProfessionalService(): HomesroloProfessionalService | null {
+  if (!provider || configuration?.projectQuotesEnabled !== true
+    || configuration?.professionalInvitationsEnabled !== true) return null
+  professionalService ??= new HomesroloProfessionalService({
+    enabled: true,
+    identity: provider,
+    homeownerRepository: provider,
+    professionals: provider,
+    now: () => new Date().toISOString(),
+  })
+  return professionalService
 }
 
 /**

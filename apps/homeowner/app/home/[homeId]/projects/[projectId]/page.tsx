@@ -79,6 +79,8 @@ export default function ProjectPage({
     && session.state.capabilities.uploads
   const projectQuotesEnabled = session.state.kind === 'signed_in'
     && session.state.capabilities.projectQuotes
+  const invitationsEnabled = session.state.kind === 'signed_in'
+    && session.state.capabilities.invitations
   const { state, retry } = usePortCall(() => port.getProject(homeId, projectId))
   const { state: filesState, retry: retryFiles } = usePortCall(() => uploadsEnabled
     ? port.listDocuments(homeId)
@@ -805,6 +807,7 @@ export default function ProjectPage({
           projectPhotoCount={projectFiles.filter(file => file.kind === 'photo_set').length + project.photos.length}
           projectFiles={projectFiles}
           uploadsEnabled={uploadsEnabled}
+          invitationsEnabled={invitationsEnabled}
           onVisitSaved={retryActivity}
         />
       ) : null}

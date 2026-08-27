@@ -564,7 +564,15 @@ export interface ProjectQuote {
   readonly artifactRef: string | null
   readonly scope: QuoteScope
   readonly notes: string
-  readonly source: 'homeowner_entry'
+  readonly source: 'homeowner_entry' | 'professional_submission'
+  readonly professionalOrganizationRef: string | null
+  readonly invitationRef: string | null
+  readonly totalAmountCents: number | null
+  readonly currencyCode: 'USD' | null
+  readonly professionalSummary: string
+  readonly proposalState: 'submitted' | 'withdrawn' | null
+  readonly homeownerDecision: 'undecided' | 'shortlisted' | 'selected' | 'declined'
+  readonly decisionRevision: number | null
   readonly revision: number
   readonly createdAt: string
   readonly updatedAt: string
@@ -581,6 +589,155 @@ export interface CreateProjectQuoteInput {
 
 export interface SaveProjectQuoteInput extends CreateProjectQuoteInput {
   readonly expectedRevision: number
+}
+
+// --- professional participation ---------------------------------------------
+
+export type ProfessionalTrade = ProjectCategory
+export type ProfessionalPublicationState = 'draft' | 'published' | 'suspended'
+
+export interface ProfessionalOrganization {
+  readonly organizationRef: string
+  readonly slug: string
+  readonly displayName: string
+  readonly legalName?: string
+  readonly description?: string
+  readonly publicPhone?: string
+  readonly publicEmail?: string
+  readonly websiteUrl?: string
+  readonly logoUrl?: string
+  readonly trades: readonly ProfessionalTrade[]
+  readonly serviceAreas: readonly string[]
+  readonly publicationState: ProfessionalPublicationState
+  readonly provenance: 'company_self_reported'
+  readonly revision: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface ProfessionalMembership {
+  readonly membershipRef: string
+  readonly organizationRef: string
+  readonly role: 'owner' | 'admin' | 'member'
+  readonly state: 'active' | 'revoked'
+  readonly revision: number
+  readonly createdAt: string
+  readonly revokedAt?: string
+}
+
+export interface ProfessionalProfileWorkspace {
+  readonly organizations: readonly ProfessionalOrganization[]
+  readonly memberships: readonly ProfessionalMembership[]
+}
+
+export interface CreateProfessionalOrganizationInput {
+  readonly commandRef: string
+  readonly displayName: string
+  readonly slug: string
+}
+
+export interface CreatedProfessionalOrganization {
+  readonly organization: ProfessionalOrganization
+  readonly membership: ProfessionalMembership
+}
+
+export interface SaveProfessionalProfileInput {
+  readonly commandRef: string
+  readonly organizationRef: string
+  readonly expectedRevision: number
+  readonly displayName: string
+  readonly legalName: string | null
+  readonly description: string | null
+  readonly publicPhone: string | null
+  readonly publicEmail: string | null
+  readonly websiteUrl: string | null
+  readonly logoUrl: string | null
+  readonly trades: readonly ProfessionalTrade[]
+  readonly serviceAreas: readonly string[]
+  readonly publicationState: 'draft' | 'published'
+}
+
+export interface ProjectInvitationDisclosure {
+  readonly title: string
+  readonly workKind: HomeownerWorkKind
+  readonly category: ProjectCategory
+  readonly trade: string
+  readonly status: ProjectStatus
+  readonly summary: string
+  readonly selectedArtifactRefs: readonly string[]
+}
+
+export interface ProjectInvitation {
+  readonly invitationRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly professionalOrganizationRef: string
+  readonly status: 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired'
+  readonly message?: string
+  readonly disclosure: ProjectInvitationDisclosure
+  readonly expiresAt: string
+  readonly revision: number
+  readonly createdAt: string
+  readonly respondedAt?: string
+  readonly revokedAt?: string
+}
+
+export interface InviteProfessionalInput {
+  readonly commandRef: string
+  readonly professionalOrganizationRef: string
+  readonly message?: string
+  readonly selectedArtifactRefs: readonly string[]
+  readonly expiresInDays: number
+}
+
+export interface RespondToProjectInvitationInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+  readonly response: 'accepted' | 'declined'
+}
+
+export interface RevokeProjectInvitationInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+}
+
+export interface ProfessionalProposal {
+  readonly quoteRef: string
+  readonly versionRef: string
+  readonly invitationRef: string
+  readonly professionalOrganizationRef: string
+  readonly homeRef: string
+  readonly projectRef: string
+  readonly contractorLabel: string
+  readonly proposalDate: string
+  readonly totalAmountCents?: number
+  readonly currencyCode: 'USD'
+  readonly summary?: string
+  readonly scope: QuoteScope
+  readonly state: 'submitted' | 'withdrawn'
+  readonly homeownerDecision: 'undecided' | 'shortlisted' | 'selected' | 'declined'
+  readonly decisionRevision: number
+  readonly revision: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface SubmitProfessionalProposalInput {
+  readonly commandRef: string
+  readonly proposalDate: string
+  readonly totalAmountCents?: number
+  readonly summary?: string
+  readonly scope: QuoteScope
+}
+
+export interface ReviseProfessionalProposalInput extends SubmitProfessionalProposalInput {
+  readonly expectedRevision: number
+}
+
+export interface DecideProfessionalProposalInput {
+  readonly commandRef: string
+  readonly expectedDecisionRevision: number
+  readonly decision: 'shortlisted' | 'selected' | 'declined'
 }
 
 // --- documents and warranties -------------------------------------------------
@@ -908,6 +1065,57 @@ export interface HomeownerDataPort {
     quoteRef: string,
     input: SaveProjectQuoteInput,
   ): Promise<PortResult<ProjectQuote>>
+
+  listProfessionals(filters?: {
+    readonly trade?: ProfessionalTrade
+    readonly serviceArea?: string
+  }): Promise<PortResult<readonly ProfessionalOrganization[]>>
+  getProfessional(slug: string): Promise<PortResult<ProfessionalOrganization>>
+  getProfessionalProfile(): Promise<PortResult<ProfessionalProfileWorkspace>>
+  createProfessionalOrganization(
+    input: CreateProfessionalOrganizationInput,
+  ): Promise<PortResult<CreatedProfessionalOrganization>>
+  saveProfessionalProfile(
+    input: SaveProfessionalProfileInput,
+  ): Promise<PortResult<ProfessionalOrganization>>
+  listProjectInvitations(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<PortResult<readonly ProjectInvitation[]>>
+  inviteProfessional(
+    homeRef: string,
+    projectRef: string,
+    input: InviteProfessionalInput,
+  ): Promise<PortResult<ProjectInvitation>>
+  revokeProjectInvitation(
+    homeRef: string,
+    projectRef: string,
+    invitationRef: string,
+    input: RevokeProjectInvitationInput,
+  ): Promise<PortResult<ProjectInvitation>>
+  listProfessionalInvitations(): Promise<PortResult<readonly ProjectInvitation[]>>
+  getProfessionalProposal(
+    invitationRef: string,
+  ): Promise<PortResult<ProfessionalProposal | null>>
+  respondToProjectInvitation(
+    invitationRef: string,
+    input: RespondToProjectInvitationInput,
+  ): Promise<PortResult<ProjectInvitation>>
+  submitProfessionalProposal(
+    invitationRef: string,
+    input: SubmitProfessionalProposalInput,
+  ): Promise<PortResult<ProfessionalProposal>>
+  reviseProfessionalProposal(
+    invitationRef: string,
+    quoteRef: string,
+    input: ReviseProfessionalProposalInput,
+  ): Promise<PortResult<ProfessionalProposal>>
+  decideProfessionalProposal(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: DecideProfessionalProposalInput,
+  ): Promise<PortResult<ProfessionalProposal>>
 
   listDocuments(homeRef: string): Promise<PortResult<readonly DocumentSummary[]>>
   uploadPrivateArtifact(

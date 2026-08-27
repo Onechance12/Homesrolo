@@ -4,10 +4,10 @@ import { isRealCalendarDate } from '../contracts/home-file-record.v1.ts'
 /**
  * Server-side contracts for the first private HomesRolo homeowner workspace.
  *
- * This module does not implement authentication, a database, object storage,
- * public sharing, or automatic professional distribution. It defines the
- * boundary those adapters must satisfy so the browser can never decide who
- * may access a home or where a roof request goes.
+ * This module defines the authorization boundary those adapters must satisfy
+ * so the browser can never decide who may access a home. Exact-project
+ * professional invitations live behind a separate capability and never create
+ * one of the home memberships defined below.
  */
 export const HOMEOWNER_RUNTIME_VERSION = 'homeowner-runtime.v1-draft' as const
 
@@ -17,7 +17,7 @@ export const HOMEOWNER_RUNTIME_STATUS = Object.freeze({
   persistenceImplemented: true,
   objectStorageImplemented: true,
   uploadsImplemented: true,
-  invitationsImplemented: false,
+  invitationsImplemented: true,
   publicSharingImplemented: false,
   jobroloTransportImplemented: true,
   productionReady: false,
@@ -95,6 +95,9 @@ export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'project.item.save',
   'quote.create',
   'quote.save',
+  'professional.invite',
+  'professional.invitation.revoke',
+  'proposal.decide',
   'artifact.create_metadata',
   'artifact.upload',
   'artifact.read_metadata',

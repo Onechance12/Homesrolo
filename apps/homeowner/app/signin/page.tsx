@@ -82,7 +82,13 @@ function maskedEmail(value: string): string {
   return `${local.slice(0, 1)}${hidden}@${domain}`
 }
 
-function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
+function EmailCodeForm({
+  context,
+  successHref,
+}: {
+  context: HomeownerEntryContext
+  successHref: string
+}) {
   const port = usePort()
   const { refresh } = useSession()
   const router = useRouter()
@@ -284,7 +290,7 @@ function EmailCodeForm({ context }: { context: HomeownerEntryContext }) {
       if (result.ok) {
         clearPendingEmailCode()
         await refresh()
-        router.replace(withHomeownerEntryContext('/homes', context))
+        router.replace(successHref)
         return
       }
       if (result.error === 'rate_limited') {
@@ -585,7 +591,7 @@ function MagicLinkForm({ context }: { context: HomeownerEntryContext }) {
   )
 }
 
-function SyntheticEntry() {
+function SyntheticEntry({ successHref }: { successHref: string }) {
   const port = usePort()
   const { refresh } = useSession()
   const router = useRouter()
@@ -595,7 +601,7 @@ function SyntheticEntry() {
     setBusy(true)
     await port.enterDemoSession('Sample homeowner')
     await refresh()
-    router.push('/onboarding')
+    router.push(successHref === '/pro' ? '/pro' : '/onboarding')
   }
 
   return (
@@ -619,11 +625,17 @@ function SyntheticEntry() {
 export default function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ intent?: string | string[]; handoff?: string | string[] }>
+  searchParams: Promise<{
+    intent?: string | string[]
+    handoff?: string | string[]
+    destination?: string | string[]
+  }>
 }) {
   const query = use(searchParams)
   const context = homeownerEntryContext({ intent: query.intent, handoff: query.handoff })
   const { intent, handoff } = context
+  const isProEntry = query.destination === 'pro'
+  const successHref = isProEntry ? '/pro' : withHomeownerEntryContext('/homes', context)
   const isRoofInspectionEntry = intent === 'inspection'
   const isHandoffEntry = handoff !== null
   const mode = usePortMode()
@@ -631,17 +643,23 @@ export default function SignInPage({
   const emailCodeAvailable = mode === 'remote'
     && session.kind === 'signed_out'
     && session.capabilities.emailCodeSignIn
-  const eyebrow = isHandoffEntry
+  const eyebrow = isProEntry
+    ? 'HOMESROLO PRO'
+    : isHandoffEntry
     ? 'COMPLETION RECORD'
     : isRoofInspectionEntry
       ? 'ROOF RECORD'
       : 'YOUR HOME RECORD'
-  const title = isHandoffEntry
+  const title = isProEntry
+    ? 'Open your professional workspace.'
+    : isHandoffEntry
     ? 'Bring this work home.'
     : isRoofInspectionEntry
       ? 'Start your private roof record.'
       : 'Open your Home Record.'
-  const summary = isHandoffEntry
+  const summary = isProEntry
+    ? 'Create your company card, answer private project invitations, and put your proposal in writing. One account works for both sides without granting access to a home.'
+    : isHandoffEntry
     ? 'Sign in, choose the right home, and review the Completion record details before anything can be copied into its private Home Record. The PDF becomes available only after you accept it.'
     : isRoofInspectionEntry
       ? 'Choose or add your home, then create a private roof-inspection request with your own notes. This does not schedule a Roof Watch visit or send your request to a contractor.'
@@ -694,7 +712,7 @@ export default function SignInPage({
               : 'We use a private, one-time link so there is no password to keep or reuse.'}
           </p>
           {mode === 'synthetic' ? (
-            <SyntheticEntry />
+            <SyntheticEntry successHref={successHref} />
           ) : session.kind === 'loading' ? (
             <div className="signin__loading">
               <Skeleton lines={3} label="Checking what sign-in is available" />
@@ -706,8 +724,10 @@ export default function SignInPage({
                   ? `You are already signed in as ${session.session.displayName}.`
                   : 'You are already signed in.'}
               </p>
-              <Link className="btn btn--primary btn--block" href={withHomeownerEntryContext('/homes', context)}>
-                {isHandoffEntry
+              <Link className="btn btn--primary btn--block" href={successHref}>
+                {isProEntry
+                  ? 'Open Homesrolo Pro'
+                  : isHandoffEntry
                   ? 'Choose the home for this record'
                   : isRoofInspectionEntry
                   ? 'Continue to my roof record'
@@ -716,7 +736,7 @@ export default function SignInPage({
             </div>
           ) : session.capabilities.emailCodeSignIn ? (
             <div className="signin__form-wrap">
-              <EmailCodeForm context={context} />
+              <EmailCodeForm context={context} successHref={successHref} />
             </div>
           ) : session.capabilities.magicLinkSignIn ? (
             <div className="signin__form-wrap">

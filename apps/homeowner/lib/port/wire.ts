@@ -16,7 +16,16 @@
 
 import {
   HOME_RECORD_HANDOFF_ACCEPTANCE_TEXT,
-  type AskRoloResult, type DeletedPhotoCheckup, type DocumentSummary, type HomeownerSession, type HomeownerWorkKind, type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile, type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError, type Project, type ProjectActivity, type ProjectItem, type ProjectQuote, type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope, type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake, type RelationshipLabel, type RoloWorkDraft,
+  type AskRoloResult, type CreatedProfessionalOrganization, type DeletedPhotoCheckup,
+  type DocumentSummary, type HomeownerSession, type HomeownerWorkKind,
+  type HomeRecordHandoffItem, type HomeRecordHandoffPreview, type HomeRecordProfile,
+  type HomeResearchFact, type HomeResearchResult, type PhotoCheckup, type PortError,
+  type ProfessionalMembership, type ProfessionalOrganization, type ProfessionalProfileWorkspace,
+  type ProfessionalProposal, type Project, type ProjectActivity, type ProjectInvitation,
+  type ProjectInvitationDisclosure, type ProjectItem, type ProjectQuote,
+  type ProjectReviewPreview, type ProjectReviewSubmission, type QuoteScope,
+  type QuoteScopeItem, type QuoteScopeKey, type RecordedHomeIntake,
+  type RelationshipLabel, type RoloWorkDraft,
   type ServerHomeSummary, type ServerHomeView, type SessionState, type SignInCapabilities,
 } from './types.ts'
 
@@ -176,7 +185,7 @@ const utcInstant: Decoder<string> = (value, at) => {
   return value
 }
 
-const nullable = <T>(decoder: Decoder<T>): Decoder<T | null> => (value, at) =>
+export const nullable = <T>(decoder: Decoder<T>): Decoder<T | null> => (value, at) =>
   value === null ? null : decoder(value, at)
 
 const calendarDate: Decoder<string> = (value, at) => {
@@ -225,6 +234,41 @@ const publicHttpsUrl: Decoder<string> = (value, at) => {
       || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')
       || privateIpv4 || privateIpv6 || blockedMarketplace) {
       return fail(at, 'a canonical public HTTPS URL')
+    }
+    return value
+  } catch {
+    return fail(at, 'a public HTTPS URL')
+  }
+}
+
+const professionalPublicUrl: Decoder<string> = (value, at) => {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 2_048) {
+    return fail(at, 'a bounded public HTTPS URL')
+  }
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLocaleLowerCase('en-US')
+    const bareHostname = hostname.replace(/^\[|\]$/g, '')
+    const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bareHostname)
+    const privateIpv4 = match ? (() => {
+      const octets = match.slice(1).map(Number)
+      if (octets.some(octet => octet > 255)) return true
+      const first = octets[0] ?? 999
+      const second = octets[1] ?? 999
+      return first === 0 || first === 10 || first === 127
+        || (first === 100 && second >= 64 && second <= 127)
+        || (first === 169 && second === 254)
+        || (first === 172 && second >= 16 && second <= 31)
+        || (first === 192 && second === 168) || first >= 224
+    })() : false
+    const privateIpv6 = bareHostname === '::' || bareHostname === '::1'
+      || bareHostname.startsWith('fc') || bareHostname.startsWith('fd')
+      || /^fe[89ab]/.test(bareHostname) || bareHostname.startsWith('::ffff:')
+    if (url.protocol !== 'https:' || url.username || url.password
+      || (url.port && url.port !== '443') || url.hash
+      || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')
+      || privateIpv4 || privateIpv6) {
+      return fail(at, 'a public HTTPS URL')
     }
     return value
   } catch {
@@ -791,18 +835,175 @@ export const decodeProjectQuote: Decoder<ProjectQuote> = (value, at) => {
     artifactRef: nullable(opaqueRef('hart')),
     scope: decodeQuoteScope,
     notes: trimmedText(500),
-    source: literal('homeowner_entry'),
-    revision: (entry, entryAt) => typeof entry === 'number'
-      && Number.isInteger(entry) && entry >= 1
-      ? entry
-      : fail(entryAt, 'a positive integer'),
+    source: oneOf(['homeowner_entry', 'professional_submission'] as const),
+    professionalOrganizationRef: nullable(opaqueRef('horg')),
+    invitationRef: nullable(opaqueRef('hinv')),
+    totalAmountCents: nullable(countInt),
+    currencyCode: nullable(literal('USD')),
+    professionalSummary: trimmedText(2_000),
+    proposalState: nullable(oneOf(['submitted', 'withdrawn'] as const)),
+    homeownerDecision: oneOf(['undecided', 'shortlisted', 'selected', 'declined'] as const),
+    decisionRevision: nullable(positiveInt),
+    revision: positiveInt,
     createdAt: utcInstant,
     updatedAt: utcInstant,
   })(value, at)
   if (decoded.updatedAt < decoded.createdAt) {
     return fail(`${at}.updatedAt`, 'a time on or after createdAt')
   }
+  if (decoded.source === 'homeowner_entry'
+    && (decoded.professionalOrganizationRef !== null
+      || decoded.invitationRef !== null
+      || decoded.totalAmountCents !== null
+      || decoded.currencyCode !== null
+      || decoded.professionalSummary !== ''
+      || decoded.proposalState !== null
+      || decoded.homeownerDecision !== 'undecided'
+      || decoded.decisionRevision !== null)) {
+    return fail(at, 'a homeowner-entered quote without professional authority fields')
+  }
+  if (decoded.source === 'professional_submission'
+    && (!decoded.professionalOrganizationRef
+      || !decoded.invitationRef
+      || decoded.currencyCode !== 'USD'
+      || !decoded.proposalState
+      || decoded.decisionRevision === null
+      || decoded.artifactRef !== null
+      || decoded.notes !== '')) {
+    return fail(at, 'a coherent professional proposal view')
+  }
   return decoded
+}
+
+const PROFESSIONAL_TRADES = [
+  'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
+  'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
+] as const
+
+export const decodeProfessionalOrganization: Decoder<ProfessionalOrganization> = (value, at) => {
+  const organization = object<ProfessionalOrganization>({
+    organizationRef: opaqueRef('horg'),
+    slug: matching(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'a canonical profile slug'),
+    displayName: boundedLabel(120),
+    legalName: optional(boundedLabel(160)),
+    description: optional(boundedLabel(1_200)),
+    publicPhone: optional(boundedLabel(32)),
+    publicEmail: optional(matching(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'a public email')),
+    websiteUrl: optional(professionalPublicUrl),
+    logoUrl: optional(professionalPublicUrl),
+    trades: boundedArray(oneOf(PROFESSIONAL_TRADES), 0, 12),
+    serviceAreas: boundedArray(boundedLabel(80), 0, 40),
+    publicationState: oneOf(['draft', 'published', 'suspended'] as const),
+    provenance: literal('company_self_reported'),
+    revision: positiveInt,
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (organization.slug.length < 3 || organization.slug.length > 80
+    || organization.updatedAt < organization.createdAt
+    || new Set(organization.trades).size !== organization.trades.length
+    || new Set(organization.serviceAreas.map(area => area.toLocaleLowerCase('en-US'))).size
+      !== organization.serviceAreas.length
+    || (organization.publicationState === 'published'
+      && (organization.trades.length === 0 || organization.serviceAreas.length === 0))) {
+    return fail(at, 'a coherent self-reported professional profile')
+  }
+  return organization
+}
+
+export const decodeProfessionalMembership: Decoder<ProfessionalMembership> = (value, at) => {
+  const membership = object<ProfessionalMembership>({
+    membershipRef: opaqueRef('hpmr'),
+    organizationRef: opaqueRef('horg'),
+    role: oneOf(['owner', 'admin', 'member'] as const),
+    state: oneOf(['active', 'revoked'] as const),
+    revision: positiveInt,
+    createdAt: utcInstant,
+    revokedAt: optional(utcInstant),
+  })(value, at)
+  if ((membership.state === 'revoked') !== (membership.revokedAt !== undefined)) {
+    return fail(at, 'a membership with coherent revocation state')
+  }
+  return membership
+}
+
+export const decodeProfessionalProfileWorkspace: Decoder<ProfessionalProfileWorkspace> =
+  object<ProfessionalProfileWorkspace>({
+    organizations: boundedArray(decodeProfessionalOrganization, 0, 20),
+    memberships: boundedArray(decodeProfessionalMembership, 0, 20),
+  })
+
+export const decodeCreatedProfessionalOrganization: Decoder<CreatedProfessionalOrganization> =
+  object<CreatedProfessionalOrganization>({
+    organization: decodeProfessionalOrganization,
+    membership: decodeProfessionalMembership,
+  })
+
+const decodeProjectInvitationDisclosure: Decoder<ProjectInvitationDisclosure> =
+  object<ProjectInvitationDisclosure>({
+    title: boundedLabel(120),
+    workKind: oneOf(['project', 'issue', 'repair', 'service', 'incident'] as const),
+    category: oneOf(PROFESSIONAL_TRADES),
+    trade: boundedLabel(80),
+    status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
+    summary: trimmedText(2_000),
+    selectedArtifactRefs: boundedArray(opaqueRef('hart'), 0, 25),
+  })
+
+export const decodeProjectInvitation: Decoder<ProjectInvitation> = (value, at) => {
+  const invitation = object<ProjectInvitation>({
+    invitationRef: opaqueRef('hinv'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: opaqueRef('hprj'),
+    professionalOrganizationRef: opaqueRef('horg'),
+    status: oneOf(['pending', 'accepted', 'declined', 'revoked', 'expired'] as const),
+    message: optional(boundedLabel(1_000)),
+    disclosure: decodeProjectInvitationDisclosure,
+    expiresAt: utcInstant,
+    revision: positiveInt,
+    createdAt: utcInstant,
+    respondedAt: optional(utcInstant),
+    revokedAt: optional(utcInstant),
+  })(value, at)
+  if (invitation.expiresAt <= invitation.createdAt
+    || new Set(invitation.disclosure.selectedArtifactRefs).size
+      !== invitation.disclosure.selectedArtifactRefs.length
+    || ((invitation.status === 'accepted' || invitation.status === 'declined')
+      && !invitation.respondedAt)
+    || ((invitation.status === 'pending' || invitation.status === 'revoked')
+      && invitation.respondedAt !== undefined)
+    || ((invitation.status === 'revoked') !== (invitation.revokedAt !== undefined))) {
+    return fail(at, 'a coherent exact-project invitation')
+  }
+  return invitation
+}
+
+export const decodeProfessionalProposal: Decoder<ProfessionalProposal> = (value, at) => {
+  const proposal = object<ProfessionalProposal>({
+    quoteRef: opaqueRef('hquo'),
+    versionRef: opaqueRef('hpvr'),
+    invitationRef: opaqueRef('hinv'),
+    professionalOrganizationRef: opaqueRef('horg'),
+    homeRef: opaqueRef('hhom'),
+    projectRef: opaqueRef('hprj'),
+    contractorLabel: boundedLabel(120),
+    proposalDate: calendarDate,
+    totalAmountCents: optional(countInt),
+    currencyCode: literal('USD'),
+    summary: optional(boundedLabel(2_000)),
+    scope: decodeQuoteScope,
+    state: oneOf(['submitted', 'withdrawn'] as const),
+    homeownerDecision: oneOf(['undecided', 'shortlisted', 'selected', 'declined'] as const),
+    decisionRevision: positiveInt,
+    revision: positiveInt,
+    createdAt: utcInstant,
+    updatedAt: utcInstant,
+  })(value, at)
+  if (proposal.updatedAt < proposal.createdAt
+    || (proposal.state === 'withdrawn' && proposal.homeownerDecision === 'selected')) {
+    return fail(at, 'a coherent professional proposal')
+  }
+  return proposal
 }
 
 export const decodeProjectReviewSubmission: Decoder<ProjectReviewSubmission> =

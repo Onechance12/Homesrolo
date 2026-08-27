@@ -313,6 +313,9 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/update/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/activity/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/invitations/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/invitations/[invitationRef]/revoke/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/proposals/[quoteRef]/decision/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts',
@@ -333,6 +336,37 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/handoffs/[shareId]/accept/route.ts',
     'app/api/v1/homes/[homeRef]/handoffs/[shareId]/reject/route.ts',
     'app/api/v1/homes/[homeRef]/home-record/export/route.ts',
+    'app/api/v1/professionals/route.ts',
+    'app/api/v1/professionals/[slug]/route.ts',
+    'app/api/v1/professional/profile/route.ts',
+    'app/api/v1/professional/invitations/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/respond/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/proposals/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/proposals/[quoteRef]/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/artifacts/[artifactRef]/route.ts',
+  ]
+  const PROFESSIONAL_GET_POST_ROUTES = [
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/invitations/route.ts',
+    'app/api/v1/professionals/route.ts',
+    'app/api/v1/professional/profile/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/proposals/route.ts',
+  ]
+  const PROFESSIONAL_POST_ONLY_ROUTES = [
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/invitations/[invitationRef]/revoke/route.ts',
+    'app/api/v1/homes/[homeRef]/projects/[projectRef]/proposals/[quoteRef]/decision/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/respond/route.ts',
+    'app/api/v1/professional/invitations/[invitationRef]/proposals/[quoteRef]/route.ts',
+  ]
+  const PROFESSIONAL_GET_ONLY_ROUTES = [
+    'app/api/v1/professionals/[slug]/route.ts',
+    'app/api/v1/professional/invitations/route.ts',
+  ]
+  const PROFESSIONAL_ARTIFACT_ROUTE =
+    'app/api/v1/professional/invitations/[invitationRef]/artifacts/[artifactRef]/route.ts'
+  const PROFESSIONAL_ADAPTER_ROUTES = [
+    ...PROFESSIONAL_GET_POST_ROUTES,
+    ...PROFESSIONAL_POST_ONLY_ROUTES,
+    ...PROFESSIONAL_GET_ONLY_ROUTES,
   ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
@@ -372,6 +406,29 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/auth/signout/route.ts') {
       assert.match(content, /export async function POST/, `${rel} revokes one session`)
       assert.match(content, /signOutHomeowner/, `${rel} only delegates to the auth boundary`)
+    } else if (PROFESSIONAL_GET_POST_ROUTES.includes(rel)) {
+      assert.match(content, /export async function GET/, `${rel} serves one professional read`)
+      assert.match(content, /export async function POST/, `${rel} serves one professional command`)
+      assert.match(content, /handleProfessionalRequest/,
+        `${rel} delegates to the isolated professional boundary`)
+    } else if (PROFESSIONAL_POST_ONLY_ROUTES.includes(rel)) {
+      assert.match(content, /export async function POST/, `${rel} serves one professional command`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} exposes no duplicate read`)
+      assert.match(content, /handleProfessionalRequest/,
+        `${rel} delegates to the isolated professional boundary`)
+    } else if (PROFESSIONAL_GET_ONLY_ROUTES.includes(rel)) {
+      assert.match(content, /export async function GET/, `${rel} serves one professional read`)
+      assert.doesNotMatch(content, /export (async function|const) POST/,
+        `${rel} exposes no professional mutation`)
+      assert.match(content, /handleProfessionalRequest/,
+        `${rel} delegates to the isolated professional boundary`)
+    } else if (rel === PROFESSIONAL_ARTIFACT_ROUTE) {
+      assert.match(content, /export async function GET/, `${rel} serves one selected private file`)
+      assert.doesNotMatch(content, /export (async function|const) POST/,
+        `${rel} exposes no artifact mutation`)
+      assert.match(content, /handleProfessionalInvitationArtifact/,
+        `${rel} delegates to the selected-artifact authorization boundary`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/record/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves one controller-only record read`)
       assert.match(content, /export async function POST/, `${rel} serves one revision-backed record update`)
@@ -474,6 +531,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/submit-for-review/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/research/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/assistant/route.ts'
+      && !PROFESSIONAL_GET_POST_ROUTES.includes(rel)
+      && !PROFESSIONAL_POST_ONLY_ROUTES.includes(rel)
       && !rel.endsWith('/handoffs/[shareId]/claim/route.ts')
       && !rel.endsWith('/handoffs/[shareId]/accept/route.ts')
       && !rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
@@ -500,7 +559,12 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && !rel.includes('/handoffs/')
       && !rel.endsWith('/handoffs/route.ts')
       && !rel.endsWith('/home-record/export/route.ts')) {
-      assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
+      if (PROFESSIONAL_ADAPTER_ROUTES.includes(rel)) {
+        assert.match(content, /handleProfessionalRequest/,
+          `${rel} only delegates to the professional adapter`)
+      } else if (rel !== PROFESSIONAL_ARTIFACT_ROUTE) {
+        assert.match(content, /handleHomeownerRequest/, `${rel} only delegates to the adapter`)
+      }
     }
   }
   for (const rel of appSources) {
@@ -836,6 +900,10 @@ test('the authenticated home is a whole-home record, not a roofing dashboard', (
   assert.match(shell, /label: 'Today', tabLabel: 'Today'/)
   assert.match(shell, /label: 'Plans & service', tabLabel: 'Plans'/)
   assert.match(shell, /label: 'Pros', tabLabel: 'Pros'/)
+  assert.match(shell, /professionalNavEnabled = session\.capabilities\.invitations/,
+    'the professional directory stays out of navigation until its schema-backed gate is live')
+  assert.match(shell, /id !== 'pros' \|\| professionalNavEnabled/,
+    'the gated navigation removes only the professional directory')
   assert.match(shell, /label: 'My Home', tabLabel: 'My Home'/)
   for (const action of ['Fix a problem', 'Plan a project', 'Get routine help', 'Add past work']) {
     assert.match(shell, new RegExp(action), `${action} is available from the persistent Start action`)

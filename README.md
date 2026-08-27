@@ -63,6 +63,18 @@ or contractor recommendation. The proposal comparison has its own default-off
 `202608260001` must be applied and verified before whole-home proposals are
 enabled.
 
+A separate default-off professional invitation slice now reuses those exact
+projects, proposals, private files, principals, and sessions. A company can
+publish a clearly self-reported profile; a homeowner can invite that company to
+one exact project and select the files it may see; the company can accept and
+submit one revisioned structured proposal; and the homeowner can shortlist or
+select it in the existing comparison. This creates no Home Record membership,
+open bid board, ranking, payment flow, or contractor CRM. Apply and verify
+migration `202608260002` before enabling
+`HOMESROLO_PROFESSIONAL_INVITATIONS_ENABLED=true`; the existing project-quotes
+gate must also be enabled. See
+`docs/HOMESROLO_PROFESSIONAL_INVITATIONS.md` for the canary and rollback.
+
 The authenticated shell now includes Rolo, a private conversational organizer
 at `POST /api/v1/homes/{homeRef}/assistant`. Rolo receives a bounded home index,
 uses the stateless OpenAI Responses API, and can prepare one typed work-record
@@ -95,8 +107,8 @@ Netlify, but public signup remains off and malware scanning is explicitly
 deferred. Its permanent quota accounting and rollout steps are documented in
 `docs/HOMEOWNER_DEV_PRIVATE_UPLOADS.md`. The Home Library shows an honest unavailable
 state when that capability is off; it does not simulate an upload. Controller
-verification, invitations, public sharing, payments, analytics, and automatic
-professional routing remain outside this release.
+verification, co-owner invitations, public sharing, payments, analytics, and
+automatic professional routing remain outside this release.
 
 A separate seasonal-photo workspace is implemented without opening that generic
 uploader. A homeowner records the date, a home area, and a repeatable spot name
@@ -135,6 +147,7 @@ Chance decides whether and where to distribute it.
 | docs/HOME_RESEARCH.md | Default-off OpenAI public-source research boundary, consent, citations, privacy, and operations |
 | docs/HOME_RECORD_HANDOFF.md | Default-off exact-share Jobrolo → Homesrolo handoff architecture, configuration, canary, rollback, and export runbook |
 | docs/NATIVE_APP_ARCHITECTURE.md | Native iOS/Android client, authentication, storage, navigation, and release boundaries |
+| docs/HOMESROLO_PROFESSIONAL_INVITATIONS.md | Exact-project company profiles, invitations, selected evidence, proposals, release order, and rollback |
 | src/contracts/homeowner-share.v1.ts | Strict inert cross-repository share contract |
 | src/contracts/home-file.v1.ts | Code-owned inert home-file policy decisions |
 | src/contracts/home-file-record.v1.ts | Draft home/company/work-record schema and visibility resolution |

@@ -123,9 +123,80 @@ const QUOTE_VIEW = {
   },
   notes: '',
   source: 'homeowner_entry',
+  professionalOrganizationRef: null,
+  invitationRef: null,
+  totalAmountCents: null,
+  currencyCode: null,
+  professionalSummary: '',
+  proposalState: null,
+  homeownerDecision: 'undecided',
+  decisionRevision: null,
   revision: 1,
   createdAt: '2026-08-21T15:00:00.000Z',
   updatedAt: '2026-08-21T15:00:00.000Z',
+}
+
+const ORGANIZATION = REF('horg', 'o')
+const INVITATION = REF('hinv', 'i')
+const PROPOSAL_VERSION = REF('hpvr', 'v')
+const PROFESSIONAL_VIEW = {
+  organizationRef: ORGANIZATION,
+  slug: 'northside-home-services',
+  displayName: 'Northside Home Services',
+  description: 'Heating, cooling, and home service work.',
+  publicPhone: '(817) 555-0100',
+  publicEmail: 'hello@example.com',
+  websiteUrl: 'https://example.com/',
+  trades: ['hvac'],
+  serviceAreas: ['Fort Worth, TX'],
+  publicationState: 'published',
+  provenance: 'company_self_reported',
+  revision: 2,
+  createdAt: '2026-08-20T15:00:00.000Z',
+  updatedAt: '2026-08-21T15:00:00.000Z',
+}
+const INVITATION_VIEW = {
+  invitationRef: INVITATION,
+  homeRef: HOME,
+  projectRef: PROJECT,
+  professionalOrganizationRef: ORGANIZATION,
+  status: 'pending',
+  message: 'Please review this cooling issue.',
+  disclosure: {
+    title: 'Upstairs cooling problem',
+    workKind: 'issue',
+    category: 'hvac',
+    trade: 'Heating & cooling',
+    status: 'planned',
+    summary: 'The upstairs unit runs but does not cool.',
+    selectedArtifactRefs: [REF('hart', 'a')],
+  },
+  expiresAt: '2026-09-02T15:00:00.000Z',
+  revision: 1,
+  createdAt: '2026-08-26T15:00:00.000Z',
+}
+const PROFESSIONAL_PROPOSAL_VIEW = {
+  quoteRef: QUOTE,
+  versionRef: PROPOSAL_VERSION,
+  invitationRef: INVITATION,
+  professionalOrganizationRef: ORGANIZATION,
+  homeRef: HOME,
+  projectRef: PROJECT,
+  contractorLabel: 'Northside Home Services',
+  proposalDate: '2026-08-26',
+  totalAmountCents: 850_000,
+  currencyCode: 'USD',
+  summary: 'Replace the upstairs system and register the warranty.',
+  scope: {
+    project_scope: { status: 'included', detail: 'Equipment and installation.' },
+    warranty: { status: 'included', detail: 'Manufacturer registration.' },
+  },
+  state: 'submitted',
+  homeownerDecision: 'undecided',
+  decisionRevision: 1,
+  revision: 1,
+  createdAt: '2026-08-26T16:00:00.000Z',
+  updatedAt: '2026-08-26T16:00:00.000Z',
 }
 
 const RESEARCH_SOURCE_URL = 'https://records.example.gov/property/123'
@@ -1078,6 +1149,174 @@ test('quote client rejects unsupported scope, authority fields, malformed refs, 
   assert.deepEqual(await emptyDetail.listProjectQuotes(HOME, PROJECT), {
     ok: false, error: 'invalid',
   })
+})
+
+test('professional directory and exact-project invitations use the existing app port', async () => {
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    if (request.path.startsWith('/api/v1/professionals?')) {
+      return { kind: 'reply', status: 200, body: { data: [PROFESSIONAL_VIEW] } }
+    }
+    if (request.method === 'GET') {
+      return { kind: 'reply', status: 200, body: { data: [INVITATION_VIEW] } }
+    }
+    return { kind: 'reply', status: 201, body: { data: INVITATION_VIEW } }
+  })
+  const listed = await port.listProfessionals({ trade: 'hvac', serviceArea: 'Fort Worth, TX' })
+  const invitations = await port.listProjectInvitations(HOME, PROJECT)
+  const invited = await port.inviteProfessional(HOME, PROJECT, {
+    commandRef: REF('hcmd', 'i'),
+    professionalOrganizationRef: ORGANIZATION,
+    message: '  Please review this cooling issue.  ',
+    selectedArtifactRefs: [ARTIFACT],
+    expiresInDays: 7,
+  })
+  assert.ok(listed.ok && invitations.ok && invited.ok)
+  assert.deepEqual(requests, [
+    {
+      method: 'GET',
+      path: '/api/v1/professionals?trade=hvac&serviceArea=Fort+Worth%2C+TX',
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/homes/${HOME}/projects/${PROJECT}/invitations`,
+    },
+    {
+      method: 'POST',
+      path: `/api/v1/homes/${HOME}/projects/${PROJECT}/invitations`,
+      body: {
+        commandRef: REF('hcmd', 'i'),
+        professionalOrganizationRef: ORGANIZATION,
+        message: 'Please review this cooling issue.',
+        selectedArtifactRefs: [ARTIFACT],
+        expiresInDays: 7,
+      },
+    },
+  ])
+  assert.doesNotMatch(JSON.stringify(requests), /principalRef|membershipRef|controller|address/)
+
+  for (const unsafeUrl of [
+    'http://example.com/',
+    'https://user:pass@example.com/',
+    'https://localhost/logo.png',
+    'https://127.0.0.1/logo.png',
+  ]) {
+    const unsafe = createRemotePort(async () => ({
+      kind: 'reply', status: 200,
+      body: { data: [{ ...PROFESSIONAL_VIEW, websiteUrl: unsafeUrl }] },
+    }))
+    assert.deepEqual(await unsafe.listProfessionals(), { ok: false, error: 'invalid' }, unsafeUrl)
+  }
+})
+
+test('a contractor can accept one invitation and submit one structured proposal', async () => {
+  const accepted = {
+    ...INVITATION_VIEW,
+    status: 'accepted',
+    revision: 2,
+    respondedAt: '2026-08-26T15:30:00.000Z',
+  }
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    if (request.path.endsWith('/respond')) {
+      return { kind: 'reply', status: 200, body: { data: accepted } }
+    }
+    if (request.method === 'GET') {
+      return { kind: 'reply', status: 200, body: { data: PROFESSIONAL_PROPOSAL_VIEW } }
+    }
+    return { kind: 'reply', status: 201, body: { data: PROFESSIONAL_PROPOSAL_VIEW } }
+  })
+  const response = await port.respondToProjectInvitation(INVITATION, {
+    commandRef: REF('hcmd', 'r'),
+    expectedRevision: 1,
+    response: 'accepted',
+  })
+  const current = await port.getProfessionalProposal(INVITATION)
+  const proposal = await port.submitProfessionalProposal(INVITATION, {
+    commandRef: REF('hcmd', 'p'),
+    proposalDate: '2026-08-26',
+    totalAmountCents: 850_000,
+    summary: ' Replace the upstairs system and register the warranty. ',
+    scope: PROFESSIONAL_PROPOSAL_VIEW.scope as never,
+  })
+  assert.ok(response.ok && current.ok && current.value !== null && proposal.ok)
+  assert.deepEqual(requests, [
+    {
+      method: 'POST',
+      path: `/api/v1/professional/invitations/${INVITATION}/respond`,
+      body: {
+        commandRef: REF('hcmd', 'r'),
+        expectedRevision: 1,
+        response: 'accepted',
+      },
+    },
+    {
+      method: 'GET',
+      path: `/api/v1/professional/invitations/${INVITATION}/proposals`,
+    },
+    {
+      method: 'POST',
+      path: `/api/v1/professional/invitations/${INVITATION}/proposals`,
+      body: {
+        commandRef: REF('hcmd', 'p'),
+        proposalDate: '2026-08-26',
+        totalAmountCents: 850_000,
+        summary: 'Replace the upstairs system and register the warranty.',
+        scope: PROFESSIONAL_PROPOSAL_VIEW.scope,
+      },
+    },
+  ])
+})
+
+test('professional profile writes remain self-reported and independently revisioned', async () => {
+  const membership = {
+    membershipRef: REF('hpmr', 'm'),
+    organizationRef: ORGANIZATION,
+    role: 'owner',
+    state: 'active',
+    revision: 1,
+    createdAt: '2026-08-20T15:00:00.000Z',
+  }
+  const requests: TransportRequest[] = []
+  const port = createRemotePort(async request => {
+    requests.push(request)
+    if (request.path === '/api/v1/professionals') {
+      return {
+        kind: 'reply',
+        status: 201,
+        body: { data: { organization: { ...PROFESSIONAL_VIEW, publicationState: 'draft', revision: 1 }, membership } },
+      }
+    }
+    return { kind: 'reply', status: 200, body: { data: PROFESSIONAL_VIEW } }
+  })
+  const created = await port.createProfessionalOrganization({
+    commandRef: REF('hcmd', 'c'),
+    displayName: ' Northside Home Services ',
+    slug: 'Northside-Home-Services',
+  })
+  const saved = await port.saveProfessionalProfile({
+    commandRef: REF('hcmd', 's'),
+    organizationRef: ORGANIZATION,
+    expectedRevision: 1,
+    displayName: 'Northside Home Services',
+    legalName: null,
+    description: 'Heating, cooling, and home service work.',
+    publicPhone: '(817) 555-0100',
+    publicEmail: 'HELLO@EXAMPLE.COM',
+    websiteUrl: 'https://example.com/',
+    logoUrl: null,
+    trades: ['hvac'],
+    serviceAreas: ['Fort Worth, TX'],
+    publicationState: 'published',
+  })
+  assert.ok(created.ok && saved.ok)
+  assert.equal(requests[0]?.body && (requests[0].body as { slug: string }).slug,
+    'northside-home-services')
+  assert.equal(requests[1]?.body && (requests[1].body as { publicEmail: string }).publicEmail,
+    'hello@example.com')
+  assert.doesNotMatch(JSON.stringify(requests), /provenance|verified|principal|membershipRef/)
 })
 
 // --- the narrowed surface -----------------------------------------------------
