@@ -1,17 +1,36 @@
 import type { HomesroloApi } from '../api/contract.ts'
 import type {
+  ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
+  CreateProfessionalOrganizationInput,
   CreateWorkInput,
+  CreatedProfessionalOrganization,
+  DecideProfessionalProposalInput,
   DeviceFile,
   HomeSummary,
   HomeView,
   NativeSessionCredential,
+  ProfessionalMembership,
+  ProfessionalOrganization,
+  ProfessionalProfileWorkspace,
+  ProfessionalProposal,
+  ProfessionalTrade,
+  ProjectActivityKind,
+  ProjectActivityRecord,
+  ProjectInvitation,
+  ProjectQuote,
+  RespondToProjectInvitationInput,
+  RevokeProjectInvitationInput,
+  ReviseProfessionalProposalInput,
   RoloConversationState,
   RoloReply,
   RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
+  SaveProfessionalProfileInput,
+  SubmitProfessionalProposalInput,
+  InviteProfessionalInput,
   UpdateWorkInput,
   WorkRecord,
 } from '../api/model.ts'
@@ -19,8 +38,52 @@ import { normalizedRoloSelectedPhoto } from '../api/protocol.ts'
 
 const FIXTURE_NOW = '2026-08-26T14:30:00.000Z'
 
-function fixtureRef(prefix: 'hhom' | 'hprj' | 'hart' | 'hcmd' | 'hask', number: number): string {
-  return `${prefix}_${`homesrolo-preview-${number}`.padEnd(43, '0').slice(0, 43)}`
+function previewPdfBytes(title: string): Uint8Array {
+  const escaped = title.replace(/[()\\]/g, value => `\\${value}`)
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${escaped.length + 36} >>\nstream\nBT /F1 18 Tf 72 720 Td (${escaped}) Tj ET\nendstream`,
+  ]
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = []
+  for (const [index, body] of objects.entries()) {
+    offsets.push(new TextEncoder().encode(pdf).byteLength)
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`
+  }
+  const xref = new TextEncoder().encode(pdf).byteLength
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  pdf += offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return new TextEncoder().encode(pdf)
+}
+
+const PREVIEW_JPEG_BASE64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAn//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AUf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AUf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Ah//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IUf/2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z'
+
+function previewArtifactContent(record: ArtifactRecord): ArtifactContent {
+  const bytes = record.mediaType === 'application/pdf'
+    ? previewPdfBytes(record.displayName)
+    : Uint8Array.from(atob(PREVIEW_JPEG_BASE64), value => value.charCodeAt(0))
+  return {
+    artifactRef: record.artifactRef,
+    displayName: record.displayName,
+    mediaType: record.mediaType,
+    byteLength: bytes.byteLength,
+    bytes,
+  }
+}
+
+function fixtureRef(
+  prefix: 'hhom' | 'hprj' | 'hact' | 'hart' | 'hcmd' | 'hask' | 'hprn'
+    | 'horg' | 'hpmr' | 'hinv' | 'hquo' | 'hpvr',
+  number: number,
+): string {
+  const serial = Number.isSafeInteger(number) && number >= 0
+    ? String(number).padStart(10, '0')
+    : '0000000000'
+  return `${prefix}_${`homesrolo-preview-${serial}`.padEnd(43, '0').slice(0, 43)}`
 }
 
 export const PREVIEW_PRIMARY_HOME_REF = fixtureRef('hhom', 1)
@@ -46,7 +109,7 @@ const PREVIEW_CAPABILITIES = Object.freeze({
 export const PREVIEW_SIGNED_IN_SESSION: Extract<ServerSession, { kind: 'signed_in' }> = Object.freeze({
   apiVersion: 'homeowner-api.v1-draft',
   kind: 'signed_in',
-  principalRef: fixtureRef('hprj', 999).replace('hprj_', 'hprn_'),
+  principalRef: fixtureRef('hprn', 999),
   capabilities: PREVIEW_CAPABILITIES,
 })
 
@@ -163,6 +226,44 @@ const SECONDARY_WORK: readonly WorkRecord[] = Object.freeze([
   }),
 ])
 
+function projectActivity(
+  number: number,
+  homeRef: string,
+  projectRef: string,
+  kind: ProjectActivityKind,
+  body: string,
+  createdAt = FIXTURE_NOW,
+): ProjectActivityRecord {
+  return {
+    activityRef: fixtureRef('hact', number),
+    homeRef,
+    projectRef,
+    kind,
+    body,
+    source: 'homeowner_entry',
+    createdAt,
+  }
+}
+
+const PRIMARY_ACTIVITY: readonly ProjectActivityRecord[] = Object.freeze([
+  projectActivity(
+    1,
+    PREVIEW_PRIMARY_HOME_REF,
+    fixtureRef('hprj', 2),
+    'milestone',
+    'Home Watch photos saved for comparison.',
+    '2026-08-09T16:10:00.000Z',
+  ),
+  projectActivity(
+    2,
+    PREVIEW_PRIMARY_HOME_REF,
+    fixtureRef('hprj', 2),
+    'note',
+    'Watch the sidewall flashing after the next heavy rain.',
+    '2026-08-09T16:14:00.000Z',
+  ),
+])
+
 function artifact(
   number: number,
   values: Omit<ArtifactRecord, 'artifactRef' | 'homeRef' | 'createdAt'>,
@@ -204,6 +305,188 @@ const PRIMARY_ARTIFACTS: readonly ArtifactRecord[] = Object.freeze([
     mediaType: 'application/pdf',
     byteLength: 96_440,
   }),
+  artifact(5, {
+    projectRef: fixtureRef('hprj', 5),
+    kind: 'photo',
+    displayName: 'Patio ant activity · follow-up.jpg',
+    mediaType: 'image/jpeg',
+    byteLength: 286_110,
+  }),
+  artifact(6, {
+    projectRef: fixtureRef('hprj', 6),
+    kind: 'photo',
+    displayName: 'Back step drainage after rain.jpg',
+    mediaType: 'image/jpeg',
+    byteLength: 334_820,
+  }),
+])
+
+export const PREVIEW_OWN_ORGANIZATION_REF = fixtureRef('horg', 10)
+export const PREVIEW_PENDING_PRO_INVITATION_REF = fixtureRef('hinv', 2)
+
+const PROFESSIONAL_ORGANIZATIONS: readonly ProfessionalOrganization[] = Object.freeze([
+  Object.freeze({
+    organizationRef: fixtureRef('horg', 1),
+    slug: 'clear-sky-roofing',
+    displayName: 'ClearSky Roofing',
+    description: 'Roof repairs, replacements, and homeowner-readable documentation.',
+    publicPhone: '817-555-0141',
+    publicEmail: 'hello@clearsky.example',
+    websiteUrl: 'https://clearsky.example/',
+    trades: ['roofing'] as const,
+    serviceAreas: ['Dallas–Fort Worth, TX', 'Southern Oklahoma'],
+    publicationState: 'published',
+    provenance: 'company_self_reported',
+    revision: 2,
+    createdAt: '2026-08-20T14:30:00.000Z',
+    updatedAt: FIXTURE_NOW,
+  }),
+  Object.freeze({
+    organizationRef: fixtureRef('horg', 2),
+    slug: 'north-texas-air',
+    displayName: 'North Texas Air',
+    description: 'Residential heating, cooling, and seasonal service.',
+    publicPhone: '214-555-0196',
+    trades: ['hvac'] as const,
+    serviceAreas: ['Dallas County, TX', 'Tarrant County, TX'],
+    publicationState: 'published',
+    provenance: 'company_self_reported',
+    revision: 1,
+    createdAt: '2026-08-21T14:30:00.000Z',
+    updatedAt: FIXTURE_NOW,
+  }),
+  Object.freeze({
+    organizationRef: fixtureRef('horg', 3),
+    slug: 'evergreen-outdoor-living',
+    displayName: 'Evergreen Outdoor Living',
+    description: 'Pools, patios, drainage, and landscape projects.',
+    publicPhone: '682-555-0127',
+    trades: ['pool', 'landscaping', 'exterior'] as const,
+    serviceAreas: ['North Texas', 'Texoma'],
+    publicationState: 'published',
+    provenance: 'company_self_reported',
+    revision: 1,
+    createdAt: '2026-08-22T14:30:00.000Z',
+    updatedAt: FIXTURE_NOW,
+  }),
+  Object.freeze({
+    organizationRef: PREVIEW_OWN_ORGANIZATION_REF,
+    slug: 'pearson-home-services',
+    displayName: 'Pearson Home Services',
+    description: 'A preview company card owned by the signed-in account.',
+    trades: ['pest', 'exterior', 'landscaping'] as const,
+    serviceAreas: ['Fort Worth, TX', 'Dallas, TX'],
+    publicationState: 'published',
+    provenance: 'company_self_reported',
+    revision: 1,
+    createdAt: '2026-08-24T14:30:00.000Z',
+    updatedAt: FIXTURE_NOW,
+  }),
+])
+
+const PROFESSIONAL_MEMBERSHIPS: readonly ProfessionalMembership[] = Object.freeze([
+  Object.freeze({
+    membershipRef: fixtureRef('hpmr', 1),
+    organizationRef: PREVIEW_OWN_ORGANIZATION_REF,
+    role: 'owner',
+    state: 'active',
+    revision: 1,
+    createdAt: '2026-08-24T14:30:00.000Z',
+  }),
+])
+
+const PROFESSIONAL_INVITATIONS: readonly ProjectInvitation[] = Object.freeze([
+  Object.freeze({
+    invitationRef: fixtureRef('hinv', 1),
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    projectRef: fixtureRef('hprj', 5),
+    professionalOrganizationRef: PREVIEW_OWN_ORGANIZATION_REF,
+    status: 'accepted',
+    message: 'Please price the patio ant follow-up and exterior sealing separately.',
+    disclosure: Object.freeze({
+      title: 'Quarterly pest service',
+      workKind: 'service',
+      category: 'pest',
+      trade: 'Pest control',
+      status: 'in_progress',
+      summary: 'Exterior treatment completed. Technician will recheck ant activity by the patio.',
+      selectedArtifactRefs: Object.freeze([fixtureRef('hart', 5)]),
+    }),
+    expiresAt: '2026-09-20T14:30:00.000Z',
+    revision: 2,
+    createdAt: '2026-08-25T14:30:00.000Z',
+    respondedAt: '2026-08-25T16:00:00.000Z',
+  }),
+  Object.freeze({
+    invitationRef: PREVIEW_PENDING_PRO_INVITATION_REF,
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    projectRef: fixtureRef('hprj', 6),
+    professionalOrganizationRef: PREVIEW_OWN_ORGANIZATION_REF,
+    status: 'pending',
+    message: 'Can you review the drainage concern and explain what you would do first?',
+    disclosure: Object.freeze({
+      title: 'Improve patio drainage',
+      workKind: 'repair',
+      category: 'landscaping',
+      trade: 'Yard & landscaping',
+      status: 'planned',
+      summary: 'Water lingers near the back step after heavy rain. Compare grading and drain options.',
+      selectedArtifactRefs: Object.freeze([fixtureRef('hart', 6)]),
+    }),
+    expiresAt: '2026-09-22T14:30:00.000Z',
+    revision: 1,
+    createdAt: '2026-08-26T14:00:00.000Z',
+  }),
+  Object.freeze({
+    invitationRef: fixtureRef('hinv', 3),
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    projectRef: fixtureRef('hprj', 2),
+    professionalOrganizationRef: fixtureRef('horg', 1),
+    status: 'pending',
+    message: 'Please review the two roof files and put the next step in writing.',
+    disclosure: Object.freeze({
+      title: 'Watch flashing above the garage',
+      workKind: 'issue',
+      category: 'roofing',
+      trade: 'Roofing',
+      status: 'planned',
+      summary: 'Home Watch photo shows lifted sealant near the sidewall. No interior moisture observed.',
+      selectedArtifactRefs: Object.freeze([fixtureRef('hart', 1), fixtureRef('hart', 3)]),
+    }),
+    expiresAt: '2026-09-24T14:30:00.000Z',
+    revision: 1,
+    createdAt: FIXTURE_NOW,
+  }),
+])
+
+const PROFESSIONAL_PROPOSALS: readonly ProfessionalProposal[] = Object.freeze([
+  Object.freeze({
+    quoteRef: fixtureRef('hquo', 1),
+    versionRef: fixtureRef('hpvr', 1),
+    invitationRef: fixtureRef('hinv', 1),
+    professionalOrganizationRef: PREVIEW_OWN_ORGANIZATION_REF,
+    homeRef: PREVIEW_PRIMARY_HOME_REF,
+    projectRef: fixtureRef('hprj', 5),
+    contractorLabel: 'Pearson Home Services',
+    proposalDate: '2026-08-26',
+    totalAmountCents: 34_500,
+    currencyCode: 'USD',
+    summary: 'Exterior treatment and one documented patio follow-up.',
+    scope: Object.freeze({
+      project_scope: Object.freeze({
+        status: 'included',
+        detail: 'Treat the exterior perimeter and recheck the patio ant activity.',
+      }),
+      schedule: Object.freeze({ status: 'included', detail: 'Return within seven days.' }),
+      exclusions: Object.freeze({ status: 'excluded', detail: 'Interior treatment unless approved.' }),
+    }),
+    state: 'submitted',
+    homeownerDecision: 'shortlisted',
+    decisionRevision: 2,
+    revision: 1,
+    createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
+  }),
 ])
 
 const PHOTO_SVG = encodeURIComponent(`
@@ -222,7 +505,57 @@ const PHOTO_URI = `data:image/svg+xml;charset=utf-8,${PHOTO_SVG}`
 
 function cloneHome(home: HomeSummary): HomeSummary { return { ...home } }
 function cloneWork(item: WorkRecord): WorkRecord { return { ...item } }
+function cloneActivity(item: ProjectActivityRecord): ProjectActivityRecord { return { ...item } }
 function cloneArtifact(item: ArtifactRecord): ArtifactRecord { return { ...item } }
+function cloneOrganization(item: ProfessionalOrganization): ProfessionalOrganization {
+  return { ...item, trades: [...item.trades], serviceAreas: [...item.serviceAreas] }
+}
+function cloneMembership(item: ProfessionalMembership): ProfessionalMembership { return { ...item } }
+function cloneInvitation(item: ProjectInvitation): ProjectInvitation {
+  return {
+    ...item,
+    disclosure: {
+      ...item.disclosure,
+      selectedArtifactRefs: [...item.disclosure.selectedArtifactRefs],
+    },
+  }
+}
+function cloneScope<T extends ProfessionalProposal['scope']>(scope: T): T {
+  return Object.fromEntries(Object.entries(scope).map(([key, item]) => [
+    key,
+    item ? { ...item } : item,
+  ])) as T
+}
+function cloneProposal(item: ProfessionalProposal): ProfessionalProposal {
+  return { ...item, scope: cloneScope(item.scope) }
+}
+function cloneQuote(item: ProjectQuote): ProjectQuote {
+  return { ...item, scope: cloneScope(item.scope) }
+}
+function proposalQuote(item: ProfessionalProposal): ProjectQuote {
+  return {
+    quoteRef: item.quoteRef,
+    homeRef: item.homeRef,
+    projectRef: item.projectRef,
+    contractorLabel: item.contractorLabel,
+    proposalDate: item.proposalDate,
+    artifactRef: null,
+    scope: cloneScope(item.scope),
+    notes: '',
+    source: 'professional_submission',
+    professionalOrganizationRef: item.professionalOrganizationRef,
+    invitationRef: item.invitationRef,
+    totalAmountCents: item.totalAmountCents ?? null,
+    currencyCode: 'USD',
+    professionalSummary: item.summary ?? '',
+    proposalState: item.state,
+    homeownerDecision: item.homeownerDecision,
+    decisionRevision: item.decisionRevision,
+    revision: item.revision,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }
+}
 
 /** A deterministic, memory-only API. It has no transport and cannot upload. */
 export class PreviewHomesroloApi implements HomesroloApi {
@@ -231,10 +564,21 @@ export class PreviewHomesroloApi implements HomesroloApi {
     [PREVIEW_PRIMARY_HOME_REF, PRIMARY_WORK.map(cloneWork)],
     [PREVIEW_SECONDARY_HOME_REF, SECONDARY_WORK.map(cloneWork)],
   ])
+  readonly #activity = new Map<string, ProjectActivityRecord[]>([
+    [fixtureRef('hprj', 2), PRIMARY_ACTIVITY.map(cloneActivity)],
+  ])
   readonly #artifacts = new Map<string, ArtifactRecord[]>([
     [PREVIEW_PRIMARY_HOME_REF, PRIMARY_ARTIFACTS.map(cloneArtifact)],
     [PREVIEW_SECONDARY_HOME_REF, []],
   ])
+  readonly #organizations = PROFESSIONAL_ORGANIZATIONS.map(cloneOrganization)
+  readonly #memberships = PROFESSIONAL_MEMBERSHIPS.map(cloneMembership)
+  readonly #invitations = PROFESSIONAL_INVITATIONS.map(cloneInvitation)
+  readonly #proposals = PROFESSIONAL_PROPOSALS.map(cloneProposal)
+  readonly #quotes = new Map<string, ProjectQuote[]>(PROFESSIONAL_PROPOSALS.map(proposal => [
+    proposal.projectRef,
+    [proposalQuote(proposal)],
+  ]))
   #signedIn = true
   #sequence = 100
 
@@ -316,6 +660,18 @@ export class PreviewHomesroloApi implements HomesroloApi {
       professionalLabel: input.professionalLabel ?? null,
     })
     this.#work.get(homeRef)?.unshift(created)
+    const activity: ProjectActivityRecord[] = []
+    if (input.initialActivity) {
+      this.#sequence += 1
+      activity.push(projectActivity(
+        this.#sequence,
+        homeRef,
+        created.projectRef,
+        input.initialActivity.kind,
+        input.initialActivity.body.trim(),
+      ))
+    }
+    this.#activity.set(created.projectRef, activity)
     return cloneWork(created)
   }
 
@@ -344,23 +700,418 @@ export class PreviewHomesroloApi implements HomesroloApi {
     return cloneWork(updated)
   }
 
+  async listProjectActivity(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<readonly ProjectActivityRecord[]> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    return (this.#activity.get(projectRef) ?? []).map(cloneActivity)
+  }
+
   async addWorkNote(
     homeRef: string,
     projectRef: string,
     body: string,
     commandRef?: string,
-  ): Promise<void> {
+  ): Promise<ProjectActivityRecord> {
+    this.#assertSignedIn()
     void commandRef
-    const records = this.#work.get(homeRef) ?? []
-    const index = records.findIndex(item => item.projectRef === projectRef)
-    const current = records[index]
-    if (!current) throw new Error('preview_work_not_found')
-    records[index] = {
+    this.#project(homeRef, projectRef)
+    const cleanBody = body.trim()
+    if (cleanBody.length < 1 || cleanBody.length > 2_000) {
+      throw new Error('preview_activity_invalid')
+    }
+    this.#sequence += 1
+    const created = projectActivity(
+      this.#sequence,
+      homeRef,
+      projectRef,
+      'note',
+      cleanBody,
+    )
+    const activity = this.#activity.get(projectRef) ?? []
+    activity.push(created)
+    this.#activity.set(projectRef, activity)
+    return cloneActivity(created)
+  }
+
+  async listProjectQuotes(homeRef: string, projectRef: string): Promise<readonly ProjectQuote[]> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    return (this.#quotes.get(projectRef) ?? []).map(cloneQuote)
+  }
+
+  async listProfessionals(filters: {
+    readonly trade?: ProfessionalTrade
+    readonly serviceArea?: string
+  } = {}): Promise<readonly ProfessionalOrganization[]> {
+    this.#assertSignedIn()
+    const area = filters.serviceArea?.trim().toLocaleLowerCase('en-US')
+    return this.#organizations
+      .filter(organization => organization.publicationState === 'published')
+      .filter(organization => !filters.trade || organization.trades.includes(filters.trade))
+      .filter(organization => !area || organization.serviceAreas.some(value => (
+        value.toLocaleLowerCase('en-US').includes(area)
+      )))
+      .map(cloneOrganization)
+  }
+
+  async getProfessional(slug: string): Promise<ProfessionalOrganization> {
+    this.#assertSignedIn()
+    const normalized = slug.trim().toLocaleLowerCase('en-US')
+    const organization = this.#organizations.find(candidate => (
+      candidate.slug === normalized && candidate.publicationState === 'published'
+    ))
+    if (!organization) throw new Error('preview_professional_not_found')
+    return cloneOrganization(organization)
+  }
+
+  async getProfessionalProfile(): Promise<ProfessionalProfileWorkspace> {
+    this.#assertSignedIn()
+    const memberships = this.#memberships.filter(membership => membership.state === 'active')
+    const organizationRefs = new Set(memberships.map(membership => membership.organizationRef))
+    return {
+      organizations: this.#organizations
+        .filter(organization => organizationRefs.has(organization.organizationRef))
+        .map(cloneOrganization),
+      memberships: memberships.map(cloneMembership),
+    }
+  }
+
+  async createProfessionalOrganization(
+    input: CreateProfessionalOrganizationInput,
+  ): Promise<CreatedProfessionalOrganization> {
+    this.#assertSignedIn()
+    const displayName = input.displayName.trim()
+    const slug = input.slug.trim().toLocaleLowerCase('en-US')
+    if (!displayName || this.#organizations.some(item => item.slug === slug)) {
+      throw new Error('preview_professional_conflict')
+    }
+    this.#sequence += 1
+    const organization: ProfessionalOrganization = {
+      organizationRef: fixtureRef('horg', this.#sequence),
+      slug,
+      displayName,
+      trades: [],
+      serviceAreas: [],
+      publicationState: 'draft',
+      provenance: 'company_self_reported',
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+      updatedAt: FIXTURE_NOW,
+    }
+    this.#sequence += 1
+    const membership: ProfessionalMembership = {
+      membershipRef: fixtureRef('hpmr', this.#sequence),
+      organizationRef: organization.organizationRef,
+      role: 'owner',
+      state: 'active',
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+    }
+    this.#organizations.push(organization)
+    this.#memberships.push(membership)
+    return { organization: cloneOrganization(organization), membership: cloneMembership(membership) }
+  }
+
+  async saveProfessionalProfile(
+    input: SaveProfessionalProfileInput,
+  ): Promise<ProfessionalOrganization> {
+    this.#assertSignedIn()
+    const index = this.#organizations.findIndex(item => item.organizationRef === input.organizationRef)
+    const current = this.#organizations[index]
+    const membership = this.#memberships.find(item => item.organizationRef === input.organizationRef
+      && item.state === 'active' && (item.role === 'owner' || item.role === 'admin'))
+    if (!current || !membership || current.revision !== input.expectedRevision) {
+      throw new Error('preview_professional_conflict')
+    }
+    if (input.publicationState === 'published'
+      && (input.trades.length === 0 || input.serviceAreas.length === 0)) {
+      throw new Error('preview_professional_incomplete')
+    }
+    const optional = (value: string | null) => value?.trim() || undefined
+    const legalName = optional(input.legalName)
+    const description = optional(input.description)
+    const publicPhone = optional(input.publicPhone)
+    const publicEmail = optional(input.publicEmail)?.toLocaleLowerCase('en-US')
+    const websiteUrl = optional(input.websiteUrl)
+    const logoUrl = optional(input.logoUrl)
+    const updated: ProfessionalOrganization = {
+      organizationRef: current.organizationRef,
+      slug: current.slug,
+      displayName: input.displayName.trim(),
+      ...(legalName ? { legalName } : {}),
+      ...(description ? { description } : {}),
+      ...(publicPhone ? { publicPhone } : {}),
+      ...(publicEmail ? { publicEmail } : {}),
+      ...(websiteUrl ? { websiteUrl } : {}),
+      ...(logoUrl ? { logoUrl } : {}),
+      trades: [...input.trades],
+      serviceAreas: input.serviceAreas.map(area => area.trim()),
+      publicationState: input.publicationState,
+      provenance: 'company_self_reported',
+      revision: current.revision + 1,
+      createdAt: current.createdAt,
+      updatedAt: FIXTURE_NOW,
+    }
+    this.#organizations[index] = updated
+    return cloneOrganization(updated)
+  }
+
+  async listProjectInvitations(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<readonly ProjectInvitation[]> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    return this.#invitations.filter(invitation => invitation.homeRef === homeRef
+      && invitation.projectRef === projectRef).map(cloneInvitation)
+  }
+
+  async inviteProfessional(
+    homeRef: string,
+    projectRef: string,
+    input: InviteProfessionalInput,
+  ): Promise<ProjectInvitation> {
+    this.#assertSignedIn()
+    const project = this.#project(homeRef, projectRef)
+    const organization = this.#organizations.find(candidate => (
+      candidate.organizationRef === input.professionalOrganizationRef
+      && candidate.publicationState === 'published'
+    ))
+    const artifacts = this.#artifacts.get(homeRef) ?? []
+    if (!organization || new Set(input.selectedArtifactRefs).size !== input.selectedArtifactRefs.length
+      || input.selectedArtifactRefs.some(ref => !artifacts.some(item => (
+        item.artifactRef === ref && item.projectRef === projectRef
+      )))) {
+      throw new Error('preview_invitation_invalid')
+    }
+    this.#sequence += 1
+    const invitation: ProjectInvitation = {
+      invitationRef: fixtureRef('hinv', this.#sequence),
+      homeRef,
+      projectRef,
+      professionalOrganizationRef: organization.organizationRef,
+      status: 'pending',
+      ...(input.message?.trim() ? { message: input.message.trim() } : {}),
+      disclosure: {
+        title: project.title,
+        workKind: project.workKind,
+        category: project.category,
+        trade: project.category.replaceAll('_', ' '),
+        status: project.status,
+        summary: project.summary,
+        selectedArtifactRefs: [...input.selectedArtifactRefs],
+      },
+      expiresAt: new Date(new Date(FIXTURE_NOW).getTime()
+        + input.expiresInDays * 86_400_000).toISOString(),
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+    }
+    this.#invitations.push(invitation)
+    return cloneInvitation(invitation)
+  }
+
+  async revokeProjectInvitation(
+    homeRef: string,
+    projectRef: string,
+    invitationRef: string,
+    input: RevokeProjectInvitationInput,
+  ): Promise<ProjectInvitation> {
+    this.#assertSignedIn()
+    const index = this.#invitations.findIndex(item => item.invitationRef === invitationRef
+      && item.homeRef === homeRef && item.projectRef === projectRef)
+    const current = this.#invitations[index]
+    if (!current || current.revision !== input.expectedRevision
+      || (current.status !== 'pending' && current.status !== 'accepted')) {
+      throw new Error('preview_invitation_conflict')
+    }
+    const { respondedAt: _respondedAt, ...withoutResponse } = current
+    const updated: ProjectInvitation = {
+      ...withoutResponse,
+      status: 'revoked',
+      revokedAt: FIXTURE_NOW,
+      revision: current.revision + 1,
+    }
+    this.#invitations[index] = updated
+    return cloneInvitation(updated)
+  }
+
+  async listProfessionalInvitations(): Promise<readonly ProjectInvitation[]> {
+    this.#assertSignedIn()
+    const organizationRefs = new Set(this.#memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef))
+    return this.#invitations.filter(invitation => (
+      organizationRefs.has(invitation.professionalOrganizationRef)
+    )).map(cloneInvitation)
+  }
+
+  async respondToProjectInvitation(
+    invitationRef: string,
+    input: RespondToProjectInvitationInput,
+  ): Promise<ProjectInvitation> {
+    this.#assertSignedIn()
+    const organizationRefs = new Set(this.#memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef))
+    const index = this.#invitations.findIndex(item => item.invitationRef === invitationRef
+      && organizationRefs.has(item.professionalOrganizationRef))
+    const current = this.#invitations[index]
+    if (!current || current.status !== 'pending' || current.revision !== input.expectedRevision) {
+      throw new Error('preview_invitation_conflict')
+    }
+    const updated: ProjectInvitation = {
       ...current,
-      summary: [current.summary, body.trim()].filter(Boolean).join('\n\n'),
+      status: input.response,
+      respondedAt: FIXTURE_NOW,
+      revision: current.revision + 1,
+    }
+    this.#invitations[index] = updated
+    return cloneInvitation(updated)
+  }
+
+  professionalArtifactPreviewSource(invitationRef: string, artifactRef: string): {
+    readonly uri: string
+    readonly headers: Readonly<Record<string, string>>
+  } {
+    this.#assertSignedIn()
+    const organizationRefs = new Set(this.#memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef))
+    const invitation = this.#invitations.find(item => item.invitationRef === invitationRef
+      && item.status === 'accepted' && organizationRefs.has(item.professionalOrganizationRef))
+    const selected = invitation?.disclosure.selectedArtifactRefs.includes(artifactRef)
+    const exists = invitation && (this.#artifacts.get(invitation.homeRef) ?? [])
+      .some(item => item.artifactRef === artifactRef)
+    if (!invitation || !selected || !exists) throw new Error('preview_artifact_not_shared')
+    return { uri: PHOTO_URI, headers: {} }
+  }
+
+  async readProfessionalArtifactContent(
+    invitationRef: string,
+    artifactRef: string,
+  ): Promise<ArtifactContent> {
+    this.#assertSignedIn()
+    const organizationRefs = new Set(this.#memberships
+      .filter(membership => membership.state === 'active')
+      .map(membership => membership.organizationRef))
+    const invitation = this.#invitations.find(item => item.invitationRef === invitationRef
+      && item.status === 'accepted' && organizationRefs.has(item.professionalOrganizationRef))
+    const artifact = invitation?.disclosure.selectedArtifactRefs.includes(artifactRef)
+      ? (this.#artifacts.get(invitation.homeRef) ?? [])
+        .find(item => item.artifactRef === artifactRef)
+      : null
+    if (!invitation || !artifact) throw new Error('preview_artifact_not_shared')
+    return previewArtifactContent(artifact)
+  }
+
+  async getProfessionalProposal(invitationRef: string): Promise<ProfessionalProposal | null> {
+    this.#assertSignedIn()
+    const invitation = (await this.listProfessionalInvitations())
+      .find(item => item.invitationRef === invitationRef)
+    if (!invitation) throw new Error('preview_invitation_not_found')
+    const proposal = this.#proposals.find(item => item.invitationRef === invitationRef)
+    return proposal ? cloneProposal(proposal) : null
+  }
+
+  async submitProfessionalProposal(
+    invitationRef: string,
+    input: SubmitProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    this.#assertSignedIn()
+    const invitation = (await this.listProfessionalInvitations())
+      .find(item => item.invitationRef === invitationRef)
+    if (!invitation || invitation.status !== 'accepted'
+      || this.#proposals.some(item => item.invitationRef === invitationRef)) {
+      throw new Error('preview_proposal_conflict')
+    }
+    const organization = this.#organizations.find(item => (
+      item.organizationRef === invitation.professionalOrganizationRef
+    ))
+    if (!organization) throw new Error('preview_professional_not_found')
+    this.#sequence += 1
+    const proposal: ProfessionalProposal = {
+      quoteRef: fixtureRef('hquo', this.#sequence),
+      versionRef: fixtureRef('hpvr', this.#sequence),
+      invitationRef,
+      professionalOrganizationRef: invitation.professionalOrganizationRef,
+      homeRef: invitation.homeRef,
+      projectRef: invitation.projectRef,
+      contractorLabel: organization.displayName,
+      proposalDate: input.proposalDate,
+      ...(input.totalAmountCents === undefined ? {} : { totalAmountCents: input.totalAmountCents }),
+      currencyCode: 'USD',
+      ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
+      scope: cloneScope(input.scope),
+      state: 'submitted',
+      homeownerDecision: 'undecided',
+      decisionRevision: 1,
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+      updatedAt: FIXTURE_NOW,
+    }
+    this.#proposals.push(proposal)
+    this.#upsertQuote(proposal)
+    return cloneProposal(proposal)
+  }
+
+  async reviseProfessionalProposal(
+    invitationRef: string,
+    quoteRef: string,
+    input: ReviseProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    this.#assertSignedIn()
+    const index = this.#proposals.findIndex(item => item.invitationRef === invitationRef
+      && item.quoteRef === quoteRef)
+    const current = this.#proposals[index]
+    if (!current || current.revision !== input.expectedRevision
+      || current.homeownerDecision === 'selected') throw new Error('preview_proposal_conflict')
+    this.#sequence += 1
+    const {
+      totalAmountCents: _totalAmountCents,
+      summary: _summary,
+      ...withoutOptionalProposalFields
+    } = current
+    const updated: ProfessionalProposal = {
+      ...withoutOptionalProposalFields,
+      versionRef: fixtureRef('hpvr', this.#sequence),
+      proposalDate: input.proposalDate,
+      ...(input.totalAmountCents === undefined ? {} : { totalAmountCents: input.totalAmountCents }),
+      ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
+      scope: cloneScope(input.scope),
       revision: current.revision + 1,
       updatedAt: FIXTURE_NOW,
     }
+    this.#proposals[index] = updated
+    this.#upsertQuote(updated)
+    return cloneProposal(updated)
+  }
+
+  async decideProfessionalProposal(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: DecideProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    this.#assertSignedIn()
+    this.#project(homeRef, projectRef)
+    const index = this.#proposals.findIndex(item => item.homeRef === homeRef
+      && item.projectRef === projectRef && item.quoteRef === quoteRef)
+    const current = this.#proposals[index]
+    if (!current || current.decisionRevision !== input.expectedDecisionRevision) {
+      throw new Error('preview_proposal_conflict')
+    }
+    const updated: ProfessionalProposal = {
+      ...current,
+      homeownerDecision: input.decision,
+      decisionRevision: current.decisionRevision + 1,
+      updatedAt: FIXTURE_NOW,
+    }
+    this.#proposals[index] = updated
+    this.#upsertQuote(updated)
+    return cloneProposal(updated)
   }
 
   async askRolo(
@@ -419,7 +1170,7 @@ export class PreviewHomesroloApi implements HomesroloApi {
             ? 'Homeowner noticed reduced cooling upstairs. Check the thermostat, filter, vents, and outdoor-unit clearance without opening energized equipment.'
             : `Preview draft based on: ${clean.slice(0, 240)}`,
           professionalLabel: null,
-          firstUpdate: 'Rolo organized this as a reviewable draft; nothing has been saved yet.',
+          firstUpdate: 'Started in Rolo and added to Work after homeowner review.',
         }
 
     return {
@@ -427,11 +1178,13 @@ export class PreviewHomesroloApi implements HomesroloApi {
       answer: boundaryRefusal
         ? 'I cannot decide insurance coverage or provide legal advice. I did not open the attached photo. I can help you organize the facts and questions for a licensed professional.'
         : selectedArtifact
-        ? 'I can describe what is visible in this one photo, but I cannot confirm hidden damage or diagnose the cause from an image alone. The exterior and roofline are visible, with no urgent hazard signal in this sample.'
+        ? 'I can describe what is visible in this photo, but I cannot confirm hidden damage or diagnose the cause from one image. I do not see smoke, exposed wiring, or anything obviously displaced in this sample.'
         : homeWatch
           ? 'Start with a calm, repeatable walk-through. Compare the same views each season, note only what you can safely observe, and call a qualified professional for anything energized, leaking, unstable, or unsafe.'
           : cooling
-            ? 'You can safely confirm the thermostat mode and set point, look at the filter, make sure supply vents are open, and check that the outdoor unit is not blocked. Do not open electrical panels or equipment covers. I made a draft you can review.'
+            ? conversation.pendingWork
+              ? 'Good—that lowers the immediate urgency. I added when it started and the absence of leaks, sparks, or other safety signs to the draft. If the simple checks do not restore cooling, the next step is an HVAC visit.'
+              : 'You can safely confirm the thermostat mode and set point, look at the filter, make sure supply vents are open, and check that the outdoor unit is not blocked. Do not open electrical panels or equipment covers. I made a draft you can review.'
             : 'I organized that into a reviewable Work draft. You can approve it, discard it, or keep talking before anything is saved.',
       proposedWork,
       destination: boundaryRefusal ? null : 'work',
@@ -462,14 +1215,21 @@ export class PreviewHomesroloApi implements HomesroloApi {
     return (this.#artifacts.get(homeRef) ?? []).map(cloneArtifact)
   }
 
-  artifactPreviewSource(homeRef: string, artifactRef: string): {
-    readonly uri: string
-    readonly headers: Readonly<Record<string, string>>
-  } {
+  artifactPreviewSource(homeRef: string, artifactRef: string): import('../api/image-source.ts').ProtectedImageSource {
     const artifactExists = (this.#artifacts.get(homeRef) ?? [])
       .some(item => item.artifactRef === artifactRef && item.kind === 'photo')
     if (!artifactExists) throw new Error('preview_artifact_not_found')
     return { uri: PHOTO_URI, headers: {} }
+  }
+
+  async readArtifactContent(homeRef: string, artifact: ArtifactRecord): Promise<ArtifactContent> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    const record = (this.#artifacts.get(homeRef) ?? []).find(item => (
+      item.artifactRef === artifact.artifactRef && artifact.homeRef === homeRef
+    ))
+    if (!record) throw new Error('preview_artifact_not_found')
+    return previewArtifactContent(record)
   }
 
   async uploadArtifact(
@@ -483,6 +1243,22 @@ export class PreviewHomesroloApi implements HomesroloApi {
     void deviceFile
     void projectRef
     throw new Error('preview_upload_disabled')
+  }
+
+  #project(homeRef: string, projectRef: string): WorkRecord {
+    this.#home(homeRef)
+    const found = (this.#work.get(homeRef) ?? []).find(item => item.projectRef === projectRef)
+    if (!found) throw new Error('preview_work_not_found')
+    return found
+  }
+
+  #upsertQuote(proposal: ProfessionalProposal): void {
+    const quotes = this.#quotes.get(proposal.projectRef) ?? []
+    const index = quotes.findIndex(item => item.quoteRef === proposal.quoteRef)
+    const next = proposalQuote(proposal)
+    if (index === -1) quotes.push(next)
+    else quotes[index] = next
+    this.#quotes.set(proposal.projectRef, quotes)
   }
 
   #home(homeRef: string): HomeSummary {

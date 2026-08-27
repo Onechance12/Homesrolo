@@ -5,14 +5,11 @@ import { HomesroloNativeApi } from '../api/client.ts'
 import type { ServerSession } from '../api/model.ts'
 import { PreviewHomesroloApi, PREVIEW_SIGNED_IN_SESSION } from '../preview/api.ts'
 import { isHomesroloPreviewEnabled, type PreviewEnvironment } from '../preview/mode.ts'
+import { webCredentialStorage, type CredentialStorage } from './credential-storage.ts'
+
+export type { CredentialStorage } from './credential-storage.ts'
 
 const SESSION_KEY = 'homesrolo.native.session.v1'
-
-export interface CredentialStorage {
-  read(): Promise<string | null>
-  write(token: string): Promise<void>
-  remove(): Promise<void>
-}
 
 export interface SessionRuntime {
   readonly api: HomesroloApi
@@ -27,7 +24,7 @@ interface RuntimeOptions {
   readonly environment?: PreviewEnvironment
 }
 
-function productionStorage(): CredentialStorage {
+function nativeCredentialStorage(): CredentialStorage {
   return {
     read: () => SecureStore.getItemAsync(SESSION_KEY),
     write: token => SecureStore.setItemAsync(SESSION_KEY, token, {
@@ -62,7 +59,7 @@ export function createSessionRuntime(options: RuntimeOptions): SessionRuntime {
   }
   return {
     api: new HomesroloNativeApi(options.tokenProvider, { onSignedOut: options.onSignedOut }),
-    storage: productionStorage(),
+    storage: environment.platform === 'web' ? webCredentialStorage() : nativeCredentialStorage(),
     previewMode: false,
     initialSession: null,
   }

@@ -1,47 +1,48 @@
 import { useCallback, useMemo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, router, useGlobalSearchParams } from 'expo-router'
+import { Redirect, router } from 'expo-router'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { WorkCard } from '../../../src/components/WorkCard.tsx'
 import { Button, Card, Loading, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
+import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import { colors, radius, space } from '../../../src/theme.ts'
 
 const ACTIONS = [
   {
     icon: 'construct-outline' as const,
-    title: 'Fix a problem',
-    detail: 'Something broke or does not seem right',
+    title: 'Fix something',
+    detail: 'Broken, leaking, or not right',
     tone: colors.warning,
-    prompt: 'Something at my home is not working. Help me figure out what is safe to check, what photos or details would help, and whether I need a professional.',
+    prompt: 'Something at home is not working.',
   },
   {
     icon: 'color-wand-outline' as const,
-    title: 'Plan a project',
-    detail: 'Pool, remodel, paint, roof, or another idea',
+    title: 'Plan work',
+    detail: 'Pool, remodel, paint, roof, or yard',
     tone: colors.aqua,
-    prompt: 'I want to plan a home project. Ask me what I want, where it is, what matters to me, ideas or photos I already have, my budget, and timing. Help me turn it into a clear plan I can save.',
+    prompt: 'I want to plan a home project.',
   },
   {
     icon: 'repeat-outline' as const,
-    title: 'Get routine help',
-    detail: 'Yard care, service, cleaning, pest, and more',
+    title: 'Schedule care',
+    detail: 'Yard, cleaning, pest, or a tune-up',
     tone: colors.mint,
-    prompt: 'I need routine help at my home, such as yard care, heating and air service, pest control, cleaning, or another recurring service. Help me describe exactly what I need and create a service plan.',
+    prompt: 'I need routine help at my home.',
   },
   {
     icon: 'time-outline' as const,
     title: 'Add past work',
-    detail: 'Bring an old repair or improvement into the Rolo',
+    detail: 'Save an older repair, service, or upgrade',
     tone: colors.lime,
-    prompt: "Help me add past work to this home's history. Ask only what matters: what was done, when it happened, who did it, and what proof I still have.",
+    prompt: 'I want to add work that already happened.',
   },
 ]
 
 export default function TodayScreen() {
-  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const homeId = useHomeId()
   const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(async () => {
     const [home, work] = await Promise.all([api.getHome(homeId), api.listWork(homeId)])
@@ -77,20 +78,20 @@ export default function TodayScreen() {
     <Page>
       <HomeHeader
         section="Today"
-        title="What needs doing?"
+        title="What’s going on?"
         detail={`${home.displayLabel} · ${home.privateLocationLabel}`}
       />
 
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ask Rolo about this home"
-        onPress={() => openRolo('I need help with my home. Ask me what I am trying to fix, plan, schedule, or understand.')}
+        onPress={() => openRolo('I need help with something at home.')}
         style={({ pressed }) => [styles.roloBar, pressed && styles.pressed]}
       >
-        <View style={styles.roloMark}><Ionicons name="sparkles" size={23} color={colors.ink} /></View>
+        <View style={styles.roloMark}><Ionicons name="chatbubble-ellipses" size={21} color={colors.ink} /></View>
         <View style={styles.roloCopy}>
-          <Text style={styles.roloTitle}>Tell Rolo what you need</Text>
-          <Text style={styles.roloDetail}>Talk it through—no forms or trade knowledge needed.</Text>
+          <Text style={styles.roloTitle}>What’s going on at home?</Text>
+          <Text style={styles.roloDetail}>Tell Rolo, or choose a shortcut below.</Text>
         </View>
         <Ionicons name="arrow-forward" size={20} color={colors.lime} />
       </Pressable>
@@ -114,33 +115,22 @@ export default function TodayScreen() {
         ))}
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => openRolo("I have a question about my home. Use this home's saved information when it helps, and tell me clearly what you can and cannot confirm.")}
-        style={({ pressed }) => [styles.askCard, pressed && styles.pressed]}
-      >
-        <Ionicons name="chatbubble-ellipses-outline" size={25} color={colors.aqua} />
-        <View style={styles.roloCopy}>
-          <Text style={styles.askTitle}>Ask about my home</Text>
-          <Text style={styles.actionDetail}>Use what this home already remembers.</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.slate} />
-      </Pressable>
-
       <SectionTitle
-        title="In motion"
-        detail={workViews.active.length > 0 ? `${workViews.active.length} open ${workViews.active.length === 1 ? 'plan' : 'plans'} for this home.` : 'The work you start will stay within reach here.'}
+        title="Open work"
+        detail={workViews.active.length > 0
+          ? `${workViews.active.length} active ${workViews.active.length === 1 ? 'item' : 'items'}.`
+          : 'Projects, repairs, and service will appear here.'}
       />
       {workViews.active.slice(0, 3).map(item => <WorkCard key={item.projectRef} work={item} />)}
       {workViews.active.length === 0 ? (
         <Card>
-          <Tag tone="lime">Clear for now</Tag>
-          <Text style={styles.emptyTitle}>No open work is waiting on you.</Text>
-          <Text style={styles.emptyCopy}>Start with a problem, project idea, or routine service and Rolo will help shape the first plan.</Text>
+          <Tag tone="lime">All clear</Tag>
+          <Text style={styles.emptyTitle}>Nothing open right now.</Text>
+          <Text style={styles.emptyCopy}>Start a repair, service, or project whenever you need it.</Text>
         </Card>
       ) : null}
       <Button
-        label={workViews.active.length > 0 ? 'See all plans' : 'Open plans'}
+        label={workViews.active.length > 0 ? 'See all work' : 'Open work'}
         icon="layers-outline"
         quiet
         onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
@@ -148,7 +138,7 @@ export default function TodayScreen() {
 
       {workViews.finished.length > 0 ? (
         <>
-          <SectionTitle title="Recently finished" detail="Completed work quietly becomes part of My Home." />
+          <SectionTitle title="Recently finished" detail="Recent work saved to this home." />
           {workViews.finished.slice(0, 2).map(item => <WorkCard key={item.projectRef} work={item} compact />)}
         </>
       ) : null}
@@ -158,7 +148,7 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   roloBar: {
-    minHeight: 84,
+    minHeight: 76,
     borderRadius: radius.large,
     borderWidth: 1,
     borderColor: colors.lime,
@@ -169,49 +159,39 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   roloMark: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.lime,
     alignItems: 'center',
     justifyContent: 'center',
   },
   roloCopy: { flex: 1, gap: 3 },
-  roloTitle: { color: colors.cream, fontSize: 17, fontWeight: '900' },
+  roloTitle: { color: colors.cream, fontSize: 17, fontWeight: '800' },
   roloDetail: { color: colors.slate, fontSize: 12, lineHeight: 17 },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   action: {
-    width: '48%',
-    minHeight: 158,
+    flexGrow: 1,
+    flexBasis: '47%',
+    minWidth: 132,
+    minHeight: 112,
     borderRadius: radius.large,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.inkRaised,
-    padding: 15,
-    gap: 9,
+    padding: 13,
+    gap: 7,
   },
   actionIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionTitle: { color: colors.cream, fontSize: 16, lineHeight: 20, fontWeight: '900' },
+  actionTitle: { color: colors.cream, fontSize: 15, lineHeight: 19, fontWeight: '800' },
   actionDetail: { color: colors.slate, fontSize: 12, lineHeight: 17 },
-  askCard: {
-    minHeight: 72,
-    borderRadius: radius.medium,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.inkRaised,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  askTitle: { color: colors.cream, fontSize: 16, fontWeight: '900' },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
-  emptyTitle: { color: colors.cream, fontSize: 19, lineHeight: 24, fontWeight: '900' },
+  emptyTitle: { color: colors.cream, fontSize: 19, lineHeight: 24, fontWeight: '800' },
   emptyCopy: { color: colors.slate, fontSize: 14, lineHeight: 20 },
 })

@@ -2,28 +2,68 @@ import Constants from 'expo-constants'
 import * as Crypto from 'expo-crypto'
 import { File, Paths } from 'expo-file-system'
 import type { HomesroloApi } from './contract.ts'
+import type { ProtectedImageSource } from './image-source.ts'
 import type {
+  ArtifactContent,
   ArtifactKind,
   ArtifactMediaType,
   ArtifactRecord,
   ArtifactReservation,
   Capabilities,
+  CreateProfessionalOrganizationInput,
   CreateWorkInput,
+  CreatedProfessionalOrganization,
+  DecideProfessionalProposalInput,
   DeviceFile,
   HomeSummary,
   HomeView,
   NativeSessionCredential,
+  ProfessionalOrganization,
+  ProfessionalProfileWorkspace,
+  ProfessionalProposal,
+  ProfessionalTrade,
+  ProjectActivityRecord,
+  ProjectInvitation,
+  ProjectQuote,
+  RespondToProjectInvitationInput,
+  RevokeProjectInvitationInput,
+  ReviseProfessionalProposalInput,
   RoloConversationState,
   RoloReply,
   RoloSelectedPhoto,
   RoloTurn,
   ServerSession,
+  SaveProfessionalProfileInput,
+  SubmitProfessionalProposalInput,
+  InviteProfessionalInput,
   UpdateWorkInput,
   WorkCategory,
   WorkKind,
   WorkRecord,
   WorkStatus,
 } from './model.ts'
+import { artifactContentFromResponse } from './artifact-content.ts'
+import { parseProjectActivity } from './activity.ts'
+import {
+  createProfessionalOrganizationBody,
+  decideProfessionalProposalBody,
+  invitationRevisionBody,
+  inviteProfessionalBody,
+  isInvitationRef,
+  isOrganizationRef,
+  isQuoteRef,
+  normalizedProfessionalSlug,
+  parseCreatedProfessionalOrganization,
+  parseProfessionalOrganization,
+  parseProfessionalProfileWorkspace,
+  parseProfessionalProposal,
+  parseProjectInvitation,
+  parseProjectQuote,
+  professionalDirectoryQuery,
+  professionalProposalBody,
+  respondToProjectInvitationBody,
+  saveProfessionalProfileBody,
+} from './professional.ts'
 import {
   apiPath,
   boundedRoloConversation,
@@ -435,6 +475,40 @@ export class HomesroloNativeApi implements HomesroloApi {
     try { return envelopeData(payload) } catch { throw new NativeApiError(response.status, 'invalid_response') }
   }
 
+  async #readArtifactContent(
+    path: string,
+    artifactRef: string,
+    fallbackDisplayName?: string,
+  ): Promise<ArtifactContent> {
+    const token = this.#token()
+    if (!token || !isSessionToken(token)) throw new NativeApiError(401, 'signed_out')
+    let response: Response
+    try {
+      response = await fetch(`${this.#origin}${path}`, {
+        method: 'GET',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        referrerPolicy: 'no-referrer',
+        headers: { ...nativeRequestHeaders(token), accept: '*/*' },
+      })
+    } catch {
+      throw new NativeApiError(0, 'network_unavailable')
+    }
+    if (!response.ok) {
+      let payload: unknown = null
+      try { payload = await response.json() } catch { /* Binary errors may have no JSON body. */ }
+      const problem = problemCode(payload)
+      if (response.status === 401) this.#onSignedOut()
+      throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
+    }
+    try {
+      return await artifactContentFromResponse(response, artifactRef, fallbackDisplayName)
+    } catch {
+      throw new NativeApiError(response.status, 'invalid_response')
+    }
+  }
+
   async requestEmailCode(email: string): Promise<void> {
     const normalized = email.trim().toLowerCase()
     const data = record(await this.#request(apiPath('auth', 'email-code'), {
@@ -514,20 +588,296 @@ export class HomesroloNativeApi implements HomesroloApi {
     }))
   }
 
+  async listProjectActivity(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<readonly ProjectActivityRecord[]> {
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const data = await this.#request(apiPath('homes', homeRef, 'projects', projectRef, 'activity'))
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    const activity = data.map(parseProjectActivity)
+    if (activity.some(entry => entry.homeRef !== homeRef || entry.projectRef !== projectRef)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return activity
+  }
+
   async addWorkNote(
     homeRef: string,
     projectRef: string,
     body: string,
     noteCommandRef?: string,
-  ): Promise<void> {
-    await this.#request(apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
+  ): Promise<ProjectActivityRecord> {
+    const cleanBody = body.trim()
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)
+      || cleanBody.length < 1 || cleanBody.length > 2_000) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const activity = parseProjectActivity(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
       method: 'POST',
       body: {
         commandRef: noteCommandRef ?? await this.newCommandRef(),
         kind: 'note',
-        body: body.trim(),
+        body: cleanBody,
       },
-    })
+    }))
+    if (activity.homeRef !== homeRef || activity.projectRef !== projectRef
+      || activity.kind !== 'note' || activity.body !== cleanBody) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return activity
+  }
+
+  async listProjectQuotes(homeRef: string, projectRef: string): Promise<readonly ProjectQuote[]> {
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const data = await this.#request(apiPath('homes', homeRef, 'projects', projectRef, 'quotes'))
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    const quotes = data.map(parseProjectQuote)
+    if (quotes.some(quote => quote.homeRef !== homeRef || quote.projectRef !== projectRef)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return quotes
+  }
+
+  async listProfessionals(filters: {
+    readonly trade?: ProfessionalTrade
+    readonly serviceArea?: string
+  } = {}): Promise<readonly ProfessionalOrganization[]> {
+    const query = professionalDirectoryQuery(filters)
+    if (query === null) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(`${apiPath('professionals')}${query ? `?${query}` : ''}`)
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    return data.map(parseProfessionalOrganization)
+  }
+
+  async getProfessional(slug: string): Promise<ProfessionalOrganization> {
+    const normalized = normalizedProfessionalSlug(slug)
+    if (!normalized) throw new NativeApiError(400, 'invalid_request')
+    const organization = parseProfessionalOrganization(
+      await this.#request(apiPath('professionals', normalized)),
+    )
+    if (organization.slug !== normalized) throw new NativeApiError(200, 'invalid_response')
+    return organization
+  }
+
+  async getProfessionalProfile(): Promise<ProfessionalProfileWorkspace> {
+    return parseProfessionalProfileWorkspace(
+      await this.#request(apiPath('professional', 'profile')),
+    )
+  }
+
+  async createProfessionalOrganization(
+    input: CreateProfessionalOrganizationInput,
+  ): Promise<CreatedProfessionalOrganization> {
+    const body = createProfessionalOrganizationBody(input)
+    if (!body) throw new NativeApiError(400, 'invalid_request')
+    return parseCreatedProfessionalOrganization(await this.#request(apiPath('professionals'), {
+      method: 'POST', body,
+    }))
+  }
+
+  async saveProfessionalProfile(
+    input: SaveProfessionalProfileInput,
+  ): Promise<ProfessionalOrganization> {
+    const body = saveProfessionalProfileBody(input)
+    if (!body) throw new NativeApiError(400, 'invalid_request')
+    const organization = parseProfessionalOrganization(await this.#request(
+      apiPath('professional', 'profile'), { method: 'POST', body },
+    ))
+    if (organization.organizationRef !== input.organizationRef
+      || organization.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return organization
+  }
+
+  async listProjectInvitations(
+    homeRef: string,
+    projectRef: string,
+  ): Promise<readonly ProjectInvitation[]> {
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const data = await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'invitations'),
+    )
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    const invitations = data.map(parseProjectInvitation)
+    if (invitations.some(invitation => invitation.homeRef !== homeRef
+      || invitation.projectRef !== projectRef)) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitations
+  }
+
+  async inviteProfessional(
+    homeRef: string,
+    projectRef: string,
+    input: InviteProfessionalInput,
+  ): Promise<ProjectInvitation> {
+    const body = inviteProfessionalBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const invitation = parseProjectInvitation(await this.#request(
+      apiPath('homes', homeRef, 'projects', projectRef, 'invitations'),
+      { method: 'POST', body },
+    ))
+    if (invitation.homeRef !== homeRef || invitation.projectRef !== projectRef
+      || invitation.professionalOrganizationRef !== input.professionalOrganizationRef) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitation
+  }
+
+  async revokeProjectInvitation(
+    homeRef: string,
+    projectRef: string,
+    invitationRef: string,
+    input: RevokeProjectInvitationInput,
+  ): Promise<ProjectInvitation> {
+    const body = invitationRevisionBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef)
+      || !isInvitationRef(invitationRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const invitation = parseProjectInvitation(await this.#request(apiPath(
+      'homes', homeRef, 'projects', projectRef, 'invitations', invitationRef, 'revoke',
+    ), { method: 'POST', body }))
+    if (invitation.invitationRef !== invitationRef || invitation.homeRef !== homeRef
+      || invitation.projectRef !== projectRef || invitation.status !== 'revoked'
+      || invitation.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitation
+  }
+
+  async listProfessionalInvitations(): Promise<readonly ProjectInvitation[]> {
+    const data = await this.#request(apiPath('professional', 'invitations'))
+    if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
+    return data.map(parseProjectInvitation)
+  }
+
+  async respondToProjectInvitation(
+    invitationRef: string,
+    input: RespondToProjectInvitationInput,
+  ): Promise<ProjectInvitation> {
+    const body = respondToProjectInvitationBody(input)
+    if (!isInvitationRef(invitationRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const invitation = parseProjectInvitation(await this.#request(
+      apiPath('professional', 'invitations', invitationRef, 'respond'),
+      { method: 'POST', body },
+    ))
+    if (invitation.invitationRef !== invitationRef || invitation.status !== input.response
+      || invitation.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitation
+  }
+
+  professionalArtifactPreviewSource(
+    invitationRef: string,
+    artifactRef: string,
+  ): ProtectedImageSource {
+    const token = this.#token()
+    if (!isInvitationRef(invitationRef) || !isArtifactRef(artifactRef) || !token) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    return {
+      uri: `${this.#origin}${apiPath(
+        'professional', 'invitations', invitationRef, 'artifacts', artifactRef,
+      )}`,
+      headers: { ...nativeRequestHeaders(token), accept: '*/*' },
+    }
+  }
+
+  async readProfessionalArtifactContent(
+    invitationRef: string,
+    artifactRef: string,
+  ): Promise<ArtifactContent> {
+    if (!isInvitationRef(invitationRef) || !isArtifactRef(artifactRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    return this.#readArtifactContent(apiPath(
+      'professional', 'invitations', invitationRef, 'artifacts', artifactRef,
+    ), artifactRef)
+  }
+
+  async getProfessionalProposal(invitationRef: string): Promise<ProfessionalProposal | null> {
+    if (!isInvitationRef(invitationRef)) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(
+      apiPath('professional', 'invitations', invitationRef, 'proposals'),
+    )
+    const proposal = data === null ? null : parseProfessionalProposal(data)
+    if (proposal !== null && proposal.invitationRef !== invitationRef) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return proposal
+  }
+
+  async submitProfessionalProposal(
+    invitationRef: string,
+    input: SubmitProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    const body = professionalProposalBody(input)
+    if (!isInvitationRef(invitationRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const proposal = parseProfessionalProposal(await this.#request(
+      apiPath('professional', 'invitations', invitationRef, 'proposals'),
+      { method: 'POST', body },
+    ))
+    if (proposal.invitationRef !== invitationRef || proposal.revision !== 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return proposal
+  }
+
+  async reviseProfessionalProposal(
+    invitationRef: string,
+    quoteRef: string,
+    input: ReviseProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    const body = professionalProposalBody(input)
+    if (!isInvitationRef(invitationRef) || !isQuoteRef(quoteRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const proposal = parseProfessionalProposal(await this.#request(apiPath(
+      'professional', 'invitations', invitationRef, 'proposals', quoteRef,
+    ), { method: 'POST', body }))
+    if (proposal.invitationRef !== invitationRef || proposal.quoteRef !== quoteRef
+      || proposal.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return proposal
+  }
+
+  async decideProfessionalProposal(
+    homeRef: string,
+    projectRef: string,
+    quoteRef: string,
+    input: DecideProfessionalProposalInput,
+  ): Promise<ProfessionalProposal> {
+    const body = decideProfessionalProposalBody(input)
+    if (!isHomeRef(homeRef) || !isProjectRef(projectRef) || !isQuoteRef(quoteRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const proposal = parseProfessionalProposal(await this.#request(apiPath(
+      'homes', homeRef, 'projects', projectRef, 'proposals', quoteRef, 'decision',
+    ), { method: 'POST', body }))
+    if (proposal.homeRef !== homeRef || proposal.projectRef !== projectRef
+      || proposal.quoteRef !== quoteRef || proposal.homeownerDecision !== input.decision
+      || proposal.decisionRevision !== input.expectedDecisionRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return proposal
   }
 
   async askRolo(
@@ -567,10 +917,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     return data.map(parseArtifact)
   }
 
-  artifactPreviewSource(homeRef: string, artifactRef: string): {
-    readonly uri: string
-    readonly headers: Readonly<Record<string, string>>
-  } {
+  artifactPreviewSource(homeRef: string, artifactRef: string): ProtectedImageSource {
     const token = this.#token()
     if (!isHomeRef(homeRef) || !isArtifactRef(artifactRef) || !token) {
       throw new NativeApiError(400, 'invalid_request')
@@ -579,6 +926,22 @@ export class HomesroloNativeApi implements HomesroloApi {
       uri: `${this.#origin}${apiPath('homes', homeRef, 'artifacts', artifactRef, 'preview')}`,
       headers: { ...nativeRequestHeaders(token), accept: 'image/*' },
     }
+  }
+
+  async readArtifactContent(homeRef: string, artifact: ArtifactRecord): Promise<ArtifactContent> {
+    if (!isHomeRef(homeRef) || artifact.homeRef !== homeRef
+      || !isArtifactRef(artifact.artifactRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const content = await this.#readArtifactContent(
+      apiPath('homes', homeRef, 'artifacts', artifact.artifactRef, 'content'),
+      artifact.artifactRef,
+      artifact.displayName,
+    )
+    if (content.mediaType !== artifact.mediaType || content.byteLength !== artifact.byteLength) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return content
   }
 
   async uploadArtifact(

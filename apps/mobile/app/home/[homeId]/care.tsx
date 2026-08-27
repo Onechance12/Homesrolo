@@ -1,20 +1,24 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, router, useGlobalSearchParams } from 'expo-router'
+import { Redirect, router } from 'expo-router'
 import type { ArtifactKind } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
+import { ArtifactFileCard } from '../../../src/components/ArtifactFileCard.tsx'
+import { PhotoPreview } from '../../../src/components/PhotoPreview.tsx'
+import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
 import { WorkCard } from '../../../src/components/WorkCard.tsx'
 import { Button, Card, Loading, Metric, Notice, Page, SectionTitle, Tag } from '../../../src/components/ui.tsx'
+import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import { pickDocument, pickPhoto } from '../../../src/native/pickers.ts'
 import { PREVIEW_UPLOAD_NOTICE } from '../../../src/preview/api.ts'
 import { colors, radius, space } from '../../../src/theme.ts'
 
 export default function MyHomeScreen() {
-  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const homeId = useHomeId()
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const width = useWindowDimensions().width
   const loader = useCallback(async () => {
@@ -26,6 +30,7 @@ export default function MyHomeScreen() {
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [previewPhotoRef, setPreviewPhotoRef] = useState<string | null>(null)
   const cardWidth = Math.max(270, width - 64)
 
   const values = useMemo(() => {
@@ -87,10 +92,10 @@ export default function MyHomeScreen() {
           <Metric value={artifacts.length} label="saved files" />
           <Metric value={values.care.length} label="care entries" />
         </View>
-        <Text style={styles.privateLine}>This record grows quietly as you plan, fix, maintain, and finish work.</Text>
+        <Text style={styles.privateLine}>Private to this home. You decide what gets shared.</Text>
       </Card>
 
-      <SectionTitle title="The cards in your Rolo" detail="Swipe through what this home has been through." />
+      <SectionTitle title="Your Rolo" detail="Swipe through recent work and care." />
       {values.cards.length > 0 ? (
         <ScrollView
           horizontal
@@ -104,12 +109,12 @@ export default function MyHomeScreen() {
       ) : (
         <Card>
           <Tag tone="lime">Your first card</Tag>
-          <Text style={styles.emptyTitle}>Work you start from Today will land here.</Text>
-          <Text style={styles.copy}>You can also add an old repair, service visit, receipt, or photo whenever you have it.</Text>
+          <Text style={styles.emptyTitle}>Your first home card starts here.</Text>
+          <Text style={styles.copy}>Add an old repair, service visit, receipt, or photo whenever you have it.</Text>
         </Card>
       )}
 
-      <SectionTitle title="Save to this home" detail="Keep a photo or file even when it is not attached to a plan yet." />
+      <SectionTitle title="Photos & files" detail="Save something to the home even when it is not attached to work yet." />
       <View style={styles.captureGrid}>
         <Capture icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
         <Capture icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
@@ -118,36 +123,40 @@ export default function MyHomeScreen() {
       </View>
       {uploadError ? <Notice message={uploadError} /> : null}
 
+      <SectionTitle title={`Photos · ${values.photos.length}`} detail="Private images saved to this home. Tap one to look closer." />
       {values.photos.length > 0 ? (
         <>
-          <SectionTitle title="Photos" detail="Private images saved to this home." />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
             {values.photos.slice(0, 12).map(photo => (
-              <View key={photo.artifactRef} style={styles.photoCard}>
-                <Image source={api.artifactPreviewSource(homeId, photo.artifactRef)} style={styles.photo} resizeMode="cover" />
+              <Pressable
+                key={photo.artifactRef}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${photo.displayName}`}
+                onPress={() => setPreviewPhotoRef(photo.artifactRef)}
+                style={({ pressed }) => [styles.photoCard, pressed && styles.pressed]}
+              >
+                <ProtectedImage source={api.artifactPreviewSource(homeId, photo.artifactRef)} style={styles.photo} resizeMode="cover" />
                 <Text style={styles.photoName} numberOfLines={2}>{photo.displayName}</Text>
-              </View>
+              </Pressable>
             ))}
           </ScrollView>
         </>
-      ) : null}
+      ) : <Text style={styles.emptyLine}>No photos saved yet.</Text>}
 
+      <SectionTitle title={`Files & warranties · ${values.files.length}`} />
       {values.files.length > 0 ? (
         <>
-          <SectionTitle title="Documents & warranties" />
           {values.files.slice(0, 6).map(file => (
-            <Card key={file.artifactRef}>
-              <View style={styles.fileRow}>
-                <Ionicons name={file.kind === 'warranty' ? 'shield-checkmark-outline' : 'document-text-outline'} size={23} color={colors.aqua} />
-                <View style={styles.fileCopy}>
-                  <Text style={styles.fileName}>{file.displayName}</Text>
-                  <Text style={styles.fileMeta}>{file.kind} · {Math.max(1, Math.round(file.byteLength / 1024))} KB</Text>
-                </View>
-              </View>
-            </Card>
+            <ArtifactFileCard
+              key={file.artifactRef}
+              title={file.displayName}
+              detail={`${file.kind} · ${Math.max(1, Math.round(file.byteLength / 1024))} KB`}
+              kind={file.kind}
+              load={() => api.readArtifactContent(homeId, file)}
+            />
           ))}
         </>
-      ) : null}
+      ) : <Text style={styles.emptyLine}>No files or warranties saved yet.</Text>}
 
       <SectionTitle title="Care & checkups" detail="Small habits make the record more useful without turning homeownership into homework." />
       <Card accent>
@@ -160,8 +169,8 @@ export default function MyHomeScreen() {
         </View>
         <Text style={styles.copy}>Walk the same areas a few times a year and save what changed. Roof Watch is the roof-specific part of Home Watch.</Text>
         <Button
-          label="Talk through a home checkup"
-          icon="sparkles-outline"
+          label="Start a home checkup"
+          icon="checkmark-circle-outline"
           onPress={() => router.push({
             pathname: '/home/[homeId]/rolo',
             params: { homeId, prompt: 'Help me do a seasonal Home Watch checkup and record what I see.' },
@@ -175,13 +184,19 @@ export default function MyHomeScreen() {
         <Badge icon="checkmark-circle-outline" title="Care keeper" earned={values.care.length >= 3} detail={`${values.care.length} entries`} />
       </View>
 
-      {values.newest.length > 0 ? (
-        <>
-          <SectionTitle title="Home history" detail="The same work records, ordered by the latest update." />
-          {values.newest.slice(0, 5).map(item => <WorkCard key={item.projectRef} work={item} />)}
-        </>
+      <Button
+        label="View all work"
+        onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
+        quiet
+        icon="layers-outline"
+      />
+      {previewPhotoRef ? (
+        <PhotoPreview
+          source={api.artifactPreviewSource(homeId, previewPhotoRef)}
+          title={values.photos.find(photo => photo.artifactRef === previewPhotoRef)?.displayName ?? 'Home photo'}
+          onClose={() => setPreviewPhotoRef(null)}
+        />
       ) : null}
-      <Button label="Refresh My Home" onPress={resource.reload} quiet icon="refresh" />
     </Page>
   )
 }
@@ -210,7 +225,7 @@ function Badge({ icon, title, detail, earned }: {
     <View style={[styles.badge, earned && styles.badgeEarned]}>
       <Ionicons name={icon} size={22} color={earned ? colors.lime : colors.smoke} />
       <Text style={styles.badgeTitle}>{title}</Text>
-      <Text style={styles.badgeDetail}>{earned ? detail : 'Keep building'}</Text>
+      <Text style={styles.badgeDetail}>{earned ? detail : 'Not started'}</Text>
     </View>
   )
 }
@@ -221,6 +236,7 @@ const styles = StyleSheet.create({
   carousel: { gap: 12, paddingRight: space.lg },
   emptyTitle: { color: colors.cream, fontSize: 20, lineHeight: 25, fontWeight: '900' },
   copy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
+  emptyLine: { color: colors.smoke, fontSize: 13, lineHeight: 18, paddingHorizontal: 2 },
   captureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   capture: {
     width: '48%', minHeight: 96, gap: 9, alignItems: 'center', justifyContent: 'center',
@@ -236,17 +252,13 @@ const styles = StyleSheet.create({
   },
   photo: { width: 190, height: 145, backgroundColor: colors.inkSoft },
   photoName: { color: colors.cream, fontSize: 12, lineHeight: 17, fontWeight: '700', padding: 11 },
-  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  fileCopy: { flex: 1, gap: 3 },
-  fileName: { color: colors.cream, fontSize: 15, fontWeight: '800' },
-  fileMeta: { color: colors.slate, fontSize: 11, textTransform: 'capitalize' },
   watchRow: { flexDirection: 'row', gap: 13, alignItems: 'center' },
   watchIcon: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   watchCopy: { flex: 1, gap: 7 },
   watchTitle: { color: colors.cream, fontSize: 19, lineHeight: 23, fontWeight: '900' },
-  badges: { flexDirection: 'row', gap: space.sm },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   badge: {
-    flex: 1, minHeight: 120, borderRadius: radius.medium, borderWidth: 1,
+    flexBasis: '47%', flexGrow: 1, minHeight: 110, borderRadius: radius.medium, borderWidth: 1,
     borderColor: colors.line, backgroundColor: colors.inkRaised, padding: 12, gap: 6,
   },
   badgeEarned: { borderColor: colors.lime, backgroundColor: colors.limeSoft },

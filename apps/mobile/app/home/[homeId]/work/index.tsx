@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { Redirect, router, useFocusEffect, useGlobalSearchParams } from 'expo-router'
+import { Redirect, router, useFocusEffect } from 'expo-router'
 import type { WorkCategory, WorkKind, WorkStatus } from '../../../../src/api/model.ts'
 import { friendlyError } from '../../../../src/api/errors.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
 import { WorkCard } from '../../../../src/components/WorkCard.tsx'
 import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../../src/components/ui.tsx'
+import { useHomeId } from '../../../../src/home/HomeRouteProvider.tsx'
 import { useResource } from '../../../../src/hooks/useResource.ts'
 import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../../src/theme.ts'
 
@@ -18,14 +19,15 @@ const CATEGORIES: readonly WorkCategory[] = [
 const STATUSES: readonly WorkStatus[] = ['planned', 'in_progress', 'completed']
 
 export default function WorkScreen() {
-  const { homeId } = useGlobalSearchParams<{ homeId: string }>()
+  const homeId = useHomeId()
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const loader = useCallback(() => api.listWork(homeId), [api, homeId])
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'open' | 'care'>('open')
+  const [filter, setFilter] = useState<'all' | 'open' | 'care' | 'completed'>('open')
+  const [query, setQuery] = useState('')
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [professional, setProfessional] = useState('')
@@ -41,12 +43,24 @@ export default function WorkScreen() {
     else hasFocused.current = true
   }, [resource.reload]))
 
-  const visible = useMemo(() => resource.state.kind !== 'ready' ? []
-    : resource.state.value.filter(item => !item.archived).filter(item => {
-      if (filter === 'open') return item.status === 'planned' || item.status === 'in_progress'
-      if (filter === 'care') return ['issue', 'repair', 'service'].includes(item.workKind)
-      return true
-    }), [filter, resource.state])
+  const visible = useMemo(() => {
+    if (resource.state.kind !== 'ready') return []
+    const normalized = query.trim().toLocaleLowerCase('en-US')
+    const statusRank = { in_progress: 0, planned: 1, completed: 2, cancelled: 3 } as const
+    return resource.state.value
+      .filter(item => !item.archived)
+      .filter(item => {
+        if (filter === 'open') return item.status === 'planned' || item.status === 'in_progress'
+        if (filter === 'care') return ['issue', 'repair', 'service'].includes(item.workKind)
+        if (filter === 'completed') return item.status === 'completed'
+        return true
+      })
+      .filter(item => !normalized || [
+        item.title, item.summary, item.professionalLabel ?? '', categoryLabel[item.category], kindLabel[item.workKind],
+      ].some(value => value.toLocaleLowerCase('en-US').includes(normalized)))
+      .sort((left, right) => statusRank[left.status] - statusRank[right.status]
+        || right.updatedAt.localeCompare(left.updatedAt))
+  }, [filter, query, resource.state])
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
@@ -87,23 +101,23 @@ export default function WorkScreen() {
   return (
     <Page>
       <HomeHeader
-        section="Plans"
-        title="Keep work moving."
-        detail="Projects, repairs, and routine help stay together here from the first idea through the finished work."
+        section="Work"
+        title="Everything happening at home."
+        detail="Projects, repairs, service, and finished work stay together."
       />
       {!creating ? (
         <>
           <Card accent>
-            <Text style={styles.formTitle}>Start with what you want done.</Text>
-            <Text style={styles.formCopy}>Tell Rolo about the problem, project, or service. It will ask the useful questions and let you approve the plan before anything is saved.</Text>
+            <Text style={styles.formTitle}>Start something.</Text>
+            <Text style={styles.formCopy}>Describe the problem, project, or service in your own words. Review it before anything is saved.</Text>
             <Button
-              label="Start a plan with Rolo"
-              icon="sparkles-outline"
+              label="Talk it through"
+              icon="chatbubble-ellipses-outline"
               onPress={() => router.push({
                 pathname: '/home/[homeId]/rolo',
                 params: {
                   homeId,
-                  prompt: 'Help me start a plan for work at my home. Ask what I need done, why, when, and the details a professional would need to understand it.',
+                  prompt: 'I need help planning some work at my home.',
                 },
               })}
             />
@@ -130,11 +144,19 @@ export default function WorkScreen() {
         </Card>
       ) : null}
 
-      <SectionTitle title="Your plans" detail="One place for open work, care, and finished history." />
+      <SectionTitle title="Work" detail="Active first, then your finished history." />
+      <TextField
+        label="Find work"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search title, area, note, or company"
+        returnKeyType="search"
+      />
       <View style={styles.chips}>
         <Chip label="Active" selected={filter === 'open'} onPress={() => setFilter('open')} />
-        <Chip label="Everything" selected={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip label="Care & repairs" selected={filter === 'care'} onPress={() => setFilter('care')} />
+        <Chip label="Care" selected={filter === 'care'} onPress={() => setFilter('care')} />
+        <Chip label="Completed" selected={filter === 'completed'} onPress={() => setFilter('completed')} />
+        <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
       </View>
       {resource.state.kind === 'loading' ? <Loading label="Opening work…" /> : null}
       {resource.state.kind === 'error' ? (
@@ -147,8 +169,8 @@ export default function WorkScreen() {
       {visible.map(item => <WorkCard key={item.projectRef} work={item} />)}
       {resource.state.kind === 'ready' && visible.length === 0 ? (
         <Notice message={filter === 'open'
-          ? 'No active plans yet. Start with Rolo or add the details yourself.'
-          : 'Nothing matches this view yet.'} />
+          ? 'Nothing is open right now.'
+          : query.trim() ? 'No work matches that search.' : 'Nothing matches this view.'} />
       ) : null}
     </Page>
   )

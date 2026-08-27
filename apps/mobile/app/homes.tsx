@@ -5,6 +5,7 @@ import { Redirect, router } from 'expo-router'
 import { useSession } from '../src/auth/SessionProvider.tsx'
 import { friendlyError } from '../src/api/errors.ts'
 import { useResource } from '../src/hooks/useResource.ts'
+import { openSelectedHome } from '../src/home/navigation.ts'
 import {
   Body, Brand, Button, Card, Eyebrow, Loading, Notice, Page, TextField, Title,
 } from '../src/components/ui.tsx'
@@ -39,7 +40,7 @@ export default function HomesScreen() {
       }
       const home = await api.createHome(cleanLabel, cleanAddress, pendingCreate.current.commandRef)
       pendingCreate.current = null
-      router.replace({ pathname: '/home/[homeId]', params: { homeId: home.homeRef } })
+      openSelectedHome(router, home.homeRef)
     } catch (caught) { setError(friendlyError(caught)) } finally { setBusy(false) }
   }
 
@@ -64,7 +65,7 @@ export default function HomesScreen() {
       {homes.state.kind === 'ready' ? homes.state.value.map(home => (
         <Pressable
           key={home.homeRef}
-          onPress={() => router.replace({ pathname: '/home/[homeId]', params: { homeId: home.homeRef } })}
+          onPress={() => openSelectedHome(router, home.homeRef)}
           style={({ pressed }) => [styles.homeCard, pressed && styles.pressed]}
         >
           <View style={styles.homeIcon}><Ionicons name="home" size={24} color={colors.ink} /></View>
@@ -94,6 +95,13 @@ export default function HomesScreen() {
             ? <Button label="Cancel" onPress={() => setAdding(false)} quiet /> : null}
         </Card>
       ) : <Button label="Add another home" icon="add" onPress={() => { pendingCreate.current = null; setAdding(true) }} quiet />}
+
+      <Button
+        label="Open Homesrolo Pro"
+        icon="briefcase-outline"
+        quiet
+        onPress={() => router.push('/pro')}
+      />
     </Page>
   )
 }
@@ -113,8 +121,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
   homeIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.lime },
   homeCopy: { flex: 1, gap: 4 },
-  homeTitle: { color: colors.cream, fontSize: 19, fontWeight: '900' },
+  homeTitle: { color: colors.cream, fontSize: 19, fontWeight: '800' },
   homeLocation: { color: colors.slate, fontSize: 13, lineHeight: 18 },
-  addTitle: { color: colors.cream, fontSize: 23, lineHeight: 28, fontWeight: '900' },
+  addTitle: { color: colors.cream, fontSize: 23, lineHeight: 28, fontWeight: '800' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, fontWeight: '700' },
 })
