@@ -186,6 +186,12 @@ export default function MyHomeScreen() {
           detail="Work, photos, files, and checkups in date order"
           onPress={() => router.push({ pathname: '/home/[homeId]/timeline', params: { homeId } })}
         />
+        <HomeTool
+          icon="people-outline"
+          title="People & companies"
+          detail="Find, invite, and return to professionals for this home"
+          onPress={() => router.push({ pathname: '/home/[homeId]/people', params: { homeId } })}
+        />
       </View>
 
       {showUploadActions ? (

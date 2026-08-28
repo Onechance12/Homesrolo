@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -12,10 +12,11 @@ import {
   View,
 } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { Redirect, router, useLocalSearchParams } from 'expo-router'
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type {
   ArtifactRecord,
+  HomeSummary,
   RoloReply,
   RoloTurn,
   WorkRecord,
@@ -24,6 +25,7 @@ import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
+import { WorkCard } from '../../../src/components/WorkCard.tsx'
 import { Button, Card, Loading, Notice, Page, Tag } from '../../../src/components/ui.tsx'
 import { pickPhoto } from '../../../src/native/pickers.ts'
 import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
@@ -45,27 +47,28 @@ import { categoryLabel, colors, kindLabel, radius, space, statusLabel } from '..
 const STARTERS: readonly {
   readonly icon: keyof typeof Ionicons.glyphMap
   readonly label: string
-  readonly prompt: string
+  readonly prompt?: string
+  readonly destination?: 'people'
 }[] = [
   {
     icon: 'thermometer-outline',
-    label: 'My AC isn\'t cooling',
-    prompt: 'My AC is running, but the house is not cooling. What can I check safely?',
+    label: 'Something isn\'t working',
+    prompt: 'Something at my home is not working. Help me figure out what to check safely and what to do next.',
   },
   {
-    icon: 'water-outline',
-    label: 'Help me plan a pool',
-    prompt: 'I want to add a pool. Help me organize the idea, budget, and next steps.',
+    icon: 'sparkles-outline',
+    label: 'Plan a project',
+    prompt: 'I want to plan a project for my home. Help me organize the idea, choices, budget, and next steps.',
+  },
+  {
+    icon: 'people-outline',
+    label: 'Find or invite a pro',
+    destination: 'people',
   },
   {
     icon: 'calendar-outline',
     label: 'What maintenance is due?',
     prompt: 'What should I be checking or maintaining around my home right now?',
-  },
-  {
-    icon: 'time-outline',
-    label: 'Find something in my home history',
-    prompt: 'Help me find something that was saved about this home.',
   },
 ]
 
@@ -117,6 +120,8 @@ export default function RoloScreen() {
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [conversationProjectRef, setConversationProjectRef] = useState<string | null>(null)
   const [hydratedScope, setHydratedScope] = useState<string | null>(null)
+  const [homeSummary, setHomeSummary] = useState<HomeSummary | null>(null)
+  const [activeWork, setActiveWork] = useState<readonly WorkRecord[]>([])
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
   const mounted = useRef(true)
@@ -135,6 +140,27 @@ export default function RoloScreen() {
   const persistenceKey = persistenceScope
     ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}`
     : null
+
+  useFocusEffect(useCallback(() => {
+    let active = true
+    setHomeSummary(null)
+    setActiveWork([])
+    if (auth.kind !== 'signed_in') {
+      return () => { active = false }
+    }
+    void Promise.allSettled([api.getHome(homeId), api.listWork(homeId)]).then(([homeResult, workResult]) => {
+      if (!active) return
+      setHomeSummary(homeResult.status === 'fulfilled' ? homeResult.value : null)
+      if (workResult.status === 'fulfilled') {
+        setActiveWork(workResult.value
+          .filter(item => !item.archived && (item.status === 'planned' || item.status === 'in_progress'))
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)))
+      } else {
+        setActiveWork([])
+      }
+    })
+    return () => { active = false }
+  }, [api, auth.kind, homeId]))
 
   useEffect(() => {
     if (!persistenceScope || redirectToPeople) return
@@ -286,10 +312,18 @@ export default function RoloScreen() {
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
+  if (persistenceKey && hydratedScope !== persistenceKey) {
+    return <Loading label="Opening Rolo…" />
+  }
   if (!auth.session.capabilities.homeAssistant) {
     return (
       <Page>
         <HomeHeader section="Rolo Live" title="Rolo can’t answer right now." detail="Your home, work, photos, and files are still here." />
+        <Card>
+          <Text style={styles.introCopy}>You can keep using the rest of your home while Rolo is unavailable.</Text>
+          <Button label="Open Home" icon="home-outline" onPress={() => router.replace({ pathname: '/home/[homeId]/care', params: { homeId } })} />
+          <Button label="Open Work" icon="layers-outline" quiet onPress={() => router.replace({ pathname: '/home/[homeId]/work', params: { homeId } })} />
+        </Card>
       </Page>
     )
   }
@@ -359,7 +393,6 @@ export default function RoloScreen() {
     setPhotoReview(null)
     setPhotoReviewTitle(null)
     setPhotoReviewRef(null)
-    if (prompt !== undefined) router.setParams({ prompt: undefined })
     let selectedPhoto = attachment?.state === 'saved' ? attachment.artifact : null
     let photoSavedDuringSend = false
     try {
@@ -404,6 +437,7 @@ export default function RoloScreen() {
       setProposal(reply.proposedWork)
       setSuggestion(suggestionFromReply(reply))
       setFollowUpQuestions(reply.followUpQuestions)
+      if (prompt !== undefined) router.setParams({ prompt: undefined })
       if (selectedPhoto && reply.photoReview) {
         setPhotoReview(reply.photoReview)
         setPhotoReviewTitle(selectedPhoto.displayName)
@@ -467,6 +501,9 @@ export default function RoloScreen() {
       })
       pendingCreate.current = null
       setSaved(work)
+      if (work.status === 'planned' || work.status === 'in_progress') {
+        setActiveWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
+      }
       setProposal(null)
       setSuggestion({ destination: 'work', projectRef: work.projectRef })
       setFollowUpQuestions([])
@@ -517,8 +554,8 @@ export default function RoloScreen() {
         >
         <HomeHeader
           section="Rolo"
-          title="What’s going on?"
-          detail="Talk it through, ask about this home, or add a photo."
+          title={homeSummary?.displayLabel ?? 'What’s going on?'}
+          detail={homeSummary?.privateLocationLabel ?? 'Talk it through, ask about this home, or add a photo.'}
         />
 
         {turns.length > 0 ? (
@@ -553,8 +590,8 @@ export default function RoloScreen() {
             <View style={styles.introTop}>
               <View style={styles.roloMark}><Ionicons name="chatbubble-ellipses" size={21} color={colors.ink} /></View>
               <View style={styles.introHeading}>
-                <Text style={styles.introTitle}>Tell me what brought you here.</Text>
-                <Text style={styles.introCopy}>A repair, an idea, routine care, or a question about the house.</Text>
+                <Text style={styles.introTitle}>What’s going on at home?</Text>
+                <Text style={styles.introCopy}>Tell me, show me a photo, or choose a place to start.</Text>
               </View>
             </View>
             {STARTERS.map(starter => (
@@ -563,6 +600,11 @@ export default function RoloScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={starter.label}
                 onPress={() => {
+                  if (starter.destination === 'people') {
+                    router.push({ pathname: '/home/[homeId]/people', params: { homeId } })
+                    return
+                  }
+                  if (!starter.prompt) return
                   if (attachment) {
                     setInput(starter.prompt)
                     setApprovedPhotoMessage(null)
@@ -579,6 +621,26 @@ export default function RoloScreen() {
               </Pressable>
             ))}
           </Card>
+        ) : null}
+
+        {turns.length === 0 && !conversationProjectRef && activeWork[0] ? (
+          <View style={styles.activeWork}>
+            <View style={styles.activeWorkHeading}>
+              <View style={styles.activeWorkTitleRow}>
+                <Ionicons name="pulse-outline" size={17} color={colors.lime} />
+                <Text style={styles.activeWorkTitle}>Already in motion</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open all active work"
+                onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Text style={styles.activeWorkLink}>{activeWork.length > 1 ? `See all ${activeWork.length}` : 'See Work'}</Text>
+              </Pressable>
+            </View>
+            <WorkCard work={activeWork[0]} compact />
+          </View>
         ) : null}
 
         {turns.map((turn, index) => (
@@ -922,7 +984,7 @@ function suggestionLabel(suggestion: RoloSuggestion): string {
   if (suggestion.destination === 'work' || suggestion.destination === 'activity') return 'Open Work'
   if (suggestion.destination === 'library') return 'Open photos & files'
   if (suggestion.destination === 'details') return 'Open Home'
-  return 'Open Today'
+  return 'Open Home'
 }
 
 function openSuggestion(homeId: string, suggestion: RoloSuggestion) {
@@ -945,7 +1007,7 @@ function openSuggestion(homeId: string, suggestion: RoloSuggestion) {
     router.push({ pathname: '/home/[homeId]/details', params: { homeId } })
     return
   }
-  router.push({ pathname: '/home/[homeId]', params: { homeId } })
+  router.push({ pathname: '/home/[homeId]/care', params: { homeId } })
 }
 
 function PhotoAction({ icon, label, disabled, onPress }: {
@@ -983,6 +1045,11 @@ const styles = StyleSheet.create({
   roloMark: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   introTitle: { color: colors.cream, fontSize: 18, lineHeight: 23, fontWeight: '800' },
   introCopy: { color: colors.slate, fontSize: 13, lineHeight: 19 },
+  activeWork: { gap: 9 },
+  activeWorkHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  activeWorkTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  activeWorkTitle: { color: colors.cream, fontSize: 13, fontWeight: '900' },
+  activeWorkLink: { color: colors.aqua, fontSize: 12, fontWeight: '900' },
   newChat: { minHeight: 44, alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10 },
   newChatText: { color: colors.aqua, fontSize: 12, fontWeight: '700' },
   pressed: { opacity: 0.72 },

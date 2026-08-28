@@ -1,7 +1,7 @@
 import type { ImperativeRouter } from 'expo-router'
 
 export type WorkspaceRoute = '/pro' | {
-  readonly pathname: '/home/[homeId]'
+  readonly pathname: '/home/[homeId]/rolo'
   readonly params: { readonly homeId: string }
 }
 

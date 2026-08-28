@@ -29,7 +29,7 @@ export default function StartupScreen() {
       readWorkspacePreference(principalRef),
     ])
     const decision = decideStartupDestination(
-      homes.length > 0,
+      homes.map(home => home.homeRef),
       hasActiveProfessionalWorkspace(professional),
       preference,
     )
