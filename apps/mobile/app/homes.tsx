@@ -9,16 +9,17 @@ import { openSelectedHome } from '../src/home/navigation.ts'
 import {
   EMPTY_NEW_HOME_ADDRESS,
   reviewNewHomeAddress,
-  sameHomeRecordAddress,
   type NewHomeAddressDraft,
   type ReviewedNewHomeAddress,
 } from '../src/home/onboarding.ts'
+import { createReviewedHome } from '../src/home/create-home.ts'
 import { publicRoofingIntent, publicRoofingPrompt } from '../src/auth/entry-intent.ts'
 import { legacyProjectRef, oneRouteParam } from '../src/home/legacy-route.ts'
 import {
   Body, Brand, Button, Card, Eyebrow, Loading, Notice, Page, TextField, Title,
 } from '../src/components/ui.tsx'
 import { InstallHomesrolo } from '../src/components/InstallHomesrolo.tsx'
+import { writeWorkspacePreference } from '../src/workspace/preference.ts'
 import { colors, radius, space } from '../src/theme.ts'
 
 export default function HomesScreen() {
@@ -30,7 +31,7 @@ export default function HomesScreen() {
   const entryIntent = publicRoofingIntent(rawIntent)
   const requestedAdd = oneRouteParam(rawAdd) === '1'
   const requestedProject = legacyProjectRef(rawProject)
-  const { state: auth, api, signOut, refreshSession } = useSession()
+  const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(() => api.listHomes(), [api])
   const homes = useResource(loader, auth.kind === 'signed_in')
   const [adding, setAdding] = useState(requestedAdd)
@@ -44,8 +45,15 @@ export default function HomesScreen() {
     readonly createCommandRef: string
     readonly recordCommandRef: string
   } | null>(null)
+  const principalRef = auth.kind === 'signed_in' ? auth.session.principalRef : null
+  const hasValidatedHome = homes.state.kind === 'ready' && homes.state.value.length > 0
 
   useEffect(() => { if (requestedAdd) setAdding(true) }, [requestedAdd])
+
+  useEffect(() => {
+    if (!principalRef || !hasValidatedHome) return
+    void writeWorkspacePreference(principalRef, 'home')
+  }, [hasValidatedHome, principalRef])
 
   function openHome(homeRef: string) {
     if (requestedProject) {
@@ -72,6 +80,7 @@ export default function HomesScreen() {
   }
 
   async function addHome() {
+    if (!principalRef) return
     const review = reviewNewHomeAddress(address)
     if (!review.ok) {
       setReviewedAddress(null)
@@ -90,22 +99,13 @@ export default function HomesScreen() {
           recordCommandRef: await api.newCommandRef(),
         }
       }
-      const home = await api.createHome(
-        cleanLabel,
-        review.value.privateLocationLabel,
-        pendingCreate.current.createCommandRef,
-      )
-      const profile = await api.getHomeRecord(home.homeRef)
-      if (!sameHomeRecordAddress(profile.address, review.value.address)) {
-        await api.updateHomeRecord(home.homeRef, {
-          commandRef: pendingCreate.current.recordCommandRef,
-          expectedRevision: profile.revision,
-          address: review.value.address,
-          homeType: profile.homeType,
-          yearBuilt: profile.yearBuilt,
-          systems: profile.systems,
-        })
-      }
+      const home = await createReviewedHome(api, {
+        label: cleanLabel,
+        reviewedAddress: review.value,
+        createCommandRef: pendingCreate.current.createCommandRef,
+        recordCommandRef: pendingCreate.current.recordCommandRef,
+      })
+      await writeWorkspacePreference(principalRef, 'home')
       pendingCreate.current = null
       openHome(home.homeRef)
     } catch (caught) { setError(friendlyError(caught)) } finally { setBusy(false) }
@@ -134,11 +134,11 @@ export default function HomesScreen() {
         <Brand compact />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Sign out"
-          onPress={() => void signOut()}
+          accessibilityLabel="Open account"
+          onPress={() => router.push('/account')}
           style={styles.signOut}
         >
-          <Ionicons name="log-out-outline" size={20} color={colors.slate} />
+          <Ionicons name="person-outline" size={20} color={colors.slate} />
         </Pressable>
       </View>
       <View style={styles.hero}>
@@ -243,12 +243,6 @@ export default function HomesScreen() {
 
       <InstallHomesrolo />
 
-      <Button
-        label="Open Homesrolo Pro"
-        icon="briefcase-outline"
-        quiet
-        onPress={() => router.push('/pro')}
-      />
     </Page>
   )
 }

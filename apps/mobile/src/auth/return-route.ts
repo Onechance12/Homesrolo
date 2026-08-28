@@ -1,6 +1,6 @@
 import { isHomeRef, isProjectRef } from '../api/protocol.ts'
 
-export const DEFAULT_POST_SIGN_IN_DESTINATION = '/homes' as const
+export const DEFAULT_POST_SIGN_IN_DESTINATION = '/start' as const
 
 export type PostSignInDestination =
   | typeof DEFAULT_POST_SIGN_IN_DESTINATION

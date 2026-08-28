@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
-import type { ProfessionalOrganization, WorkCategory } from '../../../src/api/model.ts'
+import type { ProfessionalOrganization, ProjectInvitation, WorkCategory } from '../../../src/api/model.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import {
@@ -12,7 +12,7 @@ import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
 import { legacyProfessionalSlug, legacyProfessionalTrade } from '../../../src/home/legacy-route.ts'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import {
-  PROFESSIONAL_TRADES, matchesProfessional, tradeLabel,
+  PROFESSIONAL_TRADES, invitationStatus, matchesProfessional, tradeLabel,
 } from '../../../src/professional/presentation.ts'
 import { publicEmailUrl, publicPhoneUrl } from '../../../src/professional/contact.ts'
 import { categoryLabel, colors, radius, space } from '../../../src/theme.ts'
@@ -24,6 +24,8 @@ type SavedPerson = {
   readonly latest: string | null
 }
 
+type ProsSection = 'find' | 'invited' | 'saved'
+
 export default function PeopleScreen() {
   const homeId = useHomeId()
   const { professionalSlug: rawProfessionalSlug, trade: rawTrade } = useLocalSearchParams<{
@@ -33,31 +35,53 @@ export default function PeopleScreen() {
   const requestedProfessionalSlug = legacyProfessionalSlug(rawProfessionalSlug)
   const requestedTrade = legacyProfessionalTrade(rawTrade)
   const { state: auth, api, refreshSession } = useSession()
-  const invitationsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.invitations
+  const professionalFeaturesEnabled = auth.kind === 'signed_in'
+    && auth.session.capabilities.invitations
+    && auth.session.capabilities.projectQuotes
   const loader = useCallback(async () => {
     const [work, directory] = await Promise.all([
       api.listWork(homeId),
-      invitationsEnabled ? api.listProfessionals() : Promise.resolve([]),
+      professionalFeaturesEnabled ? api.listProfessionals() : Promise.resolve([]),
     ])
-    return { work, directory }
-  }, [api, homeId, invitationsEnabled])
+    const invitationResults = professionalFeaturesEnabled
+      ? await Promise.allSettled(work.map(item => api.listProjectInvitations(homeId, item.projectRef)))
+      : []
+    const invitations = invitationResults.flatMap(result => (
+      result.status === 'fulfilled' ? result.value : []
+    ))
+    const invitationLoadFailures = invitationResults.filter(result => result.status === 'rejected').length
+    return { work, directory, invitations, invitationLoadFailures }
+  }, [api, homeId, professionalFeaturesEnabled])
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [query, setQuery] = useState('')
   const [trade, setTrade] = useState<WorkCategory | 'all'>(requestedTrade ?? 'all')
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
   const [contactError, setContactError] = useState<string | null>(null)
+  const [section, setSection] = useState<ProsSection>('find')
 
-  useEffect(() => { if (requestedTrade) setTrade(requestedTrade) }, [requestedTrade])
+  useEffect(() => {
+    if (!requestedTrade) return
+    setTrade(requestedTrade)
+    setSection('find')
+  }, [requestedTrade])
 
   useEffect(() => {
     if (!requestedProfessionalSlug || resource.state.kind !== 'ready') return
     const organization = resource.state.value.directory.find(item => item.slug === requestedProfessionalSlug)
-    if (organization) setSelectedRef(organization.organizationRef)
+    if (organization) {
+      setSelectedRef(organization.organizationRef)
+      setSection('find')
+    }
   }, [requestedProfessionalSlug, resource.state])
 
   const view = useMemo(() => {
     if (resource.state.kind !== 'ready') {
-      return { saved: [] as readonly SavedPerson[], directory: [] as readonly ProfessionalOrganization[], openWork: [] }
+      return {
+        saved: [] as readonly SavedPerson[],
+        directory: [] as readonly ProfessionalOrganization[],
+        invitations: [] as readonly ProjectInvitation[],
+        openWork: [],
+      }
     }
     const byName = new Map<string, { name: string; count: number; areas: Set<string>; latest: string | null }>()
     for (const work of resource.state.value.work) {
@@ -73,6 +97,10 @@ export default function PeopleScreen() {
     return {
       saved: [...byName.values()].sort((left, right) => right.count - left.count),
       directory: resource.state.value.directory.filter(organization => matchesProfessional(organization, query, trade)),
+      invitations: [...resource.state.value.invitations].sort((left, right) => {
+        const active = (value: ProjectInvitation) => value.status === 'pending' || value.status === 'accepted' ? 1 : 0
+        return active(right) - active(left) || right.createdAt.localeCompare(left.createdAt)
+      }),
       openWork: resource.state.value.work.filter(work => !work.archived
         && (work.status === 'planned' || work.status === 'in_progress')),
     }
@@ -87,12 +115,13 @@ export default function PeopleScreen() {
   const selected = resource.state.kind === 'ready'
     ? resource.state.value.directory.find(item => item.organizationRef === selectedRef) ?? null
     : null
+  const allOrganizations = resource.state.kind === 'ready' ? resource.state.value.directory : []
   const matchingWork = selected ? view.openWork.filter(work => selected.trades.includes(work.category)) : []
 
   function openInvitation(projectRef: string, organizationRef: string) {
     router.push({
       pathname: '/home/[homeId]/work/[projectRef]',
-      params: { homeId, projectRef, professional: organizationRef },
+      params: { homeId, projectRef, professional: organizationRef, tab: 'bids' },
     })
   }
 
@@ -109,11 +138,37 @@ export default function PeopleScreen() {
     <Page>
       <HomeHeader
         section="Pros"
-        title="Find help. Keep the good ones."
-        detail="Invite a company to specific work, share only what you choose, and keep the people who worked on this home close."
+        title="Your home-service Rolodex"
+        detail="Find a company, follow private invitations, and keep the people this home already knows."
       />
 
-      {invitationsEnabled ? (
+      <View style={styles.sectionTabs} accessibilityRole="tablist">
+        <ProsTab label="Find" icon="search-outline" selected={section === 'find'} onPress={() => setSection('find')} />
+        <ProsTab
+          label={view.invitations.length > 0 ? `Invited · ${view.invitations.length}` : 'Invited'}
+          icon="paper-plane-outline"
+          selected={section === 'invited'}
+          onPress={() => setSection('invited')}
+        />
+        <ProsTab
+          label={view.saved.length > 0 ? `Saved · ${view.saved.length}` : 'Saved'}
+          icon="bookmark-outline"
+          selected={section === 'saved'}
+          onPress={() => setSection('saved')}
+        />
+      </View>
+
+      {resource.state.kind === 'loading' ? <Loading label="Opening your Rolodex…" /> : null}
+      {resource.state.kind === 'error' ? <Notice message="Your home-service Rolodex could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
+      {resource.state.kind === 'ready' && resource.state.value.invitationLoadFailures > 0 ? (
+        <Notice
+          message={`Homesrolo couldn’t check ${resource.state.value.invitationLoadFailures === 1 ? 'one work record' : `${resource.state.value.invitationLoadFailures} work records`} for invitations. Some company access may be missing from this view.`}
+          actionLabel="Try again"
+          onAction={resource.reload}
+        />
+      ) : null}
+
+      {resource.state.kind === 'ready' && section === 'find' && professionalFeaturesEnabled ? (
         <>
           <Card accent>
             <View style={styles.findHead}>
@@ -139,15 +194,10 @@ export default function PeopleScreen() {
             </View>
           </Card>
 
-          <View style={styles.directoryHead}>
-            <SectionTitle
-              title="Companies"
-              detail={`${view.directory.length} ${view.directory.length === 1 ? 'company' : 'companies'} found.`}
-            />
-            <Button label="I’m a pro" icon="briefcase-outline" quiet onPress={() => router.push('/pro')} />
-          </View>
-          {resource.state.kind === 'loading' ? <Loading label="Finding home pros…" /> : null}
-          {resource.state.kind === 'error' ? <Notice message="The professional directory could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
+          <SectionTitle
+            title="Companies"
+            detail={`${view.directory.length} ${view.directory.length === 1 ? 'company' : 'companies'} found.`}
+          />
           {view.directory.map(organization => {
             const active = selectedRef === organization.organizationRef
             return (
@@ -246,26 +296,101 @@ export default function PeopleScreen() {
             <Notice message="No companies match that search. Your work is still saved, so you can check again later." />
           ) : null}
         </>
-      ) : <Notice message="Homesrolo couldn’t open private invitations right now." />}
+      ) : null}
 
-      <SectionTitle title="People this home knows" detail="Built from the names saved on completed work—not purchased rankings or anonymous leads." />
-      {view.saved.map(person => (
-        <Card key={person.name.toLocaleLowerCase()}>
-          <View style={styles.profileTop}>
-            <View style={[styles.avatar, styles.savedAvatar]}><Ionicons name="checkmark" size={22} color={colors.mint} /></View>
-            <View style={styles.flex}>
-              <Text style={styles.profileName}>{person.name}</Text>
-              <Text style={styles.profileMeta}>{person.count} saved {person.count === 1 ? 'record' : 'records'}{person.latest ? ` · latest ${person.latest}` : ''}</Text>
-            </View>
-          </View>
-          <View style={styles.tags}>{[...person.areas].map(area => <Tag key={area} tone="mint">{area}</Tag>)}</View>
-        </Card>
-      ))}
-      {resource.state.kind === 'ready' && view.saved.length === 0 ? (
-        <Notice message="No past pros are saved yet. Add a company to real work and this home’s Rolodex builds itself." />
+      {resource.state.kind === 'ready' && section === 'find' && !professionalFeaturesEnabled ? (
+        <Notice message="Homesrolo couldn’t open company discovery or private invitations right now." />
+      ) : null}
+
+      {resource.state.kind === 'ready' && section === 'invited' ? (
+        professionalFeaturesEnabled ? (
+          <>
+            <SectionTitle title="Invited to your work" detail="Only the work and files you chose are shared with each company." />
+            {view.invitations.map(invitation => {
+              const organization = allOrganizations.find(item => (
+                item.organizationRef === invitation.professionalOrganizationRef
+              ))
+              return (
+                <Pressable
+                  key={invitation.invitationRef}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${invitation.disclosure.title} invitation for ${organization?.displayName ?? 'invited company'}`}
+                  accessibilityHint="Opens the work room where you can review or change this invitation"
+                  onPress={() => router.push({
+                    pathname: '/home/[homeId]/work/[projectRef]',
+                    params: { homeId, projectRef: invitation.projectRef, tab: 'bids' },
+                  })}
+                  style={({ pressed }) => [styles.invitation, pressed && styles.pressed]}
+                >
+                  <View style={styles.profileTop}>
+                    <View style={styles.invitationIcon}><Ionicons name="paper-plane" size={20} color={colors.ink} /></View>
+                    <View style={styles.flex}>
+                      <Text style={styles.profileName}>{organization?.displayName ?? 'Invited company'}</Text>
+                      <Text style={styles.profileMeta} numberOfLines={1}>{invitation.disclosure.title}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={19} color={colors.slate} />
+                  </View>
+                  <View style={styles.tags}>
+                    <Tag tone={invitation.status === 'accepted' ? 'mint' : invitation.status === 'pending' ? 'lime' : 'plain'}>
+                      {invitationStatus(invitation)}
+                    </Tag>
+                    <Tag tone="aqua">{tradeLabel(invitation.disclosure.category)}</Tag>
+                  </View>
+                  <Text style={styles.selfReported}>
+                    {invitation.disclosure.selectedArtifactRefs.length} selected {invitation.disclosure.selectedArtifactRefs.length === 1 ? 'file' : 'files'} shared · Open the work room to review access.
+                  </Text>
+                </Pressable>
+              )
+            })}
+            {view.invitations.length === 0 && resource.state.value.invitationLoadFailures === 0 ? (
+              <Notice message="No companies have been invited yet. Find a company, then choose the exact work you want them to see." />
+            ) : null}
+          </>
+        ) : <Notice message="Homesrolo couldn’t open private invitations right now." />
+      ) : null}
+
+      {resource.state.kind === 'ready' && section === 'saved' ? (
+        <>
+          <SectionTitle title="People this home knows" detail="Built from names saved on real work—not purchased rankings or anonymous leads." />
+          {view.saved.map(person => (
+            <Card key={person.name.toLocaleLowerCase()}>
+              <View style={styles.profileTop}>
+                <View style={[styles.avatar, styles.savedAvatar]}><Ionicons name="checkmark" size={22} color={colors.mint} /></View>
+                <View style={styles.flex}>
+                  <Text style={styles.profileName}>{person.name}</Text>
+                  <Text style={styles.profileMeta}>{person.count} saved {person.count === 1 ? 'record' : 'records'}{person.latest ? ` · latest ${person.latest}` : ''}</Text>
+                </View>
+              </View>
+              <View style={styles.tags}>{[...person.areas].map(area => <Tag key={area} tone="mint">{area}</Tag>)}</View>
+            </Card>
+          ))}
+          {view.saved.length === 0 ? (
+            <Notice message="No past pros are saved yet. Add a company to real work and this home’s Rolodex builds itself." />
+          ) : null}
+        </>
       ) : null}
       <Text style={styles.disclosure}>You choose every invitation. A listing is not an endorsement, and no company receives your address or Home Record by browsing this directory.</Text>
     </Page>
+  )
+}
+
+function ProsTab({ label, icon, selected, onPress }: {
+  readonly label: string
+  readonly icon: keyof typeof Ionicons.glyphMap
+  readonly selected: boolean
+  readonly onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.sectionTab, selected && styles.sectionTabSelected, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={17} color={selected ? colors.ink : colors.slate} />
+      <Text style={[styles.sectionTabText, selected && styles.sectionTabTextSelected]} numberOfLines={1}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -293,15 +418,27 @@ function ContactAction({ icon, label, accessibilityLabel, accessibilityHint, onP
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  sectionTabs: {
+    flexDirection: 'row', gap: 6, padding: 5, borderRadius: radius.medium,
+    borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft,
+  },
+  sectionTab: {
+    flex: 1, minWidth: 0, minHeight: 44, borderRadius: radius.small,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 6,
+  },
+  sectionTabSelected: { backgroundColor: colors.lime },
+  sectionTabText: { color: colors.slate, flexShrink: 1, fontSize: 11, lineHeight: 15, fontWeight: '900' },
+  sectionTabTextSelected: { color: colors.ink },
   findHead: { flexDirection: 'row', alignItems: 'center', gap: 13 },
   findIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900' },
   copy: { color: colors.slate, fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  directoryHead: { gap: space.sm },
   profileGroup: { gap: space.sm },
   profile: { backgroundColor: colors.inkRaised, borderColor: colors.line, borderWidth: 1, borderRadius: radius.large, padding: space.md, gap: space.sm },
   profileSelected: { borderColor: colors.lime, backgroundColor: colors.limeSoft },
+  invitation: { backgroundColor: colors.inkRaised, borderColor: colors.line, borderWidth: 1, borderRadius: radius.large, padding: space.md, gap: space.sm },
+  invitationIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   contactList: { gap: 7 },
   contactHeading: { color: colors.cream, fontSize: 14, lineHeight: 18, fontWeight: '900' },
   contactAction: { minHeight: 50, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },

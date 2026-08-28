@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import type { ArtifactKind } from '../../../src/api/model.ts'
@@ -9,8 +9,7 @@ import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ArtifactFileCard } from '../../../src/components/ArtifactFileCard.tsx'
 import { PhotoPreview } from '../../../src/components/PhotoPreview.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
-import { WorkCard } from '../../../src/components/WorkCard.tsx'
-import { Button, Card, Chip, Loading, Metric, Notice, Page, SectionTitle, Tag, TextField } from '../../../src/components/ui.tsx'
+import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../src/components/ui.tsx'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
 import { HOME_CHECKUP_AREA_LABEL } from '../../../src/home/checkups.ts'
 import {
@@ -37,7 +36,8 @@ export default function MyHomeScreen() {
   const requestedLibraryFilter = requestedHomeLibrary(rawLibrary)
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const photoCheckupsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.photoCheckups
-  const width = useWindowDimensions().width
+  const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
+  const showUploadActions = uploadsEnabled || previewMode
   const loader = useCallback(async () => {
     const [home, work, artifacts, checkupResult] = await Promise.all([
       api.getHome(homeId),
@@ -69,7 +69,6 @@ export default function MyHomeScreen() {
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
   const [photoLimit, setPhotoLimit] = useState(PHOTO_PAGE_SIZE)
   const [fileLimit, setFileLimit] = useState(FILE_PAGE_SIZE)
-  const cardWidth = Math.min(456, Math.max(270, width - 64))
 
   useEffect(() => {
     setPhotoLimit(PHOTO_PAGE_SIZE)
@@ -84,7 +83,6 @@ export default function MyHomeScreen() {
     if (resource.state.kind !== 'ready') return null
     const { work, artifacts, checkups } = resource.state.value
     const newest = [...work].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    const care = work.filter(item => item.workKind === 'service' || item.workKind === 'repair' || item.workKind === 'issue')
     const entries = homeLibraryEntries(artifacts, checkups, work)
     const visible = visibleHomeLibraryEntries(
       entries,
@@ -96,11 +94,7 @@ export default function MyHomeScreen() {
     )
     return {
       newest,
-      cards: newest.slice(0, 5),
-      care,
-      categories: new Set(work.map(item => item.category)),
       entries,
-      totalPhotos: entries.filter(item => item.kind === 'photo').length,
       photos: visible.filter(item => item.kind === 'photo'),
       files: visible.filter((item): item is Extract<HomeLibraryEntry, { source: 'uploads' }> => (
         item.source === 'uploads' && item.kind !== 'photo'
@@ -119,7 +113,7 @@ export default function MyHomeScreen() {
     return <Page><Notice message={`My Home could not load.${previewDetail}`} actionLabel="Try again" onAction={resource.reload} /></Page>
   }
 
-  const { home, work } = resource.state.value
+  const { home } = resource.state.value
   const photoPage = homeLibraryPage(values.photos, photoLimit)
   const filePage = homeLibraryPage(values.files, fileLimit)
   const hasLibraryConstraint = libraryFilter !== 'all' || librarySource !== 'all'
@@ -140,6 +134,7 @@ export default function MyHomeScreen() {
       setUploadError(PREVIEW_UPLOAD_NOTICE)
       return
     }
+    if (!uploadsEnabled) return
     let file: Awaited<ReturnType<typeof pickPhoto>> = null
     try {
       setUploadError(null)
@@ -164,15 +159,12 @@ export default function MyHomeScreen() {
         detail={home.privateLocationLabel}
       />
 
-      <Card accent>
-        <View style={styles.metricRow}>
-          <Metric value={work.length} label="work records" />
-          <Metric value={values.entries.length} label="saved items" />
-          <Metric value={values.care.length} label="care entries" />
-        </View>
-        <Text style={styles.privateLine}>Private to this home. You decide what gets shared.</Text>
-      </Card>
+      <View style={styles.privacyRow}>
+        <Ionicons name="lock-closed" size={15} color={colors.mint} />
+        <Text style={styles.privateLine}>Private to this home. You decide what leaves it.</Text>
+      </View>
 
+      <SectionTitle title="Home record" detail="Property facts, systems, checkups, and the history that stays with this home." />
       <View style={styles.homeTools}>
         <HomeTool
           icon="information-circle-outline"
@@ -196,34 +188,22 @@ export default function MyHomeScreen() {
         />
       </View>
 
-      <SectionTitle title="Your home, card by card" detail="Swipe through recent work and care." />
-      {values.cards.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={cardWidth + 12}
-          decelerationRate="fast"
-          contentContainerStyle={styles.carousel}
-        >
-          {values.cards.map(item => <View key={item.projectRef} style={{ width: cardWidth }}><WorkCard work={item} compact /></View>)}
-        </ScrollView>
+      {showUploadActions ? (
+        <>
+          <SectionTitle title="Add to this home" detail="Capture a photo, document, or warranty without creating work first." />
+          <View style={styles.captureGrid}>
+            <Capture icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
+            <Capture icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
+            <Capture icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
+            <Capture icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
+          </View>
+          {uploadError ? <Notice message={uploadError} /> : null}
+        </>
       ) : (
-        <Card>
-          <Tag tone="lime">Your first card</Tag>
-          <Text style={styles.emptyTitle}>Your first home card starts here.</Text>
-          <Text style={styles.copy}>Add an old repair, service visit, receipt, or photo whenever you have it.</Text>
-        </Card>
+        <Notice message="Adding photos and files isn’t available right now. Your saved library is still here." />
       )}
 
-      <SectionTitle title="Photos & files" detail="Save something to the home even when it is not attached to work yet." />
-      <View style={styles.captureGrid}>
-        <Capture icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
-        <Capture icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
-        <Capture icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
-        <Capture icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
-      </View>
-      {uploadError ? <Notice message={uploadError} /> : null}
-
+      <SectionTitle title="Home library" detail="Photos, Home Watch views, documents, and warranties in one private place." />
       <Card>
         <TextField
           label="Find something"
@@ -394,18 +374,6 @@ export default function MyHomeScreen() {
         </>
       ) : null}
 
-      <View style={styles.badges}>
-        <Badge icon="camera-outline" title="Photo habit" earned={values.totalPhotos > 0} detail={`${values.totalPhotos} saved`} />
-        <Badge icon="layers-outline" title="Whole home" earned={values.categories.size >= 3} detail={`${values.categories.size} areas`} />
-        <Badge icon="checkmark-circle-outline" title="Care keeper" earned={values.care.length >= 3} detail={`${values.care.length} entries`} />
-      </View>
-
-      <Button
-        label="View all work"
-        onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
-        quiet
-        icon="layers-outline"
-      />
       {previewPhoto ? (
         <PhotoPreview
           source={previewPhoto.source === 'uploads'
@@ -462,21 +430,6 @@ function HomeTool({ icon, title, detail, onPress }: {
   )
 }
 
-function Badge({ icon, title, detail, earned }: {
-  readonly icon: keyof typeof Ionicons.glyphMap
-  readonly title: string
-  readonly detail: string
-  readonly earned: boolean
-}) {
-  return (
-    <View style={[styles.badge, earned && styles.badgeEarned]}>
-      <Ionicons name={icon} size={22} color={earned ? colors.lime : colors.smoke} />
-      <Text style={styles.badgeTitle}>{title}</Text>
-      <Text style={styles.badgeDetail}>{earned ? detail : 'Not started'}</Text>
-    </View>
-  )
-}
-
 function libraryDate(value: string): string {
   const calendar = value.slice(0, 10)
   const parsed = new Date(`${calendar}T00:00:00.000Z`)
@@ -494,17 +447,14 @@ function requestedHomeLibrary(value: string | string[] | undefined): HomeLibrary
 }
 
 const styles = StyleSheet.create({
-  metricRow: { flexDirection: 'row', gap: space.sm },
-  privateLine: { color: colors.slate, fontSize: 12, lineHeight: 17, paddingTop: 4 },
+  privacyRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 2 },
+  privateLine: { color: colors.slate, flex: 1, fontSize: 12, lineHeight: 17 },
   homeTools: { gap: space.sm },
   homeTool: { minHeight: 72, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
   toolIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   toolCopy: { flex: 1, gap: 3 },
   toolTitle: { color: colors.cream, fontSize: 15, lineHeight: 19, fontWeight: '900' },
   toolDetail: { color: colors.slate, fontSize: 11, lineHeight: 16 },
-  carousel: { gap: 12, paddingRight: space.lg },
-  emptyTitle: { color: colors.cream, fontSize: 20, lineHeight: 25, fontWeight: '900' },
-  copy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
   emptyLine: { color: colors.smoke, fontSize: 13, lineHeight: 18, paddingHorizontal: 2 },
   captureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   capture: {
@@ -534,12 +484,4 @@ const styles = StyleSheet.create({
   photoName: { color: colors.cream, fontSize: 12, lineHeight: 17, fontWeight: '800' },
   photoMeta: { color: colors.slate, fontSize: 10, lineHeight: 14, textTransform: 'capitalize' },
   photoSource: { color: colors.lime, fontSize: 9, lineHeight: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  badge: {
-    flexBasis: '47%', flexGrow: 1, minHeight: 110, borderRadius: radius.medium, borderWidth: 1,
-    borderColor: colors.line, backgroundColor: colors.inkRaised, padding: 12, gap: 6,
-  },
-  badgeEarned: { borderColor: colors.lime, backgroundColor: colors.limeSoft },
-  badgeTitle: { color: colors.cream, fontWeight: '900', fontSize: 13 },
-  badgeDetail: { color: colors.slate, fontSize: 11, lineHeight: 15 },
 })

@@ -22,7 +22,7 @@ export default function SignInScreen() {
   const destination = useMemo(() => {
     const typedDestination = postSignInDestination(returnTo)
     const entryIntent = publicRoofingIntent(intent)
-    return typedDestination === '/homes' && entryIntent
+    return typedDestination === '/start' && entryIntent
       ? { pathname: '/homes' as const, params: { intent: entryIntent } }
       : typedDestination
   }, [intent, returnTo])

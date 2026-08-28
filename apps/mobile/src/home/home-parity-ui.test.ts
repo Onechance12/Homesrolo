@@ -19,15 +19,17 @@ test('keeps every restored home capability reachable inside the Expo shell', () 
 
 test('new-home onboarding reviews structured fields and saves the Home Record before opening it', () => {
   const homes = read('app/homes.tsx')
+  const createHome = read('src/home/create-home.ts')
   assert.match(homes, /label="Street address"/)
   assert.match(homes, /label="City"/)
   assert.match(homes, /label="State"/)
   assert.match(homes, /label="ZIP"/)
   assert.match(homes, /Review this home/)
-  assert.match(homes, /api\.getHomeRecord\(home\.homeRef\)/)
-  assert.match(homes, /api\.updateHomeRecord\(home\.homeRef/)
+  assert.match(homes, /createReviewedHome\(api/)
+  assert.match(createHome, /api\.getHomeRecord\(home\.homeRef\)/)
+  assert.match(createHome, /api\.updateHomeRecord\(home\.homeRef/)
   assert.match(homes, /openHome\(home\.homeRef\)/)
-  assert.ok(homes.indexOf('api.updateHomeRecord(home.homeRef') < homes.indexOf('openHome(home.homeRef)'))
+  assert.ok(homes.indexOf('createReviewedHome(api') < homes.indexOf('openHome(home.homeRef)'))
 })
 
 test('keeps a complete unified library reachable without rendering an unbounded list', () => {
@@ -72,6 +74,7 @@ test('work detail opens Rolo with the exact existing project context', () => {
   const client = read('src/api/client.ts')
   assert.match(detail, /label="Ask Rolo about this work"/)
   assert.match(detail, /projectRef,[\s\S]*Help me review this work record/)
+  assert.match(detail, /label="Plan with Rolo"[\s\S]*Help me build the plan for this work/)
   assert.match(rolo, /isProjectRef\(projectRefValue\)/)
   assert.match(rolo, /api\.askRolo\([\s\S]*conversationProjectRef/)
   assert.match(rolo, /setConversationProjectRef\(conversation\.projectRef\)/)

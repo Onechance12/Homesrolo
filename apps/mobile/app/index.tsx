@@ -12,5 +12,5 @@ export default function EntryScreen() {
       </Page>
     )
   }
-  return <Redirect href={state.kind === 'signed_in' ? '/homes' : '/sign-in'} />
+  return <Redirect href={state.kind === 'signed_in' ? '/start' : '/sign-in'} />
 }

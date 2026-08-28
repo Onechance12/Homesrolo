@@ -22,6 +22,8 @@ export function ProjectFiles({ homeId, projectRef }: {
   readonly projectRef: string
 }) {
   const { state: auth, api, previewMode } = useSession()
+  const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
+  const showUploadActions = uploadsEnabled || previewMode
   const loader = useCallback(async () => (await api.listArtifacts(homeId))
     .filter(artifact => artifact.projectRef === projectRef), [api, homeId, projectRef])
   const resource = useResource(loader, auth.kind === 'signed_in')
@@ -42,6 +44,7 @@ export function ProjectFiles({ homeId, projectRef }: {
       setError(PREVIEW_UPLOAD_NOTICE)
       return
     }
+    if (!uploadsEnabled) return
     setUploading(source)
     setError(null)
     let file: Awaited<ReturnType<typeof pickPhoto>> = null
@@ -67,15 +70,19 @@ export function ProjectFiles({ homeId, projectRef }: {
   return (
     <View style={styles.wrap}>
       <SectionTitle title="Photos & files" detail="Keep the evidence with this work, then choose exactly what a company may review." />
-      <View style={styles.actions}>
-        <FileAction icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
-        <FileAction icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
-        <FileAction icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
-        <FileAction icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
-      </View>
+      {showUploadActions ? (
+        <View style={styles.actions}>
+          <FileAction icon="camera-outline" label="Take photo" busy={uploading === 'camera'} onPress={() => void upload('photo', 'camera')} />
+          <FileAction icon="images-outline" label="Choose photo" busy={uploading === 'library'} onPress={() => void upload('photo', 'library')} />
+          <FileAction icon="document-attach-outline" label="Add file" busy={uploading === 'document'} onPress={() => void upload('document', 'document')} />
+          <FileAction icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} onPress={() => void upload('warranty', 'warranty')} />
+        </View>
+      ) : (
+        <Notice message="Adding photos and files isn’t available for this work right now. Saved files are still readable." />
+      )}
       {resource.state.kind === 'loading' ? <Loading label="Opening project files…" /> : null}
       {resource.state.kind === 'error' ? <Notice message="Project files could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
-      {error ? <Notice message={error} /> : null}
+      {showUploadActions && error ? <Notice message={error} /> : null}
 
       {photos.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
@@ -119,7 +126,9 @@ export function ProjectFiles({ homeId, projectRef }: {
         />
       ) : null}
       {resource.state.kind === 'ready' && artifacts.length === 0 ? (
-        <Text style={styles.empty}>Nothing attached yet. Add the first photo, estimate, receipt, or warranty when it matters.</Text>
+        <Text style={styles.empty}>{showUploadActions
+          ? 'Nothing attached yet. Add the first photo, estimate, receipt, or warranty when it matters.'
+          : 'No photos or files have been saved with this work yet.'}</Text>
       ) : null}
       {previewPhotoRef ? (
         <PhotoPreview

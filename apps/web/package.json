@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node ../../scripts/clean-web-export.mjs && next build",
+    "build": "node ../../scripts/clean-web-export.mjs && next build --webpack && node ../../scripts/clean-web-appledouble.mjs",
     "start": "npx serve out",
     "lint": "eslint app lib components",
     "typecheck": "tsc --noEmit"
