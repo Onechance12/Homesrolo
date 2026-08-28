@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { router } from 'expo-router'
+import { Redirect, router } from 'expo-router'
 import { NativeApiError } from '../api/client.ts'
 import type { HomesroloApi } from '../api/contract.ts'
 import type {
@@ -23,7 +23,6 @@ import {
   proposalDecisionLabel,
   proposalScopeDraft,
   proposalScopePayload,
-  slugFor,
   tradeLabel,
   type ProposalScopeDraft,
 } from '../professional/presentation.ts'
@@ -38,16 +37,14 @@ import {
   Divider,
   Eyebrow,
   Loading,
-  Metric,
   Notice,
   Page,
   SectionTitle,
   Tag,
   TextField,
-  Title,
 } from './ui.tsx'
 
-type HubTab = 'inbox' | 'company'
+type HubTab = 'today' | 'invitations' | 'jobs' | 'company'
 type CommandAttempt = { readonly intent: string; readonly commandRef: string }
 
 function isConflict(error: unknown): boolean {
@@ -96,153 +93,174 @@ function proposalTone(
   return 'plain'
 }
 
-function Header() {
+function Header({ organization }: {
+  readonly organization: ProfessionalOrganization | undefined
+}) {
   return (
     <>
       <View style={styles.topRow}>
         <Brand compact />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to my homes"
-          onPress={() => router.replace('/homes')}
-          style={({ pressed }) => [styles.homeButton, pressed && styles.pressed]}
+          accessibilityLabel="Open account"
+          onPress={() => router.push('/account')}
+          style={({ pressed }) => [styles.accountButton, pressed && styles.pressed]}
         >
-          <Ionicons name="home-outline" size={20} color={colors.cream} />
-          <Text style={styles.homeButtonText}>My homes</Text>
+          <Ionicons name="person-circle-outline" size={25} color={colors.cream} />
+          <Text style={styles.accountButtonText}>Account</Text>
         </Pressable>
       </View>
-      <View style={styles.hero}>
-        <Eyebrow>Homesrolo Pro</Eyebrow>
-        <Title small>One job. Only what the homeowner shared.</Title>
-        <Body muted>
-          Use the same Homesrolo account for your company card, invitations, and written
-          proposals. The homeowner chooses the job and exactly what you can see. This is not a CRM.
-        </Body>
-      </View>
-      <View style={styles.ruleRow}>
-        <Tag tone="lime">One job</Tag>
-        <Tag tone="aqua">Selected files</Tag>
-        <Tag>Company-provided profile</Tag>
+      <View style={styles.workspaceIdentity}>
+        <View style={styles.flexCopy}>
+          <Eyebrow>Pro workspace</Eyebrow>
+          <Text style={styles.workspaceName}>
+            {organization?.displayName ?? 'Homesrolo Pro'}
+          </Text>
+        </View>
+        {organization ? (
+          <Tag tone={organization.publicationState === 'published' ? 'lime' : 'plain'}>
+            {organization.publicationState === 'published'
+              ? 'Listed'
+              : organization.publicationState === 'suspended' ? 'Paused' : 'Draft'}
+          </Tag>
+        ) : null}
       </View>
     </>
   )
 }
 
-function HubTabs({ selected, inboxCount, onSelect }: {
+const HUB_TABS: readonly {
+  readonly value: HubTab
+  readonly label: string
+  readonly icon: keyof typeof Ionicons.glyphMap
+}[] = [
+  { value: 'today', label: 'Today', icon: 'today-outline' },
+  { value: 'invitations', label: 'Invites', icon: 'mail-outline' },
+  { value: 'jobs', label: 'Jobs', icon: 'briefcase-outline' },
+  { value: 'company', label: 'Company', icon: 'business-outline' },
+]
+
+function HubTabs({ selected, invitationCount, jobCount, onSelect }: {
   readonly selected: HubTab
-  readonly inboxCount: number
+  readonly invitationCount: number
+  readonly jobCount: number
   readonly onSelect: (tab: HubTab) => void
 }) {
   return (
     <View accessibilityRole="tablist" style={styles.tabs}>
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: selected === 'inbox' }}
-        onPress={() => onSelect('inbox')}
-        style={[styles.tab, selected === 'inbox' && styles.tabSelected]}
-      >
-        <Ionicons name="mail-outline" size={18} color={selected === 'inbox' ? colors.ink : colors.slate} />
-        <Text style={[styles.tabText, selected === 'inbox' && styles.tabTextSelected]}>
-          Invitations{inboxCount > 0 ? `  ${inboxCount}` : ''}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: selected === 'company' }}
-        onPress={() => onSelect('company')}
-        style={[styles.tab, selected === 'company' && styles.tabSelected]}
-      >
-        <Ionicons name="business-outline" size={18} color={selected === 'company' ? colors.ink : colors.slate} />
-        <Text style={[styles.tabText, selected === 'company' && styles.tabTextSelected]}>Company</Text>
-      </Pressable>
+      {HUB_TABS.map(item => {
+        const active = selected === item.value
+        const count = item.value === 'invitations'
+          ? invitationCount
+          : item.value === 'jobs' ? jobCount : 0
+        return (
+          <Pressable
+            key={item.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${item.label}${count > 0 ? `, ${count}` : ''}`}
+            onPress={() => onSelect(item.value)}
+            style={[styles.tab, active && styles.tabSelected]}
+          >
+            <View style={styles.tabIconWrap}>
+              <Ionicons name={item.icon} size={19} color={active ? colors.ink : colors.slate} />
+              {count > 0 ? (
+                <View style={[styles.tabBadge, active && styles.tabBadgeSelected]}>
+                  <Text style={[styles.tabBadgeText, active && styles.tabBadgeTextSelected]}>
+                    {count > 99 ? '99+' : count}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.tabText, active && styles.tabTextSelected]}>{item.label}</Text>
+          </Pressable>
+        )
+      })}
     </View>
   )
 }
 
-function CreateOrganizationCard({ api, onCreated }: {
-  readonly api: HomesroloApi
-  readonly onCreated: (message: string) => void
+function WorkspaceHeading({ title, detail }: {
+  readonly title: string
+  readonly detail: string
 }) {
-  const [companyName, setCompanyName] = useState('')
-  const [slug, setSlug] = useState('')
-  const [slugTouched, setSlugTouched] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const attempt = useRef<CommandAttempt | null>(null)
-
-  function changeName(value: string) {
-    attempt.current = null
-    setError(null)
-    setCompanyName(value)
-    if (!slugTouched) setSlug(slugFor(value))
-  }
-
-  function changeSlug(value: string) {
-    attempt.current = null
-    setError(null)
-    setSlugTouched(true)
-    setSlug(slugFor(value))
-  }
-
-  async function create() {
-    const displayName = companyName.trim()
-    const normalizedSlug = slug.trim().toLocaleLowerCase('en-US')
-    if (!displayName || normalizedSlug.length < 3) return
-    setBusy(true)
-    setError(null)
-    try {
-      const intent = JSON.stringify({ displayName, slug: normalizedSlug })
-      if (!attempt.current || attempt.current.intent !== intent) {
-        attempt.current = { intent, commandRef: await api.newCommandRef() }
-      }
-      await api.createProfessionalOrganization({
-        commandRef: attempt.current.commandRef,
-        displayName,
-        slug: normalizedSlug,
-      })
-      attempt.current = null
-      onCreated('Company card created. Add the facts homeowners need before you list it.')
-    } catch (caught) {
-      setError(isConflict(caught)
-        ? 'That profile URL is already in use. Make it more specific and try again.'
-        : friendlyError(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <Card accent>
-      <Eyebrow>First step</Eyebrow>
-      <Text style={styles.cardTitle}>Create your company card.</Text>
-      <Body muted>
-        Your homeowner and professional activity use one sign-in. This creates a company
-        organization; it does not create another personal account.
-      </Body>
-      <TextField
-        label="Company name"
-        value={companyName}
-        onChangeText={changeName}
-        maxLength={120}
-        placeholder="Clear Water Pools"
-      />
-      <TextField
-        label="Profile URL"
-        value={slug}
-        onChangeText={changeSlug}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={80}
-        placeholder="clear-water-pools"
-        hint={`homesrolo.com/pros/${slug || 'your-company'}`}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button
-        label={busy ? 'Creating…' : 'Create company card'}
-        onPress={() => void create()}
-        disabled={busy || !companyName.trim() || slug.length < 3}
-      />
-    </Card>
+    <View style={styles.screenHeading}>
+      <Text accessibilityRole="header" style={styles.screenTitle}>{title}</Text>
+      <Text style={styles.screenDetail}>{detail}</Text>
+    </View>
+  )
+}
+
+function CountTile({ icon, value, label, active, onPress }: {
+  readonly icon: keyof typeof Ionicons.glyphMap
+  readonly value: number
+  readonly label: string
+  readonly active?: boolean
+  readonly onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${value} ${label}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.countTile,
+        active && styles.countTileActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.countTileTop}>
+        <Ionicons name={icon} size={20} color={active ? colors.lime : colors.aqua} />
+        <Ionicons name="chevron-forward" size={17} color={colors.smoke} />
+      </View>
+      <Text style={styles.countValue}>{value}</Text>
+      <Text style={styles.countLabel}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function InvitationPreview({ invitation, action, onPress }: {
+  readonly invitation: ProjectInvitation
+  readonly action: string
+  readonly onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${action}: ${invitation.disclosure.title}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.previewRow, pressed && styles.pressed]}
+    >
+      <View style={[styles.previewIcon, invitation.status === 'pending' && styles.previewIconPending]}>
+        <Ionicons
+          name={invitation.status === 'pending' ? 'mail-unread-outline' : 'hammer-outline'}
+          size={20}
+          color={invitation.status === 'pending' ? colors.warning : colors.mint}
+        />
+      </View>
+      <View style={styles.flexCopy}>
+        <Text numberOfLines={1} style={styles.previewTitle}>{invitation.disclosure.title}</Text>
+        <Text numberOfLines={1} style={styles.previewMeta}>
+          {tradeLabel(invitation.disclosure.category)} · {action}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={19} color={colors.smoke} />
+    </Pressable>
+  )
+}
+
+function ClosedInvitationRow({ invitation }: { readonly invitation: ProjectInvitation }) {
+  return (
+    <View style={styles.closedRow}>
+      <View style={styles.flexCopy}>
+        <Text numberOfLines={1} style={styles.closedTitle}>{invitation.disclosure.title}</Text>
+        <Text style={styles.previewMeta}>
+          {tradeLabel(invitation.disclosure.category)} · {displayDate(invitation.createdAt)}
+        </Text>
+      </View>
+      <Tag tone={invitationTone(invitation.status)}>{invitation.status}</Tag>
+    </View>
   )
 }
 
@@ -409,8 +427,8 @@ function OrganizationProfileForm({ api, organization, membership, onSaved }: {
         <Tag tone={published ? 'lime' : 'plain'}>{published ? 'Listed' : 'Draft'}</Tag>
       </View>
       <Body muted>
-        Tell homeowners who you are and where you work. Homesrolo labels these facts as
-        company-supplied; listing never buys ranking or opens a home record.
+        Tell homeowners who you are and where you work. Listing this company-supplied
+        profile never grants access to a home or job.
       </Body>
       <Divider />
       <TextField
@@ -493,8 +511,7 @@ function OrganizationProfileForm({ api, organization, membership, onSaved }: {
         <Chip label="Listed for homeowners" selected={published} onPress={() => { changed(); setPublished(true) }} />
       </View>
       <Text style={styles.helper}>
-        A listed card is public inside Homesrolo. A homeowner still has to choose your company
-        and send an exact-project invitation.
+        Homeowners still choose your company and send a separate invitation for each job.
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Button
@@ -751,13 +768,14 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
   }
 
   const fileCount = invitation.disclosure.selectedArtifactRefs.length
-  const messageCount = invitation.message ? 1 : 0
 
   return (
     <Card style={styles.invitationCard}>
       <View style={styles.cardHeadingRow}>
         <View style={styles.flexCopy}>
-          <Eyebrow>{tradeLabel(invitation.disclosure.category)} · Homeowner invitation</Eyebrow>
+          <Eyebrow>{`${tradeLabel(invitation.disclosure.category)} · ${invitation.status === 'accepted'
+            ? 'Job workspace'
+            : 'Homeowner invitation'}`}</Eyebrow>
           <Text style={styles.cardTitle}>{invitation.disclosure.title}</Text>
           <Text style={styles.meta}>
             {organization?.displayName ?? 'Your company'} · {invitationStatus(invitation)}
@@ -772,20 +790,12 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
           <Text style={styles.messageText}>{invitation.message}</Text>
         </View>
       ) : null}
-      <View style={styles.metricRow}>
-        <Metric value={1} label="shared job" />
-        <Metric value={messageCount} label={messageCount === 1 ? 'message' : 'messages'} />
-        <Metric value={fileCount} label={fileCount === 1 ? 'selected file' : 'selected files'} />
+      <View style={styles.detailTags}>
+        <Tag>{kindLabel[invitation.disclosure.workKind]}</Tag>
+        <Tag>{statusLabel[invitation.disclosure.status]}</Tag>
+        {fileCount > 0 ? <Tag tone="aqua">{fileCount} shared {fileCount === 1 ? 'file' : 'files'}</Tag> : null}
       </View>
       <View style={styles.factGrid}>
-        <View style={styles.fact}>
-          <Text style={styles.factLabel}>Type</Text>
-          <Text style={styles.factValue}>{kindLabel[invitation.disclosure.workKind]}</Text>
-        </View>
-        <View style={styles.fact}>
-          <Text style={styles.factLabel}>Work status</Text>
-          <Text style={styles.factValue}>{statusLabel[invitation.disclosure.status]}</Text>
-        </View>
         <View style={styles.fact}>
           <Text style={styles.factLabel}>Invitation expires</Text>
           <Text style={styles.factValue}>{displayDate(invitation.expiresAt)}</Text>
@@ -812,8 +822,6 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
           </View>
         </>
       ) : null}
-
-      <Notice message="You can see the homeowner-written project details and only the files they selected. Homesrolo does not automatically add the home address, other projects, the whole-home library, insurance records, or household access." />
 
       {invitation.status === 'pending' ? (
         <View style={styles.responseBlock}>
@@ -882,10 +890,11 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
   const invitationLoader = useCallback(() => api.listProfessionalInvitations(), [api])
   const workspace = useResource(workspaceLoader)
   const invitations = useResource(invitationLoader)
-  const [tab, setTab] = useState<HubTab>('inbox')
+  const [tab, setTab] = useState<HubTab>('today')
   const [companyNotice, setCompanyNotice] = useState<string | null>(null)
   const organizations = workspace.state.kind === 'ready' ? workspace.state.value.organizations : []
   const memberships = workspace.state.kind === 'ready' ? workspace.state.value.memberships : []
+  const primaryOrganization = organizations[0]
   const organizationByRef = useMemo(
     () => new Map(organizations.map(organization => [organization.organizationRef, organization])),
     [organizations],
@@ -902,18 +911,23 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
     return [...invitations.state.value].sort((a, b) => rank[a.status] - rank[b.status]
       || b.createdAt.localeCompare(a.createdAt))
   }, [invitations.state])
-  const activeCount = sortedInvitations.filter(invitation =>
-    invitation.status === 'pending' || invitation.status === 'accepted').length
+  const pendingInvitations = sortedInvitations.filter(invitation => invitation.status === 'pending')
+  const acceptedJobs = sortedInvitations.filter(invitation => invitation.status === 'accepted')
+  const closedInvitations = sortedInvitations.filter(invitation =>
+    invitation.status !== 'pending' && invitation.status !== 'accepted')
 
   function reloadWorkspace(message: string) {
     setCompanyNotice(message)
     workspace.reload()
   }
 
+  if (workspace.state.kind === 'ready' && organizations.length === 0) {
+    return <Redirect href={{ pathname: '/onboarding', params: { mode: 'pro' } }} />
+  }
+
   return (
-    <Page>
-      <Header />
-      <HubTabs selected={tab} inboxCount={activeCount} onSelect={setTab} />
+    <Page key={tab}>
+      <Header organization={primaryOrganization} />
 
       {workspace.state.kind === 'loading' ? <Loading label="Opening your company…" /> : null}
       {workspace.state.kind === 'error' ? (
@@ -924,68 +938,224 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
         />
       ) : null}
 
-      {workspace.state.kind === 'ready' && organizations.length === 0 ? (
+      {workspace.state.kind === 'ready' && organizations.length > 0 ? (
         <>
-          <Notice message="Create your company card so homeowners can invite you to a job." />
-          <CreateOrganizationCard api={api} onCreated={reloadWorkspace} />
-        </>
-      ) : null}
-
-      {workspace.state.kind === 'ready' && organizations.length > 0 && tab === 'company' ? (
-        <>
-          <SectionTitle
-            title="Your company card"
-            detail="Public facts are self-reported. Project access always requires a separate homeowner invitation."
+          <HubTabs
+            selected={tab}
+            invitationCount={pendingInvitations.length}
+            jobCount={acceptedJobs.length}
+            onSelect={setTab}
           />
-          {companyNotice ? <Notice message={companyNotice} /> : null}
-          {organizations.map(organization => (
-            <OrganizationProfileForm
-              key={`${organization.organizationRef}:${organization.revision}`}
-              api={api}
-              organization={organization}
-              membership={membershipByOrganization.get(organization.organizationRef)}
-              onSaved={reloadWorkspace}
-            />
-          ))}
-        </>
-      ) : null}
 
-      {workspace.state.kind === 'ready' && organizations.length > 0 && tab === 'inbox' ? (
-        <>
-          <SectionTitle
-            title="Private project invitations"
-            detail="Only invitations sent directly to your company appear here."
-          />
-          {invitations.state.kind === 'loading' ? <Loading label="Checking invitations…" /> : null}
-          {invitations.state.kind === 'error' ? (
-            <Notice
-              message="Homesrolo could not load your project invitations."
-              actionLabel="Try again"
-              onAction={invitations.reload}
-            />
-          ) : null}
-          {invitations.state.kind === 'ready' && sortedInvitations.length === 0 ? (
-            <Card>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="mail-open-outline" size={28} color={colors.lime} />
+          {tab === 'today' ? (
+            <>
+              <WorkspaceHeading
+                title="Today"
+                detail={pendingInvitations.length > 0
+                  ? `${pendingInvitations.length} ${pendingInvitations.length === 1 ? 'invitation needs' : 'invitations need'} a response.`
+                  : 'Your invitations, accepted jobs, and company status at a glance.'}
+              />
+              <View style={styles.countGrid}>
+                <CountTile
+                  icon="mail-unread-outline"
+                  value={pendingInvitations.length}
+                  label={pendingInvitations.length === 1 ? 'invitation' : 'invitations'}
+                  active={pendingInvitations.length > 0}
+                  onPress={() => setTab('invitations')}
+                />
+                <CountTile
+                  icon="briefcase-outline"
+                  value={acceptedJobs.length}
+                  label={acceptedJobs.length === 1 ? 'accepted job' : 'accepted jobs'}
+                  onPress={() => setTab('jobs')}
+                />
               </View>
-              <Text style={styles.cardTitle}>No invitations yet.</Text>
-              <Body muted>
-                List your company card so a homeowner can choose it for a job. No
-                address or whole-home record is exposed by being listed.
-              </Body>
-              <Button label="Review company card" onPress={() => setTab('company')} quiet />
-            </Card>
+
+              {primaryOrganization?.publicationState === 'draft' ? (
+                <Card accent style={styles.profilePrompt}>
+                  <View style={styles.promptRow}>
+                    <View style={styles.promptIcon}>
+                      <Ionicons name="storefront-outline" size={21} color={colors.lime} />
+                    </View>
+                    <View style={styles.flexCopy}>
+                      <Text style={styles.promptTitle}>Finish your company card</Text>
+                      <Text style={styles.previewMeta}>Add services and service areas before listing it.</Text>
+                    </View>
+                  </View>
+                  <Button label="Open company" onPress={() => setTab('company')} quiet />
+                </Card>
+              ) : null}
+
+              {invitations.state.kind === 'loading' ? <Loading label="Checking today…" /> : null}
+              {invitations.state.kind === 'error' ? (
+                <Notice
+                  message="Homesrolo could not load your invitations and jobs."
+                  actionLabel="Try again"
+                  onAction={invitations.reload}
+                />
+              ) : null}
+              {invitations.state.kind === 'ready' && pendingInvitations.length > 0 ? (
+                <>
+                  <SectionTitle title="Needs a response" />
+                  <Card style={styles.previewList}>
+                    {pendingInvitations.slice(0, 3).map(invitation => (
+                      <InvitationPreview
+                        key={invitation.invitationRef}
+                        invitation={invitation}
+                        action="Review invitation"
+                        onPress={() => setTab('invitations')}
+                      />
+                    ))}
+                    {pendingInvitations.length > 3 ? (
+                      <Button
+                        label={`View all ${pendingInvitations.length} invitations`}
+                        onPress={() => setTab('invitations')}
+                        quiet
+                      />
+                    ) : null}
+                  </Card>
+                </>
+              ) : null}
+              {invitations.state.kind === 'ready' && acceptedJobs.length > 0 ? (
+                <>
+                  <SectionTitle title="Accepted jobs" />
+                  <Card style={styles.previewList}>
+                    {acceptedJobs.slice(0, 3).map(invitation => (
+                      <InvitationPreview
+                        key={invitation.invitationRef}
+                        invitation={invitation}
+                        action="Open job"
+                        onPress={() => setTab('jobs')}
+                      />
+                    ))}
+                    {acceptedJobs.length > 3 ? (
+                      <Button
+                        label={`View all ${acceptedJobs.length} jobs`}
+                        onPress={() => setTab('jobs')}
+                        quiet
+                      />
+                    ) : null}
+                  </Card>
+                </>
+              ) : null}
+              {invitations.state.kind === 'ready'
+                && pendingInvitations.length === 0
+                && acceptedJobs.length === 0 ? (
+                  <Card style={styles.emptyCompact}>
+                    <View style={styles.emptyIcon}>
+                      <Ionicons name="checkmark-outline" size={28} color={colors.lime} />
+                    </View>
+                    <View style={styles.flexCopy}>
+                      <Text style={styles.cardTitle}>You’re caught up.</Text>
+                      <Body muted>New homeowner invitations will appear here.</Body>
+                    </View>
+                  </Card>
+                ) : null}
+            </>
           ) : null}
-          {invitations.state.kind === 'ready' ? sortedInvitations.map(invitation => (
-            <ProfessionalInvitationCard
-              key={`${invitation.invitationRef}:${invitation.revision}`}
-              api={api}
-              invitation={invitation}
-              organization={organizationByRef.get(invitation.professionalOrganizationRef)}
-              onInvitationChanged={invitations.reload}
-            />
-          )) : null}
+
+          {tab === 'invitations' ? (
+            <>
+              <WorkspaceHeading
+                title="Invitations"
+                detail="Review the job and homeowner-selected files, then accept or decline."
+              />
+              {invitations.state.kind === 'loading' ? <Loading label="Checking invitations…" /> : null}
+              {invitations.state.kind === 'error' ? (
+                <Notice
+                  message="Homesrolo could not load your project invitations."
+                  actionLabel="Try again"
+                  onAction={invitations.reload}
+                />
+              ) : null}
+              {invitations.state.kind === 'ready' && pendingInvitations.length === 0 ? (
+                <Card style={styles.emptyCompact}>
+                  <View style={styles.emptyIcon}>
+                    <Ionicons name="mail-open-outline" size={28} color={colors.lime} />
+                  </View>
+                  <View style={styles.flexCopy}>
+                    <Text style={styles.cardTitle}>No invitations waiting.</Text>
+                    <Body muted>New invitations sent to your company will show up here.</Body>
+                  </View>
+                </Card>
+              ) : null}
+              {invitations.state.kind === 'ready' ? pendingInvitations.map(invitation => (
+                <ProfessionalInvitationCard
+                  key={`${invitation.invitationRef}:${invitation.revision}`}
+                  api={api}
+                  invitation={invitation}
+                  organization={organizationByRef.get(invitation.professionalOrganizationRef)}
+                  onInvitationChanged={invitations.reload}
+                />
+              )) : null}
+              {invitations.state.kind === 'ready' && closedInvitations.length > 0 ? (
+                <>
+                  <SectionTitle title="Past invitations" />
+                  <Card style={styles.closedList}>
+                    {closedInvitations.map(invitation => (
+                      <ClosedInvitationRow key={invitation.invitationRef} invitation={invitation} />
+                    ))}
+                  </Card>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {tab === 'jobs' ? (
+            <>
+              <WorkspaceHeading
+                title="Jobs"
+                detail="Accepted invitations stay here with their shared files and written proposals."
+              />
+              {invitations.state.kind === 'loading' ? <Loading label="Opening jobs…" /> : null}
+              {invitations.state.kind === 'error' ? (
+                <Notice
+                  message="Homesrolo could not load your jobs."
+                  actionLabel="Try again"
+                  onAction={invitations.reload}
+                />
+              ) : null}
+              {invitations.state.kind === 'ready' && acceptedJobs.length === 0 ? (
+                <Card style={styles.emptyCompact}>
+                  <View style={styles.emptyIcon}>
+                    <Ionicons name="briefcase-outline" size={28} color={colors.lime} />
+                  </View>
+                  <View style={styles.flexCopy}>
+                    <Text style={styles.cardTitle}>No jobs yet.</Text>
+                    <Body muted>Accept a homeowner invitation to start a job workspace.</Body>
+                  </View>
+                </Card>
+              ) : null}
+              {invitations.state.kind === 'ready' ? acceptedJobs.map(invitation => (
+                <ProfessionalInvitationCard
+                  key={`${invitation.invitationRef}:${invitation.revision}`}
+                  api={api}
+                  invitation={invitation}
+                  organization={organizationByRef.get(invitation.professionalOrganizationRef)}
+                  onInvitationChanged={invitations.reload}
+                />
+              )) : null}
+            </>
+          ) : null}
+
+          {tab === 'company' ? (
+            <>
+              <WorkspaceHeading
+                title="Company"
+                detail="Manage the facts homeowners see when they choose who to invite."
+              />
+              {companyNotice ? <Notice message={companyNotice} /> : null}
+              {organizations.map(organization => (
+                <OrganizationProfileForm
+                  key={`${organization.organizationRef}:${organization.revision}`}
+                  api={api}
+                  organization={organization}
+                  membership={membershipByOrganization.get(organization.organizationRef)}
+                  onSaved={reloadWorkspace}
+                />
+              ))}
+            </>
+          ) : null}
         </>
       ) : null}
     </Page>
@@ -994,25 +1164,77 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
 
 const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  hero: { gap: space.sm, paddingTop: space.lg, paddingBottom: space.xs },
-  homeButton: {
+  accountButton: {
     minHeight: 42, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1,
     borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 7,
   },
-  homeButtonText: { color: colors.cream, fontSize: 13, fontWeight: '800' },
+  accountButtonText: { color: colors.cream, fontSize: 13, fontWeight: '800' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
-  ruleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  workspaceIdentity: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.xs,
+  },
+  workspaceName: {
+    color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: -0.3,
+  },
   tabs: {
-    flexDirection: 'row', gap: space.xs, padding: 5, borderRadius: radius.large,
+    flexDirection: 'row', gap: 4, padding: 5, borderRadius: radius.large,
     borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised,
   },
   tab: {
-    flex: 1, minHeight: 46, borderRadius: radius.medium, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: 8,
+    flex: 1, minHeight: 58, borderRadius: radius.medium,
+    alignItems: 'center', justifyContent: 'center', gap: 4,
   },
   tabSelected: { backgroundColor: colors.lime },
-  tabText: { color: colors.slate, fontSize: 14, fontWeight: '800' },
+  tabIconWrap: { position: 'relative' },
+  tabText: { color: colors.slate, fontSize: 10, fontWeight: '800' },
   tabTextSelected: { color: colors.ink },
+  tabBadge: {
+    position: 'absolute', top: -8, right: -13, minWidth: 17, height: 17, borderRadius: 9,
+    paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.lime,
+  },
+  tabBadgeSelected: { backgroundColor: colors.ink },
+  tabBadgeText: { color: colors.ink, fontSize: 9, fontWeight: '900' },
+  tabBadgeTextSelected: { color: colors.lime },
+  screenHeading: { gap: 5, paddingTop: space.xs },
+  screenTitle: {
+    color: colors.cream, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -0.9,
+  },
+  screenDetail: { color: colors.slate, fontSize: 14, lineHeight: 20 },
+  countGrid: { flexDirection: 'row', gap: space.sm },
+  countTile: {
+    flex: 1, minHeight: 130, padding: space.md, borderRadius: radius.large,
+    borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised, gap: 4,
+  },
+  countTileActive: { borderColor: colors.lime, backgroundColor: colors.limeSoft },
+  countTileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  countValue: { color: colors.cream, fontSize: 34, lineHeight: 39, fontWeight: '900' },
+  countLabel: { color: colors.slate, fontSize: 12, fontWeight: '800' },
+  profilePrompt: { gap: space.sm },
+  promptRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  promptIcon: {
+    width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.inkSoft,
+  },
+  promptTitle: { color: colors.cream, fontSize: 16, lineHeight: 21, fontWeight: '900' },
+  previewList: { paddingVertical: 2, gap: 0 },
+  previewRow: {
+    minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.line,
+  },
+  previewIcon: {
+    width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#153c32',
+  },
+  previewIconPending: { backgroundColor: '#41351b' },
+  previewTitle: { color: colors.cream, fontSize: 15, lineHeight: 20, fontWeight: '900' },
+  previewMeta: { color: colors.slate, fontSize: 12, lineHeight: 17, fontWeight: '700' },
+  emptyCompact: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  closedList: { paddingVertical: 2, gap: 0 },
+  closedRow: {
+    minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.line,
+  },
+  closedTitle: { color: colors.cream, fontSize: 14, lineHeight: 19, fontWeight: '800' },
   cardTitle: { color: colors.cream, fontSize: 22, lineHeight: 27, fontWeight: '900', letterSpacing: -0.4 },
   cardHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   flexCopy: { flex: 1, gap: 5 },
@@ -1030,7 +1252,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.medium, padding: space.md,
   },
   messageText: { flex: 1, color: colors.cream, fontSize: 15, lineHeight: 21 },
-  metricRow: { flexDirection: 'row', gap: space.sm },
+  detailTags: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   factGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   fact: {
     minWidth: 120, flexGrow: 1, flexBasis: '30%', padding: space.sm,

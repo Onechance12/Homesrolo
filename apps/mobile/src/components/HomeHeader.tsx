@@ -1,7 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { router } from 'expo-router'
-import { returnToHomeChooser } from '../home/navigation.ts'
 import { colors, space } from '../theme.ts'
 
 export function HomeHeader({ section, title, detail }: {
@@ -15,14 +14,12 @@ export function HomeHeader({ section, title, detail }: {
         <Text style={styles.section}>{section}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Switch homes"
-          accessibilityHint="Opens your home list"
-          onPress={() => returnToHomeChooser(router)}
+          accessibilityLabel="Open account"
+          accessibilityHint="Switch homes or workspaces and manage your account"
+          onPress={() => router.push('/account')}
           style={styles.switcher}
         >
-          <Ionicons name="home-outline" size={17} color={colors.slate} />
-          <Text style={styles.switchText}>Homes</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.smoke} />
+          <Ionicons name="person-outline" size={18} color={colors.slate} />
         </Pressable>
       </View>
       <Text accessibilityRole="header" style={styles.title}>{title}</Text>
@@ -39,7 +36,6 @@ const styles = StyleSheet.create({
     minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6,
     borderRadius: 22, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 11,
   },
-  switchText: { color: colors.slate, fontWeight: '700', fontSize: 12 },
   title: { color: colors.cream, fontSize: 26, lineHeight: 31, fontWeight: '800', letterSpacing: -0.65 },
   detail: { color: colors.slate, fontSize: 13, lineHeight: 18 },
 })

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { NativeApiError } from '../../../../src/api/client.ts'
@@ -47,12 +47,28 @@ type PendingCommand = {
   readonly commandRef: string
 }
 
+type WorkDetailTab = 'overview' | 'plan' | 'files' | 'bids' | 'updates'
+
+const WORK_DETAIL_TABS: readonly {
+  readonly value: WorkDetailTab
+  readonly label: string
+  readonly icon: keyof typeof Ionicons.glyphMap
+}[] = [
+  { value: 'overview', label: 'Overview', icon: 'grid-outline' },
+  { value: 'plan', label: 'Plan', icon: 'list-outline' },
+  { value: 'files', label: 'Files', icon: 'images-outline' },
+  { value: 'bids', label: 'Bids', icon: 'people-outline' },
+  { value: 'updates', label: 'Updates', icon: 'time-outline' },
+]
+
 export default function WorkDetailScreen() {
   const homeId = useHomeId()
-  const { projectRef, professional } = useLocalSearchParams<{
+  const { projectRef, professional, tab: rawTab } = useLocalSearchParams<{
     projectRef: string
     professional?: string
+    tab?: string | string[]
   }>()
+  const requestedTab = routeWorkDetailTab(rawTab)
   const { state: auth, api, refreshSession } = useSession()
   const loader = useCallback(async () => {
     const work = await api.listWork(homeId)
@@ -105,17 +121,19 @@ export default function WorkDetailScreen() {
       homeId={homeId}
       work={resource.state.value.work}
       initialActivity={resource.state.value.activity}
+      initialTab={requestedTab ?? (professional ? 'bids' : 'overview')}
       {...(professional ? { preselectedOrganizationRef: professional } : {})}
       onReload={resource.reload}
     />
   )
 }
 
-function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizationRef, onReload }: {
+function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselectedOrganizationRef, onReload }: {
   readonly api: HomesroloApi
   readonly homeId: string
   readonly work: WorkRecord
   readonly initialActivity: readonly ProjectActivityRecord[]
+  readonly initialTab: WorkDetailTab
   readonly preselectedOrganizationRef?: string
   readonly onReload: () => void
 }) {
@@ -131,6 +149,7 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
   const [noteError, setNoteError] = useState<string | null>(null)
   const [noteSuccess, setNoteSuccess] = useState<string | null>(null)
   const [activity, setActivity] = useState<readonly ProjectActivityRecord[]>(initialActivity)
+  const [tab, setTab] = useState<WorkDetailTab>(initialTab)
   const pendingSave = useRef<PendingCommand | null>(null)
   const pendingNote = useRef<PendingCommand | null>(null)
   const saveLock = useRef(false)
@@ -250,7 +269,9 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
         detail={`${categoryLabel[current.category]} · saved to this home`}
       />
 
-      <Card accent>
+      <WorkDetailTabs selected={tab} onSelect={setTab} />
+
+      {tab === 'overview' ? <Card accent>
         <View style={styles.headingRow}>
           <Tag tone={current.status === 'completed' ? 'mint' : current.status === 'in_progress' ? 'lime' : 'plain'}>
             {kindLabel[current.workKind]}
@@ -270,14 +291,18 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
             <Button
               label="Ask Rolo about this work"
               icon="chatbubble-ellipses-outline"
-              onPress={() => openProjectRolo(homeId, current.projectRef)}
+              onPress={() => openProjectRolo(
+                homeId,
+                current.projectRef,
+                'Help me review this work record. What looks incomplete or worth deciding next?',
+              )}
             />
             <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} quiet />
           </>
         ) : null}
-      </Card>
+      </Card> : null}
 
-      {editing ? (
+      {tab === 'overview' && editing ? (
         <Card>
           <SectionTitle title="Edit this record" detail="These changes update the existing entry." />
           <TextField
@@ -363,9 +388,9 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
           {saveError ? <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text> : null}
         </Card>
       ) : null}
-      {saveSuccess ? <Text accessibilityRole="alert" style={styles.success}>{saveSuccess}</Text> : null}
+      {tab === 'overview' && saveSuccess ? <Text accessibilityRole="alert" style={styles.success}>{saveSuccess}</Text> : null}
 
-      <Card>
+      {tab === 'updates' ? <Card>
         <SectionTitle
           title="Updates"
           detail="Notes and milestones stay with this work."
@@ -413,33 +438,88 @@ function WorkDetail({ api, homeId, work, initialActivity, preselectedOrganizatio
         />
         {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
         {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
-      </Card>
+      </Card> : null}
 
-      <ProjectChoices homeId={homeId} projectRef={current.projectRef} />
+      {tab === 'plan' ? (
+        <>
+          <Card accent>
+            <SectionTitle title="Build the plan" detail="Keep choices, materials, and the next decision in one place." />
+            <Button
+              label="Plan with Rolo"
+              icon="chatbubble-ellipses-outline"
+              onPress={() => openProjectRolo(
+                homeId,
+                current.projectRef,
+                'Help me build the plan for this work. Organize the choices, questions, budget, and next decision.',
+              )}
+            />
+          </Card>
+          <ProjectChoices homeId={homeId} projectRef={current.projectRef} />
+        </>
+      ) : null}
 
-      <ProjectFiles homeId={homeId} projectRef={current.projectRef} />
+      {tab === 'files' ? <ProjectFiles homeId={homeId} projectRef={current.projectRef} /> : null}
 
-      <SectionTitle
-        title="Proposals"
-        detail="Invite a company here, or keep a written proposal you received somewhere else."
-      />
+      {tab === 'bids' ? (
+        <>
+          <SectionTitle
+            title="Bids and invited pros"
+            detail="Invite a company here, or keep a written proposal you received somewhere else."
+          />
 
-      <ProjectProfessionalWorkspace
-        homeId={homeId}
-        work={current}
-        {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
-      />
+          <ProjectProfessionalWorkspace
+            homeId={homeId}
+            work={current}
+            {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
+          />
 
-      <ProjectOutsideProposalWorkspace
-        homeId={homeId}
-        work={current}
-        onVisitSaved={created => setActivity(entries => [
-          ...entries.filter(entry => entry.activityRef !== created.activityRef),
-          created,
-        ].sort((left, right) => left.createdAt.localeCompare(right.createdAt)))}
-      />
+          <ProjectOutsideProposalWorkspace
+            homeId={homeId}
+            work={current}
+            onVisitSaved={created => setActivity(entries => [
+              ...entries.filter(entry => entry.activityRef !== created.activityRef),
+              created,
+            ].sort((left, right) => left.createdAt.localeCompare(right.createdAt)))}
+          />
+        </>
+      ) : null}
 
     </Page>
+  )
+}
+
+function routeWorkDetailTab(value: string | readonly string[] | undefined): WorkDetailTab | null {
+  if (typeof value !== 'string') return null
+  return WORK_DETAIL_TABS.find(tab => tab.value === value)?.value ?? null
+}
+
+function WorkDetailTabs({ selected, onSelect }: {
+  readonly selected: WorkDetailTab
+  readonly onSelect: (tab: WorkDetailTab) => void
+}) {
+  return (
+    <ScrollView
+      horizontal
+      accessibilityRole="tablist"
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.detailTabs}
+    >
+      {WORK_DETAIL_TABS.map(tab => {
+        const active = selected === tab.value
+        return (
+          <Pressable
+            key={tab.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(tab.value)}
+            style={[styles.detailTab, active && styles.detailTabActive]}
+          >
+            <Ionicons name={tab.icon} size={16} color={active ? colors.ink : colors.slate} />
+            <Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>{tab.label}</Text>
+          </Pressable>
+        )
+      })}
+    </ScrollView>
   )
 }
 
@@ -488,18 +568,27 @@ function openWork(homeId: string) {
   router.replace({ pathname: '/home/[homeId]/work', params: { homeId } })
 }
 
-function openProjectRolo(homeId: string, projectRef: string) {
+function openProjectRolo(homeId: string, projectRef: string, prompt: string) {
   router.push({
     pathname: '/home/[homeId]/rolo',
     params: {
       homeId,
       projectRef,
-      prompt: 'Help me review this work record. What looks incomplete or worth deciding next?',
+      prompt,
     },
   })
 }
 
 const styles = StyleSheet.create({
+  detailTabs: { gap: 8, paddingRight: space.lg },
+  detailTab: {
+    minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 21, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.inkRaised, paddingHorizontal: 13,
+  },
+  detailTabActive: { backgroundColor: colors.lime, borderColor: colors.lime },
+  detailTabText: { color: colors.slate, fontSize: 12, fontWeight: '800' },
+  detailTabTextActive: { color: colors.ink },
   back: {
     alignSelf: 'flex-start', minHeight: 44, marginLeft: -7, paddingHorizontal: 7,
     flexDirection: 'row', alignItems: 'center', gap: 2,

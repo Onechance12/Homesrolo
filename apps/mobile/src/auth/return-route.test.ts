@@ -9,6 +9,11 @@ import {
 const homeId = `hhom_${'h'.repeat(43)}`
 const projectRef = `hprj_${'p'.repeat(43)}`
 
+test('signed-in entry defaults through the workspace startup gate', () => {
+  assert.equal(DEFAULT_POST_SIGN_IN_DESTINATION, '/start')
+  assert.equal(postSignInDestination('/homes'), '/start')
+})
+
 test('work detail creates a valid return path and restores its typed destination', () => {
   const path = workDetailReturnPath(homeId, projectRef)
   assert.equal(path, `/home/${homeId}/work/${projectRef}`)
