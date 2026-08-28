@@ -13,11 +13,13 @@ import {
   type HomeownerRepositoryPort,
 } from '../homeowner-runtime.v1.ts'
 import type { HomeownerHomeRecordProfilePort } from '../home-record-profile.v1.ts'
+import type { HomeownerArtifactMetadataPort } from '../homeowner-artifact-metadata.v1.ts'
 
 const body = (character: string) => character.repeat(43)
 const principalRef = `hprn_${body('p')}`
 const homeRef = `hhom_${body('h')}`
 const otherHomeRef = `hhom_${body('o')}`
+const artifactRef = `hart_${body('a')}`
 const now = '2026-08-10T12:00:00.000Z'
 
 const principal: HomeownerPrincipal = {
@@ -144,16 +146,20 @@ const homeRecordProfile: HomeownerHomeRecordProfilePort = {
   },
 }
 
-function handler() {
+function handler(overrides: {
+  readonly repository?: HomeownerRepositoryPort
+  readonly artifactMetadata?: HomeownerArtifactMetadataPort
+} = {}) {
   const service = new HomeownerApiService({
     identity: {
       async resolvePrincipal(sessionHandle) {
         return sessionHandle === 'server-cookie-session' ? principal : null
       },
     },
-    repository,
+    repository: overrides.repository ?? repository,
     commands,
     homeRecordProfile,
+    artifactMetadata: overrides.artifactMetadata,
     now: () => now,
     capabilities: {
       emailCodeSignIn: false,
@@ -405,4 +411,96 @@ test('POST exact-home record accepts only a revision-backed private address and 
     }))
     assert.equal(rejected.status, 400)
   }
+})
+
+test('POST exact artifact metadata is controller-only, revisioned, and returns no storage details', async () => {
+  const artifact = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    artifactRef,
+    homeRef,
+    controllerPrincipalRef: principalRef,
+    kind: 'photo' as const,
+    displayName: 'Back patio before.jpg',
+    mediaType: 'image/jpeg',
+    byteLength: 1_024,
+    payloadSha256: 'a'.repeat(64),
+    storageObjectRef: `hobj_${body('s')}`,
+    contentClass: 'homeowner_private' as const,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const jsonBody = {
+    commandRef: `hcmd_${body('u')}`,
+    expectedRevision: 1,
+    projectRef: null,
+    observedOn: '2026-08-09',
+    phase: 'before',
+    areaLabel: 'Back patio',
+    geoPin: {
+      latitude: 32.7555,
+      longitude: -97.3308,
+      accuracyMeters: 8,
+      capturedAt: '2026-08-09T17:30:00.000Z',
+      provenance: 'device_confirmed',
+    },
+  } as const
+  const handle = handler({
+    repository: {
+      ...repository,
+      async listArtifactMetadata() { return [artifact] },
+    },
+    artifactMetadata: {
+      async updateArtifactMetadata(input) {
+        assert.equal(input.grant.action, 'artifact.update_metadata')
+        assert.equal(input.command.artifactRef, artifactRef)
+        return {
+          ...artifact,
+          observedOn: input.command.observedOn ?? undefined,
+          phase: input.command.phase ?? undefined,
+          areaLabel: input.command.areaLabel ?? undefined,
+          geoPin: input.command.geoPin ?? undefined,
+          revision: 2,
+          updatedAt: input.command.requestedAt,
+        }
+      },
+    },
+  })
+  const response = await handle(request({
+    method: 'POST',
+    pathname: `/api/v1/homes/${homeRef}/artifacts/${artifactRef}/metadata`,
+    hasBody: true,
+    jsonBody,
+  }))
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, { data: {
+    artifactRef,
+    homeRef,
+    projectRef: null,
+    kind: 'photo',
+    displayName: 'Back patio before.jpg',
+    mediaType: 'image/jpeg',
+    byteLength: 1_024,
+    observedOn: '2026-08-09',
+    phase: 'before',
+    areaLabel: 'Back patio',
+    geoPin: jsonBody.geoPin,
+    revision: 2,
+    createdAt: now,
+    updatedAt: now,
+  } })
+  assert.doesNotMatch(JSON.stringify(response.body), /storage|payloadSha|controllerPrincipal/)
+
+  const wrongMethod = await handle(request({
+    pathname: `/api/v1/homes/${homeRef}/artifacts/${artifactRef}/metadata`,
+  }))
+  assert.equal(wrongMethod.status, 404,
+    'the core GET dispatcher does not expose the write-only route')
+  const authorityInjection = await handle(request({
+    method: 'POST',
+    pathname: `/api/v1/homes/${homeRef}/artifacts/${artifactRef}/metadata`,
+    hasBody: true,
+    jsonBody: { ...jsonBody, principalRef },
+  }))
+  assert.equal(authorityInjection.status, 400)
 })

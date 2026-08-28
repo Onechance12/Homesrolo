@@ -114,6 +114,7 @@ test('authenticated route modules are explicitly dynamic', () => {
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
     '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts',
+    '../../app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/metadata/route.ts',
     '../../app/api/v1/homes/[homeRef]/research/route.ts',
     '../../app/api/v1/homes/[homeRef]/handoffs/route.ts',
     '../../app/api/v1/homes/[homeRef]/handoffs/[shareId]/route.ts',

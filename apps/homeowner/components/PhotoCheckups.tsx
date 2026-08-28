@@ -22,6 +22,9 @@ export const PHOTO_CHECKUP_AREAS = [
   { value: 'water_heater', label: 'Water heater' },
   { value: 'foundation', label: 'Foundation' },
   { value: 'gutters', label: 'Gutters' },
+  { value: 'siding', label: 'Siding' },
+  { value: 'windows_doors', label: 'Windows & doors' },
+  { value: 'drainage', label: 'Drainage' },
   { value: 'other', label: 'Other' },
 ] as const satisfies readonly { value: PhotoCheckupArea; label: string }[]
 
@@ -35,6 +38,9 @@ export const PHOTO_CHECKUP_AREA_LABEL: Readonly<Record<PhotoCheckupArea, string>
   water_heater: 'Water heater',
   foundation: 'Foundation',
   gutters: 'Gutters',
+  siding: 'Siding',
+  windows_doors: 'Windows & doors',
+  drainage: 'Drainage',
   other: 'Other',
 })
 

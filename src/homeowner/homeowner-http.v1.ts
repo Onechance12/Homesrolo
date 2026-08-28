@@ -43,6 +43,7 @@ const HOME_PROJECT_ITEMS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/pr
 const HOME_PROJECT_QUOTES_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes$/
 const HOME_PROJECT_QUOTE_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/projects\/(hprj_[A-Za-z0-9_-]{43})\/quotes\/(hquo_[A-Za-z0-9_-]{43})$/
 const HOME_ARTIFACTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/artifacts$/
+const HOME_ARTIFACT_METADATA_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/artifacts\/(hart_[A-Za-z0-9_-]{43})\/metadata$/
 const HOME_CHECKUP_PHOTOS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/photo-checkups$/
 const HOME_ROOFING_PROJECTS_PATH = /^\/api\/v1\/homes\/(hhom_[A-Za-z0-9_-]{43})\/roofing-projects$/
 
@@ -155,6 +156,18 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
       }
 
       if (request.method === 'POST') {
+        const artifactMetadataMatch = HOME_ARTIFACT_METADATA_PATH.exec(request.pathname)
+        if (artifactMetadataMatch?.[1] && artifactMetadataMatch[2]) {
+          if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
+            return problem(400, 'invalid_request')
+          }
+          return success(await service.updateArtifactMetadata(
+            context,
+            artifactMetadataMatch[1],
+            artifactMetadataMatch[2],
+            request.jsonBody,
+          ))
+        }
         const homeRecordMatch = HOME_RECORD_PATH.exec(request.pathname)
         if (homeRecordMatch?.[1]) {
           if (request.search !== '' || !request.hasBody || request.jsonBody === undefined) {
@@ -276,6 +289,7 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
          || HOME_PROJECT_QUOTES_PATH.test(request.pathname)
          || HOME_PROJECT_QUOTE_PATH.test(request.pathname)
          || HOME_ARTIFACTS_PATH.test(request.pathname)
+         || HOME_ARTIFACT_METADATA_PATH.test(request.pathname)
          || HOME_CHECKUP_PHOTOS_PATH.test(request.pathname)
          || HOME_ROOFING_PROJECTS_PATH.test(request.pathname)) {
         return problem(405, 'method_not_allowed')
@@ -288,4 +302,4 @@ export function createHomeownerHttpHandler(service: HomeownerApiService) {
 }
 
 export const HOMEOWNER_HTTP_WARNING =
-  'This boundary defines authenticated home, Home Record profile, project, activity, item, quote, artifact-metadata, and sanitized checkup-photo metadata reads plus exact-home profile, intake, revision-backed project workspace, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'
+  'This boundary defines authenticated home, Home Record profile, project, activity, item, quote, artifact, and sanitized checkup-photo metadata reads plus exact-home profile, intake, revision-backed project workspace and artifact-metadata, roofing-intent, and private-quote commands. Raw photo and multipart artifact upload plus private content delivery remain separate server-only adapters; no open-ended mutation or Jobrolo delivery exists here.'

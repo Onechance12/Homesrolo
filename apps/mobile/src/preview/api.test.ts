@@ -352,6 +352,47 @@ test('cannot perform an upload', async () => {
   )
 })
 
+test('organizes one preview photo with revisioned project, phase, date, area, and confirmed geo', async () => {
+  const api = new PreviewHomesroloApi()
+  const photo = (await api.listArtifacts(PREVIEW_PRIMARY_HOME_REF))
+    .find(item => item.kind === 'photo' && item.projectRef === null)
+  const project = (await api.listWork(PREVIEW_PRIMARY_HOME_REF))[0]
+  assert.ok(photo)
+  assert.ok(project)
+  const input = {
+    commandRef: await api.newCommandRef(),
+    expectedRevision: photo.revision,
+    projectRef: project.projectRef,
+    observedOn: '2026-08-25',
+    phase: 'reference' as const,
+    areaLabel: 'North exterior',
+    geoPin: {
+      latitude: 32.7555,
+      longitude: -97.3308,
+      accuracyMeters: 10,
+      capturedAt: '2026-08-25T18:30:00.000Z',
+      provenance: 'device_confirmed' as const,
+    },
+  }
+  const updated = await api.updateArtifactMetadata(
+    PREVIEW_PRIMARY_HOME_REF, photo.artifactRef, input,
+  )
+  assert.equal(updated.projectRef, project.projectRef)
+  assert.equal(updated.phase, 'reference')
+  assert.equal(updated.revision, photo.revision + 1)
+  assert.deepEqual(updated.geoPin, input.geoPin)
+  assert.deepEqual(
+    await api.updateArtifactMetadata(PREVIEW_PRIMARY_HOME_REF, photo.artifactRef, input),
+    updated,
+    'an exact retry returns the first result',
+  )
+  await assert.rejects(api.updateArtifactMetadata(
+    PREVIEW_PRIMARY_HOME_REF,
+    photo.artifactRef,
+    { ...input, commandRef: await api.newCommandRef(), expectedRevision: photo.revision },
+  ), /preview_revision_conflict/)
+})
+
 test('opens private content only through the exact home or accepted invitation', async () => {
   const api = new PreviewHomesroloApi()
   const document = (await api.listArtifacts(PREVIEW_PRIMARY_HOME_REF))

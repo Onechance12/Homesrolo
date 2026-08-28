@@ -26,6 +26,9 @@ const photo = {
 
 test('accepts only exact-home Home Watch metadata and image routes', () => {
   assert.deepEqual(parseHomeCheckupPhoto(photo), photo)
+  assert.equal(parseHomeCheckupPhoto({ ...photo, area: 'siding' }).area, 'siding')
+  assert.equal(parseHomeCheckupPhoto({ ...photo, area: 'windows_doors' }).area, 'windows_doors')
+  assert.equal(parseHomeCheckupPhoto({ ...photo, area: 'drainage' }).area, 'drainage')
   assert.throws(() => parseHomeCheckupPhoto({ ...photo, fullUrl: 'https://example.test/photo.jpg' }))
   assert.throws(() => parseHomeCheckupPhoto({ ...photo, extra: true }))
   assert.throws(() => parseHomeCheckupPhoto({ ...photo, observedOn: '2026-02-30' }))

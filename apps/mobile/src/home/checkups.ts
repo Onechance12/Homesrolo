@@ -4,7 +4,8 @@ import { HOME_CHECKUP_AREAS } from '../api/home-checkup.ts'
 export const HOME_CHECKUP_AREA_LABEL: Readonly<Record<HomeCheckupArea, string>> = Object.freeze({
   front_exterior: 'Front exterior', rear_exterior: 'Rear exterior', roofline: 'Roofline',
   attic: 'Attic', ceilings: 'Ceilings', hvac: 'HVAC', water_heater: 'Water heater',
-  foundation: 'Foundation', gutters: 'Gutters', other: 'Other',
+  foundation: 'Foundation', gutters: 'Gutters', siding: 'Siding',
+  windows_doors: 'Windows & doors', drainage: 'Drainage', other: 'Other',
 })
 
 export interface HomeCheckupGroup {

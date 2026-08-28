@@ -45,6 +45,9 @@ const config: ExpoConfig = {
       cameraPermission: 'Homesrolo uses the camera only when you choose to add a home photo.',
       photosPermission: 'Homesrolo opens your photos only when you choose something to save.',
     }],
+    ['expo-location', {
+      locationWhenInUsePermission: 'Homesrolo saves your current location only when you choose to pin a new home photo.',
+    }],
   ],
   experiments: { typedRoutes: true },
   extra: {

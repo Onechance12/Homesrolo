@@ -578,7 +578,19 @@ type WireArtifact = {
   displayName: string
   mediaType: 'application/pdf' | 'image/jpeg' | 'image/png'
   byteLength: number
+  observedOn?: string | null
+  phase?: 'before' | 'during' | 'after' | 'reference' | null
+  areaLabel?: string | null
+  geoPin?: {
+    latitude: number
+    longitude: number
+    accuracyMeters: number
+    capturedAt: string
+    provenance: 'device_confirmed'
+  } | null
+  revision?: number
   createdAt: string
+  updatedAt?: string
 }
 
 export interface SignedStorageUploadTicket {
@@ -597,6 +609,11 @@ export type ArtifactUploadReservation =
     }
 
 export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
+  const boundedNumber = (minimum: number, maximum: number): Decoder<number> =>
+    (candidate, candidateAt) => typeof candidate === 'number'
+      && Number.isFinite(candidate) && candidate >= minimum && candidate <= maximum
+      ? candidate
+      : fail(candidateAt, `a finite number from ${minimum} through ${maximum}`)
   const decoded = object<WireArtifact>({
     artifactRef: opaqueRef('hart'),
     homeRef: opaqueRef('hhom'),
@@ -605,7 +622,19 @@ export const decodeArtifact: Decoder<DocumentSummary> = (value, at) => {
     displayName: boundedLabel(160),
     mediaType: oneOf(['application/pdf', 'image/jpeg', 'image/png'] as const),
     byteLength: countInt,
+    observedOn: optional(nullable(calendarDate)),
+    phase: optional(nullable(oneOf(['before', 'during', 'after', 'reference'] as const))),
+    areaLabel: optional(nullable(boundedLabel(120))),
+    geoPin: optional(nullable(object({
+      latitude: boundedNumber(-90, 90),
+      longitude: boundedNumber(-180, 180),
+      accuracyMeters: boundedNumber(0, 100_000),
+      capturedAt: utcInstant,
+      provenance: literal('device_confirmed'),
+    }))),
+    revision: optional(positiveInt),
     createdAt: utcInstant,
+    updatedAt: optional(utcInstant),
   })(value, at)
   if (decoded.byteLength < 1 || decoded.byteLength > 10 * 1024 * 1024) {
     return fail(`${at}.byteLength`, 'a byte length from 1 through 10 MiB')
@@ -741,7 +770,8 @@ export const decodeHomeRecordHandoffList: Decoder<readonly HomeRecordHandoffPrev
 
 const PHOTO_CHECKUP_AREAS = [
   'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
-  'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+  'hvac', 'water_heater', 'foundation', 'gutters', 'siding', 'windows_doors',
+  'drainage', 'other',
 ] as const satisfies readonly PhotoCheckup['area'][]
 
 type WirePhotoCheckup = PhotoCheckup

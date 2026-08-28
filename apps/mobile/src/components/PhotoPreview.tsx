@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
 import {
   Modal,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -9,18 +10,53 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, space } from '../theme.ts'
 import type { ProtectedImageSource } from '../api/image-source.ts'
+import type { ArtifactGeoPin } from '../api/model.ts'
 import { ProtectedImage } from './ProtectedImage.tsx'
 
-export function PhotoPreview({ onClose, source, title }: {
+export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLabel, onAction }: {
   readonly onClose: () => void
   readonly source: ProtectedImageSource
   readonly title: string
+  readonly detail?: string
+  readonly geoPin?: ArtifactGeoPin | null
+  readonly actionLabel?: string
+  readonly onAction?: () => void
 }) {
   return (
     <Modal visible animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.toolbar}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+          <View style={styles.titleWrap}>
+            <Text style={styles.title} numberOfLines={2}>{title}</Text>
+            {detail ? <Text style={styles.detail} numberOfLines={2}>{detail}</Text> : null}
+            {geoPin ? (
+              <Text style={styles.coordinates} numberOfLines={1}>
+                {geoPin.latitude.toFixed(5)}, {geoPin.longitude.toFixed(5)} · ±{Math.round(geoPin.accuracyMeters)} m
+              </Text>
+            ) : null}
+          </View>
+          {geoPin ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Open photo pin in Maps"
+              onPress={() => void Linking.openURL(mapUrl(geoPin))}
+              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            >
+              <Ionicons name="map-outline" size={18} color={colors.aqua} />
+              <Text style={styles.mapText}>Map</Text>
+            </Pressable>
+          ) : null}
+          {actionLabel && onAction ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={actionLabel}
+              onPress={onAction}
+              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+            >
+              <Ionicons name="create-outline" size={18} color={colors.lime} />
+              <Text style={styles.actionText}>{actionLabel}</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close photo"
@@ -49,7 +85,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
-  title: { flex: 1, color: colors.cream, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  titleWrap: { flex: 1, minWidth: 0, gap: 2 },
+  title: { color: colors.cream, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  detail: { color: colors.slate, fontSize: 10, lineHeight: 14 },
+  coordinates: { color: colors.aqua, fontSize: 9, lineHeight: 13, fontWeight: '700' },
+  action: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8 },
+  actionText: { color: colors.lime, fontSize: 12, lineHeight: 16, fontWeight: '800' },
+  mapText: { color: colors.aqua, fontSize: 11, lineHeight: 15, fontWeight: '800' },
   close: {
     width: 44,
     height: 44,
@@ -63,3 +105,7 @@ const styles = StyleSheet.create({
   image: { flex: 1, width: '100%' },
   pressed: { opacity: 0.72 },
 })
+
+function mapUrl(pin: ArtifactGeoPin): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pin.latitude},${pin.longitude}`)}`
+}

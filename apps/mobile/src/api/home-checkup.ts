@@ -10,7 +10,8 @@ type JsonRecord = Record<string, unknown>
 
 export const HOME_CHECKUP_AREAS = [
   'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
-  'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+  'hvac', 'water_heater', 'foundation', 'gutters', 'siding', 'windows_doors',
+  'drainage', 'other',
 ] as const satisfies readonly HomeCheckupArea[]
 
 const AREA_SET = new Set<HomeCheckupArea>(HOME_CHECKUP_AREAS)

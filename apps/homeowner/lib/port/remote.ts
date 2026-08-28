@@ -91,7 +91,8 @@ const QUOTE_SCOPE_KEYS = new Set([
 ])
 const PHOTO_CHECKUP_AREAS = new Set([
   'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
-  'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+  'hvac', 'water_heater', 'foundation', 'gutters', 'siding', 'windows_doors',
+  'drainage', 'other',
 ])
 const MAX_PHOTO_INPUT_BYTES = 10 * 1024 * 1024
 

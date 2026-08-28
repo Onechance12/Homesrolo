@@ -3,6 +3,7 @@ import type {
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
+  ResolvedArtifactRecord,
   CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
   CreateHomeCheckupPhotoInput,
@@ -41,6 +42,7 @@ import type {
   InviteProfessionalInput,
   UpdateWorkInput,
   UpdateHomeRecordInput,
+  UpdateArtifactMetadataInput,
   WorkRecord,
 } from '../api/model.ts'
 import { normalizedRoloSelectedPhoto } from '../api/protocol.ts'
@@ -50,6 +52,7 @@ import {
   projectQuoteCommandIntent,
 } from '../api/homeowner-quote.ts'
 import { projectItemBody, projectItemIntent } from '../api/project-item.ts'
+import { artifactMetadataUpdateBody } from '../api/artifact-metadata.ts'
 
 const FIXTURE_NOW = '2026-08-26T14:30:00.000Z'
 
@@ -319,17 +322,26 @@ const PRIMARY_PROJECT_ITEMS: readonly ProjectItem[] = Object.freeze([
 
 function artifact(
   number: number,
-  values: Omit<ArtifactRecord, 'artifactRef' | 'homeRef' | 'createdAt'>,
-): ArtifactRecord {
+  values: Pick<ResolvedArtifactRecord,
+    'projectRef' | 'kind' | 'displayName' | 'mediaType' | 'byteLength'>
+    & Partial<Pick<ResolvedArtifactRecord,
+      'observedOn' | 'phase' | 'areaLabel' | 'geoPin' | 'revision'>>,
+): ResolvedArtifactRecord {
   return {
     artifactRef: fixtureRef('hart', number),
     homeRef: PREVIEW_PRIMARY_HOME_REF,
+    observedOn: null,
+    phase: null,
+    areaLabel: null,
+    geoPin: null,
+    revision: 1,
     ...values,
     createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
   }
 }
 
-const PRIMARY_ARTIFACTS: readonly ArtifactRecord[] = Object.freeze([
+const PRIMARY_ARTIFACTS: readonly ResolvedArtifactRecord[] = Object.freeze([
   artifact(1, {
     projectRef: fixtureRef('hprj', 2),
     kind: 'photo',
@@ -615,7 +627,9 @@ function cloneHome(home: HomeSummary): HomeSummary { return { ...home } }
 function cloneWork(item: WorkRecord): WorkRecord { return { ...item } }
 function cloneActivity(item: ProjectActivityRecord): ProjectActivityRecord { return { ...item } }
 function cloneProjectItem(item: ProjectItem): ProjectItem { return { ...item } }
-function cloneArtifact(item: ArtifactRecord): ArtifactRecord { return { ...item } }
+function cloneArtifact(item: ResolvedArtifactRecord): ResolvedArtifactRecord {
+  return { ...item, geoPin: item.geoPin ? { ...item.geoPin } : null }
+}
 function cloneHomeRecord(item: HomeRecordProfile): HomeRecordProfile {
   return {
     ...item,
@@ -701,10 +715,14 @@ export class PreviewHomesroloApi implements HomesroloApi {
     readonly intent: string
     readonly activity: ProjectActivityRecord
   }>()
-  readonly #artifacts = new Map<string, ArtifactRecord[]>([
+  readonly #artifacts = new Map<string, ResolvedArtifactRecord[]>([
     [PREVIEW_PRIMARY_HOME_REF, PRIMARY_ARTIFACTS.map(cloneArtifact)],
     [PREVIEW_SECONDARY_HOME_REF, []],
   ])
+  readonly #artifactMetadataCommands = new Map<string, {
+    readonly intent: string
+    readonly artifact: ResolvedArtifactRecord
+  }>()
   readonly #homeRecords = new Map<string, HomeRecordProfile>([
     [PREVIEW_PRIMARY_HOME_REF, cloneHomeRecord(PRIMARY_HOME_RECORD)],
   ])
@@ -1633,7 +1651,7 @@ export class PreviewHomesroloApi implements HomesroloApi {
     }
   }
 
-  async listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]> {
+  async listArtifacts(homeRef: string): Promise<readonly ResolvedArtifactRecord[]> {
     this.#assertSignedIn()
     this.#home(homeRef)
     return (this.#artifacts.get(homeRef) ?? []).map(cloneArtifact)
@@ -1661,12 +1679,58 @@ export class PreviewHomesroloApi implements HomesroloApi {
     kind: ArtifactKind,
     deviceFile: DeviceFile,
     projectRef?: string,
-  ): Promise<ArtifactRecord> {
+  ): Promise<ResolvedArtifactRecord> {
     void homeRef
     void kind
     void deviceFile
     void projectRef
     throw new Error('preview_upload_disabled')
+  }
+
+  async updateArtifactMetadata(
+    homeRef: string,
+    artifactRef: string,
+    input: UpdateArtifactMetadataInput,
+  ): Promise<ResolvedArtifactRecord> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    const body = artifactMetadataUpdateBody(input)
+    const intent = JSON.stringify({ homeRef, artifactRef, ...body })
+    const prior = this.#artifactMetadataCommands.get(body.commandRef)
+    if (prior) {
+      if (prior.intent !== intent) throw new Error('preview_command_conflict')
+      return cloneArtifact(prior.artifact)
+    }
+    const records = this.#artifacts.get(homeRef) ?? []
+    const index = records.findIndex(item => item.artifactRef === artifactRef)
+    const current = records[index]
+    if (!current) throw new Error('preview_artifact_not_found')
+    if (current.revision !== body.expectedRevision) throw new Error('preview_revision_conflict')
+    if (body.projectRef !== null
+      && !(this.#work.get(homeRef) ?? []).some(item => item.projectRef === body.projectRef)) {
+      throw new Error('preview_work_not_found')
+    }
+    if (current.kind !== 'photo'
+      && (body.observedOn !== null || body.phase !== null
+        || body.areaLabel !== null || body.geoPin !== null)) {
+      throw new Error('preview_photo_metadata_requires_photo')
+    }
+    const updated: ResolvedArtifactRecord = {
+      ...current,
+      projectRef: body.projectRef,
+      observedOn: body.observedOn,
+      phase: body.phase,
+      areaLabel: body.areaLabel,
+      geoPin: body.geoPin,
+      revision: current.revision + 1,
+      updatedAt: FIXTURE_NOW,
+    }
+    records[index] = updated
+    this.#artifactMetadataCommands.set(body.commandRef, {
+      intent,
+      artifact: cloneArtifact(updated),
+    })
+    return cloneArtifact(updated)
   }
 
   async listHomeCheckups(homeRef: string): Promise<readonly HomeCheckupPhoto[]> {

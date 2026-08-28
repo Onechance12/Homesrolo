@@ -24,11 +24,13 @@ test('groups repeatable Home Watch views and orders each comparison newest first
     photo(1, '2026-02-01', 'roofline', 'Garage'),
     photo(2, '2026-08-01', 'roofline', '  garage  '),
     photo(3, '2026-07-01', 'hvac', 'Upstairs return'),
+    photo(4, '2026-07-02', 'windows_doors', 'Back patio door'),
   ])
-  assert.equal(groups.length, 2)
+  assert.equal(groups.length, 3)
   assert.deepEqual(groups[0]?.photos.map(item => item.observedOn), ['2026-08-01', '2026-02-01'])
   assert.equal(groups[0]?.viewLabel, 'Garage')
   assert.equal(groups[1]?.area, 'hvac')
+  assert.equal(groups[2]?.areaLabel, 'Windows & doors')
 })
 
 test('uses the phone calendar date rather than UTC rollover', () => {

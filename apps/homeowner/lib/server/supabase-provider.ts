@@ -31,6 +31,10 @@ import {
   HOMEOWNER_ARTIFACT_MAX_BYTES,
   validateReservedHomeownerArtifactPayload,
 } from '../../../../src/homeowner/homeowner-artifacts.v1.ts'
+import {
+  homeownerArtifactMetadataCommandIntent,
+  type HomeownerArtifactMetadataPort,
+} from '../../../../src/homeowner/homeowner-artifact-metadata.v1.ts'
 import type { HomeownerRuntimeConfiguration } from './config.ts'
 import {
   type HomeownerProjectReviewPersistencePort,
@@ -357,6 +361,18 @@ function projectItemFromRow(input: unknown): HomeownerProjectItem {
 
 function artifactFromRow(input: unknown) {
   const row = record(input)
+  const geoValues = [
+    row.geo_latitude,
+    row.geo_longitude,
+    row.geo_accuracy_meters,
+    row.geo_captured_at,
+    row.geo_provenance,
+  ]
+  const presentGeoValues = geoValues.filter(value => value !== null && value !== undefined)
+  if (presentGeoValues.length !== 0 && presentGeoValues.length !== geoValues.length) {
+    throw new HomeownerApiError('unavailable')
+  }
+  const hasGeoPin = presentGeoValues.length === geoValues.length
   return homeownerArtifactMetadataSchema.parse({
     recordVersion: HOMEOWNER_RUNTIME_VERSION,
     artifactRef: requiredString(row, 'artifact_ref'),
@@ -370,7 +386,29 @@ function artifactFromRow(input: unknown) {
     payloadSha256: requiredString(row, 'payload_sha256'),
     storageObjectRef: requiredString(row, 'storage_object_ref'),
     contentClass: requiredString(row, 'content_class'),
+    ...(row.observed_on === null || row.observed_on === undefined
+      ? {}
+      : { observedOn: requiredString(row, 'observed_on') }),
+    ...(row.photo_phase === null || row.photo_phase === undefined
+      ? {}
+      : { phase: requiredString(row, 'photo_phase') }),
+    ...(row.area_label === null || row.area_label === undefined
+      ? {}
+      : { areaLabel: requiredString(row, 'area_label') }),
+    ...(hasGeoPin ? {
+      geoPin: {
+        latitude: requiredNumber(row, 'geo_latitude'),
+        longitude: requiredNumber(row, 'geo_longitude'),
+        accuracyMeters: requiredNumber(row, 'geo_accuracy_meters'),
+        capturedAt: canonicalInstant(row, 'geo_captured_at'),
+        provenance: requiredString(row, 'geo_provenance'),
+      },
+    } : {}),
+    revision: row.revision === undefined ? 1 : requiredNumber(row, 'revision'),
     createdAt: canonicalInstant(row, 'created_at'),
+    ...(row.updated_at === null || row.updated_at === undefined
+      ? {}
+      : { updatedAt: canonicalInstant(row, 'updated_at') }),
   })
 }
 
@@ -581,7 +619,8 @@ export function createSupabaseClients(configuration: HomeownerRuntimeConfigurati
 /** One server-only adapter implements identity, exact-home reads, and commands. */
 export class SupabaseHomeownerProvider implements
   HomeownerIdentityPort, HomeownerRepositoryPort, HomeownerCommandPort,
-  HomeownerPrivateObjectPort, HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
+  HomeownerPrivateObjectPort, HomeownerArtifactMetadataPort,
+  HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
   HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort,
   HomeownerHomeRecordProfilePort, HomesroloProfessionalPort {
   readonly #client: SupabaseClient
@@ -732,6 +771,54 @@ export class SupabaseHomeownerProvider implements
       .order('created_at', { ascending: false })
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(artifactFromRow)
+  }
+
+  async updateArtifactMetadata(
+    input: Parameters<HomeownerArtifactMetadataPort['updateArtifactMetadata']>[0],
+  ) {
+    const pin = input.command.geoPin
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_update_homeowner_artifact_metadata',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: digest(homeownerArtifactMetadataCommandIntent(input.command)),
+        p_artifact_ref: input.command.artifactRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_project_ref: input.command.projectRef,
+        p_observed_on: input.command.observedOn,
+        p_photo_phase: input.command.phase,
+        p_area_label: input.command.areaLabel,
+        p_geo_latitude: pin?.latitude ?? null,
+        p_geo_longitude: pin?.longitude ?? null,
+        p_geo_accuracy_meters: pin?.accuracyMeters ?? null,
+        p_geo_captured_at: pin?.capturedAt ?? null,
+        p_geo_provenance: pin?.provenance ?? null,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) {
+      if (error.message.includes('artifact_metadata_revision_conflict')
+        || error.message.includes('command_digest_mismatch')
+        || error.message.includes('command_scope_mismatch')) {
+        throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('artifact_not_found')
+        || error.message.includes('project_not_in_home')
+        || error.message.includes('membership_not_authorized')) {
+        throw new HomeownerApiError('not_found')
+      }
+      if (error.message.includes('invalid_')
+        || error.message.includes('artifact_observed_date_in_future')
+        || error.message.includes('artifact_photo_metadata_requires_photo')) {
+        throw new HomeownerApiError('invalid_request')
+      }
+      throw new HomeownerApiError('unavailable')
+    }
+    return artifactFromRow(data)
   }
   async listCheckupPhotos(grant: AuthorizedHomeownerWorkspace) {
     await this.#reconcileCheckupPhotoObjects()

@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import type {
   ArtifactRecord,
   HomeSummary,
+  ResolvedArtifactRecord,
   RoloReply,
   RoloTurn,
   WorkRecord,
@@ -30,6 +31,12 @@ import { Button, Card, Loading, Notice, Page, Tag } from '../../../src/component
 import { pickPhoto } from '../../../src/native/pickers.ts'
 import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
+import { localCalendarDate } from '../../../src/home/checkups.ts'
+import {
+  artifactMetadataReplacement,
+  newPhotoMetadataDraft,
+  type PhotoMetadataDraft,
+} from '../../../src/home/photo-metadata.ts'
 import { oneRouteParam } from '../../../src/home/legacy-route.ts'
 import { isProjectRef } from '../../../src/api/protocol.ts'
 import {
@@ -42,6 +49,11 @@ import {
   type PersistedRoloPhoto,
 } from '../../../src/rolo/conversation-persistence.ts'
 import { roloRequestCanCommit } from '../../../src/rolo/request-generation.ts'
+import { workCreateFieldsFromRoloDraft } from '../../../src/rolo/work-draft.ts'
+import {
+  captureConfirmedDeviceLocation,
+  type ConfirmedDeviceGeoPin,
+} from '../../../src/native/current-location.ts'
 import { categoryLabel, colors, kindLabel, radius, space, statusLabel } from '../../../src/theme.ts'
 
 const STARTERS: readonly {
@@ -108,12 +120,20 @@ export default function RoloScreen() {
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<WorkRecord | null>(null)
   const [attachment, setAttachment] = useState<RoloPhotoAttachment | null>(null)
+  const [pendingPhotoSource, setPendingPhotoSource] = useState<'camera' | 'library' | null>(null)
+  const [cameraPhotoDraft, setCameraPhotoDraft] = useState<PhotoMetadataDraft | null>(null)
+  const [pendingGeoPin, setPendingGeoPin] = useState<ConfirmedDeviceGeoPin | null>(null)
+  const [locationBusy, setLocationBusy] = useState(false)
+  const [locationNote, setLocationNote] = useState<string | null>(null)
+  const [reviewedNewPhoto, setReviewedNewPhoto] = useState<ResolvedArtifactRecord | null>(null)
+  const [inlineNote, setInlineNote] = useState<string | null>(null)
   const [rememberedAttachment, setRememberedAttachment] = useState<PersistedRoloPhoto | null>(null)
   const [approvedPhotoMessage, setApprovedPhotoMessage] = useState<string | null>(null)
   const [savedPhotos, setSavedPhotos] = useState<readonly ArtifactRecord[]>([])
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState(false)
   const [photoReview, setPhotoReview] = useState<RoloReply['photoReview']>(null)
+  const [reviewExpanded, setReviewExpanded] = useState(false)
   const [photoReviewTitle, setPhotoReviewTitle] = useState<string | null>(null)
   const [photoReviewRef, setPhotoReviewRef] = useState<string | null>(null)
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false)
@@ -259,8 +279,15 @@ export default function RoloScreen() {
       setPhotosLoading(false)
       setPhotosError(false)
       setAttachment(null)
+      setPendingPhotoSource(null)
+      setCameraPhotoDraft(null)
+      setPendingGeoPin(null)
+      setLocationBusy(false)
+      setLocationNote(null)
+      setReviewedNewPhoto(null)
       setApprovedPhotoMessage(null)
       setPhotoReview(null)
+      setReviewExpanded(false)
       setPhotoReviewTitle(null)
       setPhotoReviewRef(null)
       return () => { active = false }
@@ -291,7 +318,7 @@ export default function RoloScreen() {
     if (turns.length === 0 && !busy && !photoPickerOpen && !attachment) return
     const frame = requestAnimationFrame(() => threadScrollRef.current?.scrollToEnd({ animated: true }))
     return () => cancelAnimationFrame(frame)
-  }, [attachment, busy, photoPickerOpen, photoReviewRef, proposal, turns.length])
+  }, [attachment, busy, photoPickerOpen, photoReviewRef, privacyOpen, proposal, turns.length])
 
   useEffect(() => {
     mounted.current = true
@@ -329,7 +356,7 @@ export default function RoloScreen() {
   }
 
   async function chooseNewPhoto(source: 'camera' | 'library') {
-    if (previewMode || !uploadsEnabled || busy || photoBusy) return
+    if (previewMode || !uploadsEnabled || busy || photoBusy || locationBusy) return
     const version = conversationVersion.current
     setPhotoBusy(true)
     setError(null)
@@ -346,6 +373,10 @@ export default function RoloScreen() {
         return
       }
       setAttachment({ state: 'pending', file })
+      setPendingPhotoSource(source)
+      setCameraPhotoDraft(source === 'camera' ? newPhotoMetadataDraft() : null)
+      setPendingGeoPin(null)
+      setLocationNote(null)
       setRememberedAttachment(null)
       setApprovedPhotoMessage(null)
       setPhotoPickerOpen(false)
@@ -361,8 +392,12 @@ export default function RoloScreen() {
   }
 
   function chooseSavedPhoto(artifact: ArtifactRecord) {
-    if (busy || photoBusy || artifact.kind !== 'photo') return
+    if (busy || photoBusy || locationBusy || artifact.kind !== 'photo') return
     setAttachment({ state: 'saved', artifact })
+    setPendingPhotoSource(null)
+    setCameraPhotoDraft(null)
+    setPendingGeoPin(null)
+    setLocationNote(null)
     setRememberedAttachment({ artifactRef: artifact.artifactRef, title: artifact.displayName })
     setApprovedPhotoMessage(null)
     setPhotoPickerOpen(false)
@@ -370,35 +405,88 @@ export default function RoloScreen() {
   }
 
   function removePhoto() {
-    if (busy) return
+    if (busy || locationBusy) return
     setAttachment(null)
+    setPendingPhotoSource(null)
+    setCameraPhotoDraft(null)
+    setPendingGeoPin(null)
+    setLocationNote(null)
     setRememberedAttachment(null)
     setApprovedPhotoMessage(null)
   }
 
+  async function toggleCurrentPhotoLocation() {
+    if (busy || locationBusy || attachment?.state !== 'pending'
+      || pendingPhotoSource !== 'camera' || !cameraPhotoDraft) return
+    if (cameraPhotoDraft.pinCurrentLocation) {
+      setCameraPhotoDraft({ ...cameraPhotoDraft, pinCurrentLocation: false })
+      setPendingGeoPin(null)
+      setLocationNote(null)
+      return
+    }
+
+    const version = conversationVersion.current
+    setLocationBusy(true)
+    setLocationNote(null)
+    try {
+      const pin = await captureConfirmedDeviceLocation()
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
+      setPendingGeoPin(pin)
+      setCameraPhotoDraft(current => current ? { ...current, pinCurrentLocation: true } : current)
+    } catch (caught) {
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
+      setPendingGeoPin(null)
+      setCameraPhotoDraft(current => current ? { ...current, pinCurrentLocation: false } : current)
+      setLocationNote(locationRequestFailureNote(caught))
+    } finally {
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        setLocationBusy(false)
+      }
+    }
+  }
+
   async function send(message = input) {
     const clean = message.trim()
-    if (!clean || busy || sendInFlight.current) return
+    if (!clean || busy || locationBusy || sendInFlight.current) return
     if (attachment && approvedPhotoMessage !== roloPhotoConsentKey(attachment, clean)) {
       setError('Approve this photo for this message, or remove it before sending.')
       return
     }
     const version = conversationVersion.current
+    const proposalBeforeSend = proposal
+    const continuesPhotoWork = proposalBeforeSend !== null || followUpQuestions[0] !== undefined
+    const newPhotoSource = attachment?.state === 'pending' ? pendingPhotoSource : null
+    const cameraDetails = newPhotoSource === 'camera'
+      ? cameraPhotoDraft ?? newPhotoMetadataDraft()
+      : null
+    const locationRequestNote = locationNote
     sendInFlight.current = true
     setBusy(true)
     setError(null)
     setSaved(null)
+    setInlineNote(locationRequestNote)
     setSuggestion(null)
     setInput('')
     setPhotoReview(null)
+    setReviewExpanded(false)
     setPhotoReviewTitle(null)
     setPhotoReviewRef(null)
     let selectedPhoto = attachment?.state === 'saved' ? attachment.artifact : null
     let photoSavedDuringSend = false
+    let newUploadedPhoto: ResolvedArtifactRecord | null = null
+    let photoWorkflowNote: string | null = null
     try {
       if (attachment?.state === 'pending') {
-        const uploadedPhoto = await api.uploadArtifact(homeId, 'photo', attachment.file)
-        selectedPhoto = uploadedPhoto
+        const geoPin = cameraDetails?.pinCurrentLocation ? pendingGeoPin : null
+        if (cameraDetails?.pinCurrentLocation && !geoPin) {
+          photoWorkflowNote = 'The location was not confirmed, so this photo was saved without a pin.'
+        }
+        const uploadedPhoto = await api.uploadArtifact(
+          homeId,
+          'photo',
+          attachment.file,
+          conversationProjectRef ?? undefined,
+        )
         photoSavedDuringSend = true
         if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
         setAttachment({ state: 'saved', artifact: uploadedPhoto })
@@ -406,10 +494,45 @@ export default function RoloScreen() {
           artifactRef: uploadedPhoto.artifactRef,
           title: uploadedPhoto.displayName,
         })
+        let organizedPhoto = uploadedPhoto
+        if (cameraDetails) {
+          try {
+            organizedPhoto = await api.updateArtifactMetadata(
+              homeId,
+              uploadedPhoto.artifactRef,
+              {
+                commandRef: await api.newCommandRef(),
+                expectedRevision: uploadedPhoto.revision,
+                ...artifactMetadataReplacement(uploadedPhoto, {
+                  observedOn: cameraDetails.observedOn,
+                  phase: cameraDetails.phase,
+                  areaLabel: null,
+                  geoPin,
+                }),
+              },
+            )
+          } catch {
+            photoWorkflowNote = [
+              photoWorkflowNote,
+              'Photo saved, but its date and Reference label could not be attached.',
+            ].filter(Boolean).join(' ')
+          }
+        }
+        if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
+        selectedPhoto = organizedPhoto
+        newUploadedPhoto = organizedPhoto
+        setAttachment({ state: 'saved', artifact: organizedPhoto })
+        setPendingPhotoSource(null)
+        setCameraPhotoDraft(null)
+        setPendingGeoPin(null)
+        setLocationNote(null)
         setSavedPhotos(current => [
-          uploadedPhoto,
-          ...current.filter(photo => photo.artifactRef !== uploadedPhoto.artifactRef),
+          organizedPhoto,
+          ...current.filter(photo => photo.artifactRef !== organizedPhoto.artifactRef),
         ].slice(0, 12))
+        if (photoWorkflowNote) {
+          setInlineNote([locationRequestNote, photoWorkflowNote].filter(Boolean).join(' '))
+        }
       }
       if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
       const reply = await api.askRolo(homeId, clean, turns, {
@@ -435,11 +558,18 @@ export default function RoloScreen() {
       setTurns(current => [...current, ...exchange].slice(-18))
       pendingCreate.current = null
       setProposal(reply.proposedWork)
+      if (newUploadedPhoto && reply.photoReview && conversationProjectRef === null) {
+        setReviewedNewPhoto(newUploadedPhoto)
+      } else if (!continuesPhotoWork
+        || (!reply.proposedWork && reply.followUpQuestions.length === 0)) {
+        setReviewedNewPhoto(null)
+      }
       setSuggestion(suggestionFromReply(reply))
       setFollowUpQuestions(reply.followUpQuestions)
       if (prompt !== undefined) router.setParams({ prompt: undefined })
       if (selectedPhoto && reply.photoReview) {
         setPhotoReview(reply.photoReview)
+        setReviewExpanded(false)
         setPhotoReviewTitle(selectedPhoto.displayName)
         setPhotoReviewRef(selectedPhoto.artifactRef)
         setAttachment(null)
@@ -476,21 +606,11 @@ export default function RoloScreen() {
 
   async function saveProposal() {
     if (!proposal) return
+    const photoToFile = reviewedNewPhoto
     setSaving(true)
     setError(null)
     try {
-      const createFields = {
-        title: proposal.title,
-        workKind: proposal.kind,
-        category: proposal.category,
-        status: proposal.status,
-        ...(proposal.occurredOn ? { occurredOn: proposal.occurredOn } : {}),
-        ...(proposal.summary ? { summary: proposal.summary } : {}),
-        ...(proposal.professionalLabel ? { professionalLabel: proposal.professionalLabel } : {}),
-        ...(proposal.firstUpdate
-          ? { initialActivity: { kind: 'note' as const, body: proposal.firstUpdate } }
-          : {}),
-      }
+      const createFields = workCreateFieldsFromRoloDraft(proposal, localCalendarDate())
       const intent = JSON.stringify(createFields)
       if (!pendingCreate.current || pendingCreate.current.intent !== intent) {
         pendingCreate.current = { intent, commandRef: await api.newCommandRef() }
@@ -500,6 +620,28 @@ export default function RoloScreen() {
         ...createFields,
       })
       pendingCreate.current = null
+      if (photoToFile && photoToFile.projectRef === null) {
+        try {
+          const filedPhoto = await api.updateArtifactMetadata(
+            homeId,
+            photoToFile.artifactRef,
+            {
+              commandRef: await api.newCommandRef(),
+              expectedRevision: photoToFile.revision,
+              ...artifactMetadataReplacement(photoToFile, { projectRef: work.projectRef }),
+            },
+          )
+          setSavedPhotos(current => current.map(photo => (
+            photo.artifactRef === filedPhoto.artifactRef ? filedPhoto : photo
+          )))
+        } catch {
+          setInlineNote(current => [
+            current,
+            'Work saved, but the reviewed photo stayed with the whole home. You can file it from Home later.',
+          ].filter(Boolean).join(' '))
+        }
+      }
+      setReviewedNewPhoto(null)
       setSaved(work)
       if (work.status === 'planned' || work.status === 'in_progress') {
         setActiveWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
@@ -532,15 +674,32 @@ export default function RoloScreen() {
     setBusy(false)
     setPhotoBusy(false)
     setAttachment(null)
+    setPendingPhotoSource(null)
+    setCameraPhotoDraft(null)
+    setPendingGeoPin(null)
+    setLocationBusy(false)
+    setLocationNote(null)
+    setReviewedNewPhoto(null)
+    setInlineNote(null)
     setRememberedAttachment(null)
     setApprovedPhotoMessage(null)
     setPhotoReview(null)
+    setReviewExpanded(false)
     setPhotoReviewTitle(null)
     setPhotoReviewRef(null)
     setPhotoPickerOpen(false)
     sendInFlight.current = false
     pendingCreate.current = null
   }
+
+  const visibleReviewObservations = photoReview
+    ? (reviewExpanded ? photoReview.visibleObservations : photoReview.visibleObservations.slice(0, 2))
+    : []
+  const visibleReviewLimitations = photoReview
+    ? (reviewExpanded ? photoReview.cannotConfirm : photoReview.cannotConfirm.slice(0, 1))
+    : []
+  const hasMoreReviewDetails = Boolean(photoReview
+    && (photoReview.visibleObservations.length > 2 || photoReview.cannotConfirm.length > 1))
 
   return (
     <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -556,14 +715,15 @@ export default function RoloScreen() {
           section="Rolo"
           title={homeSummary?.displayLabel ?? 'What’s going on?'}
           detail={homeSummary?.privateLocationLabel ?? 'Talk it through, ask about this home, or add a photo.'}
+          showAccount={false}
         />
 
         {turns.length > 0 ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start a new conversation"
-            accessibilityState={{ disabled: busy || saving }}
-            disabled={busy || saving}
+            accessibilityState={{ disabled: busy || saving || locationBusy }}
+            disabled={busy || saving || locationBusy}
             onPress={startFreshConversation}
             style={({ pressed }) => [styles.newChat, pressed && styles.pressed]}
           >
@@ -667,7 +827,7 @@ export default function RoloScreen() {
         ) : null}
 
         {photoReview ? (
-          <Card accent>
+          <Card accent style={styles.reviewCard}>
             <View style={styles.reviewTop}>
               <View style={styles.reviewHeading}>
                 <Text style={styles.reviewEyebrow}>What I can see</Text>
@@ -690,23 +850,35 @@ export default function RoloScreen() {
               />
             ) : null}
             <Text style={styles.reviewSection}>What stands out</Text>
-            {photoReview.visibleObservations.map(item => (
+            {visibleReviewObservations.map(item => (
               <View key={item} style={styles.reviewItem}>
                 <Ionicons name="eye-outline" size={16} color={colors.lime} />
                 <Text style={styles.reviewCopy}>{item}</Text>
               </View>
             ))}
             <Text style={styles.reviewSection}>What the photo can’t tell us</Text>
-            {photoReview.cannotConfirm.map(item => (
+            {visibleReviewLimitations.map(item => (
               <View key={item} style={styles.reviewItem}>
                 <Ionicons name="help-circle-outline" size={16} color={colors.aqua} />
                 <Text style={styles.reviewCopy}>{item}</Text>
               </View>
             ))}
+            {hasMoreReviewDetails ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={reviewExpanded ? 'Show fewer photo review details' : 'Show all photo review details'}
+                accessibilityState={{ expanded: reviewExpanded }}
+                onPress={() => setReviewExpanded(current => !current)}
+                style={({ pressed }) => [styles.reviewToggle, pressed && styles.pressed]}
+              >
+                <Text style={styles.reviewToggleText}>{reviewExpanded ? 'Show less' : 'Show all photo details'}</Text>
+                <Ionicons name={reviewExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.aqua} />
+              </Pressable>
+            ) : null}
             {photoReview.suggestedTrade ? (
               <Text style={styles.reviewTrade}>If you want it checked in person, start with someone who handles {categoryLabel[photoReview.suggestedTrade].toLowerCase()}.</Text>
             ) : null}
-            <Text style={styles.disclosure}>This is a visual review—not a diagnosis, measurement, quote, or safety clearance.</Text>
+            <Text style={styles.disclosure}>Visual guidance only—not a diagnosis, measurement, quote, or safety clearance.</Text>
           </Card>
         ) : null}
 
@@ -731,12 +903,24 @@ export default function RoloScreen() {
             <Button label="Leave it in the chat" onPress={() => {
               pendingCreate.current = null
               setProposal(null)
+              setReviewedNewPhoto(null)
               setFollowUpQuestions([])
             }} disabled={saving} quiet />
             <Text style={styles.disclosure}>Nothing is saved until you approve it.</Text>
           </Card>
         ) : null}
-        {saved ? <Notice message={`“${saved.title}” is now in Work.`} /> : null}
+        {saved ? (
+          <View style={styles.inlineStatus} accessibilityLiveRegion="polite">
+            <Ionicons name="checkmark-circle" size={16} color={colors.mint} />
+            <Text style={styles.inlineStatusText}>“{saved.title}” is now in Work.</Text>
+          </View>
+        ) : null}
+        {inlineNote ? (
+          <View style={styles.inlineStatus} accessibilityLiveRegion="polite">
+            <Ionicons name="information-circle-outline" size={16} color={colors.aqua} />
+            <Text style={styles.inlineStatusText}>{inlineNote}</Text>
+          </View>
+        ) : null}
         {suggestion ? (
           <Button
             label={suggestionLabel(suggestion)}
@@ -751,15 +935,15 @@ export default function RoloScreen() {
           <Card style={styles.photoPanel}>
             <View style={styles.photoAttach}>
               <View style={styles.photoAttachHeading}>
-                <View>
+                <View style={styles.photoAttachHeadingCopy}>
                   <Text style={styles.photoAttachTitle}>{attachment ? 'Photo attached' : 'Add a photo'}</Text>
                   <Text style={styles.photoAttachHint}>Choose one photo to review with your next message.</Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Close photo picker"
-                  accessibilityState={{ disabled: busy }}
-                  disabled={busy}
+                  accessibilityLabel={attachment ? 'Remove attached photo' : 'Close photo picker'}
+                  accessibilityState={{ disabled: busy || locationBusy }}
+                  disabled={busy || locationBusy}
                   onPress={() => {
                     if (attachment) removePhoto()
                     setPhotoPickerOpen(false)
@@ -795,19 +979,11 @@ export default function RoloScreen() {
                     </Text>
                     <Text style={styles.attachmentState}>
                       {attachment.state === 'pending'
-                        ? 'Saves privately to this home when you send.'
+                        ? pendingPhotoSource === 'camera' && cameraPhotoDraft
+                          ? `${cameraPhotoDraft.observedOn} · Reference · saves privately when sent.`
+                          : 'Saves privately to this home when you send.'
                         : 'Already saved in this private home.'}
                     </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove attached photo"
-                      accessibilityState={{ disabled: busy }}
-                      disabled={busy}
-                      onPress={removePhoto}
-                      style={styles.removePhotoButton}
-                    >
-                      <Text style={styles.removePhoto}>Remove photo</Text>
-                    </Pressable>
                   </View>
                 </View>
               ) : (
@@ -865,12 +1041,57 @@ export default function RoloScreen() {
                   ) : null}
                 </>
               )}
+              {attachment?.state === 'pending' && pendingPhotoSource === 'camera' && cameraPhotoDraft ? (
+                <View style={styles.locationControl}>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{
+                      checked: cameraPhotoDraft.pinCurrentLocation && pendingGeoPin !== null,
+                      disabled: busy || locationBusy,
+                    }}
+                    accessibilityLabel={pendingGeoPin
+                      ? 'Remove current device location from this photo'
+                      : 'Pin current device location to this photo'}
+                    accessibilityHint={pendingGeoPin
+                      ? 'The displayed location will not be saved if you remove it'
+                      : 'Requests the foreground location once and displays it before you send'}
+                    disabled={busy || locationBusy}
+                    onPress={() => void toggleCurrentPhotoLocation()}
+                    style={({ pressed }) => [styles.locationRow, pressed && styles.consentPressed]}
+                  >
+                    {locationBusy ? (
+                      <ActivityIndicator size="small" color={colors.lime} />
+                    ) : (
+                      <Ionicons
+                        name={pendingGeoPin ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color={pendingGeoPin ? colors.lime : colors.slate}
+                      />
+                    )}
+                    <View style={styles.locationCopy}>
+                      <Text style={styles.locationTitle}>
+                        {locationBusy
+                          ? 'Getting current location…'
+                          : pendingGeoPin
+                          ? 'Pin this location when sent'
+                          : 'Pin my current location'}
+                      </Text>
+                      <Text style={styles.locationDetail}>
+                        {pendingGeoPin
+                          ? `${locationPinSummary(pendingGeoPin)} · Sending confirms this pin.`
+                          : 'One foreground check now. Never background or photo EXIF.'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {locationNote ? <Text style={styles.locationNote}>{locationNote}</Text> : null}
+                </View>
+              ) : null}
               {attachment ? (
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: photoConsent }}
                   accessibilityLabel="Allow Rolo to inspect this photo for this message only"
-                  disabled={busy || !currentPhotoConsentKey}
+                  disabled={busy || locationBusy || !currentPhotoConsentKey}
                   onPress={() => setApprovedPhotoMessage(current => (
                     current === currentPhotoConsentKey ? null : currentPhotoConsentKey
                   ))}
@@ -878,20 +1099,27 @@ export default function RoloScreen() {
                 >
                   <Ionicons
                     name={photoConsent ? 'checkbox' : 'square-outline'}
-                    size={24}
+                    size={20}
                     color={photoConsent ? colors.lime : colors.slate}
                   />
                   <Text style={styles.consentText}>
                     {!input.trim()
-                      ? 'Write what you want to know first. Then approve this photo for that exact message.'
+                      ? 'Write what you want to know, then approve this photo for that exact message.'
                       : attachment.state === 'pending'
-                      ? 'Save this photo privately and use it only to answer this message.'
-                      : 'Use this saved photo only to answer this message.'}
+                      ? 'Save privately and use this photo only for this exact message.'
+                      : 'Use this saved photo only for this exact message.'}
                   </Text>
                 </Pressable>
               ) : null}
             </View>
           </Card>
+        ) : null}
+        {privacyOpen ? (
+          <Text style={styles.safety}>
+            Your message and a limited list of what this home has saved may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
+            {visionEnabled ? ' A new photo is saved privately first; Homesrolo removes details such as its location before sending a fresh copy for that request.' : ''}
+            {' '}Rolo can help you think through what is visible, but it is not a licensed professional or emergency service.
+          </Text>
         ) : null}
         </ScrollView>
 
@@ -906,8 +1134,8 @@ export default function RoloScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add a photo"
-                accessibilityState={{ disabled: busy || photoBusy }}
-                disabled={busy || photoBusy}
+                accessibilityState={{ disabled: busy || photoBusy || locationBusy }}
+                disabled={busy || photoBusy || locationBusy}
                 onPress={() => setPhotoPickerOpen(current => !current)}
                 style={({ pressed }) => [styles.composerAction, pressed && styles.pressed]}
               >
@@ -932,12 +1160,12 @@ export default function RoloScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={busy ? 'Sending message' : 'Send message'}
-            accessibilityState={{ disabled: busy || photoBusy || !input.trim() || (!!attachment && !photoConsent) }}
+            accessibilityState={{ disabled: busy || photoBusy || locationBusy || !input.trim() || (!!attachment && !photoConsent) }}
             onPress={() => void send()}
-            disabled={busy || photoBusy || !input.trim() || (!!attachment && !photoConsent)}
+            disabled={busy || photoBusy || locationBusy || !input.trim() || (!!attachment && !photoConsent)}
             style={({ pressed }) => [
               styles.sendButton,
-              (busy || photoBusy || !input.trim() || (!!attachment && !photoConsent)) && styles.sendButtonDisabled,
+              (busy || photoBusy || locationBusy || !input.trim() || (!!attachment && !photoConsent)) && styles.sendButtonDisabled,
               pressed && styles.pressed,
             ]}
           >
@@ -953,19 +1181,13 @@ export default function RoloScreen() {
             accessibilityLabel="How this chat uses your information"
             accessibilityState={{ expanded: privacyOpen }}
             onPress={() => setPrivacyOpen(current => !current)}
+            hitSlop={6}
             style={({ pressed }) => [styles.privacyToggle, pressed && styles.pressed]}
           >
             <Ionicons name="lock-closed-outline" size={14} color={colors.smoke} />
-            <Text style={styles.privacyToggleText}>Private by default · How this chat uses your information</Text>
+            <Text style={styles.privacyToggleText} numberOfLines={1}>Private by default · Details</Text>
             <Ionicons name={privacyOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.smoke} />
           </Pressable>
-          {privacyOpen ? (
-            <Text style={styles.safety}>
-              Your message and a limited list of what this home has saved may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
-              {visionEnabled ? ' A new photo is saved privately first; Homesrolo removes details such as its location before sending a fresh copy for that request.' : ''}
-              {' '}Rolo can help you think through what is visible, but it is not a licensed professional or emergency service.
-            </Text>
-          ) : null}
         </View>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -977,6 +1199,20 @@ function suggestionFromReply(reply: RoloReply): RoloSuggestion | null {
   // A proposed draft does not exist in Work until the homeowner approves it.
   if (reply.destination === 'work' && !reply.projectRef && reply.proposedWork) return null
   return { destination: reply.destination, projectRef: reply.projectRef }
+}
+
+function locationRequestFailureNote(caught: unknown): string {
+  const detail = caught instanceof Error && caught.message.trim()
+    ? caught.message.trim()
+    : 'Current location was not available.'
+  const compactDetail = detail
+    .replace(/\s*The photo can still be saved without a pin\.\s*$/i, '')
+    .trim()
+  return `${compactDetail || 'Current location was not available.'} You can still send and review this photo without a pin.`
+}
+
+function locationPinSummary(pin: ConfirmedDeviceGeoPin): string {
+  return `${pin.latitude.toFixed(4)}, ${pin.longitude.toFixed(4)} · ±${Math.round(pin.accuracyMeters)} m`
 }
 
 function suggestionLabel(suggestion: RoloSuggestion): string {
@@ -1038,7 +1274,7 @@ function PhotoAction({ icon, label, disabled, onPress }: {
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.ink },
   thread: { flex: 1 },
-  threadContent: { padding: space.lg, paddingBottom: space.md, gap: space.md },
+  threadContent: { paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
   introCard: { gap: 10 },
   introTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 2 },
   introHeading: { flex: 1, gap: 3 },
@@ -1072,14 +1308,20 @@ const styles = StyleSheet.create({
   },
   thinkingText: { color: colors.slate, fontSize: 13, fontWeight: '700' },
   reviewTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  reviewCard: { padding: space.sm, gap: space.xs },
   reviewHeading: { flex: 1, gap: 3 },
   reviewEyebrow: { color: colors.lime, fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
   reviewTitle: { color: colors.cream, fontSize: 18, lineHeight: 23, fontWeight: '900' },
-  reviewImage: { width: '100%', height: 190, borderRadius: radius.medium, backgroundColor: colors.inkSoft },
+  reviewImage: { width: '100%', height: 136, borderRadius: radius.medium, backgroundColor: colors.inkSoft },
   reviewSection: { color: colors.aqua, fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 3 },
   reviewItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
-  reviewCopy: { color: colors.cream, flex: 1, fontSize: 14, lineHeight: 20 },
+  reviewCopy: { color: colors.cream, flex: 1, fontSize: 13, lineHeight: 18 },
   reviewTrade: { color: colors.lime, fontSize: 13, lineHeight: 19, fontWeight: '800' },
+  reviewToggle: {
+    minHeight: 44, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 8,
+  },
+  reviewToggleText: { color: colors.aqua, fontSize: 12, lineHeight: 16, fontWeight: '900' },
   followUpLabel: { color: colors.aqua, fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.7 },
   followUpQuestion: { color: colors.cream, fontSize: 17, lineHeight: 24, fontWeight: '800' },
   proposalTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1088,9 +1330,12 @@ const styles = StyleSheet.create({
   proposalMeta: { color: colors.aqua, fontSize: 13, fontWeight: '800' },
   proLabel: { color: colors.lime, fontSize: 13, fontWeight: '800' },
   disclosure: { color: colors.smoke, fontSize: 11, textAlign: 'center' },
-  photoPanel: { gap: 0 },
+  inlineStatus: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, paddingHorizontal: 3 },
+  inlineStatusText: { color: colors.slate, flex: 1, fontSize: 11, lineHeight: 16 },
+  photoPanel: { gap: 0, padding: space.sm },
   photoAttach: { gap: 11, paddingBottom: 3 },
   photoAttachHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  photoAttachHeadingCopy: { flex: 1, minWidth: 0 },
   iconButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   photoAttachTitle: { color: colors.cream, fontSize: 16, fontWeight: '900' },
   photoAttachHint: { color: colors.smoke, fontSize: 11, lineHeight: 16, marginTop: 2 },
@@ -1105,17 +1350,24 @@ const styles = StyleSheet.create({
   photoActionText: { color: colors.cream, fontSize: 13, fontWeight: '800' },
   attachmentCard: {
     borderRadius: radius.medium, overflow: 'hidden', borderWidth: 1, borderColor: colors.line,
-    backgroundColor: colors.inkSoft, flexDirection: 'row', minHeight: 108,
+    backgroundColor: colors.inkSoft, flexDirection: 'row', minHeight: 88,
   },
-  attachmentImage: { width: 108, minHeight: 108, backgroundColor: colors.inkRaised },
-  attachmentBody: { flex: 1, padding: 11, justifyContent: 'center', gap: 5 },
+  attachmentImage: { width: 88, minHeight: 88, backgroundColor: colors.inkRaised },
+  attachmentBody: { flex: 1, padding: 9, justifyContent: 'center', gap: 5 },
   attachmentName: { color: colors.cream, fontSize: 14, lineHeight: 18, fontWeight: '900' },
   attachmentState: { color: colors.slate, fontSize: 11, lineHeight: 15 },
-  removePhoto: { color: colors.aqua, fontSize: 12, fontWeight: '900' },
-  removePhotoButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
+  locationControl: { gap: 4 },
+  locationRow: {
+    minHeight: 48, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
+    padding: 9, backgroundColor: colors.inkSoft, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+  },
+  locationCopy: { flex: 1, gap: 1 },
+  locationTitle: { color: colors.cream, fontSize: 12, lineHeight: 16, fontWeight: '800' },
+  locationDetail: { color: colors.slate, fontSize: 10, lineHeight: 14 },
+  locationNote: { color: colors.aqua, fontSize: 10, lineHeight: 14, paddingHorizontal: 3 },
   consentRow: {
-    minHeight: 58, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
-    padding: 11, backgroundColor: colors.inkSoft, flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    minHeight: 48, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
+    padding: 9, backgroundColor: colors.inkSoft, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
   },
   consentPressed: { borderColor: colors.lime },
   consentText: { color: colors.cream, flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '700' },
@@ -1130,29 +1382,32 @@ const styles = StyleSheet.create({
   savedPhotoThumb: { width: 46, height: 46, borderRadius: 9, backgroundColor: colors.inkRaised },
   savedPhotoName: { color: colors.cream, flex: 1, fontSize: 12, lineHeight: 16, fontWeight: '800' },
   composer: {
-    minHeight: 56, borderRadius: radius.large, borderWidth: 1, borderColor: colors.line,
-    backgroundColor: colors.inkRaised, padding: 6, flexDirection: 'row', alignItems: 'flex-end', gap: 7,
+    minHeight: 50, borderRadius: radius.large, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.inkRaised, padding: 4, flexDirection: 'row', alignItems: 'flex-end', gap: 5,
   },
   composerDock: {
     borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.ink,
-    paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: 5,
+    paddingHorizontal: space.md, paddingTop: space.xs, paddingBottom: space.xs, gap: 2,
   },
   composerAction: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.inkSoft,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: colors.inkSoft,
     alignItems: 'center', justifyContent: 'center',
   },
   composerActionAttached: { backgroundColor: colors.lime },
   composerInput: {
-    flex: 1, minHeight: 42, maxHeight: 108, paddingHorizontal: 7, paddingTop: 10, paddingBottom: 9,
+    flex: 1, minHeight: 38, maxHeight: 96, paddingHorizontal: 6, paddingTop: 8, paddingBottom: 7,
     color: colors.cream, fontSize: 15, lineHeight: 21, textAlignVertical: 'center',
   },
   sendButton: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.lime,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: colors.lime,
     alignItems: 'center', justifyContent: 'center',
   },
   sendButtonDisabled: { opacity: 0.35 },
-  composerHint: { color: colors.warning, fontSize: 11, lineHeight: 16, paddingHorizontal: 8, marginTop: -7 },
-  privacyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
+  composerHint: { color: colors.warning, fontSize: 11, lineHeight: 16, paddingHorizontal: 6, marginTop: 2 },
+  privacyToggle: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 2 },
   privacyToggleText: { color: colors.smoke, fontSize: 10, lineHeight: 14, flexShrink: 1 },
-  safety: { color: colors.smoke, fontSize: 11, lineHeight: 16, textAlign: 'center', paddingHorizontal: space.lg },
+  safety: {
+    color: colors.smoke, fontSize: 11, lineHeight: 16, textAlign: 'center',
+    paddingHorizontal: space.sm, paddingVertical: space.xs,
+  },
 })

@@ -100,6 +100,7 @@ export const HOMEOWNER_WORKSPACE_ACTIONS = Object.freeze([
   'proposal.decide',
   'artifact.create_metadata',
   'artifact.upload',
+  'artifact.update_metadata',
   'artifact.read_metadata',
   'project.submit_for_review',
   'handoff.preview',
@@ -388,7 +389,21 @@ export const homeownerArtifactMetadataSchema = z.object({
   payloadSha256: z.string().regex(/^[a-f0-9]{64}$/),
   storageObjectRef: opaqueRef('hobj'),
   contentClass: z.literal('homeowner_private'),
+  /** Optional photo evidence fields remain absent on pre-migration records. */
+  observedOn: calendarDate.optional(),
+  phase: z.enum(['before', 'during', 'after', 'reference']).optional(),
+  areaLabel: z.string().trim().min(1).max(120)
+    .regex(/^[^\u0000-\u001f\u007f]*$/).optional(),
+  geoPin: z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracyMeters: z.number().min(0).max(100_000),
+    capturedAt: utcInstant,
+    provenance: z.literal('device_confirmed'),
+  }).strict().optional(),
+  revision: z.number().int().min(1).optional(),
   createdAt: utcInstant,
+  updatedAt: utcInstant.optional(),
 }).strict()
 
 export const homeownerWarrantySchema = z.object({
