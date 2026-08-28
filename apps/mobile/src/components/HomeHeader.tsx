@@ -1,26 +1,32 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { router } from 'expo-router'
+import { useHomeId } from '../home/HomeRouteProvider.tsx'
 import { colors, space } from '../theme.ts'
 
-export function HomeHeader({ section, title, detail }: {
+export function HomeHeader({ section, title, detail, showAccount = true }: {
   readonly section: string
   readonly title: string
   readonly detail?: string
+  readonly showAccount?: boolean
 }) {
+  const homeId = useHomeId()
+
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
         <Text style={styles.section}>{section}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open account"
-          accessibilityHint="Switch homes or workspaces and manage your account"
-          onPress={() => router.push('/account')}
-          style={styles.switcher}
-        >
-          <Ionicons name="person-outline" size={18} color={colors.slate} />
-        </Pressable>
+        {showAccount ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open account"
+            accessibilityHint="Switch homes or workspaces and manage your account"
+            onPress={() => router.push({ pathname: '/home/[homeId]/account', params: { homeId } })}
+            style={styles.switcher}
+          >
+            <Ionicons name="person-outline" size={18} color={colors.slate} />
+          </Pressable>
+        ) : null}
       </View>
       <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       {detail ? <Text style={styles.detail}>{detail}</Text> : null}

@@ -27,15 +27,19 @@ AI access, and Jobrolo handoffs.
 
 ## Product navigation
 
-The native app has five stable destinations:
+The homeowner app has four stable destinations:
 
-1. **Home** — what needs attention, recent activity, systems, and the useful
-   summary of this home.
-2. **Care** — Home Watch, repeatable checkups, maintenance, and service rhythm.
-3. **Rolo** — conversation, home search, and reviewable actions.
-4. **Work** — issues, repairs, service, incidents, and projects.
-5. **People** — household members, trusted professionals, visits, and scoped
-   access.
+1. **Rolo** — the front door: persistent conversation, photo help, home search,
+   and reviewable actions.
+2. **Home** — facts, Home Watch, timeline, library, people, and the durable home
+   record.
+3. **Work** — issues, repairs, service, incidents, projects, bids, and updates.
+4. **Account** — home selection, private workspace switching, and session
+   controls.
+
+People and professional discovery remain reachable from Rolo and Home without
+competing with the four primary destinations. The separate Pro workspace keeps
+its own operational Today, Invites, Jobs, and Company navigation.
 
 Activity and files are not disconnected primary destinations. A stored object
 has one canonical identity and appears in every relevant home, work, care, or

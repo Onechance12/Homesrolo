@@ -3,7 +3,7 @@ import type { ImperativeRouter } from 'expo-router'
 export const HOME_CHOOSER_ROUTE = '/homes' as const
 
 export type SelectedHomeRoute = {
-  readonly pathname: '/home/[homeId]'
+  readonly pathname: '/home/[homeId]/rolo'
   readonly params: { readonly homeId: string }
 }
 
@@ -26,5 +26,5 @@ export function openSelectedHome(
   navigation: Pick<ImperativeRouter, 'push'>,
   homeId: string,
 ): void {
-  navigation.push({ pathname: '/home/[homeId]', params: { homeId } })
+  navigation.push({ pathname: '/home/[homeId]/rolo', params: { homeId } })
 }

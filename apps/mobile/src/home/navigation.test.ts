@@ -33,7 +33,7 @@ test('selecting a home pushes it above the chooser anchor', () => {
   openSelectedHome(navigation, homeId)
 
   assert.deepEqual(destinations, [{
-    pathname: '/home/[homeId]',
+    pathname: '/home/[homeId]/rolo',
     params: { homeId },
   }])
 })
@@ -45,7 +45,7 @@ test('choosing a second home and going back cannot uncover the first home', () =
   const navigation = {
     push: (destination: Parameters<ImperativeRouter['push']>[0]) => {
       const route = destination as SelectedHomeRoute
-      history.push(`/home/${route.params.homeId}`)
+      history.push(`/home/${route.params.homeId}/rolo`)
     },
     dismissTo: (destination: Parameters<ImperativeRouter['dismissTo']>[0]) => {
       const index = history.lastIndexOf(destination as string)

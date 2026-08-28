@@ -48,6 +48,9 @@ test('Rolo opens Home details instead of dropping that suggestion into the Libra
     /destination === 'library'\)[\s\S]*pathname: '\/home\/\[homeId\]\/care'/)
   assert.match(roloScreen,
     /destination === 'details'\)[\s\S]*pathname: '\/home\/\[homeId\]\/details'/)
+  assert.match(roloScreen,
+    /return 'Open Home'[\s\S]*pathname: '\/home\/\[homeId\]\/care'/)
+  assert.doesNotMatch(roloScreen, /Open Today/)
 })
 
 test('the former Rolo people filter opens the saved professional Rolodex', () => {

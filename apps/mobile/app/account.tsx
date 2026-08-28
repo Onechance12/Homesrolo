@@ -15,6 +15,7 @@ import {
   Page,
   SectionTitle,
 } from '../src/components/ui.tsx'
+import { HomeHeader } from '../src/components/HomeHeader.tsx'
 import {
   clearWorkspacePreference,
   writeWorkspacePreference,
@@ -22,7 +23,7 @@ import {
 import { replaceWorkspace } from '../src/workspace/navigation.ts'
 import { colors, radius, space } from '../src/theme.ts'
 
-export default function AccountScreen() {
+export function AccountWorkspace({ embedded = false }: { readonly embedded?: boolean }) {
   const { state: auth, api, signOut, refreshSession } = useSession()
   const professionalEnabled = auth.kind === 'signed_in'
     && auth.session.capabilities.invitations
@@ -47,7 +48,7 @@ export default function AccountScreen() {
 
   async function openHome(homeRef: string) {
     await writeWorkspacePreference(principalRef, 'home')
-    replaceWorkspace(router, { pathname: '/home/[homeId]', params: { homeId: homeRef } })
+    replaceWorkspace(router, { pathname: '/home/[homeId]/rolo', params: { homeId: homeRef } })
   }
 
   async function openPro() {
@@ -76,28 +77,41 @@ export default function AccountScreen() {
 
   return (
     <Page>
-      <View style={styles.topRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          onPress={() => router.back()}
-          style={styles.roundButton}
-        >
-          <Ionicons name="arrow-back" size={21} color={colors.cream} />
-        </Pressable>
-        <Brand compact />
-        <View style={styles.roundButtonPlaceholder} />
-      </View>
-
-      <View style={styles.intro}>
-        <Eyebrow>Account</Eyebrow>
-        <Text style={styles.title}>{hasBoth ? 'Switch spaces.' : 'Your Homesrolo.'}</Text>
-        <Body muted>
-          {hasBoth
+      {embedded ? (
+        <HomeHeader
+          section="Account"
+          title={hasBoth ? 'Switch spaces.' : 'Your Homesrolo.'}
+          showAccount={false}
+          detail={hasBoth
             ? 'Your home and company stay separate. Choose the space you want to use.'
             : 'Manage the homes or company connected to this private sign-in.'}
-        </Body>
-      </View>
+        />
+      ) : (
+        <>
+          <View style={styles.topRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              onPress={() => router.back()}
+              style={styles.roundButton}
+            >
+              <Ionicons name="arrow-back" size={21} color={colors.cream} />
+            </Pressable>
+            <Brand compact />
+            <View style={styles.roundButtonPlaceholder} />
+          </View>
+
+          <View style={styles.intro}>
+            <Eyebrow>Account</Eyebrow>
+            <Text style={styles.title}>{hasBoth ? 'Switch spaces.' : 'Your Homesrolo.'}</Text>
+            <Body muted>
+              {hasBoth
+                ? 'Your home and company stay separate. Choose the space you want to use.'
+                : 'Manage the homes or company connected to this private sign-in.'}
+            </Body>
+          </View>
+        </>
+      )}
 
       {resource.state.kind === 'loading' ? <Loading label="Finding your spaces…" /> : null}
       {resource.state.kind === 'error' ? (
@@ -159,11 +173,6 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color={colors.aqua} />
               </Pressable>
             </View>
-          ) : hasHomes && professionalEnabled ? (
-            <Card>
-              <SectionTitle title="Do you also run a home-service company?" detail="Company tools stay in a separate Pro space." />
-              <Button label="Add a company workspace" icon="briefcase-outline" quiet onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'pro' } })} />
-            </Card>
           ) : null}
 
           <Card>
@@ -174,6 +183,10 @@ export default function AccountScreen() {
       ) : null}
     </Page>
   )
+}
+
+export default function AccountScreen() {
+  return <AccountWorkspace />
 }
 
 const styles = StyleSheet.create({

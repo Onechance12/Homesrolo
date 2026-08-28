@@ -35,6 +35,7 @@ test('account workspace switches clear the old role or home from navigation hist
   const account = read('app/account.tsx')
   const navigation = read('src/workspace/navigation.ts')
   assert.match(account, /replaceWorkspace\(router/)
+  assert.match(account, /pathname: '\/home\/\[homeId\]\/rolo'/)
   assert.doesNotMatch(account, /activeOrganizations\.map/)
   assert.match(navigation, /navigation\.dismissAll\(\)[\s\S]*navigation\.replace\(destination\)/)
 })
@@ -56,6 +57,13 @@ test('work and Pro detail use operational app sections instead of one long landi
   for (const label of ['Today', 'Invites', 'Jobs', 'Company']) {
     assert.match(pro, new RegExp(`label: '${label}'`))
   }
+  const hubTabs = pro.match(/const HUB_TABS[\s\S]*?\n\]/)?.[0] ?? ''
+  assert.deepEqual(
+    [...hubTabs.matchAll(/label: '([^']+)'/g)].map(match => match[1]),
+    ['Today', 'Invites', 'Jobs', 'Company'],
+  )
+  assert.match(pro, /useState<HubTab>\('today'\)/)
+  assert.doesNotMatch(pro, /HomeHeader|HomeRouteProvider|\/home\/\[homeId\]/)
   assert.match(pro, /router\.push\('\/account'\)/)
 })
 
