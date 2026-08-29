@@ -24,6 +24,7 @@ import {
   type HomeownerCommandPort,
   type HomeownerIdentityPort,
   type HomeownerPrivateObjectPort,
+  type AuthorizedHomeownerAction,
   type AuthorizedHomeownerWorkspace,
   type HomeownerMembership,
   type HomeownerProject,
@@ -37,6 +38,12 @@ import {
   safeArtifactDisplayName,
   validateHomeownerArtifactPayload,
 } from './homeowner-artifacts.v1.ts'
+import {
+  homeownerArtifactPhotoMetadataViewSchema,
+  updateHomeownerArtifactMetadataFieldsSchema,
+  updateHomeownerArtifactMetadataInputSchema,
+  type HomeownerArtifactMetadataPort,
+} from './homeowner-artifact-metadata.v1.ts'
 import {
   HOMEOWNER_CHECKUP_PHOTO_FULL_MAX_BYTES,
   HOMEOWNER_CHECKUP_PHOTO_MAX_PER_HOME,
@@ -327,10 +334,24 @@ export const homeownerApiArtifactViewSchema = z.object({
   displayName: homeownerArtifactMetadataSchema.shape.displayName,
   mediaType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
   byteLength: homeownerArtifactMetadataSchema.shape.byteLength,
+  observedOn: homeownerArtifactPhotoMetadataViewSchema.shape.observedOn,
+  phase: homeownerArtifactPhotoMetadataViewSchema.shape.phase,
+  areaLabel: homeownerArtifactPhotoMetadataViewSchema.shape.areaLabel,
+  geoPin: homeownerArtifactPhotoMetadataViewSchema.shape.geoPin,
+  revision: homeownerArtifactPhotoMetadataViewSchema.shape.revision,
   createdAt: homeownerUtcInstantSchema,
+  updatedAt: homeownerArtifactPhotoMetadataViewSchema.shape.updatedAt,
 }).strict()
 
 export type HomeownerApiArtifactView = z.infer<typeof homeownerApiArtifactViewSchema>
+
+/** Exact artifact ref stays in the route; execution time remains server-owned. */
+export const homeownerApiUpdateArtifactMetadataInputSchema =
+  updateHomeownerArtifactMetadataFieldsSchema
+
+export type HomeownerApiUpdateArtifactMetadataInput = z.infer<
+  typeof homeownerApiUpdateArtifactMetadataInputSchema
+>
 
 export const homeownerApiArtifactUploadReservationSchema = z.discriminatedUnion('state', [
   z.object({
@@ -479,6 +500,7 @@ export interface HomeownerApiServiceOptions {
   readonly repository: HomeownerRepositoryPort
   readonly commands: HomeownerCommandPort
   readonly privateObjects?: HomeownerPrivateObjectPort
+  readonly artifactMetadata?: HomeownerArtifactMetadataPort
   readonly projectQuotes?: HomeownerProjectQuotePort
   readonly projectWorkspace?: HomeownerProjectWorkspacePort
   readonly homeRecordProfile?: HomeownerHomeRecordProfilePort
@@ -566,7 +588,10 @@ function safeProjectItem(input: HomeownerProjectItem): HomeownerApiProjectItemVi
   })
 }
 
-function safeArtifact(input: unknown): HomeownerApiArtifactView {
+function safeArtifact(
+  input: unknown,
+  options: { readonly includePreciseGeo?: boolean } = {},
+): HomeownerApiArtifactView {
   const artifact = homeownerArtifactMetadataSchema.parse(input)
   return homeownerApiArtifactViewSchema.parse({
     artifactRef: artifact.artifactRef,
@@ -576,7 +601,13 @@ function safeArtifact(input: unknown): HomeownerApiArtifactView {
     displayName: artifact.displayName,
     mediaType: artifact.mediaType,
     byteLength: artifact.byteLength,
+    observedOn: artifact.observedOn ?? null,
+    phase: artifact.phase ?? null,
+    areaLabel: artifact.areaLabel ?? null,
+    geoPin: options.includePreciseGeo ? artifact.geoPin ?? null : null,
+    revision: artifact.revision ?? 1,
     createdAt: artifact.createdAt,
+    updatedAt: artifact.updatedAt ?? artifact.createdAt,
   })
 }
 
@@ -664,6 +695,7 @@ export class HomeownerApiService {
   readonly #repository: HomeownerRepositoryPort
   readonly #commands: HomeownerCommandPort
   readonly #privateObjects: HomeownerPrivateObjectPort | null
+  readonly #artifactMetadata: HomeownerArtifactMetadataPort | null
   readonly #projectQuotes: HomeownerProjectQuotePort | null
   readonly #projectWorkspace: HomeownerProjectWorkspacePort | null
   readonly #homeRecordProfile: HomeownerHomeRecordProfilePort | null
@@ -676,6 +708,7 @@ export class HomeownerApiService {
     this.#repository = options.repository
     this.#commands = options.commands
     this.#privateObjects = options.privateObjects ?? null
+    this.#artifactMetadata = options.artifactMetadata ?? null
     this.#projectQuotes = options.projectQuotes ?? null
     this.#projectWorkspace = options.projectWorkspace ?? null
     this.#homeRecordProfile = options.homeRecordProfile ?? null
@@ -1151,14 +1184,97 @@ export class HomeownerApiService {
     context: HomeownerApiRequestContext,
     requestedHomeRef: string,
   ): Promise<readonly HomeownerApiArtifactView[]> {
-    const grant = await this.#workspaceGrant(
+    const { grant, role } = await this.#workspaceGrantAndRole(
       context,
       requestedHomeRef,
       'artifact.read_metadata',
     )
     if (!this.#capabilities.uploads) throw new HomeownerApiError('unavailable')
     const artifacts = await this.#repository.listArtifactMetadata(grant)
-    return artifacts.map(safeArtifact)
+    return artifacts.map(artifact => safeArtifact(artifact, {
+      includePreciseGeo: role === 'workspace_controller',
+    }))
+  }
+
+  /**
+   * Updates only browser-safe organization metadata after an upload is
+   * available. Image bytes, EXIF, storage identifiers, and integrity fields
+   * never enter this command.
+   */
+  async updateArtifactMetadata(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    requestedArtifactRef: string,
+    input: unknown,
+  ): Promise<HomeownerApiArtifactView> {
+    const artifactRef = opaqueRef('hart').safeParse(requestedArtifactRef)
+    const parsedInput = homeownerApiUpdateArtifactMetadataInputSchema.safeParse(input)
+    if (!artifactRef.success || !parsedInput.success) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    const requestedAt = this.#now()
+    const command = updateHomeownerArtifactMetadataInputSchema.safeParse({
+      ...parsedInput.data,
+      artifactRef: artifactRef.data,
+      requestedAt,
+    })
+    if (!command.success) throw new HomeownerApiError('invalid_request')
+
+    const grant = await this.#workspaceGrant(
+      context,
+      requestedHomeRef,
+      'artifact.update_metadata',
+    )
+    if (!this.#capabilities.uploads || !this.#artifactMetadata) {
+      throw new HomeownerApiError('unavailable')
+    }
+    const artifacts = await this.#repository.listArtifactMetadata(grant)
+    const currentInput = artifacts.find(candidate =>
+      candidate.artifactRef === artifactRef.data && candidate.homeRef === grant.homeRef)
+    if (!currentInput) throw new HomeownerApiError('not_found')
+    const current = homeownerArtifactMetadataSchema.parse(currentInput)
+    const hasPhotoMetadata = command.data.observedOn !== null
+      || command.data.phase !== null
+      || command.data.areaLabel !== null
+      || command.data.geoPin !== null
+    if (current.kind !== 'photo' && hasPhotoMetadata) {
+      throw new HomeownerApiError('invalid_request')
+    }
+    if (command.data.projectRef !== null) {
+      await this.#exactProject(grant, command.data.projectRef)
+    }
+
+    const updated = homeownerArtifactMetadataSchema.parse(
+      await this.#artifactMetadata.updateArtifactMetadata({
+        grant,
+        command: command.data,
+      }),
+    )
+    const coherent = updated.artifactRef === current.artifactRef
+      && updated.homeRef === grant.homeRef
+      && updated.controllerPrincipalRef === current.controllerPrincipalRef
+      && updated.kind === current.kind
+      && updated.displayName === current.displayName
+      && updated.mediaType === current.mediaType
+      && updated.byteLength === current.byteLength
+      && updated.payloadSha256 === current.payloadSha256
+      && updated.storageObjectRef === current.storageObjectRef
+      && updated.contentClass === 'homeowner_private'
+      && updated.createdAt === current.createdAt
+      && updated.projectRef === (command.data.projectRef ?? undefined)
+      && updated.observedOn === (command.data.observedOn ?? undefined)
+      && updated.phase === (command.data.phase ?? undefined)
+      && updated.areaLabel === (command.data.areaLabel ?? undefined)
+      && stableJson(updated.geoPin ?? null) === stableJson(command.data.geoPin)
+      && updated.revision === command.data.expectedRevision + 1
+      // A receipt replay returns the timestamp of the original atomic write,
+      // not the later HTTP retry. It must remain canonical and no later than
+      // this server-owned execution time.
+      && updated.updatedAt !== undefined
+      && updated.updatedAt >= current.createdAt
+      && updated.updatedAt <= requestedAt
+    if (!coherent) throw new HomeownerApiError('unavailable')
+    return safeArtifact(updated, { includePreciseGeo: true })
   }
 
   /**
@@ -1789,6 +1905,17 @@ export class HomeownerApiService {
     requestedHomeRef: string,
     action: Action,
   ) {
+    return (await this.#workspaceGrantAndRole(context, requestedHomeRef, action)).grant
+  }
+
+  async #workspaceGrantAndRole<Action extends HomeownerWorkspaceAction>(
+    context: HomeownerApiRequestContext,
+    requestedHomeRef: string,
+    action: Action,
+  ): Promise<{
+    readonly grant: AuthorizedHomeownerAction<Action>
+    readonly role: HomeownerMembership['role']
+  }> {
     const parsedHomeRef = opaqueRef('hhom').safeParse(requestedHomeRef)
     if (!parsedHomeRef.success) throw new HomeownerApiError('invalid_request')
     if (!context.sessionHandle) throw new HomeownerApiError('signed_out')
@@ -1799,6 +1926,12 @@ export class HomeownerApiService {
       parsedHomeRef.data,
     )
     if (!membership) throw new HomeownerApiError('not_found')
+    let role: HomeownerMembership['role']
+    try {
+      role = parseHomeownerMembership(membership).role
+    } catch {
+      throw new HomeownerApiError('not_found')
+    }
     const decision = authorizeHomeownerWorkspace({
       principal,
       membership,
@@ -1812,7 +1945,7 @@ export class HomeownerApiService {
     }
     const grant = requireHomeownerActionGrant(decision, action)
     if (!grant) throw new HomeownerApiError('forbidden')
-    return grant
+    return { grant, role }
   }
 }
 

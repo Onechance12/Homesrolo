@@ -25,6 +25,9 @@ export function toPosix(relative: string): string {
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
   for (const name of readdirSync(path.join(APP, dir))) {
+    // External macOS volumes may persist Finder resource forks as AppleDouble
+    // sidecars. They are never application source or API routes.
+    if (name.startsWith('._')) continue
     const rel = toPosix(path.join(dir, name))
     const stat = statSync(path.join(APP, rel))
     if (stat.isDirectory()) out.push(...sourceFiles(rel))
@@ -325,6 +328,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts',
     'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts',
+    'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/metadata/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts',
     'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts',
@@ -461,6 +465,12 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       assert.match(content, /export async function POST/, `${rel} completes one reserved upload`)
       assert.match(content, /handleArtifactUploadCompletion/,
         `${rel} delegates completion policy to the server seam`)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/metadata/route.ts') {
+      assert.match(content, /export async function POST/, `${rel} updates one artifact's metadata`)
+      assert.doesNotMatch(content, /export (async function|const) GET/,
+        `${rel} exposes no duplicate read`)
+      assert.match(content, /handleHomeownerRequest/,
+        `${rel} delegates to the exact controller authorization boundary`)
     } else if (rel === 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts') {
       assert.match(content, /export async function GET/, `${rel} serves the bounded photo list`)
       assert.match(content, /export async function POST/, `${rel} serves one raw image upload`)
@@ -530,6 +540,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/items/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/metadata/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/[projectRef]/quotes/[quoteRef]/route.ts'
@@ -555,6 +566,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/metadata/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/full/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/photo-checkups/[photoRef]/thumbnail/route.ts'
@@ -1011,7 +1023,8 @@ test('seasonal photo checkups are mobile-first, exact-view, and independently ga
 
   for (const value of [
     'front_exterior', 'rear_exterior', 'roofline', 'attic', 'ceilings',
-    'hvac', 'water_heater', 'foundation', 'gutters', 'other',
+    'hvac', 'water_heater', 'foundation', 'gutters', 'siding', 'windows_doors',
+    'drainage', 'other',
   ]) {
     assert.match(checkups, new RegExp(`value: '${value}'`), `${value} is one repeatable view`)
   }

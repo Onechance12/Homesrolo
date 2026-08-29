@@ -2,6 +2,7 @@ import type {
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
+  ResolvedArtifactRecord,
   CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
   CreateWorkInput,
@@ -38,6 +39,7 @@ import type {
   InviteProfessionalInput,
   UpdateWorkInput,
   UpdateHomeRecordInput,
+  UpdateArtifactMetadataInput,
   WorkRecord,
 } from './model.ts'
 import type { ProtectedImageSource } from './image-source.ts'
@@ -157,7 +159,7 @@ export interface HomesroloApi {
     projectRef?: string,
     selectedPhoto?: RoloSelectedPhoto,
   ): Promise<RoloReply>
-  listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]>
+  listArtifacts(homeRef: string): Promise<readonly ResolvedArtifactRecord[]>
   artifactPreviewSource(homeRef: string, artifactRef: string): ProtectedImageSource
   readArtifactContent(homeRef: string, artifact: ArtifactRecord): Promise<ArtifactContent>
   uploadArtifact(
@@ -165,7 +167,12 @@ export interface HomesroloApi {
     kind: ArtifactKind,
     deviceFile: DeviceFile,
     projectRef?: string,
-  ): Promise<ArtifactRecord>
+  ): Promise<ResolvedArtifactRecord>
+  updateArtifactMetadata(
+    homeRef: string,
+    artifactRef: string,
+    input: UpdateArtifactMetadataInput,
+  ): Promise<ResolvedArtifactRecord>
   listHomeCheckups(homeRef: string): Promise<readonly HomeCheckupPhoto[]>
   homeCheckupPhotoSource(
     homeRef: string,

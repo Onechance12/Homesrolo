@@ -13,6 +13,7 @@ import {
   type AuthorizedHomeownerPrincipal,
   type AuthorizedHomeownerWorkspace,
   type HomeownerCommandPort,
+  type HomeownerArtifactMetadata,
   type HomeownerMembership,
   type HomeownerPrincipal,
   type HomeownerPrivateObjectPort,
@@ -25,6 +26,7 @@ import {
   type HomeownerCheckupPhotoPort,
 } from '../homeowner-checkup-photos.v1.ts'
 import type { HomeownerHomeRecordProfilePort } from '../home-record-profile.v1.ts'
+import type { HomeownerArtifactMetadataPort } from '../homeowner-artifact-metadata.v1.ts'
 
 const body = (character: string) => character.repeat(43).slice(0, 43)
 const principalRef = `hprn_${body('p')}`
@@ -126,7 +128,9 @@ const artifact = {
   payloadSha256: 'c'.repeat(64),
   storageObjectRef: `hobj_${body('s')}`,
   contentClass: 'homeowner_private' as const,
+  revision: 1,
   createdAt: now,
+  updatedAt: now,
 }
 
 const checkupPhoto = {
@@ -225,9 +229,11 @@ function service(input: {
   projectReview?: boolean
   projectReviewAttachments?: boolean
   privateObjects?: HomeownerPrivateObjectPort
+  artifactMetadata?: HomeownerArtifactMetadataPort
   photoCheckups?: boolean
   checkupPhotos?: HomeownerCheckupPhotoPort
   homeRecordProfile?: HomeownerHomeRecordProfilePort
+  now?: () => string
 } = {}) {
   return new HomeownerApiService({
     identity: {
@@ -243,9 +249,10 @@ function service(input: {
       async recordInitialIntake() { throw new Error('not used') },
     },
     ...(input.privateObjects ? { privateObjects: input.privateObjects } : {}),
+    ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),
     ...(input.checkupPhotos ? { checkupPhotos: input.checkupPhotos } : {}),
     ...(input.homeRecordProfile ? { homeRecordProfile: input.homeRecordProfile } : {}),
-    now: () => now,
+    now: input.now ?? (() => now),
     capabilities: {
       ...capabilities,
       persistence: input.persistence ?? false,
@@ -558,23 +565,268 @@ test('malformed, cross-home, and revoked reads fail closed without revealing aut
 })
 
 test('artifact metadata reads are exact-home and never expose storage or integrity fields', async () => {
+  const geoPin = {
+    latitude: 32.7555,
+    longitude: -97.3308,
+    accuracyMeters: 8,
+    capturedAt: '2026-08-09T17:30:00.000Z',
+    provenance: 'device_confirmed' as const,
+  }
+  const photo = {
+    ...artifact,
+    kind: 'photo' as const,
+    displayName: 'Rear patio.jpg',
+    mediaType: 'image/jpeg',
+    geoPin,
+  }
   const result = await service({
     uploads: true,
-    repository: repository({ async listArtifactMetadata() { return [artifact] } }),
+    repository: repository({ async listArtifactMetadata() { return [photo] } }),
   }).listArtifacts(context, homeRef)
   assert.deepEqual(result, [{
-    artifactRef: artifact.artifactRef,
+    artifactRef: photo.artifactRef,
     homeRef,
     projectRef: null,
-    kind: 'document',
-    displayName: artifact.displayName,
-    mediaType: 'application/pdf',
-    byteLength: artifact.byteLength,
+    kind: 'photo',
+    displayName: photo.displayName,
+    mediaType: 'image/jpeg',
+    byteLength: photo.byteLength,
+    observedOn: null,
+    phase: null,
+    areaLabel: null,
+    geoPin,
+    revision: 1,
     createdAt: now,
+    updatedAt: now,
   }])
   assert.equal(JSON.stringify(result).includes('storageObjectRef'), false)
   assert.equal(JSON.stringify(result).includes('payloadSha256'), false)
   assert.equal(JSON.stringify(result).includes(principalRef), false)
+
+  const viewerResult = await service({
+    uploads: true,
+    repository: repository({
+      async readMembership() { return { ...membership, role: 'viewer' } },
+      async listArtifactMetadata() { return [photo] },
+    }),
+  }).listArtifacts(context, homeRef)
+  assert.equal(viewerResult[0]?.geoPin, null,
+    'exact device coordinates remain controller-only even when artifact metadata is shared')
+})
+
+test('artifact metadata update is controller-only, revision-backed, and may organize a member upload', async () => {
+  const uploadedByMember = {
+    ...artifact,
+    artifactRef: `hart_${body('g')}`,
+    controllerPrincipalRef: otherPrincipalRef,
+    kind: 'photo' as const,
+    displayName: 'Rear yard before work.jpg',
+    mediaType: 'image/jpeg',
+  }
+  const project = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    projectRef: `hprj_${body('j')}`,
+    homeRef,
+    controllerPrincipalRef: principalRef,
+    title: 'Improve rear drainage',
+    workKind: 'project' as const,
+    category: 'landscaping' as const,
+    status: 'planned' as const,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const observed: Parameters<HomeownerArtifactMetadataPort['updateArtifactMetadata']>[0][] = []
+  const receipts = new Map<string, HomeownerArtifactMetadata>()
+  let stored: HomeownerArtifactMetadata = uploadedByMember
+  let clock = now
+  const metadataPort: HomeownerArtifactMetadataPort = {
+    async updateArtifactMetadata(input) {
+      observed.push(input)
+      const replay = receipts.get(input.command.commandRef)
+      if (replay) return replay
+      if ((stored.revision ?? 1) !== input.command.expectedRevision) {
+        throw new HomeownerApiError('conflict')
+      }
+      stored = {
+        ...stored,
+        projectRef: input.command.projectRef ?? undefined,
+        observedOn: input.command.observedOn ?? undefined,
+        phase: input.command.phase ?? undefined,
+        areaLabel: input.command.areaLabel ?? undefined,
+        geoPin: input.command.geoPin ?? undefined,
+        revision: input.command.expectedRevision + 1,
+        updatedAt: input.command.requestedAt,
+      }
+      receipts.set(input.command.commandRef, stored)
+      return stored
+    },
+  }
+  const input = {
+    commandRef: `hcmd_${body('e')}`,
+    expectedRevision: 1,
+    projectRef: project.projectRef,
+    observedOn: '2026-08-09',
+    phase: 'before' as const,
+    areaLabel: 'Rear yard',
+    geoPin: {
+      latitude: 32.7555,
+      longitude: -97.3308,
+      accuracyMeters: 8.5,
+      capturedAt: '2026-08-09T18:30:00.000Z',
+      provenance: 'device_confirmed' as const,
+    },
+  }
+  const api = service({
+    uploads: true,
+    now: () => clock,
+    artifactMetadata: metadataPort,
+    repository: repository({
+      async listArtifactMetadata() { return [stored] },
+      async listProjects() { return [project] },
+    }),
+  })
+  const updated = await api.updateArtifactMetadata(
+    context, homeRef, uploadedByMember.artifactRef, input,
+  )
+  assert.equal(updated.revision, 2)
+  assert.equal(updated.projectRef, project.projectRef)
+  assert.equal(updated.phase, 'before')
+  assert.deepEqual(updated.geoPin, input.geoPin)
+  assert.equal('payloadSha256' in updated, false)
+  assert.equal('controllerPrincipalRef' in updated, false)
+  const captured = observed[0]
+  assert.ok(captured)
+  assert.equal(captured.grant.action, 'artifact.update_metadata')
+  assert.deepEqual(captured.command, {
+    ...input,
+    artifactRef: uploadedByMember.artifactRef,
+    requestedAt: now,
+  })
+  clock = '2026-08-10T12:05:00.000Z'
+  assert.deepEqual(await api.updateArtifactMetadata(
+    context, homeRef, uploadedByMember.artifactRef, input,
+  ), updated, 'the same command replays after the stored revision advances')
+  assert.equal(observed.length, 2)
+  assert.equal(observed[1]?.command.requestedAt, clock,
+    'a later server execution time does not change the stored retry result')
+
+  await assert.rejects(
+    service({
+      uploads: true,
+      artifactMetadata: metadataPort,
+      repository: repository({
+        async readMembership() { return { ...membership, role: 'member' } },
+        async listArtifactMetadata() { return [uploadedByMember] },
+      }),
+    }).updateArtifactMetadata(context, homeRef, uploadedByMember.artifactRef, input),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
+  )
+})
+
+test('artifact metadata rejects stale revisions, future observations, and photo fields on files', async () => {
+  let writes = 0
+  const metadataPort: HomeownerArtifactMetadataPort = {
+    async updateArtifactMetadata(input) {
+      writes += 1
+      if (input.command.expectedRevision !== (artifact.revision ?? 1)) {
+        throw new HomeownerApiError('conflict')
+      }
+      return artifact
+    },
+  }
+  const base = {
+    commandRef: `hcmd_${body('e')}`,
+    expectedRevision: 1,
+    projectRef: null,
+    observedOn: null,
+    phase: null,
+    areaLabel: null,
+    geoPin: null,
+  }
+  const api = service({
+    uploads: true,
+    artifactMetadata: metadataPort,
+    repository: repository({ async listArtifactMetadata() { return [artifact] } }),
+  })
+  await assert.rejects(
+    api.updateArtifactMetadata(context, homeRef, artifact.artifactRef, {
+      ...base,
+      expectedRevision: 2,
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'conflict',
+  )
+  await assert.rejects(
+    api.updateArtifactMetadata(context, homeRef, artifact.artifactRef, {
+      ...base,
+      observedOn: '2026-08-11',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  await assert.rejects(
+    api.updateArtifactMetadata(context, homeRef, artifact.artifactRef, {
+      ...base,
+      phase: 'reference',
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'invalid_request',
+  )
+  assert.equal(writes, 1, 'the atomic port owns stale-revision and retry ordering')
+
+  await assert.rejects(
+    service({
+      uploads: true,
+      repository: repository({ async listArtifactMetadata() { return [artifact] } }),
+      artifactMetadata: {
+        async updateArtifactMetadata() {
+          return {
+            ...artifact,
+            revision: 2,
+            createdAt: '2026-08-09T12:00:00.000Z',
+          }
+        },
+      },
+    }).updateArtifactMetadata(context, homeRef, artifact.artifactRef, base),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'unavailable',
+    'an adapter may not rewrite immutable artifact creation metadata',
+  )
+
+  let crossHomeWrites = 0
+  const foreignProject = {
+    recordVersion: HOMEOWNER_RUNTIME_VERSION,
+    projectRef: `hprj_${body('x')}`,
+    homeRef: otherHomeRef,
+    controllerPrincipalRef: principalRef,
+    title: 'Other property work',
+    workKind: 'project' as const,
+    category: 'exterior' as const,
+    status: 'planned' as const,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const crossHomeApi = service({
+    uploads: true,
+    repository: repository({
+      async listArtifactMetadata() { return [artifact] },
+      async listProjects() { return [foreignProject] },
+    }),
+    artifactMetadata: {
+      async updateArtifactMetadata() {
+        crossHomeWrites += 1
+        return artifact
+      },
+    },
+  })
+  await assert.rejects(
+    crossHomeApi.updateArtifactMetadata(context, homeRef, artifact.artifactRef, {
+      ...base,
+      commandRef: `hcmd_${body('x')}`,
+      projectRef: foreignProject.projectRef,
+    }),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+  assert.equal(crossHomeWrites, 0,
+    'a project from another home is rejected before the metadata mutation port')
 })
 
 test('artifact upload derives media, digest, principal, and time on the server', async () => {

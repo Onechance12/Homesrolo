@@ -828,6 +828,9 @@ export type PhotoCheckupArea =
   | 'water_heater'
   | 'foundation'
   | 'gutters'
+  | 'siding'
+  | 'windows_doors'
+  | 'drainage'
   | 'other'
 
 export interface PhotoCheckup {

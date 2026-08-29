@@ -133,20 +133,22 @@ export function TextField({ label, hint, ...props }: TextInputProps & {
   )
 }
 
-export function Chip({ label, selected, onPress, accessibilityHint }: {
+export function Chip({ label, selected, onPress, accessibilityHint, disabled = false }: {
   readonly label: string
   readonly selected: boolean
   readonly onPress: () => void
   readonly accessibilityHint?: string
+  readonly disabled?: boolean
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
+      style={[styles.chip, selected && styles.chipSelected, disabled && styles.chipDisabled]}
     >
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </Pressable>
@@ -247,6 +249,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipSelected: { borderColor: colors.lime, backgroundColor: colors.limeSoft },
+  chipDisabled: { opacity: 0.45 },
   chipText: { color: colors.slate, fontSize: 13, fontWeight: '700' },
   chipTextSelected: { color: colors.lime },
   tag: { alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 },

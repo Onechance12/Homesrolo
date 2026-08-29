@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { DeviceFile, HomeCheckupArea, HomeCheckupPhoto } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { HOME_CHECKUP_AREAS } from '../../../src/api/home-checkup.ts'
@@ -18,6 +18,10 @@ import {
   normalizeHomeCheckupViewLabel,
   validHomeCheckupDate,
 } from '../../../src/home/checkups.ts'
+import {
+  HOME_WATCH_TEXT_NUMBER_DISPLAY,
+  managedExteriorHomeWatchSmsUrl,
+} from '../../../src/home/home-watch-contact.ts'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
 import { pickPhoto } from '../../../src/native/pickers.ts'
@@ -43,6 +47,8 @@ export default function HomeWatchScreen() {
   const [compareKey, setCompareKey] = useState<string | null>(null)
   const [preview, setPreview] = useState<HomeCheckupPhoto | null>(null)
   const [deleteRef, setDeleteRef] = useState<string | null>(null)
+  const [managedBusy, setManagedBusy] = useState(false)
+  const [managedMessage, setManagedMessage] = useState<string | null>(null)
   const commandRef = useRef<string | null>(null)
 
   useEffect(() => () => { if (file) revokeBrowserDeviceFileUrl(file) }, [file])
@@ -122,12 +128,52 @@ export default function HomeWatchScreen() {
     } catch (error) { setMessage(friendlyError(error)) } finally { setBusy(false) }
   }
 
+  async function openManagedExteriorHomeWatch() {
+    if (managedBusy) return
+    setManagedBusy(true)
+    setManagedMessage(null)
+    let location = ''
+    try {
+      const profile = await api.getHomeRecord(homeId)
+      if (profile.address) {
+        location = `${profile.address.city}, ${profile.address.regionCode} ${profile.address.postalCode}`
+      }
+    } catch {
+      // The text still opens without a location so the homeowner can add one.
+    }
+    try {
+      await Linking.openURL(managedExteriorHomeWatchSmsUrl(location))
+      setManagedMessage('Messages is ready with your request. Nothing is sent until you send it, and nothing is scheduled until Homesrolo replies and confirms the details.')
+    } catch {
+      setManagedMessage(`This device could not open Messages. You can text HOME WATCH, your city, and ZIP to ${HOME_WATCH_TEXT_NUMBER_DISPLAY}.`)
+    } finally {
+      setManagedBusy(false)
+    }
+  }
+
   return (
     <Page>
       <HomeHeader section="My Home" title="Home Watch" detail="Photograph the same spots over time. Roof Watch is the roof-specific part of Home Watch." />
       <Pressable accessibilityRole="button" accessibilityLabel="Back to My Home" accessibilityHint="Returns to the Home tab" onPress={() => router.replace({ pathname: '/home/[homeId]/care', params: { homeId } })} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
         <Ionicons name="chevron-back" size={19} color={colors.lime} /><Text style={styles.backText}>My Home</Text>
       </Pressable>
+
+      <Card>
+        <View style={styles.watchHead}>
+          <View style={styles.managedIcon}><Ionicons name="home-outline" size={25} color={colors.lime} /></View>
+          <View style={styles.flex}><Tag tone="aqua">Managed exterior visit</Tag><Text style={styles.watchTitle}>Want Homesrolo to handle the outside check?</Text></View>
+        </View>
+        <Text style={styles.copy}>Ask about a managed exterior Home Watch for the roof, gutters, siding, windows and drainage. Roof Watch is the roof-specific part of Home Watch.</Text>
+        <Button
+          label={managedBusy ? 'Opening Messages…' : 'Text to check availability'}
+          icon="chatbubble-outline"
+          disabled={managedBusy}
+          accessibilityHint="Opens a ready-to-send Home Watch availability request using only the home city and ZIP when available."
+          onPress={() => void openManagedExteriorHomeWatch()}
+        />
+        <Text style={styles.boundary}>Texts {HOME_WATCH_TEXT_NUMBER_DISPLAY}. Tapping does not book a visit. Nothing is scheduled until you send the message and Homesrolo replies with confirmation.</Text>
+        {managedMessage ? <Notice message={managedMessage} /> : null}
+      </Card>
 
       <Card accent>
         <View style={styles.watchHead}>
@@ -287,6 +333,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.78 },
   watchHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   watchIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
+  managedIcon: { width: 50, height: 50, borderRadius: 25, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft, alignItems: 'center', justifyContent: 'center' },
   watchTitle: { color: colors.cream, fontSize: 19, lineHeight: 23, fontWeight: '900', marginTop: 5 },
   copy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
   label: { color: colors.slate, fontSize: 13, fontWeight: '700' },

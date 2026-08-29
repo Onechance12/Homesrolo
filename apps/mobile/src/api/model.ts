@@ -478,6 +478,16 @@ export interface RoloReply {
 
 export type ArtifactKind = 'photo' | 'document' | 'warranty'
 export type ArtifactMediaType = 'application/pdf' | 'image/jpeg' | 'image/png'
+export type ArtifactPhotoPhase = 'before' | 'during' | 'after' | 'reference'
+
+/** Location is accepted only after the device reading is shown and confirmed. */
+export interface ArtifactGeoPin {
+  readonly latitude: number
+  readonly longitude: number
+  readonly accuracyMeters: number
+  readonly capturedAt: string
+  readonly provenance: 'device_confirmed'
+}
 
 export interface ArtifactRecord {
   readonly artifactRef: string
@@ -487,7 +497,35 @@ export interface ArtifactRecord {
   readonly displayName: string
   readonly mediaType: ArtifactMediaType
   readonly byteLength: number
+  /** Optional only for source compatibility with pre-metadata fixture objects. */
+  readonly observedOn?: string | null
+  readonly phase?: ArtifactPhotoPhase | null
+  readonly areaLabel?: string | null
+  readonly geoPin?: ArtifactGeoPin | null
+  readonly revision?: number
   readonly createdAt: string
+  readonly updatedAt?: string
+}
+
+/** Every network and preview adapter read normalizes legacy records to this shape. */
+export interface ResolvedArtifactRecord extends ArtifactRecord {
+  readonly observedOn: string | null
+  readonly phase: ArtifactPhotoPhase | null
+  readonly areaLabel: string | null
+  readonly geoPin: ArtifactGeoPin | null
+  readonly revision: number
+  readonly updatedAt: string
+}
+
+/** Full replacement of the nullable organization metadata for one artifact. */
+export interface UpdateArtifactMetadataInput {
+  readonly commandRef: string
+  readonly expectedRevision: number
+  readonly projectRef: string | null
+  readonly observedOn: string | null
+  readonly phase: ArtifactPhotoPhase | null
+  readonly areaLabel: string | null
+  readonly geoPin: ArtifactGeoPin | null
 }
 
 export type HomeCheckupArea =
@@ -500,6 +538,9 @@ export type HomeCheckupArea =
   | 'water_heater'
   | 'foundation'
   | 'gutters'
+  | 'siding'
+  | 'windows_doors'
+  | 'drainage'
   | 'other'
 
 /** One sanitized, repeatable Home Watch view. Raw upload metadata is never exposed. */
@@ -548,7 +589,7 @@ export interface SignedUploadTicket {
 }
 
 export type ArtifactReservation =
-  | { readonly state: 'available'; readonly artifact: ArtifactRecord }
+  | { readonly state: 'available'; readonly artifact: ResolvedArtifactRecord }
   | {
       readonly state: 'upload_required'
       readonly artifactRef: string

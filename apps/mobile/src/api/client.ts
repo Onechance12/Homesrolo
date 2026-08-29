@@ -9,6 +9,7 @@ import type {
   ArtifactKind,
   ArtifactMediaType,
   ArtifactRecord,
+  ResolvedArtifactRecord,
   ArtifactReservation,
   Capabilities,
   CreateProjectQuoteInput,
@@ -47,6 +48,7 @@ import type {
   InviteProfessionalInput,
   UpdateWorkInput,
   UpdateHomeRecordInput,
+  UpdateArtifactMetadataInput,
   WorkCategory,
   WorkKind,
   WorkRecord,
@@ -59,6 +61,10 @@ import {
 } from './home-checkup.ts'
 import { homeRecordUpdateBody, parseHomeRecordProfile } from './home-record.ts'
 import { artifactContentFromResponse } from './artifact-content.ts'
+import {
+  artifactMetadataUpdateBody,
+  parseArtifactRecord as parseArtifact,
+} from './artifact-metadata.ts'
 import {
   browserDeviceFileBytes,
   validatedArtifactPayloadMediaType,
@@ -125,8 +131,6 @@ const WORK_CATEGORIES = new Set<WorkCategory>([
   'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
 ])
 const RELATIONSHIPS = new Set(['claimed_unverified', 'verified_controller', 'invited_participant'])
-const ARTIFACT_KINDS = new Set<ArtifactKind>(['photo', 'document', 'warranty'])
-const ARTIFACT_MEDIA = new Set<ArtifactMediaType>(['application/pdf', 'image/jpeg', 'image/png'])
 const DESTINATIONS = new Set(['home', 'rolo', 'activity', 'library', 'details', 'work'])
 
 function record(value: unknown): JsonRecord {
@@ -239,26 +243,6 @@ function parseWork(value: unknown): WorkRecord {
     archivedAt: source.archivedAt,
     createdAt: text(source.createdAt, 40),
     updatedAt: text(source.updatedAt, 40),
-  }
-}
-
-function parseArtifact(value: unknown): ArtifactRecord {
-  const source = record(value)
-  if (!isArtifactRef(source.artifactRef) || !isHomeRef(source.homeRef)
-    || (source.projectRef !== null && !isProjectRef(source.projectRef))
-    || typeof source.kind !== 'string' || !ARTIFACT_KINDS.has(source.kind as ArtifactKind)
-    || typeof source.mediaType !== 'string' || !ARTIFACT_MEDIA.has(source.mediaType as ArtifactMediaType)) {
-    throw new Error('invalid_wire_data')
-  }
-  return {
-    artifactRef: source.artifactRef,
-    homeRef: source.homeRef,
-    projectRef: source.projectRef,
-    kind: source.kind as ArtifactKind,
-    displayName: text(source.displayName, 160),
-    mediaType: source.mediaType as ArtifactMediaType,
-    byteLength: count(source.byteLength),
-    createdAt: text(source.createdAt, 40),
   }
 }
 
@@ -485,7 +469,7 @@ export class HomesroloNativeApi implements HomesroloApi {
   async #completeArtifactUpload(
     homeRef: string,
     attempt: ArtifactUploadAttempt & { readonly artifactRef: string },
-  ): Promise<ArtifactRecord> {
+  ): Promise<ResolvedArtifactRecord> {
     return parseArtifact(await this.#request(
       apiPath('homes', homeRef, 'artifacts', attempt.artifactRef, 'complete'),
       { method: 'POST', body: { commandRef: attempt.commandRef } },
@@ -1152,7 +1136,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     return reply
   }
 
-  async listArtifacts(homeRef: string): Promise<readonly ArtifactRecord[]> {
+  async listArtifacts(homeRef: string): Promise<readonly ResolvedArtifactRecord[]> {
     const data = await this.#request(apiPath('homes', homeRef, 'artifacts'))
     if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
     return data.map(parseArtifact)
@@ -1193,7 +1177,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     kind: ArtifactKind,
     deviceFile: DeviceFile,
     projectRef?: string,
-  ): Promise<ArtifactRecord> {
+  ): Promise<ResolvedArtifactRecord> {
     this.#cleanupConfirmedUploadFiles()
     if (!isHomeRef(homeRef) || (projectRef !== undefined && !isProjectRef(projectRef))
       || deviceFile.byteLength < 1 || deviceFile.byteLength > 10 * 1024 * 1024) {
@@ -1289,6 +1273,34 @@ export class HomesroloNativeApi implements HomesroloApi {
       artifactRef: reservation.artifactRef,
     })
     this.#confirmUploadAttempt(attempt)
+    return artifact
+  }
+
+  async updateArtifactMetadata(
+    homeRef: string,
+    artifactRef: string,
+    input: UpdateArtifactMetadataInput,
+  ): Promise<ResolvedArtifactRecord> {
+    if (!isHomeRef(homeRef) || !isArtifactRef(artifactRef)) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    let body: ReturnType<typeof artifactMetadataUpdateBody>
+    try { body = artifactMetadataUpdateBody(input) } catch {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const artifact = parseArtifact(await this.#request(
+      apiPath('homes', homeRef, 'artifacts', artifactRef, 'metadata'),
+      { method: 'POST', body },
+    ))
+    if (artifact.homeRef !== homeRef || artifact.artifactRef !== artifactRef
+      || artifact.projectRef !== body.projectRef
+      || artifact.observedOn !== body.observedOn
+      || artifact.phase !== body.phase
+      || artifact.areaLabel !== body.areaLabel
+      || JSON.stringify(artifact.geoPin) !== JSON.stringify(body.geoPin)
+      || artifact.revision !== body.expectedRevision + 1) {
+      throw new NativeApiError(502, 'invalid_response')
+    }
     return artifact
   }
 

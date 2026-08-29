@@ -283,6 +283,10 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   assert.match(String(captured.body.instructions), /homeowner's calm, sharp home librarian/)
   assert.match(String(captured.body.instructions), /Carry the conversation forward/)
   assert.match(String(captured.body.instructions), /Do not repeat a question the homeowner answered/)
+  assert.match(String(captured.body.instructions), /Preserve an area or location the homeowner supplies/)
+  assert.match(String(captured.body.instructions), /Homeowner reported:/)
+  assert.match(String(captured.body.instructions), /Visual note:/)
+  assert.match(String(captured.body.instructions), /Never invent a work date, photo capture date, storm date, camera location, GPS coordinate/)
   assert.match(String(captured.body.instructions), /Never choose, rank, or recommend a specific professional/)
   const providerInput = JSON.parse(String(captured.body.input)) as Record<string, unknown>
   assert.deepEqual(providerInput.pendingWork, pendingWork)

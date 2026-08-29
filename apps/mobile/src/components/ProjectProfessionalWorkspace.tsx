@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import type {
   ArtifactRecord,
@@ -18,6 +18,10 @@ import {
   PROPOSAL_FIELDS,
   tradeLabel,
 } from '../professional/presentation.ts'
+import {
+  professionalInvitationNotice,
+  professionalInvitationTextUrl,
+} from '../professional/contact.ts'
 import { colors, radius, space } from '../theme.ts'
 import { Button, Card, Loading, Notice, SectionTitle, Tag, TextField } from './ui.tsx'
 
@@ -58,6 +62,8 @@ export function ProjectProfessionalWorkspace({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [notificationTarget, setNotificationTarget] = useState<ProfessionalOrganization | null>(null)
+  const [notificationBusy, setNotificationBusy] = useState(false)
   const inviteAttempt = useRef<PendingAttempt | null>(null)
   const revokeAttempts = useRef(new Map<string, string>())
   const decisionAttempts = useRef(new Map<string, string>())
@@ -130,12 +136,51 @@ export function ProjectProfessionalWorkspace({
       setSelectedArtifactRefs([])
       setMessage('')
       setComposing(false)
-      setNotice(`Invitation sent to ${organization.displayName}. Only this work and the files you checked were shared.`)
+      setNotificationTarget(organization)
+      setNotice(`Private invitation created for ${organization.displayName}. Only this work and the files you checked were shared.`)
       resource.reload()
     } catch (caught) {
       setError(friendlyError(caught))
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function shareInvitationNotification() {
+    if (notificationBusy) return
+    setNotificationBusy(true)
+    setError(null)
+    try {
+      const result = await Share.share(
+        { title: 'Homesrolo invitation', message: professionalInvitationNotice() },
+        { dialogTitle: 'Let the company know' },
+      )
+      if (result.action !== Share.dismissedAction) {
+        setNotice('Invitation notice shared. No home, address, work details, or files were included.')
+      }
+    } catch {
+      setNotice('This device could not open its share sheet. The private invitation is still saved in Homesrolo.')
+    } finally {
+      setNotificationBusy(false)
+    }
+  }
+
+  async function textInvitationNotification(organization: ProfessionalOrganization) {
+    if (notificationBusy || !organization.publicPhone) return
+    const url = professionalInvitationTextUrl(organization.publicPhone)
+    if (!url) {
+      setNotice('That company-provided phone number cannot receive a text from this device. You can still share the secure sign-in notice another way.')
+      return
+    }
+    setNotificationBusy(true)
+    setError(null)
+    try {
+      await Linking.openURL(url)
+      setNotice('The invitation notice is ready in Messages. Nothing is sent until you send it.')
+    } catch {
+      setNotice('This device could not open Messages. The private invitation is still saved in Homesrolo.')
+    } finally {
+      setNotificationBusy(false)
     }
   }
 
@@ -201,6 +246,33 @@ export function ProjectProfessionalWorkspace({
       {notice ? <Notice message={notice} /> : null}
       {error ? <Notice message={error} actionLabel="Reload current details" onAction={resource.reload} /> : null}
 
+      {notificationTarget ? (
+        <Card accent>
+          <SectionTitle
+            title={`Let ${notificationTarget.displayName} know`}
+            detail="The private invitation is ready. Send a separate notice without putting home or work details in the message."
+          />
+          {notificationTarget.publicPhone && professionalInvitationTextUrl(notificationTarget.publicPhone) ? (
+            <Button
+              label={notificationBusy ? 'Opening Messages…' : 'Text company'}
+              icon="chatbubble-outline"
+              disabled={notificationBusy}
+              accessibilityHint="Opens a ready-to-send text containing only the secure Homesrolo Pro sign-in link."
+              onPress={() => void textInvitationNotification(notificationTarget)}
+            />
+          ) : null}
+          <Button
+            label={notificationBusy ? 'Opening share sheet…' : 'Share notice another way'}
+            icon="share-outline"
+            quiet={Boolean(notificationTarget.publicPhone && professionalInvitationTextUrl(notificationTarget.publicPhone))}
+            disabled={notificationBusy}
+            accessibilityHint="Opens the device share sheet with a non-sensitive invitation notice."
+            onPress={() => void shareInvitationNotification()}
+          />
+          <Button label="Done" quiet disabled={notificationBusy} onPress={() => setNotificationTarget(null)} />
+        </Card>
+      ) : null}
+
       {readyValue ? (
         <>
           {readyValue.invitations.map(invitation => {
@@ -214,6 +286,8 @@ export function ProjectProfessionalWorkspace({
                 invitation={invitation}
                 {...(organization ? { organization } : {})}
                 busy={busy === invitation.invitationRef}
+                notifying={notificationBusy}
+                onShare={() => void shareInvitationNotification()}
                 onRevoke={() => void revoke(invitation)}
               />
             )
@@ -296,10 +370,12 @@ export function ProjectProfessionalWorkspace({
   )
 }
 
-function InvitationCard({ invitation, organization, busy, onRevoke }: {
+function InvitationCard({ invitation, organization, busy, notifying, onShare, onRevoke }: {
   readonly invitation: ProjectInvitation
   readonly organization?: ProfessionalOrganization
   readonly busy: boolean
+  readonly notifying: boolean
+  readonly onShare: () => void
   readonly onRevoke: () => void
 }) {
   const active = invitation.status === 'pending' || invitation.status === 'accepted'
@@ -313,7 +389,19 @@ function InvitationCard({ invitation, organization, busy, onRevoke }: {
         <Tag tone={invitation.status === 'accepted' ? 'mint' : 'plain'}>{invitation.status}</Tag>
       </View>
       <Text style={styles.meta}>{invitation.disclosure.selectedArtifactRefs.length} selected {invitation.disclosure.selectedArtifactRefs.length === 1 ? 'file' : 'files'} shared.</Text>
-      {active ? <Button label={busy ? 'Removing…' : 'Remove access'} quiet disabled={busy} onPress={onRevoke} /> : null}
+      {active ? (
+        <>
+          <Button
+            label={notifying ? 'Opening share sheet…' : 'Notify company'}
+            icon="share-outline"
+            quiet
+            disabled={busy || notifying}
+            accessibilityHint="Shares only a secure Homesrolo Pro sign-in notice, not home or work details."
+            onPress={onShare}
+          />
+          <Button label={busy ? 'Removing…' : 'Remove access'} quiet disabled={busy || notifying} onPress={onRevoke} />
+        </>
+      ) : null}
     </Card>
   )
 }

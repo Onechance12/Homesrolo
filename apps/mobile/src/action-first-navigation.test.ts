@@ -60,3 +60,58 @@ test('the former Rolo people filter opens the saved professional Rolodex', () =>
     /redirectToPeople[\s\S]*<Redirect href=\{\{ pathname: '\/home\/\[homeId\]\/people', params: \{ homeId \} \}\}/,
   )
 })
+
+test('Rolo keeps new-photo metadata private and files only the exact reviewed upload', () => {
+  assert.match(roloScreen, /setPendingPhotoSource\(source\)/)
+  assert.match(roloScreen, /source === 'camera' \? newPhotoMetadataDraft\(\) : null/)
+
+  const locationFunction = roloScreen.match(
+    /async function toggleCurrentPhotoLocation\(\)[\s\S]*?\n  async function send\(/,
+  )?.[0]
+  const sendFunction = roloScreen.match(
+    /async function send\([\s\S]*?\n  async function saveProposal\(/,
+  )?.[0]
+
+  assert.ok(locationFunction, 'the explicit foreground-location request must remain inspectable')
+  assert.ok(sendFunction, 'the Rolo send lifecycle must remain inspectable')
+  assert.match(
+    locationFunction,
+    /captureConfirmedDeviceLocation\(\)[\s\S]*setPendingGeoPin\(pin\)[\s\S]*catch \(caught\)[\s\S]*setLocationNote\(locationRequestFailureNote\(caught\)\)/,
+    'the homeowner explicitly requests a foreground reading before sending',
+  )
+  assert.doesNotMatch(
+    sendFunction,
+    /captureConfirmedDeviceLocation/,
+    'Send must confirm the displayed reading, not silently fetch a new one',
+  )
+  assert.match(
+    roloScreen,
+    /locationPinSummary\(pendingGeoPin\)[\s\S]*Sending confirms this pin/,
+    'rounded coordinates and accuracy are shown before Send confirms the pin',
+  )
+  assert.match(
+    sendFunction,
+    /const geoPin = cameraDetails\?\.pinCurrentLocation \? pendingGeoPin : null[\s\S]*api\.uploadArtifact/,
+    'a denied or skipped location request still falls through to the private photo upload',
+  )
+  assert.match(
+    roloScreen,
+    /api\.updateArtifactMetadata\([\s\S]*expectedRevision: uploadedPhoto\.revision[\s\S]*artifactMetadataReplacement\(uploadedPhoto, \{[\s\S]*observedOn: cameraDetails\.observedOn[\s\S]*phase: cameraDetails\.phase[\s\S]*geoPin/,
+  )
+  assert.match(
+    roloScreen,
+    /newUploadedPhoto && reply\.photoReview && conversationProjectRef === null[\s\S]*setReviewedNewPhoto\(newUploadedPhoto\)/,
+  )
+  assert.match(
+    roloScreen,
+    /photoToFile && photoToFile\.projectRef === null[\s\S]*expectedRevision: photoToFile\.revision[\s\S]*artifactMetadataReplacement\(photoToFile, \{ projectRef: work\.projectRef \}\)/,
+    'approval must revision-update the newly reviewed photo instead of an arbitrary saved attachment',
+  )
+
+  const askStart = roloScreen.indexOf('const reply = await api.askRolo')
+  const askEnd = roloScreen.indexOf('\n      if (!roloRequestCanCommit', askStart)
+  assert.ok(askStart >= 0 && askEnd > askStart)
+  const askCall = roloScreen.slice(askStart, askEnd)
+  assert.doesNotMatch(askCall, /geoPin|latitude|longitude|observedOn|phase/,
+    'artifact organization and device location must never enter the model request')
+})

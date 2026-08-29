@@ -43,6 +43,9 @@ export const HOMEOWNER_CHECKUP_PHOTO_AREAS = Object.freeze([
   'water_heater',
   'foundation',
   'gutters',
+  'siding',
+  'windows_doors',
+  'drainage',
   'other',
 ] as const)
 

@@ -4,7 +4,7 @@ import typescript from 'eslint-config-next/typescript'
 // eslint-config-next 16 ships native flat configs, so no FlatCompat here —
 // the version is pinned to the Next runtime and imported directly.
 export default [
-  { ignores: ['.next/**', 'out/**', 'node_modules/**', 'next-env.d.ts'] },
+  { ignores: ['.next/**', 'out/**', 'node_modules/**', 'next-env.d.ts', '**/._*'] },
   ...coreWebVitals,
   ...typescript,
   {

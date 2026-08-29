@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import type { ProfessionalOrganization, ProjectInvitation, WorkCategory } from '../../../src/api/model.ts'
@@ -14,7 +14,11 @@ import { useResource } from '../../../src/hooks/useResource.ts'
 import {
   PROFESSIONAL_TRADES, invitationStatus, matchesProfessional, tradeLabel,
 } from '../../../src/professional/presentation.ts'
-import { publicEmailUrl, publicPhoneUrl } from '../../../src/professional/contact.ts'
+import {
+  professionalSignupRequest,
+  publicEmailUrl,
+  publicPhoneUrl,
+} from '../../../src/professional/contact.ts'
 import { categoryLabel, colors, radius, space } from '../../../src/theme.ts'
 
 type SavedPerson = {
@@ -57,6 +61,8 @@ export default function PeopleScreen() {
   const [trade, setTrade] = useState<WorkCategory | 'all'>(requestedTrade ?? 'all')
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
   const [contactError, setContactError] = useState<string | null>(null)
+  const [knownShareNotice, setKnownShareNotice] = useState<string | null>(null)
+  const [sharingKnownProfessional, setSharingKnownProfessional] = useState(false)
   const [section, setSection] = useState<ProsSection>('find')
 
   useEffect(() => {
@@ -134,6 +140,25 @@ export default function PeopleScreen() {
     }
   }
 
+  async function shareProfessionalSignup() {
+    if (sharingKnownProfessional) return
+    setSharingKnownProfessional(true)
+    setKnownShareNotice(null)
+    try {
+      const result = await Share.share(
+        { title: 'Join my Homesrolo Rolodex', message: professionalSignupRequest() },
+        { dialogTitle: 'Ask a company to join Homesrolo' },
+      )
+      if (result.action !== Share.dismissedAction) {
+        setKnownShareNotice('Signup link shared. No home, work, address, photo, or project invitation was included.')
+      }
+    } catch {
+      setKnownShareNotice('This device could not open its share sheet. Nothing from your home was shared.')
+    } finally {
+      setSharingKnownProfessional(false)
+    }
+  }
+
   return (
     <Page>
       <Pressable
@@ -201,6 +226,25 @@ export default function PeopleScreen() {
                 <Chip key={value} label={label} selected={trade === value} onPress={() => setTrade(value)} />
               ))}
             </View>
+          </Card>
+
+          <Card>
+            <View style={styles.findHead}>
+              <View style={styles.knownIcon}><Ionicons name="person-add-outline" size={23} color={colors.lime} /></View>
+              <View style={styles.flex}>
+                <Text style={styles.cardTitle}>Invite someone I already know</Text>
+                <Text style={styles.copy}>Send a company the Pro signup link. After its profile appears here, you can choose a specific job and exactly what it may see.</Text>
+              </View>
+            </View>
+            <Button
+              label={sharingKnownProfessional ? 'Opening share sheet…' : 'Ask them to join'}
+              icon="share-outline"
+              disabled={sharingKnownProfessional}
+              accessibilityHint="Shares only the Homesrolo Pro signup message. It does not create a project invitation."
+              onPress={() => void shareProfessionalSignup()}
+            />
+            <Text style={styles.selfReported}>This signup action does not share your home or create a project invitation.</Text>
+            {knownShareNotice ? <Notice message={knownShareNotice} /> : null}
           </Card>
 
           <SectionTitle
@@ -446,6 +490,7 @@ const styles = StyleSheet.create({
   sectionTabTextSelected: { color: colors.ink },
   findHead: { flexDirection: 'row', alignItems: 'center', gap: 13 },
   findIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
+  knownIcon: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900' },
   copy: { color: colors.slate, fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

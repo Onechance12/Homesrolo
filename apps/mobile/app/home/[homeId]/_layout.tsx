@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Tabs, useLocalSearchParams } from 'expo-router'
 import type { ColorValue } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HomeRouteProvider } from '../../../src/home/HomeRouteProvider.tsx'
 import { colors } from '../../../src/theme.ts'
 
@@ -9,18 +10,20 @@ const icon = (name: keyof typeof Ionicons.glyphMap) =>
 
 export default function HomeTabs() {
   const { homeId } = useLocalSearchParams<{ homeId: string }>()
+  const insets = useSafeAreaInsets()
 
   return (
     <HomeRouteProvider key={homeId} homeId={homeId}>
       <Tabs screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.ink },
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: colors.lime,
         tabBarInactiveTintColor: colors.smoke,
         tabBarStyle: {
-          height: 84,
-          paddingTop: 8,
-          paddingBottom: 15,
+          height: 49 + insets.bottom,
+          paddingTop: 4,
+          paddingBottom: insets.bottom,
           backgroundColor: colors.inkRaised,
           borderTopColor: colors.line,
         },
