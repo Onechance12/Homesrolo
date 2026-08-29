@@ -655,9 +655,6 @@ export default function MyHomeScreen() {
     // A tall phone is still a phone. Width keeps the full desktop/tablet card
     // from consuming the entire usable viewport on Pro Max-size iPhones.
     const compactDeck = window.width < 600 || window.height < 820
-    const deckCardHeight = compactDeck
-      ? Math.max(248, Math.min(276, Math.round(window.height - 440)))
-      : Math.max(406, Math.min(500, Math.round(window.height - 470)))
     return (
       <SafeAreaView style={styles.roloSafe} edges={['top']}>
         <View style={styles.roloPage}>
@@ -675,7 +672,7 @@ export default function MyHomeScreen() {
             searchPlaceholder="Find anything your home remembers"
             emptyTitle="No matching cards"
             emptyDetail="Try another divider or add something for this home to remember."
-            cardHeight={deckCardHeight}
+            fillAvailable
             peekSize={compactDeck ? 24 : 38}
             onOpen={card => void openRoloCard(card)}
             onAskRolo={askRoloAboutCard}

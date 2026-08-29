@@ -25,13 +25,13 @@ export default function HomeTabs() {
         tabBarActiveTintColor: colors.lime,
         tabBarInactiveTintColor: colors.smoke,
         tabBarStyle: {
-          height: 56 + bottomInset,
-          paddingTop: 6,
-          paddingBottom: bottomInset + 4,
+          height: 60 + bottomInset,
+          paddingTop: 2,
+          paddingBottom: bottomInset,
           backgroundColor: colors.inkRaised,
           borderTopColor: colors.line,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
       }}>
         <Tabs.Screen name="rolo" options={{ title: 'Rolo', tabBarIcon: icon('chatbubble-ellipses-outline') }} />
         <Tabs.Screen name="care" options={{ title: 'My Rolo', tabBarIcon: icon('albums-outline') }} />
