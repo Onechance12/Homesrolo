@@ -25,6 +25,19 @@ test('the homeowner app is chat-first with four stable destinations', () => {
   assert.doesNotMatch(tabs, /name="pro"/)
 })
 
+test('the shared phone chrome preserves iPhone safe areas and readable Rolodex tabs', () => {
+  const tabs = read('app/home/[homeId]/_layout.tsx')
+  const myRolo = read('app/home/[homeId]/care.tsx')
+  const cards = read('src/components/RoloCardView.tsx')
+
+  assert.match(tabs, /const bottomInset = Math\.max\(insets\.bottom, Platform\.OS === 'web' \? 8 : 0\)/)
+  assert.match(tabs, /height: 56 \+ bottomInset/)
+  assert.match(tabs, /paddingBottom: bottomInset \+ 4/)
+  assert.match(myRolo, /const compactDeck = window\.width < 600 \|\| window\.height < 820/)
+  assert.match(cards, /fileTab: \{[\s\S]*?zIndex: 2,[\s\S]*?justifyContent: 'center'/)
+  assert.match(cards, /shell: \{ width: '100%', paddingTop: 26 \}/)
+})
+
 test('old home roots resolve to Rolo and Account stays inside the homeowner tab shell', () => {
   const frontDoor = read('app/home/[homeId]/index.tsx')
   const nestedAccount = read('app/home/[homeId]/account.tsx')

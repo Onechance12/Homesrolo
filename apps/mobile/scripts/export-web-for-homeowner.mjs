@@ -29,6 +29,7 @@ const STATIC_SHELL_FINGERPRINTS = [
 
 const hostedHead = `
     <meta name="theme-color" content="#071c27" />
+    <meta name="color-scheme" content="dark" />
     <meta name="application-name" content="Homesrolo" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -36,7 +37,8 @@ const hostedHead = `
     <meta name="robots" content="noindex,nofollow" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-icon.png" />
-    <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />`
+    <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
+    <style id="homesrolo-shell-theme">html, body, #root { background-color: #071c27; }</style>`
 
 const serviceWorkerRegistration = '<script src="/register-sw.js" defer></script>'
 
@@ -44,7 +46,13 @@ function hostedShell(source) {
   if (!source.includes('</head>') || !source.includes('</body>')) {
     throw new Error('Expo web export did not contain a complete HTML shell.')
   }
+  const sourceViewport = '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />'
+  const safeViewport = '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />'
+  if (!source.includes(sourceViewport)) {
+    throw new Error('Expo web export did not contain the expected viewport declaration.')
+  }
   return source
+    .replace(sourceViewport, safeViewport)
     .replace('<title>Homesrolo</title>', '<title>Homesrolo — your home, handled</title>')
     .replace('</head>', `${hostedHead}\n  </head>`)
     .replace('</body>', `${serviceWorkerRegistration}\n</body>`)

@@ -652,7 +652,9 @@ export default function MyHomeScreen() {
   ) : null
 
   if (surface === 'rolo') {
-    const compactDeck = window.height < 820
+    // A tall phone is still a phone. Width keeps the full desktop/tablet card
+    // from consuming the entire usable viewport on Pro Max-size iPhones.
+    const compactDeck = window.width < 600 || window.height < 820
     const deckCardHeight = compactDeck
       ? Math.max(248, Math.min(276, Math.round(window.height - 440)))
       : Math.max(406, Math.min(500, Math.round(window.height - 470)))
