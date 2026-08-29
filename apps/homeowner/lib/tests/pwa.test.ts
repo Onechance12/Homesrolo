@@ -96,6 +96,12 @@ test('offline support caches only the public shell and never a private Home Reco
 
   const exporter = readRepository('apps/mobile/scripts/export-web-for-homeowner.mjs')
   assert.match(exporter, /rel=\"manifest\" href=\"\/manifest\.webmanifest\"/)
+  assert.match(exporter, /viewport-fit=cover/,
+    'the hosted Expo shell exposes the iPhone safe areas to the app layout')
+  assert.match(exporter, /html, body, #root \{ background-color: #071c27; \}/,
+    'the iPhone status-bar and launch canvas cannot fall back to white')
+  assert.match(exporter, /apple-mobile-web-app-status-bar-style\" content=\"black-translucent\"/)
+  assert.match(exporter, /meta name=\"color-scheme\" content=\"dark\"/)
   assert.match(exporter, /<script src=\"\/register-sw\.js\" defer><\/script>/,
     'the hosted shell avoids an inline script so its CSP can keep script-src self-only')
   const registrar = read('public/register-sw.js')

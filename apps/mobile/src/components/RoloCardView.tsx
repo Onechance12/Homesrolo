@@ -229,12 +229,13 @@ function displayGroup(value: HomesroloCard['group']): string {
 }
 
 const styles = StyleSheet.create({
-  shell: { width: '100%', paddingTop: 16 },
+  shell: { width: '100%', paddingTop: 26 },
   shellFull: { flex: 1 },
-  shellCompact: { minHeight: 188, paddingTop: 13 },
+  shellCompact: { minHeight: 188, paddingTop: 22 },
   fileTab: {
     position: 'absolute',
-    zIndex: 0,
+    zIndex: 2,
+    elevation: 9,
     top: 0,
     right: 18,
     minWidth: 104,
@@ -246,12 +247,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     backgroundColor: colors.inkSoft,
   },
   fileTabCompact: { height: 28, minWidth: 88, paddingHorizontal: 11 },
   fileTabText: {
-    marginTop: 6,
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '900',
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  cardFull: { flex: 1, minHeight: 390, padding: space.lg, gap: space.md },
+  cardFull: { flex: 1, minHeight: 380, padding: space.lg, gap: space.md },
   cardCompact: { flex: 1, minHeight: 170, padding: space.md, gap: space.sm },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   kindMark: {

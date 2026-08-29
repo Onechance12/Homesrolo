@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Tabs, useLocalSearchParams } from 'expo-router'
-import type { ColorValue } from 'react-native'
+import { Platform, type ColorValue } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HomeRouteProvider } from '../../../src/home/HomeRouteProvider.tsx'
 import { colors } from '../../../src/theme.ts'
@@ -11,6 +11,10 @@ const icon = (name: keyof typeof Ionicons.glyphMap) =>
 export default function HomeTabs() {
   const { homeId } = useLocalSearchParams<{ homeId: string }>()
   const insets = useSafeAreaInsets()
+  // Safari reports the real home-indicator inset once the hosted shell uses
+  // viewport-fit=cover. Keep a small browser fallback so the icon and label
+  // never sit against (or below) the visible edge while developing in a tab.
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'web' ? 8 : 0)
 
   return (
     <HomeRouteProvider key={homeId} homeId={homeId}>
@@ -21,9 +25,9 @@ export default function HomeTabs() {
         tabBarActiveTintColor: colors.lime,
         tabBarInactiveTintColor: colors.smoke,
         tabBarStyle: {
-          height: 49 + insets.bottom,
-          paddingTop: 4,
-          paddingBottom: insets.bottom,
+          height: 56 + bottomInset,
+          paddingTop: 6,
+          paddingBottom: bottomInset + 4,
           backgroundColor: colors.inkRaised,
           borderTopColor: colors.line,
         },
