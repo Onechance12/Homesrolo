@@ -16,7 +16,7 @@ test('home and project libraries gate upload controls without gating saved files
     assert.match(source, /auth\.session\.capabilities\.uploads/)
     assert.match(source, /showUploadActions = uploadsEnabled \|\| previewMode/)
     assert.match(source, /if \(!uploadsEnabled\) return/)
-    assert.match(source, /\{showUploadActions \? \(/)
+    assert.match(source, /showUploadActions \? \(/)
     assert.match(source, /api\.listArtifacts\(homeId\)/)
   }
 })
@@ -58,13 +58,31 @@ test('project photo metadata is revisioned after the exact-project upload withou
   assert.match(project, /if \(uploaded\) \{[\s\S]*?setPendingPhoto\(null\)[\s\S]*?cannot upload a duplicate/)
 })
 
-test('project photo cards stay paged, order by observed date, and expose useful organization facts', () => {
+test('project photos reuse the typed Rolo deck with controlled stage filtering and search', () => {
   const project = read('src/components/ProjectFiles.tsx')
 
   assert.match(project, /photoOrderDate\(right\)\.localeCompare\(photoOrderDate\(left\)\)/)
-  assert.match(project, /photos\.slice\(0, photoLimit\)/)
-  assert.match(project, /PHOTO_PHASE_LABEL\[photo\.phase\]/)
-  assert.match(project, /photo\.observedOn \? 'Observed' : 'Saved'/)
-  assert.match(project, /photo\.areaLabel \?\? 'Area not added'/)
-  assert.match(project, /photo\.geoPin[\s\S]*?Pinned/)
+  assert.match(project, /const photoEntries = homeLibraryEntries\(photos, \[\], \[\]\)\.map/)
+  assert.match(project, /projectLabel: projectTitle[\s\S]*searchText: `\$\{entry\.searchText\} \$\{projectTitle\}`/)
+  assert.match(project, /homeLibraryEntryCards\(photoEntries\)/)
+  assert.match(project, /<RoloDeck[\s\S]*?cards=\{photoCards\}/)
+  assert.match(project, /axis="horizontal"/)
+  assert.match(project, /query=\{photoQuery\}[\s\S]*?onQueryChange=\{setPhotoQuery\}/)
+  assert.match(project, /selectedDivider=\{photoPhase\}[\s\S]*?onSelectedDividerChange=\{setPhotoPhase\}/)
+  assert.match(project, /id: 'all'[\s\S]*?id: 'before'[\s\S]*?id: 'during'[\s\S]*?id: 'after'[\s\S]*?id: 'reference'/)
+  assert.doesNotMatch(project, /photos\.slice\(0, photoLimit\)/)
+  assert.doesNotMatch(project, /Show \$\{Math\.min\(PHOTO_PAGE_SIZE/)
+})
+
+test('project photo deck resolves protected media and keeps exact preview and Rolo references', () => {
+  const project = read('src/components/ProjectFiles.tsx')
+
+  assert.match(project, /renderMedia=\{card => card\.kind === 'photo'[\s\S]*?<ProtectedImage/)
+  assert.match(project, /artifactPreviewSource\(homeId, card\.data\.artifactRef\)/)
+  assert.match(project, /onOpen=\{openPhotoCard\}/)
+  assert.match(project, /setPreviewPhotoRef\(card\.data\.artifactRef\)/)
+  assert.match(project, /onAskRolo=\{askRoloAboutPhoto\}/)
+  assert.match(project, /openPhotoInRolo\(card\.data\.artifactRef\)/)
+  assert.match(project, /artifactRef,[\s\S]*?prompt: 'Help me review this saved photo in the context of this work\./)
+  assert.match(project, /onAction=\{\(\) => openPhotoInRolo\(previewPhoto\.artifactRef\)\}/)
 })

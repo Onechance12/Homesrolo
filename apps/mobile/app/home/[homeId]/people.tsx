@@ -161,15 +161,6 @@ export default function PeopleScreen() {
 
   return (
     <Page>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Back to Home"
-        onPress={() => router.replace({ pathname: '/home/[homeId]/care', params: { homeId } })}
-        style={({ pressed }) => [styles.backHome, pressed && styles.pressed]}
-      >
-        <Ionicons name="arrow-back" size={18} color={colors.lime} />
-        <Text style={styles.backHomeText}>Back to Home</Text>
-      </Pressable>
       <HomeHeader
         section="Pros"
         title="Your home-service Rolodex"
@@ -471,12 +462,6 @@ function ContactAction({ icon, label, accessibilityLabel, accessibilityHint, onP
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  backHome: {
-    alignSelf: 'flex-start', minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 12, borderRadius: radius.large, borderWidth: 1, borderColor: colors.line,
-    backgroundColor: colors.inkRaised,
-  },
-  backHomeText: { color: colors.cream, fontSize: 12, lineHeight: 16, fontWeight: '900' },
   sectionTabs: {
     flexDirection: 'row', gap: 6, padding: 5, borderRadius: radius.medium,
     borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft,

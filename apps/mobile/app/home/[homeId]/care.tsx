@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { ArtifactGeoPin, ArtifactKind, DeviceFile, ResolvedArtifactRecord } from '../../../src/api/model.ts'
 import { NativeApiError } from '../../../src/api/client.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ArtifactFileCard } from '../../../src/components/ArtifactFileCard.tsx'
+import { RoloDeck, type RoloDeckDivider } from '../../../src/components/RoloDeck.tsx'
 import { PhotoUploadDetails } from '../../../src/components/PhotoUploadDetails.tsx'
 import { SavedPhotoDetailsEditor } from '../../../src/components/SavedPhotoDetailsEditor.tsx'
 import { PhotoPreview } from '../../../src/components/PhotoPreview.tsx'
@@ -33,8 +35,16 @@ import {
   type HomeLibrarySource,
   type HomePhotoAlbum,
 } from '../../../src/home/library.ts'
+import {
+  homeLibraryEntryCards,
+  homePhotoAlbumCards,
+  homesroloNavigationCard,
+  workRecordCards,
+  type HomesroloCard,
+} from '../../../src/home/rolodex.ts'
 import { useResource } from '../../../src/hooks/useResource.ts'
 import { pickDocument, pickPhoto } from '../../../src/native/pickers.ts'
+import { openArtifactContent } from '../../../src/native/artifact-opener.ts'
 import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
 import { captureConfirmedDeviceLocation } from '../../../src/native/current-location.ts'
 import { PREVIEW_UPLOAD_NOTICE } from '../../../src/preview/api.ts'
@@ -49,8 +59,27 @@ type PendingPhoto = {
   readonly source: 'camera' | 'library'
 }
 
+type HomeSurface = 'rolo' | 'add' | 'library'
+
+const ROLO_DIVIDERS: readonly RoloDeckDivider[] = [
+  { id: 'all', label: 'All' },
+  { id: 'work', label: 'Work', includes: card => card.group === 'work' },
+  {
+    id: 'care',
+    label: 'Care',
+    includes: card => card.kind === 'work'
+      ? card.data.workKind === 'issue' || card.data.workKind === 'repair'
+        || card.data.workKind === 'service' || card.data.workKind === 'incident'
+      : card.kind === 'navigation' && card.data.role === 'home_watch',
+  },
+  { id: 'home', label: 'Home', includes: card => card.group === 'home' },
+  { id: 'people', label: 'People', includes: card => card.group === 'people' },
+  { id: 'saved', label: 'Saved', includes: card => card.group === 'saved' },
+]
+
 export default function MyHomeScreen() {
   const homeId = useHomeId()
+  const window = useWindowDimensions()
   const { library: rawLibrary } = useLocalSearchParams<{ library?: string | string[] }>()
   const requestedLibraryFilter = requestedHomeLibrary(rawLibrary)
   const { state: auth, api, previewMode, refreshSession } = useSession()
@@ -104,12 +133,13 @@ export default function MyHomeScreen() {
   const [fileLimit, setFileLimit] = useState(FILE_PAGE_SIZE)
   const [albumLimit, setAlbumLimit] = useState(ALBUM_PAGE_SIZE)
   const [expandedPhotoAlbum, setExpandedPhotoAlbum] = useState<string | null>(null)
+  const [focusedPhotoAlbum, setFocusedPhotoAlbum] = useState<string | null>(null)
   const [albumPhotoLimit, setAlbumPhotoLimit] = useState(ALBUM_PHOTO_PAGE_SIZE)
+  const [surface, setSurface] = useState<HomeSurface>(requestedLibraryFilter === 'all' ? 'rolo' : 'library')
 
   useEffect(() => {
     setFileLimit(FILE_PAGE_SIZE)
     setAlbumLimit(ALBUM_PAGE_SIZE)
-    setExpandedPhotoAlbum(null)
     setAlbumPhotoLimit(ALBUM_PHOTO_PAGE_SIZE)
   }, [libraryFilter, libraryProject, libraryQuery, librarySort, librarySource])
 
@@ -127,7 +157,10 @@ export default function MyHomeScreen() {
   }, [pendingPhoto])
 
   useEffect(() => {
-    if (requestedLibraryFilter !== 'all') setLibraryFilter(requestedLibraryFilter)
+    if (requestedLibraryFilter !== 'all') {
+      setLibraryFilter(requestedLibraryFilter)
+      setSurface('library')
+    }
   }, [requestedLibraryFilter])
 
   const values = useMemo(() => {
@@ -157,6 +190,84 @@ export default function MyHomeScreen() {
     }
   }, [libraryFilter, libraryProject, libraryQuery, librarySort, librarySource, resource.state])
 
+  const rolo = useMemo(() => {
+    if (!values) return { cards: [] as readonly HomesroloCard[], albums: [] as readonly HomePhotoAlbum[] }
+    const workCards = workRecordCards(values.historyNewest)
+    const activeWorkCards = workCards.filter(card => card.data.status === 'planned' || card.data.status === 'in_progress')
+    const historyWorkCards = workCards.filter(card => card.data.status !== 'planned' && card.data.status !== 'in_progress')
+    const photoEntries = values.entries.filter(entry => entry.kind === 'photo')
+    const homeWatchCount = values.entries.filter(entry => entry.source === 'home_watch').length
+    const albums = homePhotoAlbums(photoEntries, 'newest')
+    const albumCards = homePhotoAlbumCards(albums)
+    const fileCards = [...homeLibraryEntryCards(values.entries.filter(entry => entry.kind !== 'photo'))]
+      .sort((left, right) => right.sortKey.localeCompare(left.sortKey))
+    const navigationCards = [
+      ...(photoCheckupsEnabled ? [homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'home_watch',
+        eyebrow: 'Home care',
+        title: 'Home Watch',
+        summary: 'Repeatable exterior and whole-home checkups, including Roof Watch.',
+        meta: [`${homeWatchCount} saved views`],
+        count: homeWatchCount,
+      })] : []),
+      homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'timeline',
+        eyebrow: 'Home history',
+        title: 'The home timeline',
+        summary: 'Work, service, photos, files, and checkups in the order they happened.',
+        meta: [`${values.historyNewest.length + values.entries.length} saved records`],
+        count: values.historyNewest.length + values.entries.length,
+      }),
+      homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'home_details',
+        eyebrow: 'The home',
+        title: 'Home details & systems',
+        summary: 'The facts, equipment, and useful details that belong to this address.',
+      }),
+      homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'people',
+        eyebrow: 'Your people',
+        title: 'People & companies',
+        summary: 'The professionals this home knows, plus people you want to invite.',
+      }),
+      homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'work',
+        eyebrow: 'Work Rolo',
+        title: 'Projects, repairs & service',
+        summary: 'Plan something new or return to work already saved with this home.',
+        meta: [`${workCards.length} work records`],
+        count: workCards.length,
+      }),
+      homesroloNavigationCard({
+        homeRef: homeId,
+        role: 'library',
+        eyebrow: 'Saved',
+        title: 'The complete home library',
+        summary: 'Search every photo, document, warranty, and Home Watch view.',
+        meta: [`${values.entries.length} saved items`],
+        count: values.entries.length,
+      }),
+    ]
+    const primaryNavigation = navigationCards.filter(card => card.data.role === 'home_watch' || card.data.role === 'timeline')
+    const remainingNavigation = navigationCards.filter(card => card.data.role !== 'home_watch' && card.data.role !== 'timeline')
+    return {
+      albums,
+      cards: [
+        ...activeWorkCards,
+        ...primaryNavigation,
+        ...albumCards,
+        ...fileCards,
+        ...historyWorkCards,
+        ...remainingNavigation,
+      ],
+    }
+  }, [homeId, photoCheckupsEnabled, values])
+
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading label="Opening your home…" />
   if (auth.kind === 'error') {
@@ -168,9 +279,13 @@ export default function MyHomeScreen() {
     return <Page><Notice message={`My Home could not load.${previewDetail}`} actionLabel="Try again" onAction={resource.reload} /></Page>
   }
 
+  const loadedValues = values
   const { home } = resource.state.value
   const filePage = homeLibraryPage(values.files, fileLimit)
-  const albumPage = homeLibraryPage(values.photoAlbums, albumLimit)
+  const visiblePhotoAlbums = focusedPhotoAlbum
+    ? values.photoAlbums.filter(album => album.id === focusedPhotoAlbum)
+    : values.photoAlbums
+  const albumPage = homeLibraryPage(visiblePhotoAlbums, albumLimit)
   const uploadWorkChoices = matchingWorkChoices(
     values.newest,
     uploadWorkQuery,
@@ -183,6 +298,7 @@ export default function MyHomeScreen() {
   )
   const hasLibraryConstraint = libraryFilter !== 'all' || librarySource !== 'all'
     || libraryProject !== 'all' || librarySort !== 'newest' || libraryQuery.trim().length > 0
+    || focusedPhotoAlbum !== null
   const showPhotos = libraryFilter === 'all' || libraryFilter === 'photos' || libraryFilter === 'unfiled'
   const showFiles = libraryFilter !== 'photos'
 
@@ -193,6 +309,7 @@ export default function MyHomeScreen() {
     setLibraryProject('all')
     setLibrarySort('newest')
     setBrowseWorkQuery('')
+    setFocusedPhotoAlbum(null)
   }
 
   async function selectPhoto(source: 'camera' | 'library') {
@@ -386,10 +503,193 @@ export default function MyHomeScreen() {
     }
   }
 
+  function cardCoverPhoto(card: HomesroloCard): HomeLibraryEntry | null {
+    if (card.kind === 'photo' || card.kind === 'home_watch_photo') {
+      const sourceRef = card.kind === 'photo' ? card.data.artifactRef : card.data.photoRef
+      return loadedValues.entries.find(entry => entry.id === sourceRef) ?? null
+    }
+    if (card.kind === 'photo_album') {
+      return rolo.albums.find(album => album.id === card.data.albumId)?.latest ?? null
+    }
+    if (card.kind === 'work') {
+      return rolo.albums.find(album => album.projectRef === card.projectRef)?.latest ?? null
+    }
+    if (card.kind === 'navigation' && card.data.role === 'home_watch') {
+      return rolo.albums.find(album => album.id.startsWith('home-watch:'))?.latest ?? null
+    }
+    if (card.kind === 'navigation' && card.data.role === 'library') {
+      return rolo.albums[0]?.latest ?? null
+    }
+    return null
+  }
+
+  function renderRoloMedia(card: HomesroloCard) {
+    const photo = cardCoverPhoto(card)
+    if (!photo) return null
+    return (
+      <ProtectedImage
+        source={photo.source === 'uploads'
+          ? api.artifactPreviewSource(homeId, photo.artifact.artifactRef)
+          : api.homeCheckupPhotoSource(homeId, photo.checkup.photoRef, 'thumbnail')}
+        style={styles.roloMedia}
+        resizeMode="cover"
+      />
+    )
+  }
+
+  async function openRoloCard(card: HomesroloCard) {
+    setUploadError(null)
+    if (card.kind === 'document' || card.kind === 'warranty') {
+      const file = loadedValues.entries.find(entry => entry.source === 'uploads'
+        && entry.artifact.artifactRef === card.data.artifactRef)
+      if (!file || file.source !== 'uploads') return
+      try {
+        await openArtifactContent(await api.readArtifactContent(homeId, file.artifact))
+      } catch (caught) {
+        setUploadError(friendlyError(caught))
+      }
+      return
+    }
+    if (card.kind === 'photo' || card.kind === 'home_watch_photo') {
+      const photo = cardCoverPhoto(card)
+      if (photo) setPreviewPhoto(photo)
+      return
+    }
+    if (card.kind === 'photo_album') {
+      setLibraryQuery('')
+      setLibraryFilter(card.data.albumId === 'whole-home-unfiled' ? 'unfiled' : 'photos')
+      setLibrarySource(card.data.albumId.startsWith('home-watch:') ? 'home_watch' : 'all')
+      setLibraryProject(card.projectRef ?? 'all')
+      setLibrarySort('newest')
+      setFocusedPhotoAlbum(card.data.albumId)
+      setExpandedPhotoAlbum(card.data.albumId)
+      setAlbumPhotoLimit(ALBUM_PHOTO_PAGE_SIZE)
+      setSurface('library')
+      return
+    }
+    const destination = card.destination
+    if (destination.kind === 'library') {
+      setLibraryQuery('')
+      setLibraryFilter(destination.filter)
+      setLibrarySource('all')
+      setLibraryProject(destination.projectRef ?? 'all')
+      setLibrarySort('newest')
+      setFocusedPhotoAlbum(null)
+      setExpandedPhotoAlbum(null)
+      setAlbumPhotoLimit(ALBUM_PHOTO_PAGE_SIZE)
+      setSurface('library')
+      return
+    }
+    if (destination.kind === 'work') {
+      router.push({
+        pathname: '/home/[homeId]/work/[projectRef]',
+        params: {
+          homeId: destination.homeRef,
+          projectRef: destination.projectRef,
+          tab: destination.section,
+        },
+      })
+      return
+    }
+    if (destination.kind === 'home_watch') {
+      router.push({ pathname: '/home/[homeId]/checkups', params: { homeId: destination.homeRef } })
+      return
+    }
+    if (destination.kind === 'home_details') {
+      router.push({ pathname: '/home/[homeId]/details', params: { homeId: destination.homeRef } })
+      return
+    }
+    if (destination.kind === 'timeline') {
+      router.push({ pathname: '/home/[homeId]/timeline', params: { homeId: destination.homeRef } })
+      return
+    }
+    if (destination.kind === 'people') {
+      router.push({ pathname: '/home/[homeId]/people', params: { homeId: destination.homeRef } })
+      return
+    }
+    router.push({ pathname: '/home/[homeId]/work', params: { homeId: destination.homeRef } })
+  }
+
+  function askRoloAboutCard(card: HomesroloCard) {
+    const cover = cardCoverPhoto(card)
+    const artifactRef = cover?.source === 'uploads' ? cover.artifact.artifactRef : null
+    router.push({
+      pathname: '/home/[homeId]/rolo',
+      params: {
+        homeId: card.homeRef,
+        ...(card.projectRef ? { projectRef: card.projectRef } : {}),
+        ...(artifactRef ? { artifactRef } : {}),
+        prompt: card.kind === 'work'
+          ? 'Help me with this saved work record.'
+          : 'Help me review this saved photo in the context of my home.',
+      },
+    })
+  }
+
+  function cardCanOpenInRolo(card: HomesroloCard): boolean {
+    if (card.kind === 'work') return true
+    return card.kind === 'photo_album' && cardCoverPhoto(card)?.source === 'uploads'
+  }
+
+  const previewOverlay = previewPhoto ? (
+    <PhotoPreview
+      source={previewPhoto.source === 'uploads'
+        ? api.artifactPreviewSource(homeId, previewPhoto.artifact.artifactRef)
+        : api.homeCheckupPhotoSource(homeId, previewPhoto.checkup.photoRef, 'full')}
+      title={previewPhoto.title}
+      detail={photoPreviewDetail(previewPhoto)}
+      geoPin={previewPhoto.source === 'uploads' ? previewPhoto.artifact.geoPin : null}
+      {...(previewPhoto.source === 'uploads' ? {
+        actionLabel: 'Edit details',
+        onAction: () => {
+          openPhotoEditor(previewPhoto.artifact)
+          setPreviewPhoto(null)
+          setSurface('library')
+        },
+      } : {})}
+      onClose={() => setPreviewPhoto(null)}
+    />
+  ) : null
+
+  if (surface === 'rolo') {
+    const compactDeck = window.height < 820
+    const deckCardHeight = compactDeck
+      ? Math.max(248, Math.min(276, Math.round(window.height - 440)))
+      : Math.max(406, Math.min(500, Math.round(window.height - 470)))
+    return (
+      <SafeAreaView style={styles.roloSafe} edges={['top']}>
+        <View style={styles.roloPage}>
+          <MyRoloHeader
+            title={home.displayLabel}
+            detail={home.privateLocationLabel}
+            onAccount={() => router.push({ pathname: '/home/[homeId]/account', params: { homeId } })}
+          />
+          <HomeSurfaceTabs value={surface} onChange={setSurface} />
+          <RoloDeck
+            cards={rolo.cards}
+            variant={compactDeck ? 'compact' : 'full'}
+            dividers={ROLO_DIVIDERS}
+            renderMedia={renderRoloMedia}
+            searchPlaceholder="Find anything your home remembers"
+            emptyTitle="No matching cards"
+            emptyDetail="Try another divider or add something for this home to remember."
+            cardHeight={deckCardHeight}
+            peekSize={compactDeck ? 24 : 38}
+            onOpen={card => void openRoloCard(card)}
+            onAskRolo={askRoloAboutCard}
+            canAskRolo={cardCanOpenInRolo}
+          />
+          {uploadError ? <Notice message={uploadError} /> : null}
+        </View>
+        {previewOverlay}
+      </SafeAreaView>
+    )
+  }
+
   return (
     <Page>
       <HomeHeader
-        section="My Home"
+        section={surface === 'add' ? 'Add to My Rolo' : 'Home library'}
         title={home.displayLabel}
         detail={home.privateLocationLabel}
       />
@@ -398,38 +698,9 @@ export default function MyHomeScreen() {
         <Ionicons name="lock-closed" size={15} color={colors.mint} />
         <Text style={styles.privateLine}>Private to this home. You decide what leaves it.</Text>
       </View>
+      <HomeSurfaceTabs value={surface} onChange={setSurface} />
 
-      <SectionTitle title="Home record" detail="Property facts, systems, checkups, and the history that stays with this home." />
-      <View style={styles.homeTools}>
-        <HomeTool
-          icon="information-circle-outline"
-          title="Home details"
-          detail="Address, year built, and major systems"
-          onPress={() => router.push({ pathname: '/home/[homeId]/details', params: { homeId } })}
-        />
-        {auth.session.capabilities.photoCheckups ? (
-          <HomeTool
-            icon="eye-outline"
-            title="Home Watch"
-            detail="Whole-home checkups, including Roof Watch"
-            onPress={() => router.push({ pathname: '/home/[homeId]/checkups', params: { homeId } })}
-          />
-        ) : null}
-        <HomeTool
-          icon="time-outline"
-          title="Home timeline"
-          detail="Work, photos, files, and checkups in date order"
-          onPress={() => router.push({ pathname: '/home/[homeId]/timeline', params: { homeId } })}
-        />
-        <HomeTool
-          icon="people-outline"
-          title="People & companies"
-          detail="Find, invite, and return to professionals for this home"
-          onPress={() => router.push({ pathname: '/home/[homeId]/people', params: { homeId } })}
-        />
-      </View>
-
-      {showUploadActions ? (
+      {surface === 'add' && showUploadActions ? (
         <>
           <SectionTitle title="Add to this home" detail="Capture a photo, document, or warranty without creating work first." />
           {values.newest.length > 0 ? (
@@ -490,12 +761,14 @@ export default function MyHomeScreen() {
           {uploadError ? <Notice message={uploadError} /> : null}
           {uploadNotice ? <Text style={styles.savedLine}>{uploadNotice}</Text> : null}
         </>
-      ) : (
+      ) : surface === 'add' ? (
         <Notice message="Adding photos and files isn’t available right now. Your saved library is still here." />
-      )}
+      ) : null}
 
-      <SectionTitle title="Home library" detail="Photos, Home Watch views, documents, and warranties in one private place." />
-      <Card>
+      {surface === 'library' ? (
+        <>
+          <SectionTitle title="Home library" detail="Photos, Home Watch views, documents, and warranties in one private place." />
+          <Card>
         <TextField
           label="Find something"
           value={libraryQuery}
@@ -606,7 +879,7 @@ export default function MyHomeScreen() {
             </Pressable>
           ) : null}
         </View>
-      </Card>
+          </Card>
 
       {resource.state.value.checkupsUnavailable ? (
         <Notice message="Saved uploads are shown, but Home Watch photos could not be added to this view." actionLabel="Try again" onAction={resource.reload} />
@@ -634,7 +907,7 @@ export default function MyHomeScreen() {
             />
           ) : null}
           <SectionTitle
-            title={`Photo albums · ${values.photoAlbums.length}`}
+            title={`Photo albums · ${visiblePhotoAlbums.length}`}
             detail={`${values.photos.length} private photos grouped by work, area, and repeatable Home Watch view. Compare before and after—or earlier and later records.`}
           />
           {values.photoAlbums.length > 0 ? albumPage.items.map(album => {
@@ -737,7 +1010,7 @@ export default function MyHomeScreen() {
         </>
       ) : null}
 
-      {showFiles ? (
+          {showFiles ? (
         <>
           <SectionTitle title={`Files & warranties · ${values.files.length}`} />
           {values.files.length > 0 ? filePage.items.map(file => (
@@ -758,26 +1031,11 @@ export default function MyHomeScreen() {
             />
           ) : null}
         </>
+          ) : null}
+        </>
       ) : null}
 
-      {previewPhoto ? (
-        <PhotoPreview
-          source={previewPhoto.source === 'uploads'
-            ? api.artifactPreviewSource(homeId, previewPhoto.artifact.artifactRef)
-            : api.homeCheckupPhotoSource(homeId, previewPhoto.checkup.photoRef, 'full')}
-          title={previewPhoto.title}
-          detail={photoPreviewDetail(previewPhoto)}
-          geoPin={previewPhoto.source === 'uploads' ? previewPhoto.artifact.geoPin : null}
-          {...(previewPhoto.source === 'uploads' ? {
-            actionLabel: 'Edit details',
-            onAction: () => {
-              openPhotoEditor(previewPhoto.artifact)
-              setPreviewPhoto(null)
-            },
-          } : {})}
-          onClose={() => setPreviewPhoto(null)}
-        />
-      ) : null}
+      {previewOverlay}
     </Page>
   )
 }
@@ -805,24 +1063,64 @@ function Capture({ icon, label, busy, disabled, onPress }: {
   )
 }
 
-function HomeTool({ icon, title, detail, onPress }: {
-  readonly icon: keyof typeof Ionicons.glyphMap
+function MyRoloHeader({ title, detail, onAccount }: {
   readonly title: string
   readonly detail: string
-  readonly onPress: () => void
+  readonly onAccount: () => void
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityHint={detail}
-      onPress={onPress}
-      style={({ pressed }) => [styles.homeTool, pressed && styles.pressed]}
-    >
-      <View style={styles.toolIcon}><Ionicons name={icon} size={22} color={colors.ink} /></View>
-      <View style={styles.toolCopy}><Text style={styles.toolTitle}>{title}</Text><Text style={styles.toolDetail}>{detail}</Text></View>
-      <Ionicons name="chevron-forward" size={20} color={colors.lime} />
-    </Pressable>
+    <View style={styles.roloHeader}>
+      <View style={styles.roloHeaderCopy}>
+        <Text style={styles.roloEyebrow}>My Rolo</Text>
+        <Text accessibilityRole="header" numberOfLines={1} style={styles.roloTitle}>{title}</Text>
+        <Text numberOfLines={1} style={styles.roloLocation}>{detail}</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open account"
+        accessibilityHint="Switch homes or workspaces and manage your account"
+        hitSlop={6}
+        onPress={onAccount}
+        style={({ pressed }) => [styles.accountButton, pressed && styles.pressed]}
+      >
+        <Ionicons name="person-outline" size={19} color={colors.cream} />
+      </Pressable>
+    </View>
+  )
+}
+
+function HomeSurfaceTabs({ value, onChange }: {
+  readonly value: HomeSurface
+  readonly onChange: (value: HomeSurface) => void
+}) {
+  const tabs: readonly { readonly value: HomeSurface; readonly label: string; readonly icon: keyof typeof Ionicons.glyphMap }[] = [
+    { value: 'rolo', label: 'Browse', icon: 'albums-outline' },
+    { value: 'add', label: 'Add', icon: 'add-circle-outline' },
+    { value: 'library', label: 'Library', icon: 'folder-open-outline' },
+  ]
+  return (
+    <View accessibilityRole="tablist" style={styles.surfaceTabs}>
+      {tabs.map(tab => {
+        const selected = tab.value === value
+        return (
+          <Pressable
+            key={tab.value}
+            accessibilityRole="button"
+            accessibilityLabel={tab.label}
+            accessibilityState={{ selected }}
+            onPress={() => onChange(tab.value)}
+            style={({ pressed }) => [
+              styles.surfaceTab,
+              selected && styles.surfaceTabSelected,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name={tab.icon} size={17} color={selected ? colors.ink : colors.slate} />
+            <Text style={[styles.surfaceTabText, selected && styles.surfaceTabTextSelected]}>{tab.label}</Text>
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 
@@ -878,14 +1176,31 @@ function requestedHomeLibrary(value: string | string[] | undefined): HomeLibrary
 }
 
 const styles = StyleSheet.create({
+  roloSafe: { flex: 1, backgroundColor: colors.ink },
+  roloPage: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
+  roloHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  roloHeaderCopy: { flex: 1, minWidth: 0, gap: 1 },
+  roloEyebrow: { color: colors.lime, fontSize: 10, lineHeight: 13, fontWeight: '900', letterSpacing: 1.3, textTransform: 'uppercase' },
+  roloTitle: { color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: -0.4 },
+  roloLocation: { color: colors.slate, fontSize: 10, lineHeight: 14 },
+  accountButton: {
+    width: 44, height: 44, borderRadius: 15, borderWidth: 1, borderColor: colors.line,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inkRaised,
+  },
+  surfaceTabs: {
+    minHeight: 44, padding: 3, flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft,
+  },
+  surfaceTab: {
+    flex: 1, minHeight: 36, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: 11,
+  },
+  surfaceTabSelected: { backgroundColor: colors.lime },
+  surfaceTabText: { color: colors.slate, fontSize: 11, lineHeight: 15, fontWeight: '900' },
+  surfaceTabTextSelected: { color: colors.ink },
+  roloMedia: { width: '100%', height: '100%', minHeight: 76, backgroundColor: colors.inkSoft },
   privacyRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 2 },
   privateLine: { color: colors.slate, flex: 1, fontSize: 12, lineHeight: 17 },
-  homeTools: { gap: space.sm },
-  homeTool: { minHeight: 72, borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkRaised, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
-  toolIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
-  toolCopy: { flex: 1, gap: 3 },
-  toolTitle: { color: colors.cream, fontSize: 15, lineHeight: 19, fontWeight: '900' },
-  toolDetail: { color: colors.slate, fontSize: 11, lineHeight: 16 },
   emptyLine: { color: colors.smoke, fontSize: 13, lineHeight: 18, paddingHorizontal: 2 },
   savedLine: { color: colors.mint, fontSize: 12, lineHeight: 17, paddingHorizontal: 2 },
   captureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

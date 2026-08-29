@@ -1,13 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useFocusEffect } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { WorkCategory, WorkKind, WorkStatus } from '../../../../src/api/model.ts'
 import { friendlyError } from '../../../../src/api/errors.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
-import { WorkCard } from '../../../../src/components/WorkCard.tsx'
-import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../../src/components/ui.tsx'
+import { RoloDeck, type RoloDeckDivider } from '../../../../src/components/RoloDeck.tsx'
+import { Button, Card, Chip, Loading, Notice, Page, TextField } from '../../../../src/components/ui.tsx'
 import { useHomeId } from '../../../../src/home/HomeRouteProvider.tsx'
+import { workRecordCards, type HomesroloCard } from '../../../../src/home/rolodex.ts'
 import { useResource } from '../../../../src/hooks/useResource.ts'
 import { categoryLabel, colors, kindLabel, space, statusLabel } from '../../../../src/theme.ts'
 import { validOptionalWorkDate } from '../../../../src/work/detail.ts'
@@ -18,16 +21,35 @@ const CATEGORIES: readonly WorkCategory[] = [
   'appliances', 'landscaping', 'pest', 'pool', 'new_construction', 'other',
 ]
 const STATUSES: readonly WorkStatus[] = ['planned', 'in_progress', 'completed']
+type WorkFilter = 'all' | 'open' | 'care' | 'completed'
+
+const WORK_DIVIDERS: readonly RoloDeckDivider[] = [
+  {
+    id: 'open',
+    label: 'Active',
+    includes: card => card.kind === 'work'
+      && (card.data.status === 'planned' || card.data.status === 'in_progress'),
+  },
+  {
+    id: 'care',
+    label: 'Care',
+    includes: card => card.kind === 'work'
+      && (card.data.workKind === 'issue' || card.data.workKind === 'repair' || card.data.workKind === 'service'),
+  },
+  { id: 'completed', label: 'Completed', includes: card => card.kind === 'work' && card.data.status === 'completed' },
+  { id: 'all', label: 'All' },
+]
 
 export default function WorkScreen() {
   const homeId = useHomeId()
+  const window = useWindowDimensions()
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const loader = useCallback(() => api.listWork(homeId), [api, homeId])
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'open' | 'care' | 'completed'>('open')
+  const [filter, setFilter] = useState<WorkFilter>('open')
   const [query, setQuery] = useState('')
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
@@ -44,24 +66,17 @@ export default function WorkScreen() {
     else hasFocused.current = true
   }, [resource.reload]))
 
-  const visible = useMemo(() => {
+  const cards = useMemo(() => {
     if (resource.state.kind !== 'ready') return []
-    const normalized = query.trim().toLocaleLowerCase('en-US')
     const statusRank = { in_progress: 0, planned: 1, completed: 2, cancelled: 3 } as const
-    return resource.state.value
-      .filter(item => !item.archived)
-      .filter(item => {
-        if (filter === 'open') return item.status === 'planned' || item.status === 'in_progress'
-        if (filter === 'care') return ['issue', 'repair', 'service'].includes(item.workKind)
-        if (filter === 'completed') return item.status === 'completed'
-        return true
-      })
-      .filter(item => !normalized || [
-        item.title, item.summary, item.professionalLabel ?? '', categoryLabel[item.category], kindLabel[item.workKind],
-      ].some(value => value.toLocaleLowerCase('en-US').includes(normalized)))
-      .sort((left, right) => statusRank[left.status] - statusRank[right.status]
-        || right.updatedAt.localeCompare(left.updatedAt))
-  }, [filter, query, resource.state])
+    const ordered = [...resource.state.value].sort((left, right) => statusRank[left.status] - statusRank[right.status]
+      || right.updatedAt.localeCompare(left.updatedAt))
+    return workRecordCards(ordered)
+  }, [resource.state])
+  const compactDeck = window.width < 600 || window.height < 780
+  const deckCardHeight = compactDeck
+    ? Math.max(248, Math.min(360, Math.round(window.height - 390)))
+    : Math.max(406, Math.min(470, Math.round(window.height - 440)))
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
@@ -103,34 +118,14 @@ export default function WorkScreen() {
     } catch (caught) { setError(friendlyError(caught)) } finally { setBusy(false) }
   }
 
-  return (
-    <Page>
-      <HomeHeader
-        section="Work"
-        title="Everything happening at home."
-        detail="Projects, repairs, service, and finished work stay together."
-      />
-      {!creating ? (
-        <>
-          <Card accent>
-            <Text style={styles.formTitle}>What needs doing?</Text>
-            <Text style={styles.formCopy}>Tell Rolo about a problem, project, or regular service. You’ll review it before anything is saved.</Text>
-            <Button
-              label="Tell Rolo"
-              icon="chatbubble-ellipses-outline"
-              onPress={() => router.push({
-                pathname: '/home/[homeId]/rolo',
-                params: {
-                  homeId,
-                  prompt: 'I need help planning some work at my home.',
-                },
-              })}
-            />
-          </Card>
-          <Button label="Enter it myself" icon="create-outline" quiet onPress={() => setCreating(true)} />
-        </>
-      ) : null}
-      {creating ? (
+  if (creating) {
+    return (
+      <Page>
+        <HomeHeader
+          section="Work"
+          title="Add work to this home."
+          detail="Enter it directly, or cancel and let Rolo help you shape it first."
+        />
         <Card accent>
           <Text style={styles.formTitle}>What happened—or needs to happen?</Text>
           <TextField label="A clear name" value={title} onChangeText={setTitle} placeholder="Upstairs AC stopped cooling" />
@@ -147,43 +142,141 @@ export default function WorkScreen() {
           <Button label="Cancel" onPress={reset} disabled={busy} quiet />
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </Card>
-      ) : null}
+      </Page>
+    )
+  }
 
-      <SectionTitle title="Work" detail="Active first, then your finished history." />
-      <TextField
-        label="Find work"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search title, area, note, or company"
-        returnKeyType="search"
-      />
-      <View style={styles.chips}>
-        <Chip label="Active" selected={filter === 'open'} onPress={() => setFilter('open')} />
-        <Chip label="Care" selected={filter === 'care'} onPress={() => setFilter('care')} />
-        <Chip label="Completed" selected={filter === 'completed'} onPress={() => setFilter('completed')} />
-        <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.deckPage}>
+        <View style={styles.deckHeader}>
+          <View style={styles.deckHeading}>
+            <Text style={styles.deckEyebrow}>Work Rolo</Text>
+            <Text accessibilityRole="header" style={styles.deckTitle}>What’s happening at home</Text>
+          </View>
+          <View style={styles.deckActions}>
+            <HeaderAction
+              accessibilityHint="Starts a conversation to plan or record work"
+              icon="chatbubble-ellipses-outline"
+              label="Tell Rolo"
+              onPress={() => router.push({
+                pathname: '/home/[homeId]/rolo',
+                params: { homeId, prompt: 'I need help planning some work at my home.' },
+              })}
+            />
+            <HeaderAction
+              accessibilityHint="Opens the manual work form"
+              icon="add"
+              label="Add work"
+              onPress={() => setCreating(true)}
+            />
+          </View>
+        </View>
+        {resource.state.kind === 'loading' ? <Loading label="Opening work…" /> : null}
+        {resource.state.kind === 'error' ? (
+          <Notice
+            message={`Work could not load.${previewMode ? ` (${resource.state.message})` : ''}`}
+            actionLabel="Try again"
+            onAction={resource.reload}
+          />
+        ) : null}
+        {resource.state.kind === 'ready' ? (
+          <RoloDeck
+            cards={cards}
+            variant={compactDeck ? 'compact' : 'full'}
+            query={query}
+            onQueryChange={setQuery}
+            dividers={WORK_DIVIDERS}
+            selectedDivider={filter}
+            onSelectedDividerChange={selectWorkFilter}
+            searchPlaceholder="Find a project, repair, service, or company"
+            emptyTitle={emptyDeckTitle(filter, query)}
+            emptyDetail="Try another tab, clear the search, or add work with Rolo."
+            cardHeight={deckCardHeight}
+            peekSize={compactDeck ? 24 : 38}
+            onOpen={openWorkCard}
+            onAskRolo={askRoloAboutWork}
+          />
+        ) : null}
       </View>
-      {resource.state.kind === 'loading' ? <Loading label="Opening work…" /> : null}
-      {resource.state.kind === 'error' ? (
-        <Notice
-          message={`Work could not load.${previewMode ? ` (${resource.state.message})` : ''}`}
-          actionLabel="Try again"
-          onAction={resource.reload}
-        />
-      ) : null}
-      {visible.map(item => <WorkCard key={item.projectRef} work={item} />)}
-      {resource.state.kind === 'ready' && visible.length === 0 ? (
-        <Notice message={filter === 'open'
-          ? 'Nothing is open right now.'
-          : query.trim() ? 'No work matches that search.' : 'Nothing matches this view.'} />
-      ) : null}
-    </Page>
+    </SafeAreaView>
+  )
+
+  function openWorkCard(card: HomesroloCard) {
+    if (card.destination.kind !== 'work') return
+    router.push({
+      pathname: '/home/[homeId]/work/[projectRef]',
+      params: {
+        homeId: card.destination.homeRef,
+        projectRef: card.destination.projectRef,
+        tab: card.destination.section,
+      },
+    })
+  }
+
+  function askRoloAboutWork(card: HomesroloCard) {
+    if (card.kind !== 'work') return
+    router.push({
+      pathname: '/home/[homeId]/rolo',
+      params: {
+        homeId: card.homeRef,
+        projectRef: card.data.projectRef,
+        prompt: 'Help me with this saved work record.',
+      },
+    })
+  }
+
+  function selectWorkFilter(value: string) {
+    if (isWorkFilter(value)) setFilter(value)
+  }
+}
+
+function HeaderAction({ label, icon, accessibilityHint, onPress }: {
+  readonly label: string
+  readonly icon: keyof typeof Ionicons.glyphMap
+  readonly accessibilityHint: string
+  readonly onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [styles.headerAction, pressed && styles.headerActionPressed]}
+    >
+      <Ionicons name={icon} size={20} color={colors.cream} />
+    </Pressable>
   )
 }
 
+function isWorkFilter(value: string): value is WorkFilter {
+  return value === 'all' || value === 'open' || value === 'care' || value === 'completed'
+}
+
+function emptyDeckTitle(filter: WorkFilter, query: string): string {
+  if (query.trim()) return 'No work matches that search'
+  if (filter === 'open') return 'Nothing is open right now'
+  if (filter === 'completed') return 'No finished work here yet'
+  if (filter === 'care') return 'No repairs or service here yet'
+  return 'This Work Rolo is empty'
+}
+
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.ink },
+  deckPage: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
+  deckHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  deckHeading: { flex: 1, minWidth: 0, gap: 2 },
+  deckEyebrow: { color: colors.lime, fontSize: 10, fontWeight: '900', letterSpacing: 1.3, textTransform: 'uppercase' },
+  deckTitle: { color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: -0.4 },
+  deckActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerAction: {
+    width: 44, height: 44, borderRadius: 15, borderWidth: 1, borderColor: colors.line,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.inkRaised,
+  },
+  headerActionPressed: { opacity: 0.78, transform: [{ scale: 0.97 }] },
   formTitle: { color: colors.cream, fontSize: 22, lineHeight: 27, fontWeight: '900' },
-  formCopy: { color: colors.slate, fontSize: 14, lineHeight: 21 },
   label: { color: colors.slate, fontSize: 13, fontWeight: '800', marginTop: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, fontWeight: '700' },
