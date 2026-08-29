@@ -15,8 +15,8 @@ test('every explicit Start intent replaces the prior Rolo conversation once', ()
   )
   assert.match(
     roloScreen,
-    /async function send\([\s\S]*if \(prompt !== undefined\) router\.setParams\(\{ prompt: undefined \}\)/,
-    'a deep-link prompt clears only from a mounted message action',
+    /async function send\([\s\S]*if \(prompt !== undefined \|\| routeArtifactRef\) router\.setParams\(\{ prompt: undefined, artifactRef: undefined \}\)/,
+    'a deep-link prompt and exact reviewed-photo reference clear only from a mounted message action',
   )
   assert.doesNotMatch(
     roloScreen,

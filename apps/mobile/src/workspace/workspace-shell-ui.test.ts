@@ -51,7 +51,7 @@ test('homeowner surfaces do not advertise the Pro workspace as a primary app act
 test('work and Pro detail use operational app sections instead of one long landing page', () => {
   const work = read('app/home/[homeId]/work/[projectRef].tsx')
   const pro = read('src/components/NativeProfessionalHub.tsx')
-  for (const label of ['Overview', 'Plan', 'Files', 'Bids', 'Updates']) {
+  for (const label of ['Overview', 'Plan', 'Photos & files', 'Bids', 'Updates']) {
     assert.match(work, new RegExp(`label: '${label}'`))
   }
   for (const label of ['Today', 'Invites', 'Jobs', 'Company']) {

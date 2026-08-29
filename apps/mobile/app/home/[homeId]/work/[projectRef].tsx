@@ -56,7 +56,7 @@ const WORK_DETAIL_TABS: readonly {
 }[] = [
   { value: 'overview', label: 'Overview', icon: 'grid-outline' },
   { value: 'plan', label: 'Plan', icon: 'list-outline' },
-  { value: 'files', label: 'Files', icon: 'images-outline' },
+  { value: 'files', label: 'Photos & files', icon: 'images-outline' },
   { value: 'bids', label: 'Bids', icon: 'people-outline' },
   { value: 'updates', label: 'Updates', icon: 'time-outline' },
 ]
@@ -264,11 +264,18 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
     <Page>
       <ProjectBack onPress={() => goBack(homeId)} />
       <HomeHeader
-        section={kindLabel[current.workKind]}
+        section={`Work Rolo · ${kindLabel[current.workKind]}`}
         title={current.title}
         detail={`${categoryLabel[current.category]} · saved to this home`}
       />
 
+      <View style={styles.deckHeading}>
+        <View>
+          <Text style={styles.deckEyebrow}>Flip through this work</Text>
+          <Text style={styles.deckCopy}>The plan, proof, bids, and updates stay in one project deck.</Text>
+        </View>
+        <Text style={styles.deckCount}>{WORK_DETAIL_TABS.findIndex(item => item.value === tab) + 1}/{WORK_DETAIL_TABS.length}</Text>
+      </View>
       <WorkDetailTabs selected={tab} onSelect={setTab} />
 
       {tab === 'overview' ? <Card accent>
@@ -458,7 +465,7 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
         </>
       ) : null}
 
-      {tab === 'files' ? <ProjectFiles homeId={homeId} projectRef={current.projectRef} /> : null}
+      {tab === 'files' ? <ProjectFiles homeId={homeId} projectRef={current.projectRef} projectTitle={current.title} /> : null}
 
       {tab === 'bids' ? (
         <>
@@ -580,13 +587,21 @@ function openProjectRolo(homeId: string, projectRef: string, prompt: string) {
 }
 
 const styles = StyleSheet.create({
-  detailTabs: { gap: 8, paddingRight: space.lg },
+  deckHeading: {
+    flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md,
+    paddingHorizontal: 2,
+  },
+  deckEyebrow: { color: colors.lime, fontSize: 11, lineHeight: 15, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  deckCopy: { color: colors.slate, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  deckCount: { color: colors.aqua, fontSize: 12, lineHeight: 16, fontWeight: '900' },
+  detailTabs: { gap: 5, paddingTop: 8, paddingRight: space.lg },
   detailTab: {
-    minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 21, borderWidth: 1, borderColor: colors.line,
+    minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 5, borderBottomRightRadius: 5,
+    borderWidth: 1, borderBottomWidth: 3, borderColor: colors.line,
     backgroundColor: colors.inkRaised, paddingHorizontal: 13,
   },
-  detailTabActive: { backgroundColor: colors.lime, borderColor: colors.lime },
+  detailTabActive: { backgroundColor: colors.lime, borderColor: colors.lime, transform: [{ translateY: -4 }] },
   detailTabText: { color: colors.slate, fontSize: 12, fontWeight: '800' },
   detailTabTextActive: { color: colors.ink },
   back: {

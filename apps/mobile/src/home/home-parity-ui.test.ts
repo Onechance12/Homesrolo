@@ -9,8 +9,10 @@ function read(relative: string) {
 test('keeps every restored home capability reachable inside the Expo shell', () => {
   const home = read('app/home/[homeId]/care.tsx')
   const tabs = read('app/home/[homeId]/_layout.tsx')
-  assert.match(home, /title="Home details"[\s\S]*pathname: '\/home\/\[homeId\]\/details'/)
-  assert.match(home, /title="Home Watch"[\s\S]*pathname: '\/home\/\[homeId\]\/checkups'/)
+  assert.match(home, /role: 'home_details'[\s\S]*title: 'Home details & systems'/)
+  assert.match(home, /destination\.kind === 'home_details'[\s\S]*pathname: '\/home\/\[homeId\]\/details'/)
+  assert.match(home, /role: 'home_watch'[\s\S]*title: 'Home Watch'/)
+  assert.match(home, /destination\.kind === 'home_watch'[\s\S]*pathname: '\/home\/\[homeId\]\/checkups'/)
   assert.match(tabs, /name="details" options=\{\{ href: null \}\}/)
   assert.match(tabs, /name="checkups" options=\{\{ href: null \}\}/)
   assert.match(tabs, /name="projects\/\[projectId\]" options=\{\{ href: null \}\}/)
@@ -94,7 +96,7 @@ test('work detail opens Rolo with the exact existing project context', () => {
   assert.match(rolo, /Talk about something else/)
   assert.match(rolo, /router\.replace\(\{ pathname: '\/home\/\[homeId\]\/rolo'/)
   assert.doesNotMatch(rolo, /useRootNavigationState/)
-  assert.match(rolo, /if \(prompt !== undefined\) router\.setParams\(\{ prompt: undefined \}\)/)
+  assert.match(rolo, /if \(prompt !== undefined \|\| routeArtifactRef\) router\.setParams\(\{ prompt: undefined, artifactRef: undefined \}\)/)
   assert.match(client, /\.\.\.\(projectRef \? \{ projectRef \} : \{\}\)/)
 })
 

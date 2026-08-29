@@ -26,7 +26,7 @@ import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
-import { WorkCard } from '../../../src/components/WorkCard.tsx'
+import { RoloCardView } from '../../../src/components/RoloCardView.tsx'
 import { Button, Card, Loading, Notice, Page, Tag } from '../../../src/components/ui.tsx'
 import { pickPhoto } from '../../../src/native/pickers.ts'
 import { revokeBrowserDeviceFileUrl } from '../../../src/native/device-file-url.ts'
@@ -38,7 +38,8 @@ import {
   type PhotoMetadataDraft,
 } from '../../../src/home/photo-metadata.ts'
 import { oneRouteParam } from '../../../src/home/legacy-route.ts'
-import { isProjectRef } from '../../../src/api/protocol.ts'
+import { isArtifactRef, isProjectRef } from '../../../src/api/protocol.ts'
+import { workRecordCard } from '../../../src/home/rolodex.ts'
 import {
   roloPhotoConsentKey,
   type RoloPhotoAttachment,
@@ -95,10 +96,11 @@ type RoloSuggestion = Readonly<Pick<RoloReply, 'destination' | 'projectRef'>>
 
 export default function RoloScreen() {
   const homeId = useHomeId()
-  const { prompt: rawPrompt, filter: rawFilter, projectRef: rawProjectRef } = useLocalSearchParams<{
+  const { prompt: rawPrompt, filter: rawFilter, projectRef: rawProjectRef, artifactRef: rawArtifactRef } = useLocalSearchParams<{
     prompt?: string | string[]
     filter?: string | string[]
     projectRef?: string | string[]
+    artifactRef?: string | string[]
   }>()
   const promptValue = oneRouteParam(rawPrompt)
   const prompt = promptValue === null ? undefined : promptValue.slice(0, 1_600)
@@ -106,6 +108,10 @@ export default function RoloScreen() {
   const projectRefValue = oneRouteParam(rawProjectRef)
   const routeProjectRef = projectRefValue && isProjectRef(projectRefValue)
     ? projectRefValue
+    : undefined
+  const artifactRefValue = oneRouteParam(rawArtifactRef)
+  const routeArtifactRef = artifactRefValue && isArtifactRef(artifactRefValue)
+    ? artifactRefValue
     : undefined
   const redirectToPeople = filter === 'people'
   const { state: auth, api, roloStorage, previewMode, refreshSession } = useSession()
@@ -142,12 +148,14 @@ export default function RoloScreen() {
   const [hydratedScope, setHydratedScope] = useState<string | null>(null)
   const [homeSummary, setHomeSummary] = useState<HomeSummary | null>(null)
   const [activeWork, setActiveWork] = useState<readonly WorkRecord[]>([])
+  const [knownWork, setKnownWork] = useState<readonly WorkRecord[]>([])
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
   const mounted = useRef(true)
   const conversationVersion = useRef(0)
   const hydrationGeneration = useRef(0)
   const consumedPrompt = useRef<string | null>(null)
+  const consumedRoutePhoto = useRef<string | null>(null)
   const threadScrollRef = useRef<ScrollView>(null)
   const visionEnabled = !redirectToPeople
     && auth.kind === 'signed_in' && auth.session.capabilities.homeAssistantVision
@@ -165,6 +173,7 @@ export default function RoloScreen() {
     let active = true
     setHomeSummary(null)
     setActiveWork([])
+    setKnownWork([])
     if (auth.kind !== 'signed_in') {
       return () => { active = false }
     }
@@ -172,10 +181,13 @@ export default function RoloScreen() {
       if (!active) return
       setHomeSummary(homeResult.status === 'fulfilled' ? homeResult.value : null)
       if (workResult.status === 'fulfilled') {
-        setActiveWork(workResult.value
+        const readableWork = workResult.value.filter(item => !item.archived)
+        setKnownWork(readableWork)
+        setActiveWork(readableWork
           .filter(item => !item.archived && (item.status === 'planned' || item.status === 'in_progress'))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)))
       } else {
+        setKnownWork([])
         setActiveWork([])
       }
     })
@@ -234,7 +246,7 @@ export default function RoloScreen() {
       return
     }
     if (!persistenceScope || redirectToPeople) return
-    const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${prompt}`
+    const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${routeArtifactRef ?? ''}\u0000${prompt}`
     if (consumedPrompt.current === promptIdentity) return
     consumedPrompt.current = promptIdentity
     hydrationGeneration.current += 1
@@ -246,7 +258,7 @@ export default function RoloScreen() {
     )
     setHydratedScope(persistenceKey)
     void roloStorage.remove(persistenceScope).catch(() => undefined)
-  }, [homeId, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeProjectRef])
+  }, [homeId, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeArtifactRef, routeProjectRef])
 
   useEffect(() => {
     if (!persistenceScope || !persistenceKey || hydratedScope !== persistenceKey || redirectToPeople) return
@@ -296,7 +308,13 @@ export default function RoloScreen() {
     setPhotosError(false)
     void api.listArtifacts(homeId).then(artifacts => {
       if (!active) return
-      setSavedPhotos(artifacts.filter(item => item.kind === 'photo').slice(0, 12))
+      const photos = artifacts.filter(item => item.kind === 'photo')
+      const requestedPhoto = routeArtifactRef
+        ? photos.find(item => item.artifactRef === routeArtifactRef)
+        : undefined
+      setSavedPhotos(requestedPhoto
+        ? [requestedPhoto, ...photos.filter(item => item.artifactRef !== requestedPhoto.artifactRef)].slice(0, 12)
+        : photos.slice(0, 12))
       setPhotosLoading(false)
     }).catch(() => {
       if (!active) return
@@ -304,7 +322,25 @@ export default function RoloScreen() {
       setPhotosError(true)
     })
     return () => { active = false }
-  }, [api, homeId, visionEnabled])
+  }, [api, homeId, routeArtifactRef, visionEnabled])
+
+  useEffect(() => {
+    if (!routeArtifactRef) {
+      consumedRoutePhoto.current = null
+      return
+    }
+    if (!visionEnabled || consumedRoutePhoto.current === routeArtifactRef) return
+    const artifact = savedPhotos.find(item => item.homeRef === homeId
+      && item.kind === 'photo'
+      && item.artifactRef === routeArtifactRef)
+    if (!artifact) return
+    consumedRoutePhoto.current = routeArtifactRef
+    setAttachment({ state: 'saved', artifact })
+    setRememberedAttachment({ artifactRef: artifact.artifactRef, title: artifact.displayName })
+    setApprovedPhotoMessage(null)
+    setPhotoPickerOpen(true)
+    setError(null)
+  }, [homeId, routeArtifactRef, savedPhotos, visionEnabled])
 
   useEffect(() => {
     if (!rememberedAttachment || attachment || !visionEnabled) return
@@ -566,7 +602,7 @@ export default function RoloScreen() {
       }
       setSuggestion(suggestionFromReply(reply))
       setFollowUpQuestions(reply.followUpQuestions)
-      if (prompt !== undefined) router.setParams({ prompt: undefined })
+      if (prompt !== undefined || routeArtifactRef) router.setParams({ prompt: undefined, artifactRef: undefined })
       if (selectedPhoto && reply.photoReview) {
         setPhotoReview(reply.photoReview)
         setReviewExpanded(false)
@@ -643,6 +679,7 @@ export default function RoloScreen() {
       }
       setReviewedNewPhoto(null)
       setSaved(work)
+      setKnownWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
       if (work.status === 'planned' || work.status === 'in_progress') {
         setActiveWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
       }
@@ -657,7 +694,7 @@ export default function RoloScreen() {
     hydrationGeneration.current += 1
     resetConversationState()
     if (persistenceScope) void roloStorage.remove(persistenceScope).catch(() => undefined)
-    if (conversationProjectRef || routeProjectRef || prompt !== undefined) {
+    if (conversationProjectRef || routeProjectRef || routeArtifactRef || prompt !== undefined) {
       router.replace({ pathname: '/home/[homeId]/rolo', params: { homeId } })
     }
   }
@@ -688,6 +725,7 @@ export default function RoloScreen() {
     setPhotoReviewTitle(null)
     setPhotoReviewRef(null)
     setPhotoPickerOpen(false)
+    consumedRoutePhoto.current = null
     sendInFlight.current = false
     pendingCreate.current = null
   }
@@ -700,6 +738,12 @@ export default function RoloScreen() {
     : []
   const hasMoreReviewDetails = Boolean(photoReview
     && (photoReview.visibleObservations.length > 2 || photoReview.cannotConfirm.length > 1))
+  const focusedWork = conversationProjectRef
+    ? knownWork.find(item => item.projectRef === conversationProjectRef) ?? null
+    : null
+  const suggestedWork = suggestion?.destination === 'work' && suggestion.projectRef
+    ? knownWork.find(item => item.projectRef === suggestion.projectRef) ?? null
+    : null
 
   return (
     <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -741,6 +785,13 @@ export default function RoloScreen() {
                 <Text style={styles.introCopy}>A starting question is ready below. Send it as-is, or change it first.</Text>
               </View>
             </View>
+            {focusedWork ? (
+              <RoloCardView
+                card={workRecordCard(focusedWork)}
+                variant="compact"
+                onOpen={() => openSuggestion(homeId, { destination: 'work', projectRef: focusedWork.projectRef })}
+              />
+            ) : null}
             <Button label="Talk about something else" quiet onPress={startFreshConversation} />
           </Card>
         ) : null}
@@ -799,7 +850,15 @@ export default function RoloScreen() {
                 <Text style={styles.activeWorkLink}>{activeWork.length > 1 ? `See all ${activeWork.length}` : 'See Work'}</Text>
               </Pressable>
             </View>
-            <WorkCard work={activeWork[0]} compact />
+            <RoloCardView
+              card={workRecordCard(activeWork[0])}
+              variant="compact"
+              onOpen={() => openSuggestion(homeId, { destination: 'work', projectRef: activeWork[0]!.projectRef })}
+              onAskRolo={() => {
+                setConversationProjectRef(activeWork[0]!.projectRef)
+                setInput('Help me review this work and decide what should happen next.')
+              }}
+            />
           </View>
         ) : null}
 
@@ -921,7 +980,13 @@ export default function RoloScreen() {
             <Text style={styles.inlineStatusText}>{inlineNote}</Text>
           </View>
         ) : null}
-        {suggestion ? (
+        {suggestedWork ? (
+          <RoloCardView
+            card={workRecordCard(suggestedWork)}
+            variant="compact"
+            onOpen={() => openSuggestion(homeId, { destination: 'work', projectRef: suggestedWork.projectRef })}
+          />
+        ) : suggestion ? (
           <Button
             label={suggestionLabel(suggestion)}
             icon="arrow-forward"

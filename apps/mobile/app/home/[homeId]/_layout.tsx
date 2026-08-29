@@ -30,11 +30,11 @@ export default function HomeTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
       }}>
         <Tabs.Screen name="rolo" options={{ title: 'Rolo', tabBarIcon: icon('chatbubble-ellipses-outline') }} />
-        <Tabs.Screen name="care" options={{ title: 'Home', tabBarIcon: icon('home-outline') }} />
+        <Tabs.Screen name="care" options={{ title: 'My Rolo', tabBarIcon: icon('albums-outline') }} />
         <Tabs.Screen name="work" options={{ title: 'Work', tabBarIcon: icon('layers-outline') }} />
-        <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: icon('person-outline') }} />
+        <Tabs.Screen name="people" options={{ title: 'People', tabBarIcon: icon('people-outline') }} />
+        <Tabs.Screen name="account" options={{ href: null }} />
         <Tabs.Screen name="index" options={{ href: null }} />
-        <Tabs.Screen name="people" options={{ href: null }} />
         <Tabs.Screen name="details" options={{ href: null }} />
         <Tabs.Screen name="checkups" options={{ href: null }} />
         <Tabs.Screen name="timeline" options={{ href: null }} />

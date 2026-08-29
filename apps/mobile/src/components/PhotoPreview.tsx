@@ -13,13 +13,14 @@ import type { ProtectedImageSource } from '../api/image-source.ts'
 import type { ArtifactGeoPin } from '../api/model.ts'
 import { ProtectedImage } from './ProtectedImage.tsx'
 
-export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLabel, onAction }: {
+export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLabel, actionIcon = 'create-outline', onAction }: {
   readonly onClose: () => void
   readonly source: ProtectedImageSource
   readonly title: string
   readonly detail?: string
   readonly geoPin?: ArtifactGeoPin | null
   readonly actionLabel?: string
+  readonly actionIcon?: keyof typeof Ionicons.glyphMap
   readonly onAction?: () => void
 }) {
   return (
@@ -53,7 +54,7 @@ export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLab
               onPress={onAction}
               style={({ pressed }) => [styles.action, pressed && styles.pressed]}
             >
-              <Ionicons name="create-outline" size={18} color={colors.lime} />
+              <Ionicons name={actionIcon} size={18} color={colors.lime} />
               <Text style={styles.actionText}>{actionLabel}</Text>
             </Pressable>
           ) : null}

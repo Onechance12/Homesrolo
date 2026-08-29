@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
+import { router } from 'expo-router'
 import type { ArtifactGeoPin, ArtifactKind, DeviceFile, ResolvedArtifactRecord } from '../api/model.ts'
 import { friendlyError } from '../api/errors.ts'
 import { useSession } from '../auth/SessionProvider.tsx'
@@ -11,6 +12,8 @@ import {
   PHOTO_PHASE_LABEL,
   type PhotoMetadataDraft,
 } from '../home/photo-metadata.ts'
+import { homeLibraryEntries } from '../home/library.ts'
+import { homeLibraryEntryCards, type HomesroloCard } from '../home/rolodex.ts'
 import { useResource } from '../hooks/useResource.ts'
 import { pickDocument, pickPhoto } from '../native/pickers.ts'
 import { captureConfirmedDeviceLocation } from '../native/current-location.ts'
@@ -22,18 +25,27 @@ import { PhotoPreview } from './PhotoPreview.tsx'
 import { PhotoUploadDetails } from './PhotoUploadDetails.tsx'
 import { ArtifactFileCard } from './ArtifactFileCard.tsx'
 import { ProtectedImage } from './ProtectedImage.tsx'
+import { RoloDeck, type RoloDeckDivider } from './RoloDeck.tsx'
 
-const PHOTO_PAGE_SIZE = 10
 const FILE_PAGE_SIZE = 8
+
+const PROJECT_PHOTO_DIVIDERS: readonly RoloDeckDivider[] = [
+  { id: 'all', label: 'All', includes: card => card.kind === 'photo' },
+  { id: 'before', label: 'Before', includes: card => card.kind === 'photo' && card.data.phase === 'before' },
+  { id: 'during', label: 'During', includes: card => card.kind === 'photo' && card.data.phase === 'during' },
+  { id: 'after', label: 'After', includes: card => card.kind === 'photo' && card.data.phase === 'after' },
+  { id: 'reference', label: 'Reference', includes: card => card.kind === 'photo' && card.data.phase === 'reference' },
+]
 
 type PendingPhoto = {
   readonly file: DeviceFile
   readonly source: 'camera' | 'library'
 }
 
-export function ProjectFiles({ homeId, projectRef }: {
+export function ProjectFiles({ homeId, projectRef, projectTitle }: {
   readonly homeId: string
   readonly projectRef: string
+  readonly projectTitle: string
 }) {
   const { state: auth, api, previewMode } = useSession()
   const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
@@ -50,11 +62,13 @@ export function ProjectFiles({ homeId, projectRef }: {
   const [locationBusy, setLocationBusy] = useState(false)
   const [locationMessage, setLocationMessage] = useState<string | null>(null)
   const [previewPhotoRef, setPreviewPhotoRef] = useState<string | null>(null)
-  const [photoLimit, setPhotoLimit] = useState(PHOTO_PAGE_SIZE)
+  const [photoQuery, setPhotoQuery] = useState('')
+  const [photoPhase, setPhotoPhase] = useState('all')
   const [fileLimit, setFileLimit] = useState(FILE_PAGE_SIZE)
 
   useEffect(() => {
-    setPhotoLimit(PHOTO_PAGE_SIZE)
+    setPhotoQuery('')
+    setPhotoPhase('all')
     setFileLimit(FILE_PAGE_SIZE)
     setPreviewPhotoRef(null)
     setPendingPhoto(null)
@@ -206,6 +220,10 @@ export function ProjectFiles({ homeId, projectRef }: {
       || right.createdAt.localeCompare(left.createdAt)
       || right.artifactRef.localeCompare(left.artifactRef)
     ))
+  const photoEntries = homeLibraryEntries(photos, [], []).map(entry => entry.source === 'uploads'
+    ? { ...entry, projectLabel: projectTitle, searchText: `${entry.searchText} ${projectTitle}` }
+    : entry)
+  const photoCards = homeLibraryEntryCards(photoEntries)
   const files = artifacts.filter(item => item.kind !== 'photo')
   const previewPhoto = previewPhotoRef
     ? photos.find(photo => photo.artifactRef === previewPhotoRef) ?? null
@@ -248,40 +266,30 @@ export function ProjectFiles({ homeId, projectRef }: {
       ) : null}
 
       {photos.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
-          {photos.slice(0, photoLimit).map(photo => (
-            <Pressable
-              key={photo.artifactRef}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${photo.displayName}`}
-              onPress={() => setPreviewPhotoRef(photo.artifactRef)}
-              style={({ pressed }) => [styles.photoCard, pressed && styles.pressed]}
-            >
-              <ProtectedImage source={api.artifactPreviewSource(homeId, photo.artifactRef)} style={styles.photo} resizeMode="cover" />
-              <View style={styles.photoCopy}>
-                <Text style={styles.photoName} numberOfLines={2}>{photo.displayName}</Text>
-                <View style={styles.photoFacts}>
-                  <Text style={styles.phaseFact}>{photo.phase ? PHOTO_PHASE_LABEL[photo.phase] : 'Unsorted'}</Text>
-                  {photo.geoPin ? (
-                    <View style={styles.pinFact}>
-                      <Ionicons name="location-outline" size={11} color={colors.aqua} />
-                      <Text style={styles.factText}>Pinned</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.dateFact}>{photo.observedOn ? 'Observed' : 'Saved'} {friendlyPhotoDate(photo.observedOn ?? photo.createdAt.slice(0, 10))}</Text>
-                <Text style={styles.areaFact} numberOfLines={1}>{photo.areaLabel ?? 'Area not added'}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
-      {photos.length > photoLimit ? (
-        <Button
-          label={`Show ${Math.min(PHOTO_PAGE_SIZE, photos.length - photoLimit)} more photos`}
-          accessibilityHint={`${photos.length - photoLimit} more project photos are available`}
-          onPress={() => setPhotoLimit(current => current + PHOTO_PAGE_SIZE)}
-          quiet
+        <RoloDeck
+          testID="project-photo-rolo-deck"
+          cards={photoCards}
+          axis="horizontal"
+          variant="full"
+          cardHeight={430}
+          peekSize={30}
+          query={photoQuery}
+          onQueryChange={setPhotoQuery}
+          selectedDivider={photoPhase}
+          onSelectedDividerChange={setPhotoPhase}
+          dividers={PROJECT_PHOTO_DIVIDERS}
+          searchPlaceholder="Search this work’s photos"
+          emptyTitle="No photos match"
+          emptyDetail="Try another stage or search term."
+          renderMedia={card => card.kind === 'photo' ? (
+            <ProtectedImage
+              source={api.artifactPreviewSource(homeId, card.data.artifactRef)}
+              style={styles.deckPhoto}
+              resizeMode="cover"
+            />
+          ) : null}
+          onOpen={openPhotoCard}
+          onAskRolo={askRoloAboutPhoto}
         />
       ) : null}
       {files.slice(0, fileLimit).map(file => (
@@ -316,11 +324,37 @@ export function ProjectFiles({ homeId, projectRef }: {
             `${previewPhoto.observedOn ? 'Observed' : 'Saved'} ${friendlyPhotoDate(photoOrderDate(previewPhoto))}`,
           ].filter(Boolean).join(' · ')}
           geoPin={previewPhoto.geoPin}
+          actionLabel="Ask Rolo"
+          actionIcon="chatbubble-ellipses-outline"
+          onAction={() => openPhotoInRolo(previewPhoto.artifactRef)}
           onClose={() => setPreviewPhotoRef(null)}
         />
       ) : null}
     </View>
   )
+
+  function openPhotoCard(card: HomesroloCard) {
+    if (card.kind !== 'photo') return
+    setPreviewPhotoRef(card.data.artifactRef)
+  }
+
+  function askRoloAboutPhoto(card: HomesroloCard) {
+    if (card.kind !== 'photo') return
+    openPhotoInRolo(card.data.artifactRef)
+  }
+
+  function openPhotoInRolo(artifactRef: string) {
+    setPreviewPhotoRef(null)
+    router.push({
+      pathname: '/home/[homeId]/rolo',
+      params: {
+        homeId,
+        projectRef,
+        artifactRef,
+        prompt: 'Help me review this saved photo in the context of this work. What does it show, what can’t it confirm, and what should I do next?',
+      },
+    })
+  }
 }
 
 function photoOrderDate(photo: ResolvedArtifactRecord): string {
@@ -364,17 +398,7 @@ const styles = StyleSheet.create({
   actionDisabled: { opacity: 0.48 },
   actionText: { color: colors.cream, fontSize: 11, lineHeight: 14, fontWeight: '800', textAlign: 'center' },
   pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
-  photoStrip: { gap: 10, paddingRight: space.md },
-  photoCard: { width: 184, borderRadius: radius.medium, overflow: 'hidden', backgroundColor: colors.inkRaised, borderWidth: 1, borderColor: colors.line },
-  photo: { width: 184, height: 132, backgroundColor: colors.inkSoft },
-  photoCopy: { gap: 5, padding: 10 },
-  photoName: { color: colors.cream, fontSize: 12, lineHeight: 16, fontWeight: '800' },
-  photoFacts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7 },
-  phaseFact: { color: colors.ink, backgroundColor: colors.lime, borderRadius: 999, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, fontSize: 9, lineHeight: 12, fontWeight: '900', textTransform: 'uppercase' },
-  pinFact: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  factText: { color: colors.aqua, fontSize: 9, lineHeight: 12, fontWeight: '800' },
-  dateFact: { color: colors.slate, fontSize: 10, lineHeight: 14, fontWeight: '700' },
-  areaFact: { color: colors.smoke, fontSize: 10, lineHeight: 14 },
+  deckPhoto: { width: '100%', height: '100%', backgroundColor: colors.inkSoft },
   savedNotice: { color: colors.mint, fontSize: 12, lineHeight: 17, paddingHorizontal: 2 },
   empty: { color: colors.slate, fontSize: 13, lineHeight: 19, paddingHorizontal: 2 },
 })
