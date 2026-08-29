@@ -74,9 +74,6 @@ export default function WorkScreen() {
     return workRecordCards(ordered)
   }, [resource.state])
   const compactDeck = window.width < 600 || window.height < 780
-  const deckCardHeight = compactDeck
-    ? Math.max(248, Math.min(360, Math.round(window.height - 390)))
-    : Math.max(406, Math.min(470, Math.round(window.height - 440)))
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
@@ -192,7 +189,7 @@ export default function WorkScreen() {
             searchPlaceholder="Find a project, repair, service, or company"
             emptyTitle={emptyDeckTitle(filter, query)}
             emptyDetail="Try another tab, clear the search, or add work with Rolo."
-            cardHeight={deckCardHeight}
+            fillAvailable
             peekSize={compactDeck ? 24 : 38}
             onOpen={openWorkCard}
             onAskRolo={askRoloAboutWork}

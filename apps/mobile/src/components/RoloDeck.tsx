@@ -63,6 +63,8 @@ export interface RoloDeckProps extends UseRoloDeckSearchOptions {
   readonly emptyDetail?: string | undefined
   readonly cardHeight?: number | undefined
   readonly peekSize?: number | undefined
+  /** Let a vertical deck turn the remaining screen into one tall, phone-first card. */
+  readonly fillAvailable?: boolean | undefined
   readonly reduceMotion?: boolean | undefined
   readonly style?: StyleProp<ViewStyle> | undefined
   readonly testID?: string | undefined
@@ -70,6 +72,8 @@ export interface RoloDeckProps extends UseRoloDeckSearchOptions {
 
 const ALL_DIVIDER = 'all'
 const CARD_GAP = 12
+const COMPACT_CARD_MIN_HEIGHT = 192
+const FULL_CARD_MIN_HEIGHT = 406
 
 /**
  * Controlled when `query` / `selectedDivider` are supplied, and stateful when
@@ -138,6 +142,7 @@ export function RoloDeck({
   emptyDetail = 'Try another divider or tell Rolo what this home should remember.',
   cardHeight,
   peekSize = 38,
+  fillAvailable = false,
   reduceMotion,
   style,
   testID,
@@ -154,19 +159,33 @@ export function RoloDeck({
   )
   const search = useRoloDeckSearch(cards, { ...searchOptions, dividers })
   const listRef = useRef<FlatList<HomesroloCard>>(null)
+  const previousItemInterval = useRef(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [deckWidth, setDeckWidth] = useState(0)
+  const [deckViewportHeight, setDeckViewportHeight] = useState(0)
+  const requestedPeek = Math.max(20, Math.min(64, Math.round(peekSize)))
+  const minimumCardHeight = variant === 'compact'
+    ? COMPACT_CARD_MIN_HEIGHT
+    : FULL_CARD_MIN_HEIGHT
+  const availablePeek = !horizontal && fillAvailable && deckViewportHeight > 0
+    ? Math.max(0, deckViewportHeight - minimumCardHeight - CARD_GAP)
+    : requestedPeek
+  const resolvedPeek = Math.min(requestedPeek, availablePeek)
   const resolvedCardHeight = Math.round(cardHeight ?? (
-    variant === 'compact'
-      ? Math.min(280, Math.max(248, window.height * 0.31))
-      : Math.min(560, Math.max(410, window.height * 0.61))
+    !horizontal && fillAvailable && deckViewportHeight > 0
+      ? Math.max(minimumCardHeight, deckViewportHeight - CARD_GAP - resolvedPeek)
+      : variant === 'compact'
+        ? Math.min(280, Math.max(248, window.height * 0.31))
+        : Math.min(560, Math.max(410, window.height * 0.61))
   ))
-  const resolvedPeek = Math.max(20, Math.min(64, Math.round(peekSize)))
   const resolvedCardWidth = Math.max(260, Math.round(
     (deckWidth || Math.max(300, window.width - (space.lg * 2))) - resolvedPeek,
   ))
   const itemInterval = (horizontal ? resolvedCardWidth : resolvedCardHeight) + CARD_GAP
   const viewportHeight = resolvedCardHeight + (horizontal ? 0 : resolvedPeek)
+  const fixedSlotHeight = search.visibleCards.length === 0
+    ? Math.max(300, viewportHeight)
+    : viewportHeight
   const safeActiveIndex = Math.min(activeIndex, Math.max(0, search.visibleCards.length - 1))
 
   const cardIdentity = search.visibleCards.map(card => card.cardRef).join('\n')
@@ -178,6 +197,19 @@ export function RoloDeck({
   useEffect(() => {
     onActiveCardChange?.(search.visibleCards[safeActiveIndex] ?? null, safeActiveIndex)
   }, [onActiveCardChange, safeActiveIndex, search.visibleCards])
+
+  useEffect(() => {
+    if (previousItemInterval.current === 0) {
+      previousItemInterval.current = itemInterval
+      return
+    }
+    if (previousItemInterval.current === itemInterval) return
+    previousItemInterval.current = itemInterval
+    listRef.current?.scrollToOffset({
+      offset: safeActiveIndex * itemInterval,
+      animated: false,
+    })
+  }, [itemInterval, safeActiveIndex])
 
   const updateActiveIndex = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = horizontal
@@ -191,8 +223,15 @@ export function RoloDeck({
   }, [horizontal, itemInterval, search.visibleCards.length])
 
   const rememberDeckWidth = useCallback((event: LayoutChangeEvent) => {
-    const next = Math.round(event.nativeEvent.layout.width)
-    if (next > 0) setDeckWidth(current => current === next ? current : next)
+    const nextWidth = Math.round(event.nativeEvent.layout.width)
+    if (nextWidth > 0) setDeckWidth(current => current === nextWidth ? current : nextWidth)
+  }, [])
+
+  const rememberDeckViewport = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height)
+    if (nextHeight > 0) {
+      setDeckViewportHeight(current => current === nextHeight ? current : nextHeight)
+    }
   }, [])
 
   const openPage = useCallback((index: number) => {
@@ -205,7 +244,11 @@ export function RoloDeck({
   }, [itemInterval, motionReduced, search.visibleCards.length])
 
   return (
-    <View testID={testID} onLayout={rememberDeckWidth} style={[styles.root, style]}>
+    <View
+      testID={testID}
+      onLayout={rememberDeckWidth}
+      style={[styles.root, fillAvailable && !horizontal && styles.rootFill, style]}
+    >
       <View style={styles.searchBar}>
         <Ionicons name="search" size={19} color={colors.aqua} />
         <TextInput
@@ -261,14 +304,20 @@ export function RoloDeck({
         </ScrollView>
       </View>
 
-      {search.visibleCards.length === 0 ? (
-        <View style={[styles.empty, { height: viewportHeight }]}>
-          <View style={styles.emptyMark}><Ionicons name="albums-outline" size={27} color={colors.aqua} /></View>
-          <Text accessibilityRole="header" style={styles.emptyTitle}>{emptyTitle}</Text>
-          <Text style={styles.emptyDetail}>{emptyDetail}</Text>
-        </View>
-      ) : (
-        <>
+      <View
+        onLayout={rememberDeckViewport}
+        style={[
+          styles.listSlot,
+          fillAvailable && !horizontal ? styles.listSlotFill : { height: fixedSlotHeight },
+        ]}
+      >
+        {search.visibleCards.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyMark}><Ionicons name="albums-outline" size={27} color={colors.aqua} /></View>
+            <Text accessibilityRole="header" style={styles.emptyTitle}>{emptyTitle}</Text>
+            <Text style={styles.emptyDetail}>{emptyDetail}</Text>
+          </View>
+        ) : (
           <FlatList
             ref={listRef}
             accessibilityLabel="Home Rolodex cards"
@@ -303,7 +352,10 @@ export function RoloDeck({
               length: itemInterval,
               offset: itemInterval * index,
             })}
-            style={[styles.list, { height: viewportHeight }]}
+            style={[
+              styles.list,
+              fillAvailable && !horizontal ? styles.listFill : { height: viewportHeight },
+            ]}
             contentContainerStyle={horizontal ? { paddingRight: resolvedPeek } : { paddingBottom: resolvedPeek }}
             horizontal={horizontal}
             scrollEnabled={search.visibleCards.length > 1}
@@ -323,13 +375,15 @@ export function RoloDeck({
             windowSize={5}
             removeClippedSubviews={false}
           />
-          <PagingIndicator
-            activeIndex={safeActiveIndex}
-            count={search.visibleCards.length}
-            onSelect={openPage}
-          />
-        </>
-      )}
+        )}
+      </View>
+      {search.visibleCards.length > 0 ? (
+        <PagingIndicator
+          activeIndex={safeActiveIndex}
+          count={search.visibleCards.length}
+          onSelect={openPage}
+        />
+      ) : null}
     </View>
   )
 }
@@ -412,6 +466,9 @@ function visiblePageIndexes(count: number, active: number): readonly number[] {
 
 const styles = StyleSheet.create({
   root: { width: '100%', gap: space.sm },
+  rootFill: { flex: 1, minHeight: 0 },
+  listSlot: { width: '100%' },
+  listSlotFill: { flex: 1, minHeight: 0 },
   searchBar: {
     minHeight: 50,
     paddingHorizontal: 14,
@@ -442,9 +499,11 @@ const styles = StyleSheet.create({
   dividerText: { color: colors.slate, fontSize: 12, fontWeight: '800' },
   dividerTextSelected: { color: colors.lime },
   list: { width: '100%', overflow: 'visible' },
+  listFill: { flex: 1, minHeight: 0 },
   deckItem: { width: '100%' },
   deckItemBehind: { opacity: 0.68, transform: [{ scale: 0.975 }] },
   empty: {
+    flex: 1,
     minHeight: 300,
     padding: space.xl,
     alignItems: 'center',
