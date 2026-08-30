@@ -533,7 +533,7 @@ export default function MyHomeScreen() {
     return null
   }
 
-  function renderRoloMedia(card: HomesroloCard) {
+  function renderRoloMedia(card: HomesroloCard, variant: 'compact' | 'full') {
     const photo = cardCoverPhoto(card)
     if (!photo) return null
     return (
@@ -542,7 +542,7 @@ export default function MyHomeScreen() {
           ? api.artifactPreviewSource(homeId, photo.artifact.artifactRef)
           : api.homeCheckupPhotoSource(homeId, photo.checkup.photoRef, 'thumbnail')}
         style={styles.roloMedia}
-        resizeMode="cover"
+        resizeMode={variant === 'compact' ? 'contain' : 'cover'}
       />
     )
   }
@@ -1186,7 +1186,12 @@ function requestedHomeLibrary(value: string | string[] | undefined): HomeLibrary
 
 const styles = StyleSheet.create({
   roloSafe: { flex: 1, backgroundColor: colors.ink },
-  roloLoading: { flex: 1, justifyContent: 'center', paddingHorizontal: space.lg, paddingBottom: space.xl },
+  roloLoading: {
+    flex: 1,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
+  },
   roloPage: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
   roloHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   roloHeaderCopy: { flex: 1, minWidth: 0, gap: 1 },
@@ -1208,7 +1213,7 @@ const styles = StyleSheet.create({
   surfaceTabSelected: { backgroundColor: colors.lime },
   surfaceTabText: { color: colors.slate, fontSize: 11, lineHeight: 15, fontWeight: '900' },
   surfaceTabTextSelected: { color: colors.ink },
-  roloMedia: { width: '100%', height: '100%', minHeight: 76, backgroundColor: colors.inkSoft },
+  roloMedia: { width: '100%', height: '100%', backgroundColor: colors.inkSoft },
   privacyRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 2 },
   privateLine: { color: colors.slate, flex: 1, fontSize: 12, lineHeight: 17 },
   emptyLine: { color: colors.smoke, fontSize: 13, lineHeight: 18, paddingHorizontal: 2 },

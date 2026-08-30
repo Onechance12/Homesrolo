@@ -69,7 +69,7 @@ test('My Rolo exposes Browse, Add, and Library modes around one searchable visua
   assert.match(myRolo, /<RoloDeck[\s\S]*cards=\{rolo\.cards\}[\s\S]*dividers=\{ROLO_DIVIDERS\}/)
   assert.match(myRolo, /renderMedia=\{renderRoloMedia\}/)
   assert.match(myRolo, /searchPlaceholder="Find anything your home remembers"/)
-  assert.match(myRolo, /function renderRoloMedia\(card: HomesroloCard\)[\s\S]*<ProtectedImage/)
+  assert.match(myRolo, /function renderRoloMedia\(card: HomesroloCard, variant: 'compact' \| 'full'\)[\s\S]*<ProtectedImage/)
 })
 
 test('an exact My Rolo photo bridge is revalidated inside Rolo before consent', () => {
