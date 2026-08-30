@@ -23,6 +23,8 @@ function record(overrides: Partial<WorkRecord> = {}): WorkRecord {
     category: 'hvac',
     status: 'completed',
     occurredOn: '2026-08-20',
+    assignedMembershipRef: null,
+    dueOn: null,
     summary: 'Seasonal service completed.',
     professionalLabel: 'Comfort Co.',
     revision: 3,
@@ -44,7 +46,7 @@ test('finds only the exact work record within the requested home', () => {
 })
 
 test('keeps every supported work kind in the native editor', () => {
-  assert.deepEqual(WORK_KINDS, ['project', 'issue', 'repair', 'service', 'incident'])
+  assert.deepEqual(WORK_KINDS, ['project', 'issue', 'repair', 'service', 'incident', 'task'])
 })
 
 test('normalizes editable text and represents cleared optional fields as null', () => {
@@ -62,11 +64,39 @@ test('normalizes editable text and represents cleared optional fields as null', 
     category: 'hvac',
     status: 'completed',
     occurredOn: null,
+    assignedMembershipRef: null,
+    dueOn: null,
     summary: null,
     professionalLabel: 'New Comfort Co.',
   })
   assert.equal(workHasChanges(work, draft), true)
   assert.equal(workHasChanges(work, draftFromWork(work)), false)
+})
+
+test('round-trips exact-home assignment and due date through an editable task draft', () => {
+  const assignedMembershipRef = `hmbr_${'m'.repeat(43)}`
+  const task = record({
+    workKind: 'task',
+    status: 'planned',
+    assignedMembershipRef,
+    dueOn: '2026-09-05',
+  })
+  const draft = draftFromWork(task)
+  assert.equal(draft.assignedMembershipRef, assignedMembershipRef)
+  assert.equal(draft.dueOn, '2026-09-05')
+  assert.deepEqual(fieldsFromDraft(draft), {
+    title: task.title,
+    workKind: 'task',
+    category: 'hvac',
+    status: 'planned',
+    occurredOn: '2026-08-20',
+    assignedMembershipRef,
+    dueOn: '2026-09-05',
+    summary: task.summary,
+    professionalLabel: task.professionalLabel,
+  })
+  assert.equal(workHasChanges(task, draft), false)
+  assert.equal(workHasChanges(task, { ...draft, dueOn: '2026-09-06' }), true)
 })
 
 test('accepts blank or real work dates and rejects impossible calendar dates', () => {

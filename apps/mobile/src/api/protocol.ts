@@ -6,6 +6,7 @@ const HOME_REF_PATTERN = /^hhom_[A-Za-z0-9_-]{43}$/
 const PROJECT_REF_PATTERN = /^hprj_[A-Za-z0-9_-]{43}$/
 const ARTIFACT_REF_PATTERN = /^hart_[A-Za-z0-9_-]{43}$/
 const PHOTO_REF_PATTERN = /^hpho_[A-Za-z0-9_-]{43}$/
+const HOUSEHOLD_MEMBERSHIP_REF_PATTERN = /^hmbr_[A-Za-z0-9_-]{43}$/
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
 
 export const HOMESROLO_CLIENT_CONTRACTS = ['native.v1', 'pwa.v1'] as const
@@ -52,6 +53,16 @@ export function isArtifactRef(value: unknown): value is string {
 
 export function isPhotoRef(value: unknown): value is string {
   return typeof value === 'string' && PHOTO_REF_PATTERN.test(value)
+}
+
+export function isHouseholdMembershipRef(value: unknown): value is string {
+  return typeof value === 'string' && HOUSEHOLD_MEMBERSHIP_REF_PATTERN.test(value)
+}
+
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 /** Keeps the native vision boundary to one exact, consented private artifact. */
@@ -221,7 +232,7 @@ function validRoloDraft(draft: RoloWorkDraft | null): boolean {
   const nullableText = (value: string | null, maximum: number) => value === null
     || (value.trim().length >= 1 && value.trim().length <= maximum
       && !CONTROL_CHARACTERS.test(value))
-  return ['project', 'issue', 'repair', 'service', 'incident'].includes(draft.kind)
+  return ['project', 'issue', 'repair', 'service', 'incident', 'task'].includes(draft.kind)
     && draft.title.trim().length >= 1 && draft.title.trim().length <= 120
     && !CONTROL_CHARACTERS.test(draft.title)
     && [
@@ -229,7 +240,10 @@ function validRoloDraft(draft: RoloWorkDraft | null): boolean {
       'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
     ].includes(draft.category)
     && ['planned', 'in_progress', 'completed', 'cancelled'].includes(draft.status)
-    && (draft.occurredOn === null || /^\d{4}-\d{2}-\d{2}$/.test(draft.occurredOn))
+    && (draft.occurredOn === null || isCalendarDate(draft.occurredOn))
+    && (draft.assignedMembershipRef === null
+      || isHouseholdMembershipRef(draft.assignedMembershipRef))
+    && (draft.dueOn === null || isCalendarDate(draft.dueOn))
     && draft.summary.trim().length <= 2_000
     && !CONTROL_CHARACTERS.test(draft.summary)
     && nullableText(draft.professionalLabel, 160)

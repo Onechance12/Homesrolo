@@ -1,6 +1,7 @@
 import type {
   ArtifactPhotoPhase,
   HomeCheckupArea,
+  HouseholdMember,
   WorkCategory,
   WorkKind,
   WorkRecord,
@@ -53,7 +54,7 @@ export type HomesroloCardDestination =
   | {
       readonly kind: 'work_index'
       readonly homeRef: string
-      readonly filter: 'all' | 'open' | 'care' | 'completed'
+      readonly filter: 'all' | 'open' | 'household' | 'assigned_to_me' | 'care' | 'completed'
     }
 
 /** Exact user actions remain separate from the card's broader navigation context. */
@@ -101,6 +102,8 @@ export interface HomesroloWorkCardData {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn: string | null
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string | null
   readonly professionalLabel: string | null
   readonly archived: boolean
 }
@@ -227,7 +230,7 @@ const CARD_KINDS = new Set<HomesroloCardKind>([
 const CARD_GROUPS = new Set<HomesroloCardGroup>(['work', 'home', 'people', 'saved'])
 const WORK_SECTIONS = new Set<HomesroloWorkSection>(['overview', 'plan', 'files', 'bids', 'updates'])
 const LIBRARY_FILTERS = new Set<HomesroloLibraryDestinationFilter>(['all', 'photos', 'documents', 'warranties'])
-const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident'])
+const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident', 'task'])
 const WORK_CATEGORIES = new Set<WorkCategory>([
   'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
   'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
@@ -279,13 +282,20 @@ export function isHomesroloCardRef(value: unknown): value is HomesroloCardRef {
   }
 }
 
-export function workRecordCard(work: WorkRecord): HomesroloWorkCard {
+export function workRecordCard(
+  work: WorkRecord,
+  householdMembers: readonly HouseholdMember[] = [],
+): HomesroloWorkCard {
   assertHomeRef(work.homeRef)
   assertProjectRef(work.projectRef)
   const destination: HomesroloCardDestination = {
     kind: 'work', homeRef: work.homeRef, projectRef: work.projectRef, section: 'overview',
   }
   const meta = compactText([
+    work.assignedMembershipRef
+      ? `Assigned to ${householdMemberLabel(work.homeRef, work.assignedMembershipRef, householdMembers)}`
+      : work.workKind === 'task' ? 'Unassigned' : null,
+    work.dueOn ? `Due ${cardDateLabel(work.dueOn)}` : null,
     statusLabel[work.status],
     work.occurredOn ? cardDateLabel(work.occurredOn) : null,
     work.professionalLabel,
@@ -304,6 +314,10 @@ export function workRecordCard(work: WorkRecord): HomesroloWorkCard {
     searchText: searchText([
       work.title, work.summary, work.professionalLabel, work.workKind, kindLabel[work.workKind],
       work.category, categoryLabel[work.category], work.status, statusLabel[work.status], work.occurredOn,
+      work.assignedMembershipRef, work.dueOn,
+      work.assignedMembershipRef
+        ? householdMemberLabel(work.homeRef, work.assignedMembershipRef, householdMembers)
+        : null,
     ]),
     sortKey: work.updatedAt,
     destination,
@@ -315,6 +329,8 @@ export function workRecordCard(work: WorkRecord): HomesroloWorkCard {
       category: work.category,
       status: work.status,
       occurredOn: work.occurredOn,
+      assignedMembershipRef: work.assignedMembershipRef,
+      dueOn: work.dueOn,
       professionalLabel: work.professionalLabel,
       archived: work.archived,
     },
@@ -322,8 +338,21 @@ export function workRecordCard(work: WorkRecord): HomesroloWorkCard {
 }
 
 /** The default deck excludes archived work while preserving the single-record projector. */
-export function workRecordCards(work: readonly WorkRecord[]): readonly HomesroloWorkCard[] {
-  return work.filter(item => !item.archived).map(workRecordCard)
+export function workRecordCards(
+  work: readonly WorkRecord[],
+  householdMembers: readonly HouseholdMember[] = [],
+): readonly HomesroloWorkCard[] {
+  return work.filter(item => !item.archived).map(item => workRecordCard(item, householdMembers))
+}
+
+function householdMemberLabel(
+  homeRef: string,
+  membershipRef: string,
+  members: readonly HouseholdMember[],
+): string {
+  const member = members.find(item => item.homeRef === homeRef
+    && item.membershipRef === membershipRef && item.state === 'active')
+  return member?.isCurrentPrincipal ? 'you' : member?.displayLabel ?? 'household'
 }
 
 export function homeLibraryEntryCard(entry: HomeLibraryEntry): HomesroloPhotoCard
@@ -792,7 +821,7 @@ function isCardDestination(value: unknown): value is HomesroloCardDestination {
   if (candidate.kind === 'work_index') {
     const object = exactObject(candidate, ['kind', 'homeRef', 'filter'])
     return Boolean(object && isHomeRef(object.homeRef)
-      && ['all', 'open', 'care', 'completed'].includes(String(object.filter)))
+      && ['all', 'open', 'household', 'assigned_to_me', 'care', 'completed'].includes(String(object.filter)))
   }
   if (candidate.kind === 'home_details' || candidate.kind === 'timeline' || candidate.kind === 'people') {
     const object = exactObject(candidate, ['kind', 'homeRef'])
@@ -998,7 +1027,7 @@ function sameCardRefs(
 
 function isWorkCardData(value: unknown, projectRef: unknown): value is HomesroloWorkCardData {
   const data = exactObject(value, [
-    'projectRef', 'workKind', 'category', 'status', 'occurredOn',
+    'projectRef', 'workKind', 'category', 'status', 'occurredOn', 'assignedMembershipRef', 'dueOn',
     'professionalLabel', 'archived',
   ])
   return Boolean(data
@@ -1008,6 +1037,10 @@ function isWorkCardData(value: unknown, projectRef: unknown): value is Homesrolo
     && WORK_CATEGORIES.has(data.category as WorkCategory)
     && WORK_STATUSES.has(data.status as WorkStatus)
     && (data.occurredOn === null || validText(data.occurredOn, 10, true))
+    && (data.assignedMembershipRef === null
+      || (typeof data.assignedMembershipRef === 'string'
+        && /^hmbr_[A-Za-z0-9_-]{43}$/.test(data.assignedMembershipRef)))
+    && (data.dueOn === null || validText(data.dueOn, 10, true))
     && (data.professionalLabel === null || validText(data.professionalLabel, 160, true))
     && typeof data.archived === 'boolean')
 }

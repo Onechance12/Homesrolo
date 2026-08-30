@@ -67,6 +67,10 @@ export function WorkCard({ work, compact = false }: {
         <View style={styles.footer}>
           <Text style={styles.footerText} numberOfLines={1}>
             {[
+              work.workKind === 'task'
+                ? work.assignedMembershipRef ? 'Assigned to household' : 'Unassigned'
+                : null,
+              work.dueOn ? `Due ${displayDate(work.dueOn)}` : null,
               work.occurredOn ? displayDate(work.occurredOn) : null,
               work.professionalLabel,
             ].filter(Boolean).join(' · ') || (work.status === 'completed' ? 'Saved to this home' : 'Open work')}

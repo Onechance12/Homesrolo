@@ -410,13 +410,15 @@ test('only a fresh controller grant may record intake or update the private Home
   })
   assert.equal(requireHomeownerActionGrant(profileRead, 'home_record.read')?.action,
     'home_record.read')
-  assert.deepEqual(authorizeHomeownerWorkspace({
+  const viewerRead = authorizeHomeownerWorkspace({
     principal,
     membership: { ...membership, role: 'viewer' },
     requestedHomeRef: homeRef,
     action: 'home_record.read',
     recheckedAt: now,
-  }), { authorized: false, reason: 'role_denied' })
+  })
+  assert.equal(requireHomeownerActionGrant(viewerRead, 'home_record.read')?.action,
+    'home_record.read')
 })
 
 test('project commands use the runtime vocabulary and reject impossible dates', () => {

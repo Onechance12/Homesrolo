@@ -440,7 +440,7 @@ test('generic exact-home read preserves the address-free v1 projection', async (
     'the exact address never enters the home-list projection')
 })
 
-test('dedicated Home Record read is controller-only and returns the private profile', async () => {
+test('dedicated Home Record read is shared read-only while the private profile stays bounded', async () => {
   let observedAction: string | null = null
   const profilePort: HomeownerHomeRecordProfilePort = {
     async readHomeRecordProfile(grant) {
@@ -457,18 +457,15 @@ test('dedicated Home Record read is controller-only and returns the private prof
   assert.equal(observedAction, 'home_record.read')
 
   for (const role of ['member', 'viewer'] as const) {
-    const deniedRepository = repository({
+    const sharedRepository = repository({
       async readMembership() { return { ...membership, role } },
     })
-    await assert.rejects(
-      service({
-        repository: deniedRepository,
-        persistence: true,
-        homeRecordProfile: profilePort,
-      })
-        .readHomeRecord(context, homeRef),
-      (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
-    )
+    const shared = await service({
+      repository: sharedRepository,
+      persistence: true,
+      homeRecordProfile: profilePort,
+    }).readHomeRecord(context, homeRef)
+    assert.equal(shared.address?.line1, '123 Main Street')
   }
 })
 
@@ -614,7 +611,7 @@ test('artifact metadata reads are exact-home and never expose storage or integri
     'exact device coordinates remain controller-only even when artifact metadata is shared')
 })
 
-test('artifact metadata update is controller-only, revision-backed, and may organize a member upload', async () => {
+test('artifact metadata update is household-editable, revision-backed, and viewer denied', async () => {
   const uploadedByMember = {
     ...artifact,
     artifactRef: `hart_${body('g')}`,
@@ -711,17 +708,35 @@ test('artifact metadata update is controller-only, revision-backed, and may orga
   assert.equal(observed[1]?.command.requestedAt, clock,
     'a later server execution time does not change the stored retry result')
 
-  await assert.rejects(
-    service({
-      uploads: true,
-      artifactMetadata: metadataPort,
-      repository: repository({
-        async readMembership() { return { ...membership, role: 'member' } },
-        async listArtifactMetadata() { return [uploadedByMember] },
-      }),
-    }).updateArtifactMetadata(context, homeRef, uploadedByMember.artifactRef, input),
-    (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden',
-  )
+  const memberInput = {
+    ...input,
+    commandRef: `hcmd_${body('m')}`,
+    expectedRevision: 2,
+  }
+  const memberUpdated = await service({
+    uploads: true,
+    artifactMetadata: metadataPort,
+    repository: repository({
+      async readMembership() { return { ...membership, role: 'member' } },
+      async listArtifactMetadata() { return [stored] },
+      async listProjects() { return [project] },
+    }),
+  }).updateArtifactMetadata(context, homeRef, uploadedByMember.artifactRef, memberInput)
+  assert.equal(memberUpdated.revision, 3)
+
+  await assert.rejects(service({
+    uploads: true,
+    artifactMetadata: metadataPort,
+    repository: repository({
+      async readMembership() { return { ...membership, role: 'viewer' } },
+      async listArtifactMetadata() { return [stored] },
+      async listProjects() { return [project] },
+    }),
+  }).updateArtifactMetadata(context, homeRef, uploadedByMember.artifactRef, {
+    ...memberInput,
+    commandRef: `hcmd_${body('v')}`,
+    expectedRevision: 3,
+  }), (error: unknown) => error instanceof HomeownerApiError && error.code === 'forbidden')
 })
 
 test('artifact metadata rejects stale revisions, future observations, and photo fields on files', async () => {

@@ -50,7 +50,7 @@ export const QUOTE_SCOPE_KEYS = [
   'workmanship_warranty', 'manufacturer_warranty', 'payment_terms', 'exclusions',
 ] as const satisfies readonly QuoteScopeKey[]
 
-const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident'])
+const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident', 'task'])
 const WORK_STATUSES = new Set<WorkStatus>(['planned', 'in_progress', 'completed', 'cancelled'])
 const TRADE_SET = new Set<WorkCategory>(PROFESSIONAL_TRADES)
 const SCOPE_KEY_SET = new Set<QuoteScopeKey>(QUOTE_SCOPE_KEYS)

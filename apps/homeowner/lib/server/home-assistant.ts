@@ -53,22 +53,44 @@ const historyTurnSchema = z.object({
   text: boundedText(900),
 }).strict()
 
-const workDraftSchema = z.object({
-  kind: z.enum(['project', 'issue', 'repair', 'service', 'incident']),
+const membershipRefSchema = z.string().regex(/^hmbr_[A-Za-z0-9_-]{43}$/)
+const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+
+const workDraftShape = {
+  kind: z.enum(['project', 'issue', 'repair', 'service', 'incident', 'task']),
   title: boundedText(120),
   category: z.enum([
     'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
     'landscaping', 'appliances', 'pest', 'pool', 'new_construction', 'other',
   ]),
   status: z.enum(['planned', 'in_progress', 'completed', 'cancelled']),
-  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  occurredOn: calendarDateSchema.nullable(),
   summary: z.string().trim().max(2_000),
   professionalLabel: boundedText(160).nullable(),
   firstUpdate: boundedText(2_000).nullable(),
-}).strict()
+  assignedMembershipRef: membershipRefSchema.nullable(),
+  dueOn: calendarDateSchema.nullable(),
+} as const
+
+/** The provider must return the complete current draft contract. */
+const workDraftSchema = z.object(workDraftShape).strict()
+
+/**
+ * Accept the immediately preceding draft during a rolling mobile deployment,
+ * then normalize it before it can reach the model or a boundary response.
+ */
+const conversationWorkDraftSchema = z.object({
+  ...workDraftShape,
+  assignedMembershipRef: workDraftShape.assignedMembershipRef.optional(),
+  dueOn: workDraftShape.dueOn.optional(),
+}).strict().transform(draft => ({
+  ...draft,
+  assignedMembershipRef: draft.assignedMembershipRef ?? null,
+  dueOn: draft.dueOn ?? null,
+}))
 
 const conversationStateSchema = z.object({
-  pendingWork: workDraftSchema.nullable(),
+  pendingWork: conversationWorkDraftSchema.nullable(),
   unansweredFollowUpQuestion: boundedText(240).nullable(),
 }).strict()
 
@@ -172,6 +194,15 @@ export interface HomeAssistantContext {
     readonly kind: string
     readonly present: string
     readonly installedOrReplacedYear: number | null
+  }[]
+  /**
+   * Exact-home household members who can own a task. This projection is safe
+   * for model context: it contains no email, principal, invitation, or role.
+   * Ambiguous display labels are removed before this boundary.
+   */
+  readonly assignableHouseholdMembers: readonly {
+    readonly membershipRef: string
+    readonly displayLabel: string
   }[]
 }
 
@@ -319,7 +350,7 @@ const structuredOutputJsonSchema = Object.freeze({
       anyOf: [{
         type: 'object',
         properties: {
-          kind: { type: 'string', enum: ['project', 'issue', 'repair', 'service', 'incident'] },
+          kind: { type: 'string', enum: ['project', 'issue', 'repair', 'service', 'incident', 'task'] },
           title: { type: 'string', minLength: 1, maxLength: 120 },
           category: {
             type: 'string',
@@ -333,10 +364,16 @@ const structuredOutputJsonSchema = Object.freeze({
           summary: { type: 'string', maxLength: 2_000 },
           professionalLabel: { anyOf: [{ type: 'string', minLength: 1, maxLength: 160 }, { type: 'null' }] },
           firstUpdate: { anyOf: [{ type: 'string', minLength: 1, maxLength: 2_000 }, { type: 'null' }] },
+          assignedMembershipRef: {
+            anyOf: [{ type: 'string', pattern: '^hmbr_[A-Za-z0-9_-]{43}$' }, { type: 'null' }],
+          },
+          dueOn: {
+            anyOf: [{ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, { type: 'null' }],
+          },
         },
         required: [
           'kind', 'title', 'category', 'status', 'occurredOn', 'summary',
-          'professionalLabel', 'firstUpdate',
+          'professionalLabel', 'firstUpdate', 'assignedMembershipRef', 'dueOn',
         ],
         additionalProperties: false,
       }, { type: 'null' }],
@@ -391,7 +428,7 @@ const structuredOutputJsonSchema = Object.freeze({
   additionalProperties: false,
 })
 
-export const ROLO_PROMPT_VERSION = 'homesrolo-rolo-v4-work-metadata' as const
+export const ROLO_PROMPT_VERSION = 'homesrolo-rolo-v5-household-tasks' as const
 
 const INSTRUCTIONS = `You are Rolo, the homeowner's calm, sharp home librarian inside Homesrolo.
 
@@ -409,7 +446,11 @@ What you do:
 - When currentProject is present and the homeowner is talking about that work, use its summary, recentActivity, and plansAndPicks as the source of truth. Help them spot a missing decision or sensible next step; do not create a duplicate work draft for the same record.
 - Ask at most one useful question when a missing detail changes what should be recorded or what safe next step makes sense. Do not repeat a question the homeowner answered.
 - When the homeowner clearly describes one repair, issue, service visit, incident, or improvement, prepare one proposedWork draft. Never create duplicate records for the same event.
-- Choose project for a planned improvement, issue for an unresolved problem, repair for repair work, service for a one-time service visit, and incident for an event such as a leak or storm.
+- Choose project for a planned improvement, issue for an unresolved problem, repair for repair work, service for a one-time service visit, incident for an event such as a leak or storm, and task for a household honey-do, chore, or small action assigned to someone at this home.
+- assignableHouseholdMembers is the complete safe list of people who may be assigned a task for this request. Assign only when the homeowner explicitly names exactly one uniquely listed person. Copy that person's membershipRef into assignedMembershipRef; never guess, construct, expose, or repeat a membershipRef in prose.
+- If the homeowner is creating a household task but did not name one unique listed person, or the requested name is missing or ambiguous, leave assignedMembershipRef null and ask one short clarifying question. Do not silently choose the current homeowner.
+- assignedMembershipRef and dueOn are only for task drafts. For every other kind return both as null. A task must return occurredOn as null.
+- Set dueOn only when the homeowner explicitly gives a calendar date or deadline. Do not convert words such as "soon" or "when you can" into a date. Never claim that Homesrolo notified, reminded, texted, or alerted anyone.
 - Preserve an area or location the homeowner supplies, such as "upstairs hallway" or "north side of the yard," in the draft summary with a "Homeowner reported:" label. Do not infer a location from the home address, image metadata, or pixels.
 - Make firstUpdate a useful factual starting note, not generic filler. Preserve relevant homeowner details with a "Homeowner reported:" label. When selectedPhoto is present and its visible details help explain the work, also preserve a short "Visual note:" using only cautious visible observations from photoReview. A visual note is not a diagnosis or verified condition.
 - Set occurredOn only when the homeowner explicitly supplies the event date. Otherwise return null. Never invent a work date, photo capture date, storm date, camera location, GPS coordinate, or other location metadata.
@@ -451,6 +492,11 @@ function buildInput(
       : null,
     reminder: 'Nothing is saved automatically.',
   })
+}
+
+function isValidCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 export interface HomeAssistantClient {
@@ -559,12 +605,31 @@ export class OpenAIHomeAssistantClient implements HomeAssistantClient {
       : output.destination
     const today = new Date().toISOString().slice(0, 10)
     const proposedWork = output.proposedWork
-      ? {
-          ...output.proposedWork,
-          occurredOn: output.proposedWork.occurredOn && output.proposedWork.occurredOn <= today
-            ? output.proposedWork.occurredOn
-            : null,
-        }
+      ? (() => {
+          const task = output.proposedWork.kind === 'task'
+          const knownAssignableRefs = new Set(
+            context.assignableHouseholdMembers.map(member => member.membershipRef),
+          )
+          return {
+            ...output.proposedWork,
+            occurredOn: task
+              ? null
+              : output.proposedWork.occurredOn && output.proposedWork.occurredOn <= today
+                ? output.proposedWork.occurredOn
+                : null,
+            assignedMembershipRef: task
+              && output.proposedWork.assignedMembershipRef
+              && knownAssignableRefs.has(output.proposedWork.assignedMembershipRef)
+              ? output.proposedWork.assignedMembershipRef
+              : null,
+            dueOn: task
+              && output.proposedWork.dueOn
+              && isValidCalendarDate(output.proposedWork.dueOn)
+              && output.proposedWork.dueOn >= today
+              ? output.proposedWork.dueOn
+              : null,
+          }
+        })()
       : null
     const hazardAnswers = {
       visible_fire_or_smoke: 'If there is active fire or smoke, get everyone outside and call emergency services now. Do not go back inside to investigate.',

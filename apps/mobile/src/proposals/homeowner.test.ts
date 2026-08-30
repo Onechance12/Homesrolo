@@ -28,6 +28,8 @@ const work: WorkRecord = {
   category: 'pool',
   status: 'planned',
   occurredOn: null,
+  assignedMembershipRef: null,
+  dueOn: null,
   summary: 'A simple pool with room for a shallow play area.',
   professionalLabel: null,
   revision: 1,

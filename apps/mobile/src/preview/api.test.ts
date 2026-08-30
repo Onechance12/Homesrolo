@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { PreviewHomesroloApi, PREVIEW_PRIMARY_HOME_REF } from './api.ts'
+import { workCreateFieldsFromRoloDraft } from '../rolo/work-draft.ts'
 
 test('serves representative homes, work, people sources, and artifacts entirely in memory', async () => {
   const api = new PreviewHomesroloApi()
@@ -44,6 +45,65 @@ test('gives a newly added preview home the same revisioned Home Record used in p
   })
   assert.equal(saved.revision, 2)
   assert.equal(saved.address?.city, 'Kingston')
+})
+
+test('creates, assigns, dates, and completes a household task through the Work contract', async () => {
+  const api = new PreviewHomesroloApi()
+  const members = await api.listHouseholdMembers(PREVIEW_PRIMARY_HOME_REF)
+  const current = members.find(member => member.isCurrentPrincipal)
+  assert.ok(current)
+  const created = await api.createWork(PREVIEW_PRIMARY_HOME_REF, {
+    commandRef: await api.newCommandRef(),
+    title: 'Replace the hallway filter',
+    workKind: 'task',
+    category: 'hvac',
+    status: 'planned',
+    assignedMembershipRef: current.membershipRef,
+    dueOn: '2026-09-05',
+  })
+  assert.equal(created.assignedMembershipRef, current.membershipRef)
+  assert.equal(created.dueOn, '2026-09-05')
+  const completed = await api.updateWork(PREVIEW_PRIMARY_HOME_REF, created.projectRef, {
+    commandRef: await api.newCommandRef(),
+    expectedRevision: created.revision,
+    status: 'completed',
+  })
+  assert.equal(completed.status, 'completed')
+  assert.equal(completed.assignedMembershipRef, current.membershipRef)
+})
+
+test('runs household roster invitation and acceptance contracts in preview memory', async () => {
+  const api = new PreviewHomesroloApi()
+  const commandRef = await api.newCommandRef()
+  const invitation = await api.createHouseholdInvitation(PREVIEW_PRIMARY_HOME_REF, {
+    commandRef,
+    inviteeEmail: 'alex@example.com',
+    inviteeDisplayLabel: 'Alex',
+    desiredRole: 'member',
+    expiresInDays: 7,
+  })
+  assert.equal((await api.getHousehold(PREVIEW_PRIMARY_HOME_REF)).invitations.length, 1)
+  const accepted = await api.acceptHouseholdInvitation(invitation.invitationRef, {
+    commandRef: await api.newCommandRef(),
+  })
+  assert.equal(accepted.invitation.status, 'accepted')
+  assert.equal(accepted.member.displayLabel, 'Alex')
+  assert.equal(accepted.member.isCurrentPrincipal, true)
+
+  const second = new PreviewHomesroloApi()
+  const revokable = await second.createHouseholdInvitation(PREVIEW_PRIMARY_HOME_REF, {
+    commandRef: await second.newCommandRef(),
+    inviteeEmail: 'sam@example.com',
+    inviteeDisplayLabel: 'Sam',
+    desiredRole: 'viewer',
+    expiresInDays: 3,
+  })
+  const revoked = await second.revokeHouseholdInvitation(
+    PREVIEW_PRIMARY_HOME_REF,
+    revokable.invitationRef,
+    { commandRef: await second.newCommandRef(), expectedRevision: revokable.revision },
+  )
+  assert.equal(revoked.status, 'revoked')
 })
 
 test('keeps preview Rolo and writes deterministic and isolated', async () => {
@@ -214,6 +274,32 @@ test('keeps Rolo suggestions specific to planning, care, and home-history intent
   assert.equal(history.destination, null)
   assert.match(history.answer, /saved work, companies, photos, files, and warranties/i)
   assert.match(history.followUpQuestions[0] ?? '', /date, company, product, warranty/i)
+})
+
+test('Rolo preview resolves household task assignments from the exact-home roster', async () => {
+  const api = new PreviewHomesroloApi()
+  const roster = await api.getHousehold(PREVIEW_PRIMARY_HOME_REF)
+  const alex = roster.members.find(member => member.displayLabel === 'Alex')
+  assert.ok(alex)
+
+  const reply = await api.askRolo(
+    PREVIEW_PRIMARY_HOME_REF,
+    'Assign Alex the task to patch the wall Friday.',
+    [],
+    { pendingWork: null, unansweredFollowUpQuestion: null },
+  )
+  assert.equal(reply.proposedWork?.kind, 'task')
+  assert.equal(reply.proposedWork?.assignedMembershipRef, alex.membershipRef)
+  assert.equal(reply.proposedWork?.dueOn, '2026-08-28')
+  assert.match(reply.answer, /Alex.*due Friday/i)
+
+  const created = await api.createWork(PREVIEW_PRIMARY_HOME_REF, {
+    commandRef: await api.newCommandRef(),
+    ...workCreateFieldsFromRoloDraft(reply.proposedWork!, '2026-08-26'),
+  })
+  assert.equal(created.assignedMembershipRef, alex.membershipRef)
+  assert.equal(created.dueOn, '2026-08-28')
+  assert.equal(created.occurredOn, null)
 })
 
 test('keeps project-launched Rolo on the existing work record', async () => {

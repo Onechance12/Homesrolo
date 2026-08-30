@@ -1,4 +1,5 @@
 import type {
+  AcceptHouseholdInvitationInput,
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
@@ -11,10 +12,15 @@ import type {
   DeviceFile,
   DeletedHomeCheckupPhoto,
   CreateHomeCheckupPhotoInput,
+  CreateHouseholdInvitationInput,
   HomeCheckupPhoto,
   HomeRecordProfile,
   HomeSummary,
   HomeView,
+  HouseholdInvitation,
+  HouseholdInvitationAcceptance,
+  HouseholdMember,
+  HouseholdRoster,
   NativeSessionCredential,
   ProfessionalOrganization,
   ProfessionalProfileWorkspace,
@@ -25,6 +31,8 @@ import type {
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
+  RemoveHouseholdMemberInput,
+  RevokeHouseholdInvitationInput,
   RevokeProjectInvitationInput,
   ReviseProfessionalProposalInput,
   RoloReply,
@@ -35,6 +43,7 @@ import type {
   SaveProjectItemInput,
   SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
+  SetHouseholdMemberRoleInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
@@ -61,6 +70,29 @@ export interface HomesroloApi {
     createCommandRef?: string,
   ): Promise<HomeSummary>
   getHome(homeRef: string): Promise<HomeView>
+  getHousehold(homeRef: string): Promise<HouseholdRoster>
+  /** Optional presentation roster; work remains usable when this route is unavailable. */
+  listHouseholdMembers(homeRef: string): Promise<readonly HouseholdMember[]>
+  createHouseholdInvitation(homeRef: string, input: CreateHouseholdInvitationInput): Promise<HouseholdInvitation>
+  acceptHouseholdInvitation(
+    invitationRef: string,
+    input: AcceptHouseholdInvitationInput,
+  ): Promise<HouseholdInvitationAcceptance>
+  revokeHouseholdInvitation(
+    homeRef: string,
+    invitationRef: string,
+    input: RevokeHouseholdInvitationInput,
+  ): Promise<HouseholdInvitation>
+  removeHouseholdMember(
+    homeRef: string,
+    membershipRef: string,
+    input: RemoveHouseholdMemberInput,
+  ): Promise<HouseholdMember>
+  setHouseholdMemberRole(
+    homeRef: string,
+    membershipRef: string,
+    input: SetHouseholdMemberRoleInput,
+  ): Promise<HouseholdMember>
   getHomeRecord(homeRef: string): Promise<HomeRecordProfile>
   updateHomeRecord(homeRef: string, input: UpdateHomeRecordInput): Promise<HomeRecordProfile>
   listWork(homeRef: string): Promise<readonly WorkRecord[]>

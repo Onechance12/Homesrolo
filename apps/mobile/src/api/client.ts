@@ -5,6 +5,7 @@ import { Platform } from 'react-native'
 import type { HomesroloApi } from './contract.ts'
 import type { ProtectedImageSource } from './image-source.ts'
 import type {
+  AcceptHouseholdInvitationInput,
   ArtifactContent,
   ArtifactKind,
   ArtifactMediaType,
@@ -15,6 +16,7 @@ import type {
   CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
   CreateHomeCheckupPhotoInput,
+  CreateHouseholdInvitationInput,
   CreateWorkInput,
   CreatedProfessionalOrganization,
   DecideProfessionalProposalInput,
@@ -24,6 +26,10 @@ import type {
   HomeRecordProfile,
   HomeSummary,
   HomeView,
+  HouseholdInvitation,
+  HouseholdInvitationAcceptance,
+  HouseholdMember,
+  HouseholdRoster,
   NativeSessionCredential,
   ProfessionalOrganization,
   ProfessionalProfileWorkspace,
@@ -34,6 +40,8 @@ import type {
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
+  RemoveHouseholdMemberInput,
+  RevokeHouseholdInvitationInput,
   RevokeProjectInvitationInput,
   ReviseProfessionalProposalInput,
   RoloConversationState,
@@ -44,6 +52,7 @@ import type {
   SaveProjectItemInput,
   SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
+  SetHouseholdMemberRoleInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
@@ -60,6 +69,18 @@ import {
   parseHomeCheckupPhoto,
 } from './home-checkup.ts'
 import { homeRecordUpdateBody, parseHomeRecordProfile } from './home-record.ts'
+import {
+  acceptHouseholdInvitationBody,
+  createHouseholdInvitationBody,
+  householdRevisionBody,
+  householdRoleBody,
+  isHouseholdInvitationRef,
+  isHouseholdMembershipRef,
+  parseHouseholdAcceptanceEnvelope,
+  parseHouseholdInvitationEnvelope,
+  parseHouseholdMemberEnvelope,
+  parseHouseholdRosterEnvelope,
+} from './household.ts'
 import { artifactContentFromResponse } from './artifact-content.ts'
 import {
   artifactMetadataUpdateBody,
@@ -102,6 +123,7 @@ import {
   commandRef,
   envelopeData,
   isArtifactRef,
+  isCalendarDate,
   isHomeRef,
   isHomesroloClientContract,
   isProjectRef,
@@ -124,7 +146,7 @@ import {
 type JsonRecord = Record<string, unknown>
 type TokenProvider = () => string | null
 
-const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident'])
+const WORK_KINDS = new Set<WorkKind>(['project', 'issue', 'repair', 'service', 'incident', 'task'])
 const WORK_STATUSES = new Set<WorkStatus>(['planned', 'in_progress', 'completed', 'cancelled'])
 const WORK_CATEGORIES = new Set<WorkCategory>([
   'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
@@ -222,7 +244,11 @@ function parseWork(value: unknown): WorkRecord {
     || typeof source.workKind !== 'string' || !WORK_KINDS.has(source.workKind as WorkKind)
     || typeof source.category !== 'string' || !WORK_CATEGORIES.has(source.category as WorkCategory)
     || typeof source.status !== 'string' || !WORK_STATUSES.has(source.status as WorkStatus)
-    || (source.occurredOn !== null && typeof source.occurredOn !== 'string')
+    || (source.occurredOn !== null && !isCalendarDate(source.occurredOn))
+    || (source.assignedMembershipRef !== null
+      && (typeof source.assignedMembershipRef !== 'string'
+        || !/^hmbr_[A-Za-z0-9_-]{43}$/.test(source.assignedMembershipRef)))
+    || (source.dueOn !== null && !isCalendarDate(source.dueOn))
     || (source.professionalLabel !== null && typeof source.professionalLabel !== 'string')
     || typeof source.archived !== 'boolean'
     || (source.archivedAt !== null && typeof source.archivedAt !== 'string')) {
@@ -236,6 +262,8 @@ function parseWork(value: unknown): WorkRecord {
     category: source.category as WorkCategory,
     status: source.status as WorkStatus,
     occurredOn: source.occurredOn,
+    assignedMembershipRef: source.assignedMembershipRef,
+    dueOn: source.dueOn,
     summary: text(source.summary, 2_000, true),
     professionalLabel: source.professionalLabel,
     revision: count(source.revision),
@@ -303,7 +331,10 @@ function parseRolo(value: unknown): RoloReply {
     if (typeof proposed.kind !== 'string' || !WORK_KINDS.has(proposed.kind as WorkKind)
       || typeof proposed.category !== 'string' || !WORK_CATEGORIES.has(proposed.category as WorkCategory)
       || typeof proposed.status !== 'string' || !WORK_STATUSES.has(proposed.status as WorkStatus)
-      || (proposed.occurredOn !== null && typeof proposed.occurredOn !== 'string')
+      || (proposed.occurredOn !== null && !isCalendarDate(proposed.occurredOn))
+      || (proposed.assignedMembershipRef !== null
+        && !isHouseholdMembershipRef(proposed.assignedMembershipRef))
+      || (proposed.dueOn !== null && !isCalendarDate(proposed.dueOn))
       || (proposed.professionalLabel !== null && typeof proposed.professionalLabel !== 'string')
       || (proposed.firstUpdate !== null && typeof proposed.firstUpdate !== 'string')) {
       throw new Error('invalid_wire_data')
@@ -314,6 +345,8 @@ function parseRolo(value: unknown): RoloReply {
       category: proposed.category as WorkCategory,
       status: proposed.status as WorkStatus,
       occurredOn: proposed.occurredOn,
+      assignedMembershipRef: proposed.assignedMembershipRef,
+      dueOn: proposed.dueOn,
       summary: text(proposed.summary, 2_000, true),
       professionalLabel: proposed.professionalLabel,
       firstUpdate: proposed.firstUpdate,
@@ -683,6 +716,105 @@ export class HomesroloNativeApi implements HomesroloApi {
     const data = await this.#request(apiPath('homes', homeRef, 'projects'))
     if (!Array.isArray(data)) throw new NativeApiError(200, 'invalid_response')
     return data.map(parseWork)
+  }
+
+  async getHousehold(homeRef: string): Promise<HouseholdRoster> {
+    if (!isHomeRef(homeRef)) throw new NativeApiError(400, 'invalid_request')
+    return parseHouseholdRosterEnvelope(
+      await this.#request(apiPath('homes', homeRef, 'household')),
+      homeRef,
+    )
+  }
+
+  async listHouseholdMembers(homeRef: string): Promise<readonly HouseholdMember[]> {
+    return (await this.getHousehold(homeRef)).members
+  }
+
+  async createHouseholdInvitation(
+    homeRef: string,
+    input: CreateHouseholdInvitationInput,
+  ): Promise<HouseholdInvitation> {
+    const body = createHouseholdInvitationBody(input)
+    if (!isHomeRef(homeRef) || !body) throw new NativeApiError(400, 'invalid_request')
+    const invitation = parseHouseholdInvitationEnvelope(await this.#request(
+      apiPath('homes', homeRef, 'household', 'invitations'),
+      { method: 'POST', body },
+    ), homeRef)
+    if (invitation.status !== 'pending' || invitation.revision !== 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitation
+  }
+
+  async acceptHouseholdInvitation(
+    invitationRef: string,
+    input: AcceptHouseholdInvitationInput,
+  ): Promise<HouseholdInvitationAcceptance> {
+    const body = acceptHouseholdInvitationBody(input)
+    if (!isHouseholdInvitationRef(invitationRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    return parseHouseholdAcceptanceEnvelope(await this.#request(
+      apiPath('household', 'invitations', invitationRef, 'accept'),
+      { method: 'POST', body },
+    ), invitationRef)
+  }
+
+  async revokeHouseholdInvitation(
+    homeRef: string,
+    invitationRef: string,
+    input: RevokeHouseholdInvitationInput,
+  ): Promise<HouseholdInvitation> {
+    const body = householdRevisionBody(input)
+    if (!isHomeRef(homeRef) || !isHouseholdInvitationRef(invitationRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const invitation = parseHouseholdInvitationEnvelope(await this.#request(
+      apiPath('homes', homeRef, 'household', 'invitations', invitationRef, 'revoke'),
+      { method: 'POST', body },
+    ), homeRef, invitationRef)
+    if (invitation.status !== 'revoked' || invitation.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return invitation
+  }
+
+  async removeHouseholdMember(
+    homeRef: string,
+    membershipRef: string,
+    input: RemoveHouseholdMemberInput,
+  ): Promise<HouseholdMember> {
+    const body = householdRevisionBody(input)
+    if (!isHomeRef(homeRef) || !isHouseholdMembershipRef(membershipRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const member = parseHouseholdMemberEnvelope(await this.#request(
+      apiPath('homes', homeRef, 'household', 'members', membershipRef, 'remove'),
+      { method: 'POST', body },
+    ), homeRef, membershipRef)
+    if (member.state !== 'revoked' || member.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return member
+  }
+
+  async setHouseholdMemberRole(
+    homeRef: string,
+    membershipRef: string,
+    input: SetHouseholdMemberRoleInput,
+  ): Promise<HouseholdMember> {
+    const body = householdRoleBody(input)
+    if (!isHomeRef(homeRef) || !isHouseholdMembershipRef(membershipRef) || !body) {
+      throw new NativeApiError(400, 'invalid_request')
+    }
+    const member = parseHouseholdMemberEnvelope(await this.#request(
+      apiPath('homes', homeRef, 'household', 'members', membershipRef, 'role'),
+      { method: 'POST', body },
+    ), homeRef, membershipRef)
+    if (member.role !== input.desiredRole || member.revision !== input.expectedRevision + 1) {
+      throw new NativeApiError(200, 'invalid_response')
+    }
+    return member
   }
 
   async createWork(homeRef: string, input: CreateWorkInput): Promise<WorkRecord> {

@@ -42,14 +42,15 @@ type PendingPhoto = {
   readonly source: 'camera' | 'library'
 }
 
-export function ProjectFiles({ homeId, projectRef, projectTitle }: {
+export function ProjectFiles({ homeId, projectRef, projectTitle, readOnly = false }: {
   readonly homeId: string
   readonly projectRef: string
   readonly projectTitle: string
+  readonly readOnly?: boolean
 }) {
   const { state: auth, api, previewMode } = useSession()
   const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
-  const showUploadActions = uploadsEnabled || previewMode
+  const showUploadActions = !readOnly && (uploadsEnabled || previewMode)
   const loader = useCallback(async () => (await api.listArtifacts(homeId))
     .filter(artifact => artifact.projectRef === projectRef), [api, homeId, projectRef])
   const resource = useResource(loader, auth.kind === 'signed_in')
@@ -239,9 +240,9 @@ export function ProjectFiles({ homeId, projectRef, projectTitle }: {
           <FileAction icon="document-attach-outline" label="Add file" busy={uploading === 'document'} disabled={Boolean(uploading || pendingPhoto)} onPress={() => void uploadFile('document', 'document')} />
           <FileAction icon="shield-checkmark-outline" label="Add warranty" busy={uploading === 'warranty'} disabled={Boolean(uploading || pendingPhoto)} onPress={() => void uploadFile('warranty', 'warranty')} />
         </View>
-      ) : (
+      ) : !readOnly ? (
         <Notice message="Adding photos and files isn’t available for this work right now. Saved files are still readable." />
-      )}
+      ) : null}
       {resource.state.kind === 'loading' ? <Loading label="Opening project files…" /> : null}
       {resource.state.kind === 'error' ? <Notice message="Project files could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
       {showUploadActions && error ? <Notice message={error} /> : null}

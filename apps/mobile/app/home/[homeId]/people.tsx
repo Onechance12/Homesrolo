@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
-import type { ProfessionalOrganization, ProjectInvitation, WorkCategory } from '../../../src/api/model.ts'
+import type {
+  HouseholdInvitation,
+  HouseholdInvitableRole,
+  HouseholdMember,
+  HouseholdRoster,
+  ProfessionalOrganization,
+  ProjectInvitation,
+  WorkCategory,
+} from '../../../src/api/model.ts'
+import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import {
@@ -29,12 +38,18 @@ type SavedPerson = {
 }
 
 type ProsSection = 'find' | 'invited' | 'saved'
+type PeopleMode = 'household' | 'pros'
 
 export default function PeopleScreen() {
   const homeId = useHomeId()
-  const { professionalSlug: rawProfessionalSlug, trade: rawTrade } = useLocalSearchParams<{
+  const {
+    professionalSlug: rawProfessionalSlug,
+    trade: rawTrade,
+    section: rawPeopleSection,
+  } = useLocalSearchParams<{
     professionalSlug?: string | string[]
     trade?: string | string[]
+    section?: string | string[]
   }>()
   const requestedProfessionalSlug = legacyProfessionalSlug(rawProfessionalSlug)
   const requestedTrade = legacyProfessionalTrade(rawTrade)
@@ -42,10 +57,18 @@ export default function PeopleScreen() {
   const professionalFeaturesEnabled = auth.kind === 'signed_in'
     && auth.session.capabilities.invitations
     && auth.session.capabilities.projectQuotes
+  const householdSharingEnabled = auth.kind === 'signed_in'
+    && auth.session.capabilities.sharing
   const loader = useCallback(async () => {
-    const [work, directory] = await Promise.all([
+    const [work, directory, householdResult] = await Promise.all([
       api.listWork(homeId),
       professionalFeaturesEnabled ? api.listProfessionals() : Promise.resolve([]),
+      householdSharingEnabled
+        ? api.getHousehold(homeId).then(
+            household => ({ household, failed: false as const }),
+            () => ({ household: null, failed: true as const }),
+          )
+        : Promise.resolve({ household: null, failed: false as const }),
     ])
     const invitationResults = professionalFeaturesEnabled
       ? await Promise.allSettled(work.map(item => api.listProjectInvitations(homeId, item.projectRef)))
@@ -54,8 +77,15 @@ export default function PeopleScreen() {
       result.status === 'fulfilled' ? result.value : []
     ))
     const invitationLoadFailures = invitationResults.filter(result => result.status === 'rejected').length
-    return { work, directory, invitations, invitationLoadFailures }
-  }, [api, homeId, professionalFeaturesEnabled])
+    return {
+      work,
+      directory,
+      invitations,
+      invitationLoadFailures,
+      household: householdResult.household,
+      householdLoadFailed: householdResult.failed,
+    }
+  }, [api, homeId, householdSharingEnabled, professionalFeaturesEnabled])
   const resource = useResource(loader, auth.kind === 'signed_in')
   const [query, setQuery] = useState('')
   const [trade, setTrade] = useState<WorkCategory | 'all'>(requestedTrade ?? 'all')
@@ -64,12 +94,30 @@ export default function PeopleScreen() {
   const [knownShareNotice, setKnownShareNotice] = useState<string | null>(null)
   const [sharingKnownProfessional, setSharingKnownProfessional] = useState(false)
   const [section, setSection] = useState<ProsSection>('find')
+  const [mode, setMode] = useState<PeopleMode>(
+    rawPeopleSection === 'pros' || requestedProfessionalSlug || requestedTrade ? 'pros' : 'household',
+  )
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteName, setInviteName] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<HouseholdInvitableRole>('member')
+  const [householdBusy, setHouseholdBusy] = useState(false)
+  const [sharingHouseholdInvitationRef, setSharingHouseholdInvitationRef] = useState<string | null>(null)
+  const [householdError, setHouseholdError] = useState<string | null>(null)
+  const [householdNotice, setHouseholdNotice] = useState<string | null>(null)
+  const pendingHouseholdCommand = useRef<{ intent: string; commandRef: string } | null>(null)
 
   useEffect(() => {
     if (!requestedTrade) return
     setTrade(requestedTrade)
     setSection('find')
+    setMode('pros')
   }, [requestedTrade])
+
+  useEffect(() => {
+    const requested = typeof rawPeopleSection === 'string' ? rawPeopleSection : null
+    if (requested === 'household' || requested === 'pros') setMode(requested)
+  }, [rawPeopleSection])
 
   useEffect(() => {
     if (!requestedProfessionalSlug || resource.state.kind !== 'ready') return
@@ -77,6 +125,7 @@ export default function PeopleScreen() {
     if (organization) {
       setSelectedRef(organization.organizationRef)
       setSection('find')
+      setMode('pros')
     }
   }, [requestedProfessionalSlug, resource.state])
 
@@ -87,6 +136,7 @@ export default function PeopleScreen() {
         directory: [] as readonly ProfessionalOrganization[],
         invitations: [] as readonly ProjectInvitation[],
         openWork: [],
+        household: null as HouseholdRoster | null,
       }
     }
     const byName = new Map<string, { name: string; count: number; areas: Set<string>; latest: string | null }>()
@@ -109,6 +159,7 @@ export default function PeopleScreen() {
       }),
       openWork: resource.state.value.work.filter(work => !work.archived
         && (work.status === 'planned' || work.status === 'in_progress')),
+      household: resource.state.value.household,
     }
   }, [query, resource.state, trade])
 
@@ -123,6 +174,12 @@ export default function PeopleScreen() {
     : null
   const allOrganizations = resource.state.kind === 'ready' ? resource.state.value.directory : []
   const matchingWork = selected ? view.openWork.filter(work => selected.trades.includes(work.category)) : []
+  const currentHouseholdMember = view.household?.members.find(member => member.isCurrentPrincipal) ?? null
+  const canManageHousehold = currentHouseholdMember?.role === 'workspace_controller'
+
+  function assignmentsFor(member: HouseholdMember) {
+    return view.openWork.filter(work => work.assignedMembershipRef === member.membershipRef)
+  }
 
   function openInvitation(projectRef: string, organizationRef: string) {
     router.push({
@@ -159,33 +216,163 @@ export default function PeopleScreen() {
     }
   }
 
+  async function inviteHouseholdMember() {
+    if (householdBusy || !canManageHousehold) return
+    const cleanName = inviteName.trim()
+    const cleanEmail = inviteEmail.trim().toLocaleLowerCase('en-US')
+    const intent = JSON.stringify({ cleanName, cleanEmail, inviteRole })
+    setHouseholdBusy(true)
+    setHouseholdError(null)
+    setHouseholdNotice(null)
+    try {
+      if (!pendingHouseholdCommand.current || pendingHouseholdCommand.current.intent !== intent) {
+        pendingHouseholdCommand.current = { intent, commandRef: await api.newCommandRef() }
+      }
+      const invitation = await api.createHouseholdInvitation(homeId, {
+        commandRef: pendingHouseholdCommand.current.commandRef,
+        inviteeEmail: cleanEmail,
+        inviteeDisplayLabel: cleanName,
+        desiredRole: inviteRole,
+        expiresInDays: 7,
+      })
+      pendingHouseholdCommand.current = null
+      await openHouseholdInvitationShare(invitation)
+      setInviteName('')
+      setInviteEmail('')
+      setInviteRole('member')
+      setInviteOpen(false)
+      resource.reload()
+    } catch (caught) {
+      setHouseholdError(friendlyError(caught))
+    } finally {
+      setHouseholdBusy(false)
+    }
+  }
+
+  async function shareHouseholdInvitation(invitation: HouseholdInvitation) {
+    if (sharingHouseholdInvitationRef || !canManageHousehold) return
+    setSharingHouseholdInvitationRef(invitation.invitationRef)
+    setHouseholdError(null)
+    setHouseholdNotice(null)
+    try {
+      await openHouseholdInvitationShare(invitation)
+    } finally {
+      setSharingHouseholdInvitationRef(null)
+    }
+  }
+
+  async function openHouseholdInvitationShare(invitation: HouseholdInvitation) {
+    const link = householdInvitationLink(invitation)
+    try {
+      const result = await Share.share({
+        title: 'Join my Home Rolo',
+        message: `${invitation.inviteeDisplayLabel}, I invited you to share our home in Homesrolo. Sign in with the email this invitation was sent to, then open this link: ${link}`,
+      }, { dialogTitle: 'Invite someone to this Home Rolo' })
+      setHouseholdNotice(result.action === Share.dismissedAction
+        ? `${invitation.inviteeDisplayLabel}’s invitation is still pending. Tap Share again whenever you’re ready.`
+        : `Invitation shared with ${invitation.inviteeDisplayLabel}. It works only after the invited email signs in.`)
+    } catch {
+      setHouseholdNotice('This device could not open its share sheet. The invitation is still pending, so you can tap Share again to retry.')
+    }
+  }
+
+  async function revokeHouseholdInvitation(invitation: HouseholdInvitation) {
+    if (householdBusy || !canManageHousehold) return
+    setHouseholdBusy(true)
+    setHouseholdError(null)
+    setHouseholdNotice(null)
+    try {
+      await api.revokeHouseholdInvitation(homeId, invitation.invitationRef, {
+        commandRef: await api.newCommandRef(),
+        expectedRevision: invitation.revision,
+      })
+      setHouseholdNotice(`${invitation.inviteeDisplayLabel}’s pending invitation was revoked.`)
+      resource.reload()
+    } catch (caught) {
+      setHouseholdError(friendlyError(caught))
+    } finally {
+      setHouseholdBusy(false)
+    }
+  }
+
+  async function changeHouseholdRole(
+    member: HouseholdMember,
+    desiredRole: HouseholdMember['role'],
+  ) {
+    if (householdBusy || !canManageHousehold) return
+    setHouseholdBusy(true)
+    setHouseholdError(null)
+    setHouseholdNotice(null)
+    try {
+      await api.setHouseholdMemberRole(homeId, member.membershipRef, {
+        commandRef: await api.newCommandRef(),
+        expectedRevision: member.revision,
+        desiredRole,
+      })
+      setHouseholdNotice(`${member.displayLabel} is now ${householdRoleLabel(desiredRole).toLocaleLowerCase('en-US')}.`)
+      resource.reload()
+    } catch (caught) {
+      setHouseholdError(friendlyError(caught))
+    } finally {
+      setHouseholdBusy(false)
+    }
+  }
+
+  async function removeHouseholdMember(member: HouseholdMember) {
+    if (householdBusy || !canManageHousehold || member.isCurrentPrincipal) return
+    setHouseholdBusy(true)
+    setHouseholdError(null)
+    setHouseholdNotice(null)
+    try {
+      await api.removeHouseholdMember(homeId, member.membershipRef, {
+        commandRef: await api.newCommandRef(),
+        expectedRevision: member.revision,
+      })
+      setHouseholdNotice(`${member.displayLabel} no longer has access to this Home Rolo.`)
+      resource.reload()
+    } catch (caught) {
+      setHouseholdError(friendlyError(caught))
+    } finally {
+      setHouseholdBusy(false)
+    }
+  }
+
   return (
     <Page>
       <HomeHeader
-        section="Pros"
-        title="Your home-service Rolodex"
-        detail="Find a company, follow private invitations, and keep the people this home already knows."
+        section="People"
+        title={mode === 'household' ? 'The people who share this home' : 'Your home-service Rolodex'}
+        detail={mode === 'household'
+          ? 'One Home Rolo, separate sign-ins, and a shared view of the work that keeps life moving.'
+          : 'Find a company, follow private invitations, and keep the people this home already knows.'}
       />
 
-      <View style={styles.sectionTabs} accessibilityRole="tablist">
-        <ProsTab label="Find" icon="search-outline" selected={section === 'find'} onPress={() => setSection('find')} />
-        <ProsTab
-          label={view.invitations.length > 0 ? `Invited · ${view.invitations.length}` : 'Invited'}
-          icon="paper-plane-outline"
-          selected={section === 'invited'}
-          onPress={() => setSection('invited')}
-        />
-        <ProsTab
-          label={view.saved.length > 0 ? `Saved · ${view.saved.length}` : 'Saved'}
-          icon="bookmark-outline"
-          selected={section === 'saved'}
-          onPress={() => setSection('saved')}
-        />
+      <View style={styles.modeTabs} accessibilityRole="tablist">
+        <PeopleModeTab label="Household" icon="people-outline" selected={mode === 'household'} onPress={() => setMode('household')} />
+        <PeopleModeTab label="Home pros" icon="construct-outline" selected={mode === 'pros'} onPress={() => setMode('pros')} />
       </View>
 
+      {mode === 'pros' ? (
+        <View style={styles.sectionTabs} accessibilityRole="tablist">
+          <ProsTab label="Find" icon="search-outline" selected={section === 'find'} onPress={() => setSection('find')} />
+          <ProsTab
+            label={view.invitations.length > 0 ? `Invited · ${view.invitations.length}` : 'Invited'}
+            icon="paper-plane-outline"
+            selected={section === 'invited'}
+            onPress={() => setSection('invited')}
+          />
+          <ProsTab
+            label={view.saved.length > 0 ? `Saved · ${view.saved.length}` : 'Saved'}
+            icon="bookmark-outline"
+            selected={section === 'saved'}
+            onPress={() => setSection('saved')}
+          />
+        </View>
+      ) : null}
+
       {resource.state.kind === 'loading' ? <Loading label="Opening your Rolodex…" /> : null}
-      {resource.state.kind === 'error' ? <Notice message="Your home-service Rolodex could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
-      {resource.state.kind === 'ready' && resource.state.value.invitationLoadFailures > 0 ? (
+      {resource.state.kind === 'error' ? <Notice message="The people connected to this home could not load." actionLabel="Try again" onAction={resource.reload} /> : null}
+      {resource.state.kind === 'ready' && mode === 'pros' && resource.state.value.invitationLoadFailures > 0 ? (
         <Notice
           message={`Homesrolo couldn’t check ${resource.state.value.invitationLoadFailures === 1 ? 'one work record' : `${resource.state.value.invitationLoadFailures} work records`} for invitations. Some company access may be missing from this view.`}
           actionLabel="Try again"
@@ -193,7 +380,36 @@ export default function PeopleScreen() {
         />
       ) : null}
 
-      {resource.state.kind === 'ready' && section === 'find' && professionalFeaturesEnabled ? (
+      {resource.state.kind === 'ready' && mode === 'household' ? (
+        <HouseholdPanel
+          roster={view.household}
+          sharingEnabled={householdSharingEnabled}
+          loadFailed={resource.state.value.householdLoadFailed}
+          canManage={canManageHousehold}
+          inviteOpen={inviteOpen}
+          inviteName={inviteName}
+          inviteEmail={inviteEmail}
+          inviteRole={inviteRole}
+          busy={householdBusy}
+          sharingInvitationRef={sharingHouseholdInvitationRef}
+          error={householdError}
+          notice={householdNotice}
+          assignmentCountFor={member => assignmentsFor(member).length}
+          onOpenInvite={() => { setInviteOpen(true); setHouseholdError(null); setHouseholdNotice(null) }}
+          onCloseInvite={() => setInviteOpen(false)}
+          onInviteNameChange={setInviteName}
+          onInviteEmailChange={setInviteEmail}
+          onInviteRoleChange={setInviteRole}
+          onInvite={() => void inviteHouseholdMember()}
+          onShare={invitation => void shareHouseholdInvitation(invitation)}
+          onSetRole={(member, role) => void changeHouseholdRole(member, role)}
+          onRemove={member => void removeHouseholdMember(member)}
+          onRevoke={invitation => void revokeHouseholdInvitation(invitation)}
+          onRetry={resource.reload}
+        />
+      ) : null}
+
+      {resource.state.kind === 'ready' && mode === 'pros' && section === 'find' && professionalFeaturesEnabled ? (
         <>
           <Card accent>
             <View style={styles.findHead}>
@@ -342,11 +558,11 @@ export default function PeopleScreen() {
         </>
       ) : null}
 
-      {resource.state.kind === 'ready' && section === 'find' && !professionalFeaturesEnabled ? (
+      {resource.state.kind === 'ready' && mode === 'pros' && section === 'find' && !professionalFeaturesEnabled ? (
         <Notice message="Homesrolo couldn’t open company discovery or private invitations right now." />
       ) : null}
 
-      {resource.state.kind === 'ready' && section === 'invited' ? (
+      {resource.state.kind === 'ready' && mode === 'pros' && section === 'invited' ? (
         professionalFeaturesEnabled ? (
           <>
             <SectionTitle title="Invited to your work" detail="Only the work and files you chose are shared with each company." />
@@ -393,7 +609,7 @@ export default function PeopleScreen() {
         ) : <Notice message="Homesrolo couldn’t open private invitations right now." />
       ) : null}
 
-      {resource.state.kind === 'ready' && section === 'saved' ? (
+      {resource.state.kind === 'ready' && mode === 'pros' && section === 'saved' ? (
         <>
           <SectionTitle title="People this home knows" detail="Built from names saved on real work—not purchased rankings or anonymous leads." />
           {view.saved.map(person => (
@@ -413,9 +629,241 @@ export default function PeopleScreen() {
           ) : null}
         </>
       ) : null}
-      <Text style={styles.disclosure}>You choose every invitation. A listing is not an endorsement, and no company receives your address or Home Record by browsing this directory.</Text>
+      {mode === 'pros' ? (
+        <Text style={styles.disclosure}>You choose every invitation. A listing is not an endorsement, and no company receives your address or Home Record by browsing this directory.</Text>
+      ) : null}
     </Page>
   )
+}
+
+function HouseholdPanel({
+  roster,
+  sharingEnabled,
+  loadFailed,
+  canManage,
+  inviteOpen,
+  inviteName,
+  inviteEmail,
+  inviteRole,
+  busy,
+  sharingInvitationRef,
+  error,
+  notice,
+  assignmentCountFor,
+  onOpenInvite,
+  onCloseInvite,
+  onInviteNameChange,
+  onInviteEmailChange,
+  onInviteRoleChange,
+  onInvite,
+  onShare,
+  onSetRole,
+  onRemove,
+  onRevoke,
+  onRetry,
+}: {
+  readonly roster: HouseholdRoster | null
+  readonly sharingEnabled: boolean
+  readonly loadFailed: boolean
+  readonly canManage: boolean
+  readonly inviteOpen: boolean
+  readonly inviteName: string
+  readonly inviteEmail: string
+  readonly inviteRole: HouseholdInvitableRole
+  readonly busy: boolean
+  readonly sharingInvitationRef: string | null
+  readonly error: string | null
+  readonly notice: string | null
+  readonly assignmentCountFor: (member: HouseholdMember) => number
+  readonly onOpenInvite: () => void
+  readonly onCloseInvite: () => void
+  readonly onInviteNameChange: (value: string) => void
+  readonly onInviteEmailChange: (value: string) => void
+  readonly onInviteRoleChange: (value: HouseholdInvitableRole) => void
+  readonly onInvite: () => void
+  readonly onShare: (invitation: HouseholdInvitation) => void
+  readonly onSetRole: (member: HouseholdMember, role: HouseholdMember['role']) => void
+  readonly onRemove: (member: HouseholdMember) => void
+  readonly onRevoke: (invitation: HouseholdInvitation) => void
+  readonly onRetry: () => void
+}) {
+  if (!sharingEnabled) {
+    return <Notice message="Household sharing is unavailable right now. Nothing about your home has been shared." />
+  }
+  if (loadFailed || !roster) {
+    return <Notice message="Your household could not load. Existing access was not changed." actionLabel="Try again" onAction={onRetry} />
+  }
+
+  const members = roster.members.filter(member => member.state === 'active')
+  const pendingInvitations = roster.invitations.filter(invitation => invitation.status === 'pending')
+  const inviteReady = inviteName.trim().length > 0 && inviteEmail.trim().length > 0
+
+  return (
+    <>
+      <Card accent>
+        <View style={styles.householdHero}>
+          <View style={styles.householdHeroIcon}>
+            <Ionicons name="home" size={26} color={colors.ink} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.cardTitle}>One home, kept together.</Text>
+            <Text style={styles.copy}>Invite your spouse, partner, or another trusted adult. Everyone uses their own sign-in while sharing the same work, photos, and Home Rolo.</Text>
+          </View>
+        </View>
+        {canManage && !inviteOpen ? (
+          <Button label="Invite someone to this home" icon="person-add-outline" onPress={onOpenInvite} />
+        ) : null}
+        {!canManage ? (
+          <Text style={styles.selfReported}>A Home admin manages household access. You can still see the people and shared work connected to this home.</Text>
+        ) : null}
+      </Card>
+
+      {inviteOpen ? (
+        <Card>
+          <SectionTitle title="Invite to this Home Rolo" detail="Use the email they will use to sign in. The private link will not work for a different account." />
+          <TextField
+            label="Their name"
+            value={inviteName}
+            onChangeText={onInviteNameChange}
+            placeholder="Alex"
+            autoCapitalize="words"
+            autoComplete="name"
+          />
+          <TextField
+            label="Their email"
+            value={inviteEmail}
+            onChangeText={onInviteEmailChange}
+            placeholder="alex@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+          />
+          <View style={styles.chips}>
+            <Chip label="Can add and update" selected={inviteRole === 'member'} disabled={busy} onPress={() => onInviteRoleChange('member')} />
+            <Chip label="View only" selected={inviteRole === 'viewer'} disabled={busy} onPress={() => onInviteRoleChange('viewer')} />
+          </View>
+          <Text style={styles.selfReported}>“Can add and update” is the right choice for a spouse or partner. View only can open the shared record but cannot change it.</Text>
+          <Button label={busy ? 'Creating invitation…' : 'Create and share invitation'} icon="share-outline" disabled={busy || !inviteReady} onPress={onInvite} />
+          <Button label="Cancel" quiet disabled={busy} onPress={onCloseInvite} />
+        </Card>
+      ) : null}
+
+      {notice ? <Notice message={notice} /> : null}
+      {error ? <Notice message={error} /> : null}
+
+      <SectionTitle
+        title="Your household"
+        detail={`${members.length} ${members.length === 1 ? 'person has' : 'people have'} access to this exact home.`}
+      />
+      {members.map(member => {
+        const assignmentCount = assignmentCountFor(member)
+        return (
+          <Card key={member.membershipRef} style={styles.householdMemberCard}>
+            <View style={styles.profileTop}>
+              <View style={[styles.avatar, member.isCurrentPrincipal && styles.currentAvatar]}>
+                <Text style={styles.initial}>{member.displayLabel.slice(0, 1).toUpperCase()}</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.profileName}>{member.displayLabel}</Text>
+                <Text style={styles.profileMeta}>
+                  {householdRoleLabel(member.role)} · {assignmentCount === 0 ? 'No open assignments' : `${assignmentCount} open ${assignmentCount === 1 ? 'assignment' : 'assignments'}`}
+                </Text>
+              </View>
+              {member.isCurrentPrincipal ? <Tag tone="lime">You</Tag> : null}
+            </View>
+            {canManage && !member.isCurrentPrincipal ? (
+              <View style={styles.memberControls}>
+                <Text style={styles.controlLabel}>Access</Text>
+                <View style={styles.chips}>
+                  <Chip label="Home admin" selected={member.role === 'workspace_controller'} disabled={busy} onPress={() => onSetRole(member, 'workspace_controller')} />
+                  <Chip label="Can update" selected={member.role === 'member'} disabled={busy} onPress={() => onSetRole(member, 'member')} />
+                  <Chip label="View only" selected={member.role === 'viewer'} disabled={busy} onPress={() => onSetRole(member, 'viewer')} />
+                </View>
+                <Button label="Remove access" icon="person-remove-outline" quiet disabled={busy} onPress={() => onRemove(member)} />
+              </View>
+            ) : null}
+          </Card>
+        )
+      })}
+
+      {pendingInvitations.length > 0 ? (
+        <>
+          <SectionTitle title="Waiting to join" detail="Pending links expire automatically after seven days." />
+          {pendingInvitations.map(invitation => (
+            <Card key={invitation.invitationRef}>
+              <View style={styles.profileTop}>
+                <View style={styles.pendingAvatar}><Ionicons name="mail-unread-outline" size={21} color={colors.aqua} /></View>
+                <View style={styles.flex}>
+                  <Text style={styles.profileName}>{invitation.inviteeDisplayLabel}</Text>
+                  <Text style={styles.profileMeta}>{householdRoleLabel(invitation.desiredRole)} · expires {friendlyDate(invitation.expiresAt)}</Text>
+                </View>
+                <Tag tone="aqua">Invited</Tag>
+              </View>
+              {canManage ? (
+                <View style={styles.memberControls}>
+                  <Button
+                    label={sharingInvitationRef === invitation.invitationRef ? 'Opening share sheet…' : 'Share invitation again'}
+                    icon="share-outline"
+                    disabled={busy || sharingInvitationRef !== null}
+                    onPress={() => onShare(invitation)}
+                  />
+                  <Button
+                    label="Revoke invitation"
+                    quiet
+                    disabled={busy || sharingInvitationRef !== null}
+                    onPress={() => onRevoke(invitation)}
+                  />
+                </View>
+              ) : null}
+            </Card>
+          ))}
+        </>
+      ) : null}
+
+      <View style={styles.householdPrivacy}>
+        <Ionicons name="lock-closed-outline" size={17} color={colors.aqua} />
+        <Text style={styles.householdPrivacyText}>Raw Rolo conversations stay private to the person chatting. Work, tasks, photos, and home details become shared only when someone saves them to this Home Rolo.</Text>
+      </View>
+    </>
+  )
+}
+
+function PeopleModeTab({ label, icon, selected, onPress }: {
+  readonly label: string
+  readonly icon: keyof typeof Ionicons.glyphMap
+  readonly selected: boolean
+  readonly onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.modeTab, selected && styles.modeTabSelected, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={20} color={selected ? colors.ink : colors.slate} />
+      <Text style={[styles.modeTabText, selected && styles.modeTabTextSelected]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function householdInvitationLink(invitation: HouseholdInvitation): string {
+  return `https://app.homesrolo.com/join-household?invitation=${encodeURIComponent(invitation.invitationRef)}`
+}
+
+function householdRoleLabel(role: HouseholdMember['role'] | HouseholdInvitableRole): string {
+  if (role === 'workspace_controller') return 'Home admin'
+  if (role === 'member') return 'Can add and update'
+  return 'View only'
+}
+
+function friendlyDate(value: string): string {
+  const date = new Date(value)
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'soon'
 }
 
 function ProsTab({ label, icon, selected, onPress }: {
@@ -462,6 +910,17 @@ function ContactAction({ icon, label, accessibilityLabel, accessibilityHint, onP
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  modeTabs: {
+    flexDirection: 'row', gap: 7, padding: 5, borderRadius: radius.large,
+    borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft,
+  },
+  modeTab: {
+    flex: 1, minHeight: 50, borderRadius: radius.medium, paddingHorizontal: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  modeTabSelected: { backgroundColor: colors.lime },
+  modeTabText: { color: colors.slate, fontSize: 13, lineHeight: 17, fontWeight: '900' },
+  modeTabTextSelected: { color: colors.ink },
   sectionTabs: {
     flexDirection: 'row', gap: 6, padding: 5, borderRadius: radius.medium,
     borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft,
@@ -474,6 +933,25 @@ const styles = StyleSheet.create({
   sectionTabText: { color: colors.slate, flexShrink: 1, fontSize: 11, lineHeight: 15, fontWeight: '900' },
   sectionTabTextSelected: { color: colors.ink },
   findHead: { flexDirection: 'row', alignItems: 'center', gap: 13 },
+  householdHero: { flexDirection: 'row', alignItems: 'flex-start', gap: 13 },
+  householdHeroIcon: {
+    width: 52, height: 52, borderRadius: 18, backgroundColor: colors.lime,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  householdMemberCard: { gap: space.md },
+  currentAvatar: { borderWidth: 1, borderColor: colors.lime, backgroundColor: colors.limeSoft },
+  pendingAvatar: {
+    width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.aqua,
+    backgroundColor: colors.inkSoft, alignItems: 'center', justifyContent: 'center',
+  },
+  memberControls: { paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.line, gap: space.sm },
+  controlLabel: { color: colors.slate, fontSize: 11, lineHeight: 15, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.1 },
+  householdPrivacy: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: space.md,
+    borderRadius: radius.medium, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.inkSoft,
+  },
+  householdPrivacyText: { flex: 1, color: colors.slate, fontSize: 11, lineHeight: 17 },
   findIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   knownIcon: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.inkSoft, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: colors.cream, fontSize: 20, lineHeight: 24, fontWeight: '900' },

@@ -8,7 +8,9 @@ export function workCreateFieldsFromRoloDraft(
   localToday: string,
 ): RoloWorkCreateFields {
   const occurredOn = draft.occurredOn
-    ?? (draft.status === 'planned' || draft.status === 'in_progress' ? localToday : null)
+    ?? (draft.kind !== 'task' && (draft.status === 'planned' || draft.status === 'in_progress')
+      ? localToday
+      : null)
 
   return {
     title: draft.title,
@@ -16,6 +18,10 @@ export function workCreateFieldsFromRoloDraft(
     category: draft.category,
     status: draft.status,
     ...(occurredOn ? { occurredOn } : {}),
+    ...(draft.assignedMembershipRef
+      ? { assignedMembershipRef: draft.assignedMembershipRef }
+      : {}),
+    ...(draft.dueOn ? { dueOn: draft.dueOn } : {}),
     ...(draft.summary ? { summary: draft.summary } : {}),
     ...(draft.professionalLabel ? { professionalLabel: draft.professionalLabel } : {}),
     ...(draft.firstUpdate

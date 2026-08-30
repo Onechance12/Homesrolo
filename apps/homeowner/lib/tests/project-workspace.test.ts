@@ -105,6 +105,8 @@ test('Supabase workspace commands preserve exact grant fields and stable receipt
             title: input.p_title,
             work_kind: input.p_work_kind,
             professional_label: input.p_professional_label,
+            assigned_membership_ref: input.p_assigned_membership_ref,
+            due_on: input.p_due_on,
             revision: 2,
             archived_at: input.p_requested_at,
             updated_at: input.p_requested_at,
@@ -158,6 +160,8 @@ test('Supabase workspace commands preserve exact grant fields and stable receipt
     title: 'Kitchen remodel',
     workKind: 'service',
     professionalLabel: 'Sample Cabinets',
+    assignedMembershipRef: ref('hmbr', 'a'),
+    dueOn: '2026-09-05',
     archived: true,
     requestedAt,
   }
@@ -171,6 +175,10 @@ test('Supabase workspace commands preserve exact grant fields and stable receipt
   assert.equal(calls[0]?.input.p_set_title, true)
   assert.equal(calls[0]?.input.p_set_work_kind, true)
   assert.equal(calls[0]?.input.p_work_kind, 'service')
+  assert.equal(calls[0]?.input.p_set_assigned_membership_ref, true)
+  assert.equal(calls[0]?.input.p_assigned_membership_ref, ref('hmbr', 'a'))
+  assert.equal(calls[0]?.input.p_set_due_on, true)
+  assert.equal(calls[0]?.input.p_due_on, '2026-09-05')
   assert.equal(calls[0]?.input.p_set_status, false)
 
   await provider.updateProject({
@@ -274,6 +282,7 @@ test('remote port uses native-safe JSON contracts for update, activity, and item
     kind: 'note',
     body: 'Cabinet samples arrived.',
     source: 'homeowner_entry',
+    actorDisplayLabel: 'Chance',
     createdAt: requestedAt,
   }
   const itemView = {

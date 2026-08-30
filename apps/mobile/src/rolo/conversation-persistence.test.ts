@@ -32,6 +32,8 @@ function completeProjection() {
       category: 'hvac',
       status: 'planned',
       occurredOn: null,
+      assignedMembershipRef: `hmbr_${'M'.repeat(43)}`,
+      dueOn: '2026-08-29',
       summary: 'The upstairs is not cooling.',
       professionalLabel: null,
       firstUpdate: 'Started with safe homeowner checks.',
@@ -61,6 +63,39 @@ test('projects and parses only the bounded Rolo continuity allow-list', () => {
   assert.equal(parsed?.followUp, 'Is air moving from the upstairs vents?')
   assert.equal(parsed?.projectRef, projectRef)
   assert.equal(parsed?.photoReview?.projection.suggestedTrade, 'hvac')
+  assert.equal(parsed?.proposedWork?.assignedMembershipRef, `hmbr_${'M'.repeat(43)}`)
+  assert.equal(parsed?.proposedWork?.dueOn, '2026-08-29')
+})
+
+test('migrates safe version-two drafts and fails closed on malformed assignment fields', () => {
+  const projected = completeProjection()!
+  const versionTwo = {
+    ...projected,
+    schemaVersion: 2,
+    proposedWork: projected.proposedWork ? {
+      kind: projected.proposedWork.kind,
+      title: projected.proposedWork.title,
+      category: projected.proposedWork.category,
+      status: projected.proposedWork.status,
+      occurredOn: projected.proposedWork.occurredOn,
+      summary: projected.proposedWork.summary,
+      professionalLabel: projected.proposedWork.professionalLabel,
+      firstUpdate: projected.proposedWork.firstUpdate,
+    } : null,
+  }
+  const migrated = parseRoloConversation(JSON.stringify(versionTwo), scope)
+  assert.equal(migrated?.schemaVersion, 3)
+  assert.equal(migrated?.proposedWork?.assignedMembershipRef, null)
+  assert.equal(migrated?.proposedWork?.dueOn, null)
+
+  assert.equal(parseRoloConversation(JSON.stringify({
+    ...projected,
+    proposedWork: { ...projected.proposedWork, assignedMembershipRef: 'hmbr_not-safe' },
+  }), scope), null)
+  assert.equal(parseRoloConversation(JSON.stringify({
+    ...projected,
+    proposedWork: { ...projected.proposedWork, dueOn: '2026-02-31' },
+  }), scope), null)
 })
 
 test('projection cannot carry credentials, addresses, picker data, consent, or opaque fields', () => {

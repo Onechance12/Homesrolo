@@ -51,6 +51,77 @@ export interface HomeView extends HomeSummary {
   readonly updatedAt: string
 }
 
+export type HouseholdMemberRole = 'workspace_controller' | 'member' | 'viewer'
+export type HouseholdMemberState = 'active' | 'revoked'
+export type HouseholdRecordVersion = 'homeowner-household.v1'
+
+/** A safe, exact-home identity used for assignment UI. No email or principal ref is exposed. */
+export interface HouseholdMember {
+  readonly recordVersion: HouseholdRecordVersion
+  readonly membershipRef: string
+  readonly homeRef: string
+  readonly displayLabel: string
+  readonly role: HouseholdMemberRole
+  readonly state: HouseholdMemberState
+  readonly isCurrentPrincipal: boolean
+  readonly revision: number
+  readonly joinedAt: string
+  readonly revokedAt: string | null
+}
+
+export type HouseholdInvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
+export type HouseholdInvitableRole = 'member' | 'viewer'
+
+export interface HouseholdInvitation {
+  readonly recordVersion: HouseholdRecordVersion
+  readonly invitationRef: string
+  readonly homeRef: string
+  readonly inviteeDisplayLabel: string
+  readonly desiredRole: HouseholdInvitableRole
+  readonly status: HouseholdInvitationStatus
+  readonly expiresAt: string
+  readonly revision: number
+  readonly createdAt: string
+  readonly acceptedAt: string | null
+  readonly revokedAt: string | null
+}
+
+export interface HouseholdRoster {
+  readonly recordVersion: HouseholdRecordVersion
+  readonly homeRef: string
+  readonly members: readonly HouseholdMember[]
+  readonly invitations: readonly HouseholdInvitation[]
+}
+
+export interface CreateHouseholdInvitationInput {
+  readonly commandRef: string
+  readonly inviteeEmail: string
+  readonly inviteeDisplayLabel: string
+  readonly desiredRole: HouseholdInvitableRole
+  readonly expiresInDays: number
+}
+
+export interface AcceptHouseholdInvitationInput {
+  readonly commandRef: string
+}
+
+export interface RevokeHouseholdInvitationInput extends AcceptHouseholdInvitationInput {
+  readonly expectedRevision: number
+}
+
+export interface RemoveHouseholdMemberInput extends AcceptHouseholdInvitationInput {
+  readonly expectedRevision: number
+}
+
+export interface SetHouseholdMemberRoleInput extends RemoveHouseholdMemberInput {
+  readonly desiredRole: HouseholdMemberRole
+}
+
+export interface HouseholdInvitationAcceptance {
+  readonly member: HouseholdMember
+  readonly invitation: HouseholdInvitation
+}
+
 export type HomeType = 'house' | 'townhouse' | 'condo' | 'other' | 'unknown'
 export type HomeSystemKind =
   | 'roof'
@@ -101,7 +172,7 @@ export interface UpdateHomeRecordInput {
   readonly systems: readonly HomeSystemRecord[]
 }
 
-export type WorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident'
+export type WorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident' | 'task'
 export type WorkStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
 export type WorkCategory =
   | 'roofing'
@@ -125,6 +196,9 @@ export interface WorkRecord {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn: string | null
+  /** Exact-home household membership; never a principal, email, or global identity. */
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string | null
   readonly summary: string
   readonly professionalLabel: string | null
   readonly revision: number
@@ -144,6 +218,8 @@ export interface ProjectActivityRecord {
   readonly kind: ProjectActivityKind
   readonly body: string
   readonly source: 'homeowner_entry'
+  /** Home-specific safe label; never an email or principal ref. */
+  readonly actorDisplayLabel: string | null
   readonly createdAt: string
 }
 
@@ -182,6 +258,8 @@ export interface CreateWorkInput {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn?: string
+  readonly assignedMembershipRef?: string
+  readonly dueOn?: string
   readonly summary?: string
   readonly professionalLabel?: string
   readonly initialActivity?: {
@@ -198,6 +276,8 @@ export interface UpdateWorkInput {
   readonly category?: WorkCategory
   readonly status?: WorkStatus
   readonly occurredOn?: string | null
+  readonly assignedMembershipRef?: string | null
+  readonly dueOn?: string | null
   readonly summary?: string | null
   readonly professionalLabel?: string | null
   readonly archived?: boolean
@@ -437,6 +517,9 @@ export interface RoloWorkDraft {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn: string | null
+  /** Exact-home household membership selected by Rolo; labels resolve from the roster. */
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string | null
   readonly summary: string
   readonly professionalLabel: string | null
   readonly firstUpdate: string | null

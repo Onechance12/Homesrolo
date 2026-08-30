@@ -39,6 +39,7 @@ export const kindLabel = Object.freeze({
   repair: 'Repair',
   service: 'Service',
   incident: 'Event',
+  task: 'To-do',
 })
 
 export const statusLabel = Object.freeze({

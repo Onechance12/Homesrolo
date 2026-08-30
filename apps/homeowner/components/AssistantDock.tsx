@@ -53,6 +53,7 @@ const KIND_LABEL: Record<RoloWorkDraft['kind'], string> = {
   repair: 'Repair',
   service: 'Service visit',
   incident: 'Home event',
+  task: 'Task',
 }
 
 const CATEGORY_LABEL: Record<RoloWorkDraft['category'], string> = {
@@ -92,7 +93,7 @@ function destinationHref(homeId: string, destination: RoloDestination, projectRe
   return `/home/${homeId}`
 }
 
-const WORK_KINDS = new Set<RoloWorkDraft['kind']>(['project', 'issue', 'repair', 'service', 'incident'])
+const WORK_KINDS = new Set<RoloWorkDraft['kind']>(['project', 'issue', 'repair', 'service', 'incident', 'task'])
 const WORK_STATUSES = new Set<RoloWorkDraft['status']>(['planned', 'in_progress', 'completed', 'cancelled'])
 
 function readStoredDraft(value: unknown): RoloWorkDraft | null {
@@ -103,6 +104,10 @@ function readStoredDraft(value: unknown): RoloWorkDraft | null {
     || typeof draft.category !== 'string' || !Object.hasOwn(CATEGORY_LABEL, draft.category)
     || typeof draft.status !== 'string' || !WORK_STATUSES.has(draft.status as RoloWorkDraft['status'])
     || (draft.occurredOn !== null && (typeof draft.occurredOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(draft.occurredOn)))
+    || (draft.assignedMembershipRef !== undefined && draft.assignedMembershipRef !== null
+      && (typeof draft.assignedMembershipRef !== 'string' || !/^hmbr_[A-Za-z0-9_-]{43}$/.test(draft.assignedMembershipRef)))
+    || (draft.dueOn !== undefined && draft.dueOn !== null
+      && (typeof draft.dueOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(draft.dueOn)))
     || typeof draft.summary !== 'string' || draft.summary.length > 2_000
     || (draft.professionalLabel !== null && (typeof draft.professionalLabel !== 'string'
       || draft.professionalLabel.trim().length < 1 || draft.professionalLabel.length > 160))
@@ -114,6 +119,8 @@ function readStoredDraft(value: unknown): RoloWorkDraft | null {
     category: draft.category as RoloWorkDraft['category'],
     status: draft.status as RoloWorkDraft['status'],
     occurredOn: draft.occurredOn as string | null,
+    assignedMembershipRef: typeof draft.assignedMembershipRef === 'string' ? draft.assignedMembershipRef : null,
+    dueOn: typeof draft.dueOn === 'string' ? draft.dueOn : null,
     summary: draft.summary.trim(),
     professionalLabel: typeof draft.professionalLabel === 'string' ? draft.professionalLabel.trim() : null,
     firstUpdate: typeof draft.firstUpdate === 'string' ? draft.firstUpdate.trim() : null,
@@ -616,6 +623,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
         category: proposal.category,
         status: proposal.status,
         ...(proposal.occurredOn ? { occurredOn: proposal.occurredOn } : {}),
+        ...(proposal.assignedMembershipRef ? { assignedMembershipRef: proposal.assignedMembershipRef } : {}),
+        ...(proposal.dueOn ? { dueOn: proposal.dueOn } : {}),
         summary: proposal.summary,
       })
       if (!created.ok) {
@@ -742,6 +751,8 @@ export function AssistantDock({ homeId }: { readonly homeId: string }) {
                     <div><dt>Area</dt><dd>{CATEGORY_LABEL[proposal.category]}</dd></div>
                     <div><dt>Status</dt><dd>{proposal.status.replace('_', ' ')}</dd></div>
                     {proposal.occurredOn ? <div><dt>Date</dt><dd>{proposal.occurredOn}</dd></div> : null}
+                    {proposal.assignedMembershipRef ? <div><dt>Assigned</dt><dd>Household member</dd></div> : null}
+                    {proposal.dueOn ? <div><dt>Due</dt><dd>{proposal.dueOn}</dd></div> : null}
                     {proposal.professionalLabel ? <div><dt>Who</dt><dd>{proposal.professionalLabel}</dd></div> : null}
                   </dl>
                   {proposal.summary ? <p>{proposal.summary}</p> : null}

@@ -101,14 +101,24 @@ researches or saves a fact. Both paths fail closed unless the server has
 `HOMESROLO_AI_ENABLED=true` plus a server-only `OPENAI_API_KEY`. See
 `docs/HOME_RESEARCH.md` for the public-research privacy and source boundaries.
 
+Adult household collaboration reuses the same exact Home Record membership and
+Work records rather than creating a second family or task system. A Home admin
+can invite a spouse, partner, or trusted adult through an email-bound, expiring
+link; the recipient signs in separately and joins that exact home as a member
+or read-only viewer. Members can share Work, selected photos/files, due dates,
+assignments, and attributed updates. Raw Rolo conversations remain private to
+the person and device; only a reviewed task or Work record becomes shared.
+Apply migrations `202608300001` through `202608300003` before deploying this
+surface.
+
 Private PDF/JPEG/PNG storage remains separately gated. A signed-in development
 lane now supports a bounded private bucket without routing bytes through
 Netlify, but public signup remains off and malware scanning is explicitly
 deferred. Its permanent quota accounting and rollout steps are documented in
 `docs/HOMEOWNER_DEV_PRIVATE_UPLOADS.md`. The Home Library shows an honest unavailable
 state when that capability is off; it does not simulate an upload. Controller
-verification, co-owner invitations, public sharing, payments, analytics, and
-automatic professional routing remain outside this release.
+verification, child accounts, recurring chores, public sharing, payments,
+analytics, and automatic professional routing remain outside this release.
 
 A separate seasonal-photo workspace is implemented without opening that generic
 uploader. A homeowner records the date, a home area, and a repeatable spot name

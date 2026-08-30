@@ -6,14 +6,21 @@ import type {
   WorkKind,
   WorkStatus,
 } from '../api/model.ts'
-import { isArtifactRef, isHomeRef, isProjectRef } from '../api/protocol.ts'
+import {
+  isArtifactRef,
+  isCalendarDate,
+  isHomeRef,
+  isHouseholdMembershipRef,
+  isProjectRef,
+} from '../api/protocol.ts'
 
-export const ROLO_CONVERSATION_SCHEMA_VERSION = 2
+export const ROLO_CONVERSATION_SCHEMA_VERSION = 3
 export const MAX_ROLO_CONVERSATION_CHARACTERS = 24 * 1024
 
 const PRINCIPAL_REF_PATTERN = /^hprn_[A-Za-z0-9_-]{43}$/
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
-const WORK_KINDS: readonly WorkKind[] = ['project', 'issue', 'repair', 'service', 'incident']
+const WORK_KINDS: readonly WorkKind[] = ['project', 'issue', 'repair', 'service', 'incident', 'task']
+const LEGACY_WORK_KINDS: readonly WorkKind[] = ['project', 'issue', 'repair', 'service', 'incident']
 const WORK_STATUSES: readonly WorkStatus[] = ['planned', 'in_progress', 'completed', 'cancelled']
 const WORK_CATEGORIES: readonly WorkCategory[] = [
   'roofing', 'exterior', 'interior', 'electrical', 'plumbing', 'hvac',
@@ -149,7 +156,7 @@ export function projectRoloConversation(
     if (remaining === 0) break
   }
 
-  const proposedWork = parseWorkDraft(input.proposedWork)
+  const proposedWork = parseWorkDraft(input.proposedWork, ROLO_CONVERSATION_SCHEMA_VERSION)
   const followUp = input.followUp === null
     ? null
     : boundedProjectionText(input.followUp, 240, true)
@@ -208,7 +215,7 @@ export function parseRoloConversation(
     'followUp', 'suggestion', 'attachment', 'photoReview',
   ])
   if (!object
-    || object.schemaVersion !== ROLO_CONVERSATION_SCHEMA_VERSION
+    || (object.schemaVersion !== 2 && object.schemaVersion !== ROLO_CONVERSATION_SCHEMA_VERSION)
     || object.principalRef !== expected.principalRef
     || object.homeRef !== expected.homeRef
     || (object.projectRef !== null && !isProjectRef(object.projectRef))
@@ -230,7 +237,10 @@ export function parseRoloConversation(
     turns.push({ role: turn.role, text, photo })
   }
 
-  const proposedWork = object.proposedWork === null ? null : parseWorkDraft(object.proposedWork)
+  const storedSchemaVersion = object.schemaVersion as 2 | typeof ROLO_CONVERSATION_SCHEMA_VERSION
+  const proposedWork = object.proposedWork === null
+    ? null
+    : parseWorkDraft(object.proposedWork, storedSchemaVersion)
   const followUp = object.followUp === null ? null : strictText(object.followUp, 240, true)
   const suggestion = object.suggestion === null ? null : parseSuggestion(object.suggestion)
   const attachment = object.attachment === null ? null : parsePhoto(object.attachment)
@@ -313,17 +323,20 @@ function parseSuggestion(value: unknown): PersistedRoloSuggestion | null {
   }
 }
 
-function parseWorkDraft(value: unknown): RoloWorkDraft | null {
+function parseWorkDraft(value: unknown, schemaVersion: 2 | 3): RoloWorkDraft | null {
   const object = exactObject(value, [
     'kind', 'title', 'category', 'status', 'occurredOn', 'summary',
     'professionalLabel', 'firstUpdate',
+    ...(schemaVersion === 3 ? ['assignedMembershipRef', 'dueOn'] : []),
   ])
   if (!object
-    || !WORK_KINDS.includes(object.kind as WorkKind)
+    || !(schemaVersion === 2 ? LEGACY_WORK_KINDS : WORK_KINDS).includes(object.kind as WorkKind)
     || !WORK_CATEGORIES.includes(object.category as WorkCategory)
     || !WORK_STATUSES.includes(object.status as WorkStatus)
-    || (object.occurredOn !== null
-      && (typeof object.occurredOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(object.occurredOn)))) return null
+    || (object.occurredOn !== null && !isCalendarDate(object.occurredOn))
+    || (schemaVersion === 3 && object.assignedMembershipRef !== null
+      && !isHouseholdMembershipRef(object.assignedMembershipRef))
+    || (schemaVersion === 3 && object.dueOn !== null && !isCalendarDate(object.dueOn))) return null
   const title = strictText(object.title, 120, true)
   const summary = strictText(object.summary, 2_000, false)
   const professionalLabel = object.professionalLabel === null
@@ -341,6 +354,10 @@ function parseWorkDraft(value: unknown): RoloWorkDraft | null {
     category: object.category as WorkCategory,
     status: object.status as WorkStatus,
     occurredOn: object.occurredOn as string | null,
+    assignedMembershipRef: schemaVersion === 3
+      ? object.assignedMembershipRef as string | null
+      : null,
+    dueOn: schemaVersion === 3 ? object.dueOn as string | null : null,
     summary,
     professionalLabel,
     firstUpdate,

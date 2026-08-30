@@ -9,6 +9,8 @@ const BASE_DRAFT: RoloWorkDraft = {
   category: 'hvac',
   status: 'planned',
   occurredOn: null,
+  assignedMembershipRef: null,
+  dueOn: null,
   summary: 'Homeowner reported the upstairs AC is not cooling.',
   professionalLabel: null,
   firstUpdate: 'Homeowner-reported location: upstairs hallway unit.',
@@ -38,4 +40,18 @@ test('historical Rolo drafts never receive an invented date', () => {
     occurredOn: '2024-05-12',
   }, '2026-08-28')
   assert.equal(dated.occurredOn, '2024-05-12')
+})
+
+test('assigned task drafts preserve household assignment and due date without inventing occurredOn', () => {
+  const membershipRef = `hmbr_${'M'.repeat(43)}`
+  const fields = workCreateFieldsFromRoloDraft({
+    ...BASE_DRAFT,
+    kind: 'task',
+    title: 'Patch the hallway wall',
+    assignedMembershipRef: membershipRef,
+    dueOn: '2026-08-29',
+  }, '2026-08-28')
+  assert.equal(Object.hasOwn(fields, 'occurredOn'), false)
+  assert.equal(fields.assignedMembershipRef, membershipRef)
+  assert.equal(fields.dueOn, '2026-08-29')
 })

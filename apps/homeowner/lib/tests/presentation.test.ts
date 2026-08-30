@@ -341,6 +341,12 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/[homeRef]/handoffs/[shareId]/accept/route.ts',
     'app/api/v1/homes/[homeRef]/handoffs/[shareId]/reject/route.ts',
     'app/api/v1/homes/[homeRef]/home-record/export/route.ts',
+    'app/api/v1/homes/[homeRef]/household/route.ts',
+    'app/api/v1/homes/[homeRef]/household/invitations/route.ts',
+    'app/api/v1/homes/[homeRef]/household/invitations/[invitationRef]/revoke/route.ts',
+    'app/api/v1/homes/[homeRef]/household/members/[membershipRef]/remove/route.ts',
+    'app/api/v1/homes/[homeRef]/household/members/[membershipRef]/role/route.ts',
+    'app/api/v1/household/invitations/[invitationRef]/accept/route.ts',
     'app/api/v1/professionals/route.ts',
     'app/api/v1/professionals/[slug]/route.ts',
     'app/api/v1/professional/profile/route.ts',
@@ -373,12 +379,30 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     ...PROFESSIONAL_POST_ONLY_ROUTES,
     ...PROFESSIONAL_GET_ONLY_ROUTES,
   ]
+  const HOUSEHOLD_GET_ONLY_ROUTES = [
+    'app/api/v1/homes/[homeRef]/household/route.ts',
+  ]
+  const HOUSEHOLD_POST_ONLY_ROUTES = [
+    'app/api/v1/homes/[homeRef]/household/invitations/route.ts',
+    'app/api/v1/homes/[homeRef]/household/invitations/[invitationRef]/revoke/route.ts',
+    'app/api/v1/homes/[homeRef]/household/members/[membershipRef]/remove/route.ts',
+    'app/api/v1/homes/[homeRef]/household/members/[membershipRef]/role/route.ts',
+    'app/api/v1/household/invitations/[invitationRef]/accept/route.ts',
+  ]
   const found = appSources.filter(rel => /route\.(ts|tsx)$/.test(rel)).sort()
   assert.deepEqual(found, [...ROUTE_ALLOWLIST].sort(),
     'the route inventory must remain exactly the allowlisted paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    if (rel.endsWith('/handoffs/[shareId]/claim/route.ts')
+    if (HOUSEHOLD_GET_ONLY_ROUTES.includes(rel)) {
+      assert.match(content, /export async function GET/, `${rel} serves one exact-home household roster`)
+      assert.doesNotMatch(content, /export (async function|const) POST/, `${rel} exposes no household mutation`)
+      assert.match(content, /handleHouseholdRequest/, `${rel} delegates to the household boundary`)
+    } else if (HOUSEHOLD_POST_ONLY_ROUTES.includes(rel)) {
+      assert.match(content, /export async function POST/, `${rel} serves one household command`)
+      assert.doesNotMatch(content, /export (async function|const) GET/, `${rel} exposes no duplicate read`)
+      assert.match(content, /handleHouseholdRequest/, `${rel} delegates to the household boundary`)
+    } else if (rel.endsWith('/handoffs/[shareId]/claim/route.ts')
       || rel.endsWith('/handoffs/[shareId]/accept/route.ts')
       || rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
       assert.match(content, /export async function POST/, `${rel} serves one exact decision`)
@@ -549,6 +573,7 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && rel !== 'app/api/v1/homes/[homeRef]/assistant/route.ts'
       && !PROFESSIONAL_GET_POST_ROUTES.includes(rel)
       && !PROFESSIONAL_POST_ONLY_ROUTES.includes(rel)
+      && !HOUSEHOLD_POST_ONLY_ROUTES.includes(rel)
       && !rel.endsWith('/handoffs/[shareId]/claim/route.ts')
       && !rel.endsWith('/handoffs/[shareId]/accept/route.ts')
       && !rel.endsWith('/handoffs/[shareId]/reject/route.ts')) {
@@ -576,7 +601,10 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
       && !rel.includes('/handoffs/')
       && !rel.endsWith('/handoffs/route.ts')
       && !rel.endsWith('/home-record/export/route.ts')) {
-      if (PROFESSIONAL_ADAPTER_ROUTES.includes(rel)) {
+      if (HOUSEHOLD_GET_ONLY_ROUTES.includes(rel) || HOUSEHOLD_POST_ONLY_ROUTES.includes(rel)) {
+        assert.match(content, /handleHouseholdRequest/,
+          `${rel} only delegates to the household adapter`)
+      } else if (PROFESSIONAL_ADAPTER_ROUTES.includes(rel)) {
         assert.match(content, /handleProfessionalRequest/,
           `${rel} only delegates to the professional adapter`)
       } else if (rel !== PROFESSIONAL_ARTIFACT_ROUTE) {

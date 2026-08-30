@@ -32,6 +32,7 @@ export interface RoloCardViewProps {
   readonly renderMedia?: RoloCardMediaRenderer | undefined
   readonly onOpen?: ((card: HomesroloCard) => void) | undefined
   readonly onAskRolo?: ((card: HomesroloCard) => void) | undefined
+  readonly onQuickComplete?: ((card: HomesroloCard) => void) | undefined
   /** Turns the raised file tab into the physical Rolodex-style page control. */
   readonly onTabPress?: (() => void) | undefined
   readonly tabAccessibilityLabel?: string | undefined
@@ -68,6 +69,7 @@ export function RoloCardView({
   renderMedia,
   onOpen,
   onAskRolo,
+  onQuickComplete,
   onTabPress,
   tabAccessibilityLabel,
   openLabel,
@@ -154,7 +156,7 @@ export function RoloCardView({
           </>
         )}
 
-        {onOpen || onAskRolo ? (
+        {onOpen || onAskRolo || onQuickComplete ? (
           <View style={[styles.actionRow, compact && styles.actionRowCompact]}>
             {onAskRolo ? (
               <CardAction
@@ -164,6 +166,15 @@ export function RoloCardView({
                 motionReduced={motionReduced}
                 onPress={() => onAskRolo(card)}
                 quiet
+              />
+            ) : null}
+            {onQuickComplete ? (
+              <CardAction
+                accessibilityHint={`Marks ${card.title} complete for this household`}
+                icon="checkmark"
+                label="Done"
+                motionReduced={motionReduced}
+                onPress={() => onQuickComplete(card)}
               />
             ) : null}
             {onOpen ? (

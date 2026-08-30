@@ -161,7 +161,7 @@ const PROJECT_CATEGORIES = [
 ] as const
 const PROJECT_STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
 const PROJECT_WORK_KINDS = new Set<HomeownerWorkKind>([
-  'project', 'issue', 'repair', 'service', 'incident',
+  'project', 'issue', 'repair', 'service', 'incident', 'task',
 ])
 
 function normalizedRoloWorkDraft(value: unknown): RoloWorkDraft | null | undefined {
@@ -185,6 +185,16 @@ function normalizedRoloWorkDraft(value: unknown): RoloWorkDraft | null | undefin
     : typeof draft.occurredOn === 'string' && validCalendarDate(draft.occurredOn)
       ? draft.occurredOn
       : undefined
+  const assignedMembershipRef = draft.assignedMembershipRef === undefined || draft.assignedMembershipRef === null
+    ? null
+    : typeof draft.assignedMembershipRef === 'string' && /^hmbr_[A-Za-z0-9_-]{43}$/.test(draft.assignedMembershipRef)
+      ? draft.assignedMembershipRef
+      : undefined
+  const dueOn = draft.dueOn === undefined || draft.dueOn === null
+    ? null
+    : typeof draft.dueOn === 'string' && validCalendarDate(draft.dueOn)
+      ? draft.dueOn
+      : undefined
   const summary = typeof draft.summary === 'string' && draft.summary.trim().length <= 2_000
     ? draft.summary.trim()
     : undefined
@@ -199,10 +209,14 @@ function normalizedRoloWorkDraft(value: unknown): RoloWorkDraft | null | undefin
       ? boundedResearchText(draft.firstUpdate, 2_000) ?? undefined
       : undefined
   if (!kind || !title || !category || !status || occurredOn === undefined
+    || assignedMembershipRef === undefined || dueOn === undefined
     || summary === undefined || professionalLabel === undefined || firstUpdate === undefined) {
     return undefined
   }
-  return { kind, title, category, status, occurredOn, summary, professionalLabel, firstUpdate }
+  return {
+    kind, title, category, status, occurredOn, assignedMembershipRef, dueOn,
+    summary, professionalLabel, firstUpdate,
+  }
 }
 
 function normalizedRoloConversation(value: unknown): RoloConversationState | null {
@@ -286,6 +300,19 @@ function projectUpdateBody(input: Parameters<HomeownerDataPort['updateProject']>
     if (professionalLabel !== null
       && (professionalLabel.length < 1 || professionalLabel.length > 160)) return null
     body.professionalLabel = professionalLabel
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'assignedMembershipRef')) {
+    if (input.assignedMembershipRef !== null
+      && (typeof input.assignedMembershipRef !== 'string'
+        || !/^hmbr_[A-Za-z0-9_-]{43}$/.test(input.assignedMembershipRef))) return null
+    body.assignedMembershipRef = input.assignedMembershipRef
+    editableFieldCount += 1
+  }
+  if (Object.hasOwn(input, 'dueOn')) {
+    if (input.dueOn !== null
+      && (typeof input.dueOn !== 'string' || !validCalendarDate(input.dueOn))) return null
+    body.dueOn = input.dueOn
     editableFieldCount += 1
   }
   if (Object.hasOwn(input, 'archived')) {
@@ -928,6 +955,7 @@ export function createRemotePort(
       const title = input.title.trim()
       const summary = input.summary.trim()
       const occurredOn = input.occurredOn?.trim()
+      const dueOn = input.dueOn?.trim()
       const workKind = input.workKind ?? 'project'
       if (!ref
         || !COMMAND_REF_PATTERN.test(input.commandRef)
@@ -937,7 +965,10 @@ export function createRemotePort(
         || title.length < 1
         || title.length > 120
         || summary.length > 2000
-        || (occurredOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(occurredOn))) {
+        || (occurredOn !== undefined && !validCalendarDate(occurredOn))
+        || (dueOn !== undefined && !validCalendarDate(dueOn))
+        || (input.assignedMembershipRef !== undefined
+          && !/^hmbr_[A-Za-z0-9_-]{43}$/.test(input.assignedMembershipRef))) {
         return { ok: false, error: 'invalid' }
       }
       const result = await call({
@@ -951,6 +982,10 @@ export function createRemotePort(
           status: input.status,
           ...(occurredOn ? { occurredOn } : {}),
           ...(summary ? { summary } : {}),
+          ...(input.assignedMembershipRef
+            ? { assignedMembershipRef: input.assignedMembershipRef }
+            : {}),
+          ...(dueOn ? { dueOn } : {}),
         },
       }, decodeProject, 201)
       const trade = {
@@ -963,7 +998,9 @@ export function createRemotePort(
         || result.value.workKind !== workKind
         || result.value.trade !== trade[input.category]
         || result.value.status !== input.status
-        || result.value.performedOn !== (occurredOn || null))) {
+        || result.value.performedOn !== (occurredOn || null)
+        || result.value.assignedMembershipRef !== (input.assignedMembershipRef ?? null)
+        || result.value.dueOn !== (dueOn ?? null))) {
         return { ok: false, error: 'invalid' }
       }
       return result

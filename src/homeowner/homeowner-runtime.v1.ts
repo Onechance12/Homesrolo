@@ -49,6 +49,7 @@ export const homeownerMembershipSchema = z.object({
   membershipRef: opaqueRef('hmbr'),
   principalRef: opaqueRef('hprn'),
   homeRef: opaqueRef('hhom'),
+  displayLabel: z.string().trim().min(1).max(60).optional(),
   role: z.enum(['workspace_controller', 'member', 'viewer']),
   basis: z.enum(['self_created_workspace', 'verified_control', 'accepted_invitation']),
   state: z.enum(['pending', 'active', 'revoked']),
@@ -118,12 +119,14 @@ export type HomeownerWorkspaceAction = (typeof HOMEOWNER_WORKSPACE_ACTIONS)[numb
 const CONTROLLER_ACTIONS: readonly HomeownerWorkspaceAction[] = HOMEOWNER_WORKSPACE_ACTIONS
 const MEMBER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
   'workspace.read',
+  'home_record.read',
   'project.create',
   'project.update',
   'project.activity.append',
   'project.item.save',
   'artifact.create_metadata',
   'artifact.upload',
+  'artifact.update_metadata',
   'artifact.read_metadata',
   'warranty.create',
   'warranty.update',
@@ -132,6 +135,7 @@ const MEMBER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
 ])
 const VIEWER_ACTIONS: readonly HomeownerWorkspaceAction[] = Object.freeze([
   'workspace.read',
+  'home_record.read',
   'artifact.read_metadata',
 ])
 
@@ -342,6 +346,7 @@ export const homeownerProjectWorkKindSchema = z.enum([
   'repair',
   'service',
   'incident',
+  'task',
 ])
 
 export const homeownerProjectSchema = z.object({
@@ -370,6 +375,9 @@ export const homeownerProjectSchema = z.object({
   occurredOn: calendarDate.optional(),
   summary: z.string().trim().max(2000).optional(),
   professionalLabel: z.string().trim().min(1).max(160).optional(),
+  /** Exact-home household assignment. Principal identity never crosses the API. */
+  assignedMembershipRef: opaqueRef('hmbr').optional(),
+  dueOn: calendarDate.optional(),
   revision: z.number().int().min(1),
   archivedAt: utcInstant.optional(),
   createdAt: utcInstant,
@@ -488,6 +496,8 @@ export const createHomeownerProjectInputSchema = z.object({
   occurredOn: calendarDate.optional(),
   summary: z.string().trim().max(2000).optional(),
   professionalLabel: z.string().trim().min(1).max(160).optional(),
+  assignedMembershipRef: opaqueRef('hmbr').optional(),
+  dueOn: calendarDate.optional(),
   initialActivity: z.object({
     kind: z.enum(['note', 'milestone']),
     body: z.string().trim().min(1).max(2000),
@@ -654,6 +664,14 @@ export interface HomeownerRepositoryPort {
     authorization: AuthorizedHomeownerPrincipal,
   ): Promise<readonly HomeownerMembership[]>
   readMembership(principalRef: string, homeRef: string): Promise<HomeownerMembership | null>
+  /**
+   * Optional during rolling adapter upgrades; services fail closed when an
+   * assignment is requested and this authoritative exact-home lookup is absent.
+   */
+  readMembershipByRef?(
+    homeRef: string,
+    membershipRef: string,
+  ): Promise<HomeownerMembership | null>
   readHome(grant: AuthorizedHomeownerWorkspace): Promise<PrivateHomeProfile | null>
   readPropertyFacts(grant: AuthorizedHomeownerWorkspace): Promise<HomeownerPropertyFacts | null>
   listSystems(grant: AuthorizedHomeownerWorkspace): Promise<readonly HomeownerSystem[]>

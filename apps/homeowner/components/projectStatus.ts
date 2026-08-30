@@ -23,6 +23,7 @@ export const WORK_KIND_LABEL: Record<HomeownerWorkKind, string> = {
   repair: 'Repair',
   service: 'Service visit',
   incident: 'Home event',
+  task: 'Task',
 }
 
 export const WORK_KIND_OPTIONS = (Object.entries(WORK_KIND_LABEL) as [

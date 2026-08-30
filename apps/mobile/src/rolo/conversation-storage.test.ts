@@ -23,8 +23,16 @@ const key = `${scope.principalRef}.${scope.homeRef}.${projectRef}`
 const legacyKey = `${scope.principalRef}.${scope.homeRef}`
 
 function conversation(ref = projectRef, text = 'My faucet is leaking.') {
+  return conversationFor(scope, ref, text)
+}
+
+function conversationFor(
+  targetScope: RoloConversationScope,
+  ref = projectRef,
+  text = 'My faucet is leaking.',
+) {
   return projectRoloConversation({
-    ...scope,
+    ...targetScope,
     projectRef: ref,
     turns: [{ role: 'user', text }],
     proposedWork: null,
@@ -113,6 +121,64 @@ test('clearAll removes every Rolo thread without touching other origin data', as
   await storage.write(other)
   await storage.clearAll()
   assert.deepEqual([...values.keys()], ['homesrolo.web.session.v1'])
+})
+
+test('clearHome removes every thread for only the exact principal and home', async () => {
+  const otherHomeScope: RoloConversationScope = {
+    ...scope,
+    homeRef: `hhom_${'X'.repeat(43)}`,
+  }
+  const otherPrincipalScope: RoloConversationScope = {
+    ...scope,
+    principalRef: `hprn_${'Q'.repeat(43)}`,
+  }
+  const target = conversation()
+  const targetOtherProject = conversation(otherProjectRef, 'Plan the kitchen.')
+  const otherHome = conversationFor(otherHomeScope, projectRef, 'This belongs to another home.')
+  const otherPrincipal = conversationFor(otherPrincipalScope, projectRef, 'This belongs to another person.')
+  const driver = memoryRoloRawStorage()
+  const storage = createRoloConversationStorage(driver)
+
+  await storage.write(target)
+  await storage.write(targetOtherProject)
+  await storage.write(otherHome)
+  await storage.write(otherPrincipal)
+  await driver.write(legacyKey, serializeRoloConversation(target))
+  await storage.clearHome(scope)
+
+  assert.equal(await storage.read(projectScope), null)
+  assert.equal(await storage.read({ ...scope, projectRef: otherProjectRef }), null)
+  assert.equal(driver.values.has(legacyKey), false)
+  assert.deepEqual(await storage.read({ ...otherHomeScope, projectRef }), otherHome)
+  assert.deepEqual(await storage.read({ ...otherPrincipalScope, projectRef }), otherPrincipal)
+})
+
+test('web clearHome preserves unrelated origin data and other homes', async () => {
+  const values = new Map<string, string>()
+  const origin = {
+    get length() { return values.size },
+    getItem: (item: string) => values.get(item) ?? null,
+    setItem: (item: string, value: string) => { values.set(item, value) },
+    removeItem: (item: string) => { values.delete(item) },
+    key: (index: number) => [...values.keys()][index] ?? null,
+  }
+  const otherHomeScope: RoloConversationScope = {
+    ...scope,
+    homeRef: `hhom_${'X'.repeat(43)}`,
+  }
+  const otherHome = conversationFor(otherHomeScope)
+  values.set('homesrolo.web.session.v1', 'keep-session')
+  const storage = createRoloConversationStorage(webRoloRawStorage(() => origin))
+  await storage.write(conversation())
+  await storage.write(conversation(otherProjectRef))
+  await storage.write(otherHome)
+
+  await storage.clearHome(scope)
+
+  assert.equal(await storage.read(projectScope), null)
+  assert.equal(await storage.read({ ...scope, projectRef: otherProjectRef }), null)
+  assert.deepEqual(await storage.read({ ...otherHomeScope, projectRef }), otherHome)
+  assert.equal(values.get('homesrolo.web.session.v1'), 'keep-session')
 })
 
 test('serialized conversation contains no storage-only wrapper or hidden payload', async () => {

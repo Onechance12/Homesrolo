@@ -3,7 +3,7 @@ import type { ProjectActivityRecord } from './model.ts'
 type JsonRecord = Record<string, unknown>
 
 const ACTIVITY_KEYS = [
-  'activityRef', 'body', 'createdAt', 'homeRef', 'kind', 'projectRef', 'source',
+  'activityRef', 'actorDisplayLabel', 'body', 'createdAt', 'homeRef', 'kind', 'projectRef', 'source',
 ] as const
 const ACTIVITY_REF = /^hact_[A-Za-z0-9_-]{43}$/
 const HOME_REF = /^hhom_[A-Za-z0-9_-]{43}$/
@@ -34,6 +34,12 @@ export function parseProjectActivity(value: unknown): ProjectActivityRecord {
     || typeof source.body !== 'string' || source.body.length < 1 || source.body.length > 2_000
     || source.body.trim() !== source.body
     || source.source !== 'homeowner_entry'
+    || (source.actorDisplayLabel !== null
+      && (typeof source.actorDisplayLabel !== 'string'
+        || source.actorDisplayLabel.trim() !== source.actorDisplayLabel
+        || source.actorDisplayLabel.length < 1
+        || source.actorDisplayLabel.length > 60
+        || /[\u0000-\u001f\u007f]/.test(source.actorDisplayLabel)))
     || !canonicalUtcInstant(source.createdAt)) {
     throw new Error('invalid_wire_data')
   }
@@ -44,6 +50,7 @@ export function parseProjectActivity(value: unknown): ProjectActivityRecord {
     kind: source.kind,
     body: source.body,
     source: 'homeowner_entry',
+    actorDisplayLabel: source.actorDisplayLabel,
     createdAt: source.createdAt,
   }
 }
