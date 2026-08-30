@@ -1,12 +1,16 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ActivityIndicator,
+  AccessibilityInfo,
+  Animated,
+  Easing,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   type TextInputProps,
   type StyleProp,
   View,
@@ -175,12 +179,225 @@ export function Metric({ value, label }: { readonly value: string | number; read
   )
 }
 
+function LaunchDeck({ lift }: { readonly lift?: Animated.Value }) {
+  const frontMotion = lift
+    ? {
+        transform: [{
+          translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }),
+        }],
+      }
+    : undefined
+
+  return (
+    <View style={styles.loadingDeck}>
+      <View style={[styles.loadingCard, styles.loadingCardBack]} />
+      <View style={[styles.loadingCard, styles.loadingCardMiddle]} />
+      <Animated.View style={[styles.loadingCard, styles.loadingCardFront, frontMotion]}>
+        <View style={styles.loadingCardHeading}>
+          <Image
+            accessibilityIgnoresInvertColors
+            source={require('../../assets/icon-512.png')}
+            style={styles.loadingMark}
+          />
+          <View style={styles.loadingCardTitleGroup}>
+            <Text style={styles.loadingEyebrow}>MY ROLO</Text>
+            <Text style={styles.loadingCardTitle}>Your home, in order.</Text>
+          </View>
+        </View>
+        <View style={styles.loadingMemoryList}>
+          <View style={styles.loadingMemoryRow}>
+            <View style={[styles.loadingMemoryDot, styles.loadingMemoryDotLime]} />
+            <View style={[styles.loadingMemoryLine, styles.loadingMemoryLineLong]} />
+          </View>
+          <View style={styles.loadingMemoryRow}>
+            <View style={[styles.loadingMemoryDot, styles.loadingMemoryDotAqua]} />
+            <View style={[styles.loadingMemoryLine, styles.loadingMemoryLineMedium]} />
+          </View>
+          <View style={styles.loadingMemoryRow}>
+            <View style={[styles.loadingMemoryDot, styles.loadingMemoryDotMint]} />
+            <View style={[styles.loadingMemoryLine, styles.loadingMemoryLineShort]} />
+          </View>
+        </View>
+        <View style={[styles.loadingFileTab, styles.loadingFileTabTop]} />
+        <View style={[styles.loadingFileTab, styles.loadingFileTabMiddle]} />
+        <View style={[styles.loadingFileTab, styles.loadingFileTabBottom]} />
+      </Animated.View>
+    </View>
+  )
+}
+
+export function LaunchLoading({ label = 'Opening your home…' }: { readonly label?: string }) {
+  // Start still until the operating-system preference is known. This avoids a
+  // flash of motion for people who have Reduce Motion enabled.
+  const [reduceMotion, setReduceMotion] = useState(true)
+  const window = useWindowDimensions()
+  const cardLift = useRef(new Animated.Value(0)).current
+  const progressTravel = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    let mounted = true
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then(enabled => {
+        if (mounted) setReduceMotion(enabled)
+      })
+      .catch(() => {
+        // Keep the motion-free default when the host cannot report a
+        // preference. Launching the app should never create an unhandled
+        // platform promise just to decorate the opening screen.
+        if (mounted) setReduceMotion(true)
+      })
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+
+    return () => {
+      mounted = false
+      subscription.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (reduceMotion) {
+      cardLift.stopAnimation()
+      progressTravel.stopAnimation()
+      cardLift.setValue(0)
+      progressTravel.setValue(0.55)
+      return
+    }
+
+    const cardLoop = Animated.loop(Animated.sequence([
+      Animated.timing(cardLift, {
+        toValue: 1,
+        duration: 950,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(cardLift, {
+        toValue: 0,
+        duration: 950,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]))
+    const progressLoop = Animated.loop(Animated.timing(progressTravel, {
+      toValue: 1,
+      duration: 1_500,
+      easing: Easing.inOut(Easing.quad),
+      useNativeDriver: Platform.OS !== 'web',
+    }))
+
+    cardLoop.start()
+    progressLoop.start()
+    return () => {
+      cardLoop.stop()
+      progressLoop.stop()
+    }
+  }, [cardLift, progressTravel, reduceMotion])
+
+  return (
+    <SafeAreaView
+      style={[styles.loadingSafe, { minHeight: Math.max(420, window.height) }]}
+      edges={['top', 'right', 'bottom', 'left']}
+    >
+      <View
+        accessible
+        accessibilityLiveRegion="polite"
+        accessibilityRole="progressbar"
+        accessibilityLabel={label}
+        style={styles.loadingStage}
+      >
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.loadingLockup}
+        >
+          <LaunchDeck lift={cardLift} />
+          <Text style={styles.loadingBrand}>homesrolo</Text>
+          <Text style={styles.loadingText}>{label}</Text>
+          <View style={styles.loadingProgressTrack}>
+            <Animated.View
+              style={[
+                styles.loadingProgressGlide,
+                {
+                  opacity: reduceMotion ? 0.8 : 1,
+                  transform: [{
+                    translateX: progressTravel.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-44, 164],
+                    }),
+                  }],
+                },
+              ]}
+            />
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  )
+}
+
 export function Loading({ label = 'Opening your home…' }: { readonly label?: string }) {
   return (
-    <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.center}>
-      <ActivityIndicator color={colors.lime} size="large" />
-      <Text style={styles.loadingText}>{label}</Text>
+    <View
+      accessible
+      accessibilityLiveRegion="polite"
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      style={styles.inlineLoading}
+    >
+      <Image
+        accessibilityIgnoresInvertColors
+        source={require('../../assets/icon-512.png')}
+        style={styles.inlineLoadingMark}
+      />
+      <View style={styles.inlineLoadingCopy}>
+        <Text style={styles.inlineLoadingText}>{label}</Text>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.inlineLoadingRail}
+        >
+          <View style={[styles.inlineLoadingSegment, styles.inlineLoadingSegmentLime]} />
+          <View style={[styles.inlineLoadingSegment, styles.inlineLoadingSegmentAqua]} />
+          <View style={[styles.inlineLoadingSegment, styles.inlineLoadingSegmentMint]} />
+        </View>
+      </View>
     </View>
+  )
+}
+
+export function LaunchError({ message, onRetry, retryLabel = 'Try again' }: {
+  readonly message: string
+  readonly onRetry: () => void
+  readonly retryLabel?: string
+}) {
+  const window = useWindowDimensions()
+  return (
+    <SafeAreaView
+      style={[styles.loadingSafe, { minHeight: Math.max(420, window.height) }]}
+      edges={['top', 'right', 'bottom', 'left']}
+    >
+      <View style={styles.loadingStage}>
+        <View style={styles.loadingLockup}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.launchErrorArtwork}
+          >
+            <LaunchDeck />
+          </View>
+          <Text style={styles.loadingBrand}>homesrolo</Text>
+          <Text accessibilityRole="header" style={styles.launchErrorTitle}>We couldn’t open the door.</Text>
+          <Text accessibilityLiveRegion="polite" style={styles.launchErrorMessage}>{message}</Text>
+          <View style={styles.launchErrorAction}>
+            <Button
+              accessibilityHint="Attempts to open Homesrolo again"
+              icon="refresh-outline"
+              label={retryLabel}
+              onPress={onRetry}
+            />
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   )
 }
 
@@ -262,8 +479,126 @@ const styles = StyleSheet.create({
   metric: { flex: 1, minWidth: 80, gap: 2 },
   metricValue: { color: colors.lime, fontSize: 27, fontWeight: '800' },
   metricLabel: { color: colors.slate, fontSize: 12, fontWeight: '700' },
-  center: { minHeight: 420, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.ink },
-  loadingText: { color: colors.slate, fontSize: 15 },
+  loadingSafe: { flex: 1, backgroundColor: colors.ink },
+  loadingStage: {
+    flex: 1,
+    minHeight: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
+  },
+  loadingLockup: { width: '100%', maxWidth: 310, alignItems: 'center' },
+  loadingDeck: { width: 250, height: 177, marginBottom: 18 },
+  loadingCard: {
+    position: 'absolute',
+    width: 224,
+    height: 152,
+    borderWidth: 1,
+    borderRadius: 24,
+  },
+  loadingCardBack: {
+    top: 18,
+    left: 0,
+    backgroundColor: '#0a222e',
+    borderColor: '#163d4d',
+    transform: [{ rotate: '-3deg' }],
+  },
+  loadingCardMiddle: {
+    top: 10,
+    left: 12,
+    backgroundColor: colors.inkSoft,
+    borderColor: colors.line,
+    transform: [{ rotate: '1.75deg' }],
+  },
+  loadingCardFront: {
+    top: 0,
+    left: 7,
+    padding: 17,
+    backgroundColor: colors.inkRaised,
+    borderColor: '#397086',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    elevation: 9,
+  },
+  loadingCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  loadingMark: { width: 43, height: 43, borderRadius: 13 },
+  loadingCardTitleGroup: { flex: 1, gap: 3 },
+  loadingEyebrow: { color: colors.lime, fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+  loadingCardTitle: { color: colors.cream, fontSize: 15, fontWeight: '800', letterSpacing: -0.25 },
+  loadingMemoryList: { gap: 9, marginTop: 17 },
+  loadingMemoryRow: { height: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loadingMemoryDot: { width: 7, height: 7, borderRadius: 4 },
+  loadingMemoryDotLime: { backgroundColor: colors.lime },
+  loadingMemoryDotAqua: { backgroundColor: colors.aqua },
+  loadingMemoryDotMint: { backgroundColor: colors.mint },
+  loadingMemoryLine: { height: 5, borderRadius: radius.pill, backgroundColor: '#315566' },
+  loadingMemoryLineLong: { width: 118 },
+  loadingMemoryLineMedium: { width: 92 },
+  loadingMemoryLineShort: { width: 68 },
+  loadingFileTab: {
+    position: 'absolute',
+    right: -10,
+    width: 10,
+    height: 27,
+    borderTopRightRadius: 7,
+    borderBottomRightRadius: 7,
+  },
+  loadingFileTabTop: { top: 22, backgroundColor: colors.lime },
+  loadingFileTabMiddle: { top: 57, backgroundColor: colors.aqua },
+  loadingFileTabBottom: { top: 92, backgroundColor: colors.mint },
+  loadingBrand: { color: colors.cream, fontSize: 28, fontWeight: '800', letterSpacing: -1.1 },
+  loadingText: { color: colors.slate, fontSize: 14, lineHeight: 20, marginTop: 5, textAlign: 'center' },
+  loadingProgressTrack: {
+    width: 164,
+    height: 3,
+    marginTop: 17,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    backgroundColor: '#183847',
+  },
+  loadingProgressGlide: { width: 44, height: 3, borderRadius: radius.pill, backgroundColor: colors.lime },
+  inlineLoading: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.medium,
+    backgroundColor: colors.inkSoft,
+  },
+  inlineLoadingMark: { width: 36, height: 36, borderRadius: 11 },
+  inlineLoadingCopy: { flex: 1, gap: 9 },
+  inlineLoadingText: { color: colors.slate, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  inlineLoadingRail: { height: 3, flexDirection: 'row', gap: 4 },
+  inlineLoadingSegment: { height: 3, borderRadius: radius.pill },
+  inlineLoadingSegmentLime: { width: '42%', backgroundColor: colors.lime },
+  inlineLoadingSegmentAqua: { width: '25%', backgroundColor: colors.aqua },
+  inlineLoadingSegmentMint: { width: '14%', backgroundColor: colors.mint },
+  launchErrorArtwork: { height: 177 },
+  launchErrorTitle: {
+    color: colors.cream,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: '800',
+    letterSpacing: -0.55,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  launchErrorMessage: {
+    maxWidth: 290,
+    color: colors.slate,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 7,
+    textAlign: 'center',
+  },
+  launchErrorAction: { width: '100%', maxWidth: 250, marginTop: 18 },
   noticeRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   noticeText: { color: colors.slate, flex: 1, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 4 },

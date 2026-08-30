@@ -454,7 +454,11 @@ test('ordinary PWA signout revokes its HttpOnly-cookie session under exact-Origi
   assert.equal(rejected.headers.get('set-cookie'), null)
 })
 
-function pwaBridgeRequest(path: string, headers: Record<string, string> = {}): Request {
+function pwaBridgeRequest(
+  path: string,
+  headers: Record<string, string> = {},
+  body?: BodyInit,
+): Request {
   return new Request(`${APP_ORIGIN}${path}`, {
     method: 'POST',
     headers: {
@@ -465,6 +469,7 @@ function pwaBridgeRequest(path: string, headers: Record<string, string> = {}): R
       'sec-fetch-dest': 'empty',
       ...headers,
     },
+    body,
   })
 }
 
@@ -506,6 +511,35 @@ test('PWA upgrade exchanges one legacy localStorage bearer for an HttpOnly cooki
   assert.deepEqual(await response.json(), { data: { signedIn: true } })
   assert.match(response.headers.get('set-cookie') ?? '', /HttpOnly/)
   assert.doesNotMatch(response.headers.get('set-cookie') ?? '', /Max-Age=0/)
+})
+
+test('PWA upgrade accepts a proxy-normalized zero-byte stream but rejects body content', async () => {
+  const handle = 'z'.repeat(43)
+  const reads: string[] = []
+  const dependencies = {
+    appOrigin: APP_ORIGIN,
+    async readSession(sessionHandle: string) {
+      reads.push(sessionHandle)
+      return 'signed_in' as const
+    },
+  }
+  const normalizedEmpty = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      authorization: `Bearer ${handle}`,
+    }, new Uint8Array(0)),
+    dependencies,
+  )
+  assert.equal(normalizedEmpty.status, 200)
+  assert.deepEqual(reads, [handle])
+
+  const nonempty = await upgradeHomeownerPwaSessionWithDependencies(
+    pwaBridgeRequest('/api/v1/auth/pwa-upgrade', {
+      authorization: `Bearer ${handle}`,
+    }, new Uint8Array([1])),
+    dependencies,
+  )
+  assert.equal(nonempty.status, 403)
+  assert.deepEqual(reads, [handle], 'body content is rejected before any identity read')
 })
 
 test('PWA upgrade clears stale cookies but retains a valid cookie on identity outage', async () => {
@@ -573,11 +607,11 @@ test('exact PWA signout revokes bearer and residual legacy cookie then expires i
     }),
     {
       appOrigin: APP_ORIGIN,
-      async revokeSession() { throw new Error('must not be called') },
+      async revokeSession(handle) { if (handle) revoked.push(handle) },
     },
   )
-  assert.equal(missingFetchMetadata.status, 400)
-  assert.equal(missingFetchMetadata.headers.get('set-cookie'), null)
+  assert.equal(missingFetchMetadata.status, 200)
+  assert.match(missingFetchMetadata.headers.get('set-cookie') ?? '', /Max-Age=0/)
 
   const revocationOutage = await signOutHomeownerWithDependencies(
     pwaBridgeRequest('/api/v1/auth/signout', {

@@ -49,6 +49,27 @@ function sameOrigin(request: Request, expected: string): boolean {
   return origin === expected
 }
 
+async function requestBodyIsEmpty(request: Request): Promise<boolean> {
+  if (request.body === null) return true
+  try {
+    const reader = request.body.getReader()
+    // A host may represent an empty POST as one zero-byte chunk. More chunks
+    // are unnecessary for this bodyless contract and fail closed.
+    for (let reads = 0; reads < 2; reads += 1) {
+      const { done, value } = await reader.read()
+      if (done) return true
+      if (value.byteLength !== 0) {
+        await reader.cancel()
+        return false
+      }
+    }
+    await reader.cancel()
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function validMagicLinkCallbackQuery(searchParams: URLSearchParams): boolean {
   const keys = [...searchParams.keys()]
   const hasIntent = keys.includes('intent')
@@ -295,7 +316,9 @@ export async function upgradeHomeownerPwaSessionWithDependencies(
     return json(503, { error: { code: 'unavailable' } })
   }
   const envelope = homeownerPwaLegacyUpgradeEnvelope(request, dependencies.appOrigin)
-  if (!envelope) return json(403, { error: { code: 'forbidden' } })
+  if (!envelope || !(await requestBodyIsEmpty(request))) {
+    return json(403, { error: { code: 'forbidden' } })
+  }
   if (!envelope.sessionHandle) {
     return json(200, { data: { signedIn: false } }, {
       'set-cookie': clearSessionCookie(),
@@ -396,7 +419,9 @@ export async function signOutHomeownerWithDependencies(
   // browser cookie in the response.
   if (request.headers.get(HOMEOWNER_NATIVE_CLIENT_HEADER) === HOMEOWNER_PWA_CLIENT_V1) {
     const envelope = homeownerPwaSignOutEnvelope(request, dependencies.appOrigin)
-    if (!envelope) return json(400, { error: { code: 'invalid_request' } })
+    if (!envelope || !(await requestBodyIsEmpty(request))) {
+      return json(400, { error: { code: 'invalid_request' } })
+    }
     const handles = new Set([
       envelope.bearerSessionHandle,
       ...(envelope.legacySessionHandle ? [envelope.legacySessionHandle] : []),

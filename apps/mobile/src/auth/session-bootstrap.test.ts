@@ -35,16 +35,16 @@ test('native bootstrap restores SecureStore without entering the PWA bridge', as
   assert.deepEqual(calls, ['read'])
 })
 
-test('cookie bootstrap validates an existing HttpOnly session without local credentials', async () => {
+test('cookie bootstrap leaves an existing HttpOnly session to the ordinary session request', async () => {
   const calls: string[] = []
   const token = await bootstrapSessionToken({
     async upgradeLegacyPwaSession(legacyBearer) { calls.push(`upgrade:${legacyBearer}`) },
   }, storage(null, calls), 'cookie')
   assert.equal(token, null)
-  assert.deepEqual(calls, ['read', 'remove', 'upgrade:null'])
+  assert.deepEqual(calls, ['read', 'remove'])
 })
 
-test('cookie bootstrap leaves no persisted bearer when migration is unavailable', async () => {
+test('cookie bootstrap leaves no persisted bearer and does not block launch when migration is unavailable', async () => {
   const calls: string[] = []
   const unavailable = {
     async upgradeLegacyPwaSession(): Promise<void> {
@@ -52,10 +52,7 @@ test('cookie bootstrap leaves no persisted bearer when migration is unavailable'
       throw new Error('unavailable')
     },
   }
-  await assert.rejects(
-    bootstrapSessionToken(unavailable, storage(TOKEN, calls), 'cookie'),
-    /unavailable/,
-  )
+  assert.equal(await bootstrapSessionToken(unavailable, storage(TOKEN, calls), 'cookie'), null)
   assert.deepEqual(calls, ['read', 'remove', 'upgrade', 'upgrade'])
 })
 
