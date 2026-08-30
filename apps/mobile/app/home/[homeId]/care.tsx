@@ -77,6 +77,16 @@ const ROLO_DIVIDERS: readonly RoloDeckDivider[] = [
   { id: 'saved', label: 'Saved', includes: card => card.group === 'saved' },
 ]
 
+function MyRoloLoading() {
+  return (
+    <SafeAreaView style={styles.roloSafe} edges={['top']}>
+      <View style={styles.roloLoading}>
+        <Loading label="Opening your home…" />
+      </View>
+    </SafeAreaView>
+  )
+}
+
 export default function MyHomeScreen() {
   const homeId = useHomeId()
   const window = useWindowDimensions()
@@ -269,11 +279,11 @@ export default function MyHomeScreen() {
   }, [homeId, photoCheckupsEnabled, values])
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
-  if (auth.kind === 'loading') return <Loading label="Opening your home…" />
+  if (auth.kind === 'loading') return <MyRoloLoading />
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
-  if (resource.state.kind === 'loading') return <Loading label="Opening your home…" />
+  if (resource.state.kind === 'loading') return <MyRoloLoading />
   if (resource.state.kind === 'error' || !values) {
     const previewDetail = previewMode && resource.state.kind === 'error' ? ` (${resource.state.message})` : ''
     return <Page><Notice message={`My Home could not load.${previewDetail}`} actionLabel="Try again" onAction={resource.reload} /></Page>
@@ -1176,6 +1186,7 @@ function requestedHomeLibrary(value: string | string[] | undefined): HomeLibrary
 
 const styles = StyleSheet.create({
   roloSafe: { flex: 1, backgroundColor: colors.ink },
+  roloLoading: { flex: 1, justifyContent: 'center', paddingHorizontal: space.lg, paddingBottom: space.xl },
   roloPage: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.sm },
   roloHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   roloHeaderCopy: { flex: 1, minWidth: 0, gap: 1 },
