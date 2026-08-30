@@ -321,6 +321,20 @@ export function RoloDeck({
           <FlatList
             ref={listRef}
             accessibilityLabel="Home Rolodex cards"
+            accessibilityValue={{
+              min: 1,
+              max: search.visibleCards.length,
+              now: safeActiveIndex + 1,
+              text: `${safeActiveIndex + 1} of ${search.visibleCards.length}: ${search.visibleCards[safeActiveIndex]?.title ?? 'Home card'}`,
+            }}
+            accessibilityActions={search.visibleCards.length > 1 ? [
+              { name: 'decrement', label: 'Previous card' },
+              { name: 'increment', label: 'Next card' },
+            ] : []}
+            onAccessibilityAction={event => {
+              if (event.nativeEvent.actionName === 'increment') openPage(safeActiveIndex + 1)
+              if (event.nativeEvent.actionName === 'decrement') openPage(safeActiveIndex - 1)
+            }}
             data={search.visibleCards}
             keyExtractor={card => card.cardRef}
             renderItem={({ item, index }) => {
@@ -341,6 +355,10 @@ export function RoloDeck({
                     renderMedia={renderMedia}
                     onOpen={onOpen}
                     onAskRolo={onAskRolo && (!canAskRolo || canAskRolo(item)) ? onAskRolo : undefined}
+                    onTabPress={!horizontal && !active ? () => openPage(index) : undefined}
+                    tabAccessibilityLabel={!horizontal && !active
+                      ? `Flip to card ${index + 1} of ${search.visibleCards.length}: ${item.title}`
+                      : undefined}
                     reduceMotion={motionReduced}
                     style={{ height: resolvedCardHeight }}
                   />
@@ -377,7 +395,7 @@ export function RoloDeck({
           />
         )}
       </View>
-      {search.visibleCards.length > 0 ? (
+      {horizontal && search.visibleCards.length > 0 ? (
         <PagingIndicator
           activeIndex={safeActiveIndex}
           count={search.visibleCards.length}

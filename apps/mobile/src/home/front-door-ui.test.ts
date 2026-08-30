@@ -38,6 +38,10 @@ test('the shared phone chrome preserves iPhone safe areas and readable Rolodex t
   assert.match(tabs, /paddingBottom: bottomInset,/)
   assert.match(tabs, /tabBarLabelStyle: \{ fontSize: 11, lineHeight: 14, fontWeight: '700' \}/)
   assert.match(myRolo, /const compactDeck = window\.width < 600 \|\| window\.height < 820/)
+  assert.match(myRolo, /function MyRoloLoading\(\)[\s\S]*?<SafeAreaView[\s\S]*?styles\.roloLoading[\s\S]*?<Loading label="Opening your home…"/)
+  assert.match(myRolo, /auth\.kind === 'loading'\) return <MyRoloLoading \/>/)
+  assert.match(myRolo, /resource\.state\.kind === 'loading'\) return <MyRoloLoading \/>/)
+  assert.match(myRolo, /roloLoading: \{ flex: 1, justifyContent: 'center'/)
   assert.match(myRolo, /<RoloDeck[\s\S]*?fillAvailable[\s\S]*?peekSize=/)
   assert.match(workRolo, /<RoloDeck[\s\S]*?fillAvailable[\s\S]*?peekSize=/)
   assert.doesNotMatch(myRolo, /window\.height - 440/)
@@ -47,6 +51,17 @@ test('the shared phone chrome preserves iPhone safe areas and readable Rolodex t
   assert.match(deck, /listSlotFill: \{ flex: 1, minHeight: 0 \}/)
   assert.match(cards, /fileTab: \{[\s\S]*?zIndex: 2,[\s\S]*?justifyContent: 'center'/)
   assert.match(cards, /shell: \{ width: '100%', paddingTop: 26 \}/)
+})
+
+test('vertical Rolodexes flip from the exposed card tab without carousel bubbles', () => {
+  const deck = read('src/components/RoloDeck.tsx')
+  const cards = read('src/components/RoloCardView.tsx')
+
+  assert.match(deck, /onTabPress=\{!horizontal && !active \? \(\) => openPage\(index\) : undefined\}/)
+  assert.match(deck, /Flip to card \$\{index \+ 1\} of \$\{search\.visibleCards\.length\}/)
+  assert.match(cards, /onTabPress \? \([\s\S]*?<Pressable[\s\S]*?accessibilityHint="Shows this card"/)
+  assert.match(deck, /accessibilityValue=\{\{[\s\S]*?now: safeActiveIndex \+ 1/)
+  assert.match(deck, /\{horizontal && search\.visibleCards\.length > 0 \? \([\s\S]*?<PagingIndicator/)
 })
 
 test('old home roots resolve to Rolo and Account stays inside the homeowner tab shell', () => {

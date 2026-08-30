@@ -32,6 +32,9 @@ export interface RoloCardViewProps {
   readonly renderMedia?: RoloCardMediaRenderer | undefined
   readonly onOpen?: ((card: HomesroloCard) => void) | undefined
   readonly onAskRolo?: ((card: HomesroloCard) => void) | undefined
+  /** Turns the raised file tab into the physical Rolodex-style page control. */
+  readonly onTabPress?: (() => void) | undefined
+  readonly tabAccessibilityLabel?: string | undefined
   readonly openLabel?: string | undefined
   readonly askRoloLabel?: string | undefined
   readonly reduceMotion?: boolean | undefined
@@ -65,6 +68,8 @@ export function RoloCardView({
   renderMedia,
   onOpen,
   onAskRolo,
+  onTabPress,
+  tabAccessibilityLabel,
   openLabel,
   askRoloLabel = 'Ask Rolo',
   reduceMotion,
@@ -83,15 +88,34 @@ export function RoloCardView({
       testID={testID}
       style={[styles.shell, compact ? styles.shellCompact : styles.shellFull, style]}
     >
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={[styles.fileTab, compact && styles.fileTabCompact, { borderColor: tone }]}
-      >
-        <Text numberOfLines={1} style={[styles.fileTabText, { color: tone }]}>
-          {displayGroup(card.group)}
-        </Text>
-      </View>
+      {onTabPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tabAccessibilityLabel ?? `Flip to ${card.title}`}
+          accessibilityHint="Shows this card"
+          onPress={onTabPress}
+          style={({ pressed }) => [
+            styles.fileTab,
+            compact && styles.fileTabCompact,
+            { borderColor: tone },
+            pressed && styles.fileTabPressed,
+          ]}
+        >
+          <Text numberOfLines={1} style={[styles.fileTabText, { color: tone }]}>
+            {displayGroup(card.group)}
+          </Text>
+        </Pressable>
+      ) : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.fileTab, compact && styles.fileTabCompact, { borderColor: tone }]}
+        >
+          <Text numberOfLines={1} style={[styles.fileTabText, { color: tone }]}>
+            {displayGroup(card.group)}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.card, compact ? styles.cardCompact : styles.cardFull]}>
         <View style={styles.headingRow}>
@@ -251,6 +275,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inkSoft,
   },
   fileTabCompact: { height: 28, minWidth: 88, paddingHorizontal: 11 },
+  fileTabPressed: { opacity: 0.76, transform: [{ translateY: 1 }] },
   fileTabText: {
     fontSize: 10,
     lineHeight: 14,
