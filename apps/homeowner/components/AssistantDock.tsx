@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { commandRefForAttempt, mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePort, useSession } from '../lib/port/provider.tsx'
 import { roloThreadStorageKey } from '../lib/rolo-thread-storage.ts'
+import { projectRefFromPath } from '../lib/rolo-project-context.ts'
 import type {
   AskRoloResult,
   DocumentSummary,
@@ -78,10 +79,6 @@ function currentDestination(pathname: string, homeId: string) {
   if (pathname.startsWith(`${base}/documents`)) return 'library' as const
   if (pathname.startsWith(`${base}/details`)) return 'details' as const
   return 'home' as const
-}
-
-function projectRefFromPath(pathname: string): string | undefined {
-  return pathname.match(/\/projects\/(hprj_[A-Za-z0-9_-]{43})(?:\/|$)/)?.[1]
 }
 
 function destinationHref(homeId: string, destination: RoloDestination, projectRef: string | null) {
