@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons'
-import { Tabs, useLocalSearchParams } from 'expo-router'
+import { router, Tabs, useLocalSearchParams } from 'expo-router'
 import { Platform, type ColorValue } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HomeRouteProvider } from '../../../src/home/HomeRouteProvider.tsx'
@@ -33,7 +33,19 @@ export default function HomeTabs() {
         },
         tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
       }}>
-        <Tabs.Screen name="rolo" options={{ title: 'Rolo', tabBarIcon: icon('chatbubble-ellipses-outline') }} />
+        <Tabs.Screen
+          name="rolo"
+          options={{ title: 'Rolo', tabBarIcon: icon('chatbubble-ellipses-outline') }}
+          listeners={{
+            tabPress: event => {
+              event.preventDefault()
+              router.replace({
+                pathname: '/home/[homeId]/rolo',
+                params: { homeId, frontDoor: String(Date.now()) },
+              })
+            },
+          }}
+        />
         <Tabs.Screen name="care" options={{ title: 'My Rolo', tabBarIcon: icon('albums-outline') }} />
         <Tabs.Screen name="work" options={{ title: 'Work', tabBarIcon: icon('layers-outline') }} />
         <Tabs.Screen name="people" options={{ title: 'People', tabBarIcon: icon('people-outline') }} />

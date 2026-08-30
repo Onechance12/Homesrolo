@@ -32,6 +32,8 @@ const HAZARD_SIGNALS = [
 export interface RoloConversationScope {
   readonly principalRef: string
   readonly homeRef: string
+  /** Omitted for legacy/general scope; an exact ref binds storage to one work record. */
+  readonly projectRef?: string | null
 }
 
 export interface PersistedRoloPhoto {
@@ -90,22 +92,32 @@ export function isPrincipalRef(value: unknown): value is string {
 }
 
 export function isRoloConversationScope(value: RoloConversationScope): boolean {
-  return isPrincipalRef(value.principalRef) && isHomeRef(value.homeRef)
+  return isPrincipalRef(value.principalRef)
+    && isHomeRef(value.homeRef)
+    && (value.projectRef === undefined
+      || value.projectRef === null
+      || isProjectRef(value.projectRef))
 }
 
-/** An explicit route prompt always starts a new thread instead of merging old context. */
+/**
+ * The ordinary Rolo tab is always a clean front door. A work route may restore
+ * only that work record's thread; its canned prompt is merely a fallback for a
+ * project that has no saved conversation yet.
+ */
 export function planRoloHydration(
   prompt: string | undefined,
   stored: PersistedRoloConversation | null,
   requestedProjectRef?: string,
 ): RoloHydrationPlan {
+  if (requestedProjectRef === undefined) {
+    return prompt === undefined
+      ? { kind: 'empty' }
+      : { kind: 'prompt', input: prompt.slice(0, 1_600) }
+  }
+  if (stored?.projectRef === requestedProjectRef) {
+    return { kind: 'stored', conversation: stored }
+  }
   if (prompt !== undefined) return { kind: 'prompt', input: prompt.slice(0, 1_600) }
-  // Entering Rolo from a particular work record must never revive a thread
-  // about different work. With no requested project (the ordinary Rolo tab),
-  // the latest conversation may be restored together with its own scope.
-  if (requestedProjectRef !== undefined
-    && stored?.projectRef !== requestedProjectRef) return { kind: 'empty' }
-  if (stored) return { kind: 'stored', conversation: stored }
   return { kind: 'empty' }
 }
 
@@ -200,6 +212,8 @@ export function parseRoloConversation(
     || object.principalRef !== expected.principalRef
     || object.homeRef !== expected.homeRef
     || (object.projectRef !== null && !isProjectRef(object.projectRef))
+    || (expected.projectRef !== undefined
+      && object.projectRef !== (expected.projectRef ?? null))
     || !Array.isArray(object.turns)
     || object.turns.length > 16) return null
 
