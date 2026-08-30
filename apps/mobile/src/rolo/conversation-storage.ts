@@ -43,8 +43,22 @@ export function createRoloConversationStorage(driver: RoloRawStorage): RoloConve
     read: scope => schedule(async () => {
       if (!isRoloConversationScope(scope)) return null
       const key = scopeKey(scope)
-      let raw: string | null
-      try { raw = await driver.read(key) } catch { return null }
+      let raw = await driver.read(key)
+      // Migrate the former one-thread-per-home key only when it proves it
+      // belongs to the exact requested project. General Rolo never revives it.
+      if (raw === null && scope.projectRef) {
+        const legacyKey = legacyScopeKey(scope)
+        raw = await driver.read(legacyKey)
+        if (raw !== null) {
+          const legacyValue = parseRoloConversation(raw, scope)
+          if (!legacyValue) return null
+          try {
+            await driver.write(key, serializeRoloConversation(legacyValue))
+            await driver.remove(legacyKey)
+          } catch { /* The valid legacy thread can still be returned once. */ }
+          return legacyValue
+        }
+      }
       if (raw === null) return null
       const value = parseRoloConversation(raw, scope)
       if (value) return value
@@ -115,5 +129,9 @@ function browserLocalStorage(): OriginStorage {
 }
 
 function scopeKey(scope: RoloConversationScope): string {
+  return `${legacyScopeKey(scope)}.${scope.projectRef ?? 'general'}`
+}
+
+function legacyScopeKey(scope: RoloConversationScope): string {
   return `${scope.principalRef}.${scope.homeRef}`
 }

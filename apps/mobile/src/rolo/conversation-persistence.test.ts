@@ -101,6 +101,14 @@ test('strict parsing rejects extra fields and a different principal or home', ()
     ...scope,
     principalRef: `hprn_${'Q'.repeat(43)}`,
   }), null)
+  assert.deepEqual(parseRoloConversation(JSON.stringify(projected), {
+    ...scope,
+    projectRef,
+  }), projected)
+  assert.equal(parseRoloConversation(JSON.stringify(projected), {
+    ...scope,
+    projectRef: `hprj_${'K'.repeat(43)}`,
+  }), null)
 })
 
 test('project scope is optional, validated, and bound to the persisted thread', () => {
@@ -160,32 +168,34 @@ test('projection retains only sixteen recent turns, one follow-up, and bounded t
   assert.equal(projected.followUp?.length, 240)
 })
 
-test('an incoming prompt deterministically supersedes stored state', () => {
+test('the base Rolo route is blank unless it receives a fresh prompt', () => {
   const stored = completeProjection() as PersistedRoloConversation
   assert.deepEqual(planRoloHydration('Help me plan a pool', stored), {
     kind: 'prompt',
     input: 'Help me plan a pool',
   })
-  assert.deepEqual(planRoloHydration(undefined, stored), {
-    kind: 'stored',
-    conversation: stored,
-  })
+  assert.deepEqual(planRoloHydration(undefined, stored), { kind: 'empty' })
   assert.deepEqual(planRoloHydration(undefined, null), { kind: 'empty' })
 })
 
-test('ordinary tab restoration keeps project scope but explicit project entry requires a match', () => {
+test('an exact project restores its thread before considering a canned entry prompt', () => {
   const stored = completeProjection() as PersistedRoloConversation
   const otherProjectRef = `hprj_${'K'.repeat(43)}`
 
-  assert.deepEqual(planRoloHydration(undefined, stored), {
-    kind: 'stored',
-    conversation: stored,
-  })
+  assert.deepEqual(planRoloHydration(undefined, stored), { kind: 'empty' })
   assert.deepEqual(planRoloHydration(undefined, stored, projectRef), {
     kind: 'stored',
     conversation: stored,
   })
+  assert.deepEqual(planRoloHydration('Review this work', stored, projectRef), {
+    kind: 'stored',
+    conversation: stored,
+  })
   assert.deepEqual(planRoloHydration(undefined, stored, otherProjectRef), { kind: 'empty' })
+  assert.deepEqual(planRoloHydration('Review this other work', stored, otherProjectRef), {
+    kind: 'prompt',
+    input: 'Review this other work',
+  })
   assert.deepEqual(planRoloHydration(undefined, {
     ...stored,
     projectRef: null,

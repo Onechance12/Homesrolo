@@ -76,7 +76,7 @@ export default function WorkScreen() {
   const compactDeck = window.width < 600 || window.height < 780
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
-  if (auth.kind === 'loading') return <Loading />
+  if (auth.kind === 'loading') return <Page><Loading /></Page>
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }

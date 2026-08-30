@@ -96,11 +96,18 @@ type RoloSuggestion = Readonly<Pick<RoloReply, 'destination' | 'projectRef'>>
 
 export default function RoloScreen() {
   const homeId = useHomeId()
-  const { prompt: rawPrompt, filter: rawFilter, projectRef: rawProjectRef, artifactRef: rawArtifactRef } = useLocalSearchParams<{
+  const {
+    prompt: rawPrompt,
+    filter: rawFilter,
+    projectRef: rawProjectRef,
+    artifactRef: rawArtifactRef,
+    frontDoor: rawFrontDoor,
+  } = useLocalSearchParams<{
     prompt?: string | string[]
     filter?: string | string[]
     projectRef?: string | string[]
     artifactRef?: string | string[]
+    frontDoor?: string | string[]
   }>()
   const promptValue = oneRouteParam(rawPrompt)
   const prompt = promptValue === null ? undefined : promptValue.slice(0, 1_600)
@@ -113,6 +120,7 @@ export default function RoloScreen() {
   const routeArtifactRef = artifactRefValue && isArtifactRef(artifactRefValue)
     ? artifactRefValue
     : undefined
+  const frontDoor = oneRouteParam(rawFrontDoor)
   const redirectToPeople = filter === 'people'
   const { state: auth, api, roloStorage, previewMode, refreshSession } = useSession()
   const [input, setInput] = useState('')
@@ -146,8 +154,8 @@ export default function RoloScreen() {
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [conversationProjectRef, setConversationProjectRef] = useState<string | null>(null)
   const [hydratedScope, setHydratedScope] = useState<string | null>(null)
+  const [persistenceWritableScope, setPersistenceWritableScope] = useState<string | null>(null)
   const [homeSummary, setHomeSummary] = useState<HomeSummary | null>(null)
-  const [activeWork, setActiveWork] = useState<readonly WorkRecord[]>([])
   const [knownWork, setKnownWork] = useState<readonly WorkRecord[]>([])
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
@@ -166,13 +174,12 @@ export default function RoloScreen() {
   const principalRef = auth.kind === 'signed_in' ? auth.session.principalRef : null
   const persistenceScope = principalRef ? { principalRef, homeRef: homeId } : null
   const persistenceKey = persistenceScope
-    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}`
+    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}.${routeProjectRef ?? 'general'}`
     : null
 
   useFocusEffect(useCallback(() => {
     let active = true
     setHomeSummary(null)
-    setActiveWork([])
     setKnownWork([])
     if (auth.kind !== 'signed_in') {
       return () => { active = false }
@@ -183,12 +190,8 @@ export default function RoloScreen() {
       if (workResult.status === 'fulfilled') {
         const readableWork = workResult.value.filter(item => !item.archived)
         setKnownWork(readableWork)
-        setActiveWork(readableWork
-          .filter(item => !item.archived && (item.status === 'planned' || item.status === 'in_progress'))
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)))
       } else {
         setKnownWork([])
-        setActiveWork([])
       }
     })
     return () => { active = false }
@@ -201,10 +204,18 @@ export default function RoloScreen() {
     conversationVersion.current += 1
     resetConversationState('', routeProjectRef ?? null)
     setHydratedScope(null)
+    setPersistenceWritableScope(null)
     // The prompt effect below owns an explicit incoming conversation. Starting
     // a read here would let old state briefly win that race.
     if (prompt !== undefined) return
-    void roloStorage.read(persistenceScope).then(stored => {
+    if (!routeProjectRef) {
+      setPersistenceWritableScope(persistenceKey)
+      setHydratedScope(persistenceKey)
+      void roloStorage.remove({ ...persistenceScope, projectRef: null }).catch(() => undefined)
+      return
+    }
+    const projectScope = { ...persistenceScope, projectRef: routeProjectRef }
+    void roloStorage.read(projectScope).then(stored => {
       if (generation !== hydrationGeneration.current || !mounted.current) return
       const plan = planRoloHydration(undefined, stored, routeProjectRef)
       if (plan.kind === 'stored') {
@@ -228,6 +239,7 @@ export default function RoloScreen() {
       } else {
         setConversationProjectRef(routeProjectRef ?? null)
       }
+      setPersistenceWritableScope(persistenceKey)
       setHydratedScope(persistenceKey)
     }).catch(() => {
       if (generation === hydrationGeneration.current && mounted.current) {
@@ -238,7 +250,7 @@ export default function RoloScreen() {
     // `prompt` is intentionally read only at scope entry. Later prompts are
     // handled below without re-running storage hydration after the URL clears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeId, principalRef, redirectToPeople, roloStorage, routeProjectRef])
+  }, [frontDoor, homeId, principalRef, redirectToPeople, roloStorage, routeProjectRef])
 
   useEffect(() => {
     if (prompt === undefined) {
@@ -249,19 +261,58 @@ export default function RoloScreen() {
     const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${routeArtifactRef ?? ''}\u0000${prompt}`
     if (consumedPrompt.current === promptIdentity) return
     consumedPrompt.current = promptIdentity
-    hydrationGeneration.current += 1
+    const generation = hydrationGeneration.current + 1
+    hydrationGeneration.current = generation
     conversationVersion.current += 1
-    const plan = planRoloHydration(prompt, null)
-    resetConversationState(
-      plan.kind === 'prompt' ? plan.input : '',
-      routeProjectRef ?? null,
-    )
-    setHydratedScope(persistenceKey)
-    void roloStorage.remove(persistenceScope).catch(() => undefined)
+    setHydratedScope(null)
+    setPersistenceWritableScope(null)
+    if (!routeProjectRef) {
+      const plan = planRoloHydration(prompt, null)
+      resetConversationState(plan.kind === 'prompt' ? plan.input : '')
+      setPersistenceWritableScope(persistenceKey)
+      setHydratedScope(persistenceKey)
+      void roloStorage.remove({ ...persistenceScope, projectRef: null }).catch(() => undefined)
+      return
+    }
+    resetConversationState('', routeProjectRef)
+    const projectScope = { ...persistenceScope, projectRef: routeProjectRef }
+    void roloStorage.read(projectScope).then(stored => {
+      if (generation !== hydrationGeneration.current || !mounted.current) return
+      const plan = planRoloHydration(prompt, stored, routeProjectRef)
+      if (plan.kind === 'stored') {
+        const conversation = plan.conversation
+        setTurns(conversation.turns.map(turn => ({
+          role: turn.role,
+          text: turn.text,
+          ...(turn.photo ? {
+            photoTitle: turn.photo.title,
+            photoArtifactRef: turn.photo.artifactRef,
+          } : {}),
+        })))
+        setProposal(conversation.proposedWork)
+        setSuggestion(conversation.suggestion)
+        setFollowUpQuestions(conversation.followUp ? [conversation.followUp] : [])
+        setRememberedAttachment(conversation.attachment)
+        setPhotoReview(conversation.photoReview?.projection ?? null)
+        setPhotoReviewTitle(conversation.photoReview?.photo.title ?? null)
+        setPhotoReviewRef(conversation.photoReview?.photo.artifactRef ?? null)
+      } else if (plan.kind === 'prompt') {
+        setInput(plan.input)
+      }
+      setPersistenceWritableScope(persistenceKey)
+      setHydratedScope(persistenceKey)
+    }).catch(() => {
+      if (generation !== hydrationGeneration.current || !mounted.current) return
+      setInput(prompt)
+      setHydratedScope(persistenceKey)
+    })
   }, [homeId, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeArtifactRef, routeProjectRef])
 
   useEffect(() => {
-    if (!persistenceScope || !persistenceKey || hydratedScope !== persistenceKey || redirectToPeople) return
+    if (!persistenceScope || !persistenceKey
+      || hydratedScope !== persistenceKey
+      || persistenceWritableScope !== persistenceKey
+      || redirectToPeople) return
     const value = projectRoloConversation({
       ...persistenceScope,
       projectRef: conversationProjectRef,
@@ -274,13 +325,11 @@ export default function RoloScreen() {
       photoReviewTitle,
       photoReviewRef,
     })
-    const operation = value
-      ? roloStorage.write(value)
-      : roloStorage.remove(persistenceScope)
-    void operation.catch(() => undefined)
+    if (!conversationProjectRef || !value) return
+    void roloStorage.write(value).catch(() => undefined)
   }, [
     conversationProjectRef, followUpQuestions, hydratedScope, homeId, persistenceKey, photoReview,
-    photoReviewRef, photoReviewTitle, principalRef, proposal, redirectToPeople,
+    persistenceWritableScope, photoReviewRef, photoReviewTitle, principalRef, proposal, redirectToPeople,
     rememberedAttachment, roloStorage, suggestion, turns,
   ])
 
@@ -371,12 +420,12 @@ export default function RoloScreen() {
     return <Redirect href={{ pathname: '/home/[homeId]/people', params: { homeId } }} />
   }
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
-  if (auth.kind === 'loading') return <Loading />
+  if (auth.kind === 'loading') return <Page><Loading /></Page>
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
   if (persistenceKey && hydratedScope !== persistenceKey) {
-    return <Loading label="Opening Rolo…" />
+    return <Page><Loading label="Opening Rolo…" /></Page>
   }
   if (!auth.session.capabilities.homeAssistant) {
     return (
@@ -679,10 +728,8 @@ export default function RoloScreen() {
       }
       setReviewedNewPhoto(null)
       setSaved(work)
+      setConversationProjectRef(work.projectRef)
       setKnownWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
-      if (work.status === 'planned' || work.status === 'in_progress') {
-        setActiveWork(current => [work, ...current.filter(item => item.projectRef !== work.projectRef)])
-      }
       setProposal(null)
       setSuggestion({ destination: 'work', projectRef: work.projectRef })
       setFollowUpQuestions([])
@@ -693,7 +740,6 @@ export default function RoloScreen() {
     conversationVersion.current += 1
     hydrationGeneration.current += 1
     resetConversationState()
-    if (persistenceScope) void roloStorage.remove(persistenceScope).catch(() => undefined)
     if (conversationProjectRef || routeProjectRef || routeArtifactRef || prompt !== undefined) {
       router.replace({ pathname: '/home/[homeId]/rolo', params: { homeId } })
     }
@@ -832,34 +878,6 @@ export default function RoloScreen() {
               </Pressable>
             ))}
           </Card>
-        ) : null}
-
-        {turns.length === 0 && !conversationProjectRef && activeWork[0] ? (
-          <View style={styles.activeWork}>
-            <View style={styles.activeWorkHeading}>
-              <View style={styles.activeWorkTitleRow}>
-                <Ionicons name="pulse-outline" size={17} color={colors.lime} />
-                <Text style={styles.activeWorkTitle}>Already in motion</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open all active work"
-                onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Text style={styles.activeWorkLink}>{activeWork.length > 1 ? `See all ${activeWork.length}` : 'See Work'}</Text>
-              </Pressable>
-            </View>
-            <RoloCardView
-              card={workRecordCard(activeWork[0])}
-              variant="compact"
-              onOpen={() => openSuggestion(homeId, { destination: 'work', projectRef: activeWork[0]!.projectRef })}
-              onAskRolo={() => {
-                setConversationProjectRef(activeWork[0]!.projectRef)
-                setInput('Help me review this work and decide what should happen next.')
-              }}
-            />
-          </View>
         ) : null}
 
         {turns.map((turn, index) => (
@@ -1346,11 +1364,6 @@ const styles = StyleSheet.create({
   roloMark: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   introTitle: { color: colors.cream, fontSize: 18, lineHeight: 23, fontWeight: '800' },
   introCopy: { color: colors.slate, fontSize: 13, lineHeight: 19 },
-  activeWork: { gap: 9 },
-  activeWorkHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  activeWorkTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  activeWorkTitle: { color: colors.cream, fontSize: 13, fontWeight: '900' },
-  activeWorkLink: { color: colors.aqua, fontSize: 12, fontWeight: '900' },
   newChat: { minHeight: 44, alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10 },
   newChatText: { color: colors.aqua, fontSize: 12, fontWeight: '700' },
   pressed: { opacity: 0.72 },

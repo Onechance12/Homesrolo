@@ -87,11 +87,13 @@ export default function WorkDetailScreen() {
         : '/sign-in'} />
     )
   }
-  if (auth.kind === 'loading') return <Loading />
+  if (auth.kind === 'loading') return <Page><Loading /></Page>
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
-  if (resource.state.kind === 'loading') return <Loading label="Opening this work record…" />
+  if (resource.state.kind === 'loading') {
+    return <Page><Loading label="Opening this work record…" /></Page>
+  }
   if (resource.state.kind === 'error') {
     return (
       <Page>

@@ -7,12 +7,19 @@ const roloScreen = readFileSync(
   'utf8',
 )
 
-test('every explicit Start intent replaces the prior Rolo conversation once', () => {
+test('fresh Start intents open cleanly while project intents preserve their exact thread', () => {
   assert.match(
     roloScreen,
-    /if \(prompt === undefined\) \{[\s\S]*consumedPrompt\.current = null[\s\S]*promptIdentity[\s\S]*planRoloHydration\(prompt, null\)[\s\S]*resetConversationState\([\s\S]*roloStorage\.remove\(persistenceScope\)/,
-    'an explicit Start prompt is consumed once, resets local state, and removes the stored thread',
+    /if \(prompt === undefined\) \{[\s\S]*consumedPrompt\.current = null[\s\S]*promptIdentity[\s\S]*if \(!routeProjectRef\) \{[\s\S]*planRoloHydration\(prompt, null\)[\s\S]*projectRef: null/,
+    'a fresh general prompt is consumed once and starts from the blank Rolo front door',
   )
+  assert.match(
+    roloScreen,
+    /const projectScope = \{ \.\.\.persistenceScope, projectRef: routeProjectRef \}[\s\S]*roloStorage\.read\(projectScope\)[\s\S]*planRoloHydration\(prompt, stored, routeProjectRef\)/,
+    'an exact work route reads its saved project thread before using a fallback prompt',
+  )
+  assert.match(roloScreen, /persistenceWritableScope !== persistenceKey/)
+  assert.doesNotMatch(roloScreen, /roloStorage\.remove\(projectScope\)/)
   assert.match(
     roloScreen,
     /async function send\([\s\S]*if \(prompt !== undefined \|\| routeArtifactRef\) router\.setParams\(\{ prompt: undefined, artifactRef: undefined \}\)/,
