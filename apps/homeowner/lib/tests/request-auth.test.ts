@@ -224,6 +224,13 @@ test('PWA upgrade accepts one old bearer or one cookie only on its exact envelop
     request(exactPwaBridgeHeaders(), 'POST'), ORIGIN,
   ), { source: 'none', sessionHandle: null })
   assert.deepEqual(homeownerPwaLegacyUpgradeEnvelope(
+    request({
+      [HOMEOWNER_NATIVE_CLIENT_HEADER]: HOMEOWNER_PWA_CLIENT_V1,
+      origin: ORIGIN,
+    }, 'POST'), ORIGIN,
+  ), { source: 'none', sessionHandle: null },
+  'hosting proxies may omit Fetch Metadata after exact Origin validation')
+  assert.deepEqual(homeownerPwaLegacyUpgradeEnvelope(
     request(exactPwaBridgeHeaders({ authorization: `Bearer ${HANDLE}` }), 'POST'), ORIGIN,
   ), { source: 'bearer', sessionHandle: HANDLE })
   assert.deepEqual(homeownerPwaLegacyUpgradeEnvelope(
@@ -259,6 +266,18 @@ test('PWA upgrade accepts one old bearer or one cookie only on its exact envelop
     cookie: `${SESSION_COOKIE_NAME}=${HANDLE}; ${SESSION_COOKIE_NAME}=${HANDLE}`,
   }), 'POST'), ORIGIN), { source: 'invalid_cookie', sessionHandle: null },
   'the exact bridge may clear but never authenticate an ambiguous cookie')
+})
+
+test('PWA bridge tolerates a production-normalized empty request stream', () => {
+  const normalized = new Request(`${ORIGIN}/api/v1/auth/pwa-upgrade`, {
+    method: 'POST',
+    headers: exactPwaBridgeHeaders({ authorization: `Bearer ${HANDLE}` }),
+    body: new Uint8Array(0),
+  })
+  assert.notEqual(normalized.body, null)
+  assert.deepEqual(homeownerPwaLegacyUpgradeEnvelope(normalized, ORIGIN), {
+    source: 'bearer', sessionHandle: HANDLE,
+  })
 })
 
 test('PWA signout alone may bind one bearer and one legacy cookie', () => {

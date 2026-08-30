@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { Redirect } from 'expo-router'
 import { useSession } from '../src/auth/SessionProvider.tsx'
 import { useResource } from '../src/hooks/useResource.ts'
-import { Brand, Loading, Notice, Page } from '../src/components/ui.tsx'
+import { LaunchError, LaunchLoading } from '../src/components/ui.tsx'
 import {
   readWorkspacePreference,
   writeWorkspacePreference,
@@ -40,27 +40,20 @@ export default function StartupScreen() {
   }, [api, principalRef, professionalEnabled])
   const startup = useResource(loader, state.kind === 'signed_in')
 
-  if (state.kind === 'loading') return <Loading label="Opening Homesrolo…" />
+  if (state.kind === 'loading') return <LaunchLoading label="Opening Homesrolo…" />
   if (state.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (state.kind === 'error') {
     return (
-      <Page>
-        <Brand compact />
-        <Notice message={state.message} actionLabel="Try again" onAction={() => void refreshSession()} />
-      </Page>
+      <LaunchError message={state.message} onRetry={() => void refreshSession()} />
     )
   }
-  if (startup.state.kind === 'loading') return <Loading label="Opening your workspace…" />
+  if (startup.state.kind === 'loading') return <LaunchLoading label="Opening your workspace…" />
   if (startup.state.kind === 'error') {
     return (
-      <Page>
-        <Brand compact />
-        <Notice
-          message="Homesrolo couldn’t open your workspace."
-          actionLabel="Try again"
-          onAction={startup.reload}
-        />
-      </Page>
+      <LaunchError
+        message="Your space didn’t finish opening. Try again and we’ll pick up where you left off."
+        onRetry={startup.reload}
+      />
     )
   }
   return <Redirect href={startup.state.value.destination} />

@@ -44,22 +44,29 @@ export interface HomeownerPwaSignOutEnvelope {
 /**
  * A deliberately smaller browser-only envelope for migration and transitional
  * sign-out. Ordinary PWA requests are unmarked same-origin cookie requests.
+ * The async HTTP handlers separately verify that a proxy-normalized body has
+ * zero actual bytes; Request.body identity is not stable across hosts.
  */
 function exactPwaBrowserMutation(request: Request, expectedOrigin: string): boolean {
   const url = new URL(request.url)
   const contentLength = request.headers.get('content-length')
+  const fetchSite = request.headers.get('sec-fetch-site')
+  const fetchMode = request.headers.get('sec-fetch-mode')
+  const fetchDestination = request.headers.get('sec-fetch-dest')
   return request.method === 'POST'
     && url.search === ''
     && url.hash === ''
     && request.headers.get('origin') === expectedOrigin
-    && request.headers.get('sec-fetch-site') === 'same-origin'
-    && request.headers.get('sec-fetch-mode') === 'cors'
-    && request.headers.get('sec-fetch-dest') === 'empty'
+    // Fetch Metadata is useful defense-in-depth when a browser/proxy keeps
+    // it, but hosting adapters are allowed to omit these headers. Origin plus
+    // the custom PWA header still force a cross-origin browser to preflight.
+    && (fetchSite === null || fetchSite === 'same-origin')
+    && (fetchMode === null || fetchMode === 'cors')
+    && (fetchDestination === null || fetchDestination === 'empty')
     && request.headers.get(HOMEOWNER_NATIVE_CLIENT_HEADER) === HOMEOWNER_PWA_CLIENT_V1
     && request.headers.get('content-type') === null
     && request.headers.get('content-encoding') === null
     && (contentLength === null || contentLength === '0')
-    && request.body === null
 }
 
 /**

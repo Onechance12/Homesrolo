@@ -14,6 +14,7 @@ import type { ServerSession } from '../api/model.ts'
 import type { RoloConversationStorage } from '../rolo/conversation-storage.ts'
 import { createSessionRuntime, type SessionRuntime } from './runtime.ts'
 import { bootstrapSessionToken } from './session-bootstrap.ts'
+import { readSessionWithRetry } from './session-read.ts'
 
 type AuthState =
   | { readonly kind: 'loading' }
@@ -68,12 +69,15 @@ export function SessionProvider({ children, runtime: injectedRuntime }: {
       }
     }
     try {
-      const session = await api.session()
+      const session = await readSessionWithRetry(api)
       if (session.kind === 'signed_out') await clearLocalSession()
       else setState({ kind: 'signed_in', session })
     } catch (error) {
       if (error instanceof NativeApiError && error.status === 401) await clearLocalSession()
-      else setState({ kind: 'error', message: 'Homesrolo could not verify your secure session.' })
+      else setState({
+        kind: 'error',
+        message: 'The connection didn’t finish. Try again and we’ll pick up where you left off.',
+      })
     }
   }, [api, clearLocalSession, runtime.previewMode, runtime.sessionTransport])
 
@@ -97,7 +101,10 @@ export function SessionProvider({ children, runtime: injectedRuntime }: {
         }
         await refreshSession()
       } catch {
-        if (active) setState({ kind: 'error', message: 'Homesrolo could not open your secure session.' })
+        if (active) setState({
+          kind: 'error',
+          message: 'The connection didn’t finish. Try again and we’ll pick up where you left off.',
+        })
       }
     })()
     return () => { active = false }
