@@ -135,12 +135,16 @@ export function RoloCardView({
         </View>
 
         {compact ? (
-          <View style={styles.compactBody}>
-            <View style={styles.compactCopy}>
-              {card.summary ? <Text numberOfLines={2} style={styles.summary}>{card.summary}</Text> : null}
-              <CardMeta values={card.meta} limit={2} />
-            </View>
-            {media ? <View style={styles.mediaCompact}>{media}</View> : null}
+          <View style={[styles.compactBody, !media && styles.compactBodyWithoutMedia]}>
+            {card.summary ? <Text numberOfLines={media ? 1 : 2} style={styles.summary}>{card.summary}</Text> : null}
+            {media ? (
+              <View style={styles.mediaCompact}>
+                {media}
+                <View style={styles.mediaMetaOverlay}>
+                  <CardMeta values={card.meta} limit={2} />
+                </View>
+              </View>
+            ) : <CardMeta values={card.meta} limit={2} />}
           </View>
         ) : (
           <>
@@ -325,8 +329,8 @@ const styles = StyleSheet.create({
   titleCompact: { fontSize: 18, lineHeight: 22, letterSpacing: -0.25 },
   summary: { color: colors.slate, fontSize: 13, lineHeight: 19 },
   summaryFull: { color: colors.slate, fontSize: 15, lineHeight: 22 },
-  compactBody: { flex: 1, flexDirection: 'row', alignItems: 'stretch', gap: space.sm },
-  compactCopy: { flex: 1, minWidth: 0, justifyContent: 'space-between', gap: space.sm },
+  compactBody: { flex: 1, minHeight: 0, gap: space.sm },
+  compactBodyWithoutMedia: { justifyContent: 'space-between' },
   mediaFull: {
     flexGrow: 1,
     minHeight: 96,
@@ -338,14 +342,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inkSoft,
   },
   mediaCompact: {
-    width: 92,
-    minHeight: 76,
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    alignSelf: 'center',
+    position: 'relative',
     overflow: 'hidden',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.inkSoft,
   },
+  mediaMetaOverlay: { position: 'absolute', left: 8, right: 8, bottom: 8 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   metaChip: {
     maxWidth: '100%',
