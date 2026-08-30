@@ -461,6 +461,9 @@ type WireProject = {
   occurredOn: string | null
   summary: string
   professionalLabel: string | null
+  /** Optional only for rolling compatibility with pre-assignment servers. */
+  assignedMembershipRef?: string | null
+  dueOn?: string | null
   revision: number
   archived: boolean
   archivedAt: string | null
@@ -474,7 +477,7 @@ const PROJECT_CATEGORIES = [
 ] as const
 
 const PROJECT_WORK_KINDS = [
-  'project', 'issue', 'repair', 'service', 'incident',
+  'project', 'issue', 'repair', 'service', 'incident', 'task',
 ] as const satisfies readonly HomeownerWorkKind[]
 
 const PROJECT_CATEGORY_LABEL: Readonly<Record<WireProject['category'], string>> = Object.freeze({
@@ -503,6 +506,8 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     occurredOn: nullable(calendarDate),
     summary: trimmedText(2000),
     professionalLabel: nullable(boundedLabel(160)),
+    assignedMembershipRef: optional(nullable(opaqueRef('hmbr'))),
+    dueOn: optional(nullable(calendarDate)),
     revision: positiveInt,
     archived: boolean,
     archivedAt: nullable(utcInstant),
@@ -525,6 +530,8 @@ export const decodeProject: Decoder<Project> = (value, at) => {
     performedOn: decoded.occurredOn,
     status: decoded.status,
     professionalLabel: decoded.professionalLabel ?? '',
+    assignedMembershipRef: decoded.assignedMembershipRef ?? null,
+    dueOn: decoded.dueOn ?? null,
     revision: decoded.revision,
     archived: decoded.archived,
     archivedAt: decoded.archivedAt,
@@ -547,6 +554,7 @@ export const decodeProjectActivity: Decoder<ProjectActivity> = object<ProjectAct
   kind: oneOf(['note', 'milestone'] as const),
   body: boundedLabel(2000),
   source: literal('homeowner_entry'),
+  actorDisplayLabel: nullable(boundedLabel(60)),
   createdAt: utcInstant,
 })
 
@@ -1120,11 +1128,13 @@ export const decodeHomeResearchResult: Decoder<HomeResearchResult> = (value, at)
 }
 
 const decodeRoloWorkDraft = object<RoloWorkDraft>({
-  kind: oneOf(['project', 'issue', 'repair', 'service', 'incident'] as const),
+  kind: oneOf(['project', 'issue', 'repair', 'service', 'incident', 'task'] as const),
   title: boundedResearchText(120),
   category: oneOf(PROJECT_CATEGORIES),
   status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),
   occurredOn: nullable(calendarDate),
+  assignedMembershipRef: (value, at) => value === undefined ? null : nullable(opaqueRef('hmbr'))(value, at),
+  dueOn: (value, at) => value === undefined ? null : nullable(calendarDate)(value, at),
   summary: trimmedText(2_000),
   professionalLabel: nullable(boundedResearchText(160)),
   firstUpdate: nullable(boundedResearchText(2_000)),

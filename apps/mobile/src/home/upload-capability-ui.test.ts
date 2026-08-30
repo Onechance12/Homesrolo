@@ -7,18 +7,19 @@ function read(relative: string) {
 }
 
 test('home and project libraries gate upload controls without gating saved files', () => {
-  const surfaces = [
-    read('app/home/[homeId]/care.tsx'),
-    read('src/components/ProjectFiles.tsx'),
-  ]
+  const home = read('app/home/[homeId]/care.tsx')
+  const project = read('src/components/ProjectFiles.tsx')
+  const surfaces = [home, project]
 
   for (const source of surfaces) {
     assert.match(source, /auth\.session\.capabilities\.uploads/)
-    assert.match(source, /showUploadActions = uploadsEnabled \|\| previewMode/)
     assert.match(source, /if \(!uploadsEnabled\) return/)
     assert.match(source, /showUploadActions \? \(/)
     assert.match(source, /api\.listArtifacts\(homeId\)/)
   }
+  assert.match(home, /showUploadActions = uploadsEnabled \|\| previewMode/)
+  assert.match(project, /showUploadActions = !readOnly && \(uploadsEnabled \|\| previewMode\)/)
+  assert.match(project, /readonly readOnly\?: boolean/)
 })
 
 test('preview keeps its safe upload-stop behavior while unavailable accounts get one clear notice', () => {

@@ -9,6 +9,7 @@ const valid = Object.freeze({
   kind: 'note',
   body: 'Contractor visit scheduled for Friday.',
   source: 'homeowner_entry',
+  actorDisplayLabel: 'Alex',
   createdAt: '2026-08-27T14:30:00.000Z',
 })
 
@@ -30,6 +31,9 @@ test('rejects malformed, unscoped, or expanded project activity records', () => 
     { ...valid, body: ' padded ' },
     { ...valid, body: 'x'.repeat(2_001) },
     { ...valid, source: 'professional_entry' },
+    { ...valid, actorDisplayLabel: '' },
+    { ...valid, actorDisplayLabel: ' Alex ' },
+    { ...valid, actorDisplayLabel: `Alex\u0000` },
     { ...valid, createdAt: '2026-08-27T14:30:00Z' },
     { ...valid, createdAt: '2026-02-30T14:30:00.000Z' },
   ]

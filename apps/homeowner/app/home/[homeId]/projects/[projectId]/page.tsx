@@ -637,7 +637,7 @@ export default function ProjectPage({
                 <li key={activity.activityRef}>
                   <span className="project-activity__dot" aria-hidden="true" />
                   <div>
-                    <span className="mono">{activity.kind === 'milestone' ? 'Milestone' : 'Note'} · {activityDate(activity)}</span>
+                    <span className="mono">{activity.kind === 'milestone' ? 'Milestone' : 'Note'} · {activityDate(activity)}{activity.actorDisplayLabel ? ` · ${activity.actorDisplayLabel}` : ''}</span>
                     <p>{activity.body}</p>
                   </div>
                 </li>

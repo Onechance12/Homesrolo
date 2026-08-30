@@ -48,6 +48,14 @@ function nativeRoloRawStorage(): RoloRawStorage {
       const file = fileFor(key)
       if (file.exists) file.delete()
     },
+    removeScope: async prefix => {
+      if (!directory.exists) return
+      for (const entry of directory.list()) {
+        if (!(entry instanceof File) || !entry.name.endsWith('.json')) continue
+        const key = entry.name.slice(0, -'.json'.length)
+        if (key === prefix || key.startsWith(`${prefix}.`)) entry.delete()
+      }
+    },
     clear: async () => {
       if (directory.exists) directory.delete()
     },

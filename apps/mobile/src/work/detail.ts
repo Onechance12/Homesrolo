@@ -11,6 +11,7 @@ export const WORK_KINDS: readonly WorkKind[] = [
   'repair',
   'service',
   'incident',
+  'task',
 ]
 
 export const WORK_CATEGORIES: readonly WorkCategory[] = [
@@ -41,6 +42,8 @@ export interface WorkDraft {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn: string
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string
   readonly summary: string
   readonly professionalLabel: string
 }
@@ -51,6 +54,8 @@ export interface WorkUpdateFields {
   readonly category: WorkCategory
   readonly status: WorkStatus
   readonly occurredOn: string | null
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string | null
   readonly summary: string | null
   readonly professionalLabel: string | null
 }
@@ -70,6 +75,8 @@ export function draftFromWork(work: WorkRecord): WorkDraft {
     category: work.category,
     status: work.status,
     occurredOn: work.occurredOn ?? '',
+    assignedMembershipRef: work.assignedMembershipRef,
+    dueOn: work.dueOn ?? '',
     summary: work.summary,
     professionalLabel: work.professionalLabel ?? '',
   }
@@ -77,6 +84,7 @@ export function draftFromWork(work: WorkRecord): WorkDraft {
 
 export function fieldsFromDraft(draft: WorkDraft): WorkUpdateFields {
   const occurredOn = draft.occurredOn.trim()
+  const dueOn = draft.dueOn.trim()
   const summary = draft.summary.trim()
   const professionalLabel = draft.professionalLabel.trim()
   return {
@@ -85,6 +93,8 @@ export function fieldsFromDraft(draft: WorkDraft): WorkUpdateFields {
     category: draft.category,
     status: draft.status,
     occurredOn: occurredOn || null,
+    assignedMembershipRef: draft.assignedMembershipRef,
+    dueOn: dueOn || null,
     summary: summary || null,
     professionalLabel: professionalLabel || null,
   }
@@ -105,6 +115,8 @@ export function workHasChanges(work: WorkRecord, draft: WorkDraft): boolean {
     || fields.category !== work.category
     || fields.status !== work.status
     || fields.occurredOn !== work.occurredOn
+    || fields.assignedMembershipRef !== work.assignedMembershipRef
+    || fields.dueOn !== work.dueOn
     || (fields.summary ?? '') !== work.summary
     || fields.professionalLabel !== work.professionalLabel
 }

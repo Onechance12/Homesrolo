@@ -57,6 +57,8 @@ export const updateHomeownerProjectFieldsSchema = z.object({
   occurredOn: calendarDate.nullable().optional(),
   summary: z.string().trim().max(2000).nullable().optional(),
   professionalLabel: z.string().trim().min(1).max(160).nullable().optional(),
+  assignedMembershipRef: opaqueRef('hmbr').nullable().optional(),
+  dueOn: calendarDate.nullable().optional(),
   archived: z.boolean().optional(),
   requestedAt: utcInstant,
 }).strict()
@@ -71,6 +73,8 @@ export const updateHomeownerProjectInputSchema =
       'occurredOn',
       'summary',
       'professionalLabel',
+      'assignedMembershipRef',
+      'dueOn',
       'archived',
     ] as const
     if (!editableKeys.some(key => Object.hasOwn(command, key))) {

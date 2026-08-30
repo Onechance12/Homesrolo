@@ -5,7 +5,12 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { NativeApiError } from '../../../../src/api/client.ts'
 import type { HomesroloApi } from '../../../../src/api/contract.ts'
 import { friendlyError } from '../../../../src/api/errors.ts'
-import type { ProjectActivityRecord, WorkRecord } from '../../../../src/api/model.ts'
+import {
+  activeHouseholdMembers,
+  assignableHouseholdMembers,
+  canCurrentHouseholdMemberUpdate,
+} from '../../../../src/api/household.ts'
+import type { HouseholdMember, ProjectActivityRecord, WorkRecord } from '../../../../src/api/model.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
 import { workDetailReturnPath } from '../../../../src/auth/return-route.ts'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
@@ -61,6 +66,12 @@ const WORK_DETAIL_TABS: readonly {
   { value: 'updates', label: 'Updates', icon: 'time-outline' },
 ]
 
+const TASK_DETAIL_TABS = WORK_DETAIL_TABS.filter(tab => (
+  tab.value === 'overview' || tab.value === 'files' || tab.value === 'updates'
+))
+
+const VIEW_ONLY_DETAIL_TABS = TASK_DETAIL_TABS
+
 export default function WorkDetailScreen() {
   const homeId = useHomeId()
   const { projectRef, professional, tab: rawTab } = useLocalSearchParams<{
@@ -73,9 +84,18 @@ export default function WorkDetailScreen() {
   const loader = useCallback(async () => {
     const work = await api.listWork(homeId)
     const current = findExactWork(work, homeId, projectRef)
-    if (!current) return { work: null, activity: [] as readonly ProjectActivityRecord[] }
-    const activity = await api.listProjectActivity(homeId, projectRef)
-    return { work: current, activity }
+    if (!current) return {
+      work: null,
+      activity: [] as readonly ProjectActivityRecord[],
+      members: [] as readonly HouseholdMember[],
+    }
+    const [activity, members] = await Promise.all([
+      api.listProjectActivity(homeId, projectRef),
+      api.getHousehold(homeId)
+        .then(household => household.members)
+        .catch(() => [] as readonly HouseholdMember[]),
+    ])
+    return { work: current, activity, members }
   }, [api, homeId, projectRef])
   const resource = useResource(loader, auth.kind === 'signed_in')
 
@@ -123,6 +143,7 @@ export default function WorkDetailScreen() {
       homeId={homeId}
       work={resource.state.value.work}
       initialActivity={resource.state.value.activity}
+      householdMembers={resource.state.value.members}
       initialTab={requestedTab ?? (professional ? 'bids' : 'overview')}
       {...(professional ? { preselectedOrganizationRef: professional } : {})}
       onReload={resource.reload}
@@ -130,11 +151,12 @@ export default function WorkDetailScreen() {
   )
 }
 
-function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselectedOrganizationRef, onReload }: {
+function WorkDetail({ api, homeId, work, initialActivity, householdMembers, initialTab, preselectedOrganizationRef, onReload }: {
   readonly api: HomesroloApi
   readonly homeId: string
   readonly work: WorkRecord
   readonly initialActivity: readonly ProjectActivityRecord[]
+  readonly householdMembers: readonly HouseholdMember[]
   readonly initialTab: WorkDetailTab
   readonly preselectedOrganizationRef?: string
   readonly onReload: () => void
@@ -143,6 +165,7 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
   const [draft, setDraft] = useState<WorkDraft>(() => draftFromWork(work))
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [conflicted, setConflicted] = useState(false)
@@ -151,7 +174,19 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
   const [noteError, setNoteError] = useState<string | null>(null)
   const [noteSuccess, setNoteSuccess] = useState<string | null>(null)
   const [activity, setActivity] = useState<readonly ProjectActivityRecord[]>(initialActivity)
-  const [tab, setTab] = useState<WorkDetailTab>(initialTab)
+  const canChangeWork = useMemo(
+    () => canCurrentHouseholdMemberUpdate(householdMembers),
+    [householdMembers],
+  )
+  const detailTabs = currentDetailTabs(current, canChangeWork)
+  const [tab, setTab] = useState<WorkDetailTab>(() => (
+    detailTabs.some(item => item.value === initialTab) ? initialTab : 'overview'
+  ))
+  const activeMembers = useMemo(() => activeHouseholdMembers(householdMembers), [householdMembers])
+  const assignableMembers = useMemo(
+    () => assignableHouseholdMembers(householdMembers),
+    [householdMembers],
+  )
   const pendingSave = useRef<PendingCommand | null>(null)
   const pendingNote = useRef<PendingCommand | null>(null)
   const saveLock = useRef(false)
@@ -165,6 +200,14 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
     setSaveSuccess(null)
   }
 
+  function selectDraftKind(workKind: WorkDraft['workKind']) {
+    setDraft(previous => workKind === 'task'
+      ? { ...previous, workKind }
+      : { ...previous, workKind, assignedMembershipRef: null, dueOn: '' })
+    setSaveError(null)
+    setSaveSuccess(null)
+  }
+
   function cancelEdit() {
     pendingSave.current = null
     setDraft(draftFromWork(current))
@@ -174,8 +217,8 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
   }
 
   async function save() {
-    if (saveLock.current || conflicted || !draft.title.trim() || !changed) return
-    if (!validOptionalWorkDate(draft.occurredOn)) {
+    if (!canChangeWork || saveLock.current || conflicted || !draft.title.trim() || !changed) return
+    if (!validOptionalWorkDate(draft.occurredOn) || !validOptionalWorkDate(draft.dueOn)) {
       setSaveError('Use a real date as YYYY-MM-DD, or leave it blank.')
       return
     }
@@ -215,6 +258,31 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
     }
   }
 
+  async function completeTask() {
+    if (!canChangeWork || completing || current.workKind !== 'task' || current.status === 'completed') return
+    setCompleting(true)
+    setSaveError(null)
+    setSaveSuccess(null)
+    try {
+      const updated = await api.updateWork(homeId, current.projectRef, {
+        commandRef: await api.newCommandRef(),
+        expectedRevision: current.revision,
+        status: 'completed',
+      })
+      if (updated.homeRef !== homeId || updated.projectRef !== current.projectRef) {
+        throw new NativeApiError(200, 'invalid_response')
+      }
+      setCurrent(updated)
+      setDraft(draftFromWork(updated))
+      setSaveSuccess('Marked complete for this household.')
+    } catch (caught) {
+      if (caught instanceof NativeApiError && caught.code === 'conflict') setConflicted(true)
+      else setSaveError(friendlyError(caught))
+    } finally {
+      setCompleting(false)
+    }
+  }
+
   function reloadAfterConflict() {
     pendingSave.current = null
     setSaveError(null)
@@ -231,7 +299,7 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
 
   async function addNote() {
     const body = note.trim()
-    if (noteLock.current || !body) return
+    if (!canChangeWork || noteLock.current || !body) return
     const intent = workNoteIntent(current.projectRef, body)
     if (lastCompletedNote.current === intent) return
     noteLock.current = true
@@ -274,11 +342,13 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
       <View style={styles.deckHeading}>
         <View>
           <Text style={styles.deckEyebrow}>Flip through this work</Text>
-          <Text style={styles.deckCopy}>The plan, proof, bids, and updates stay in one project deck.</Text>
+          <Text style={styles.deckCopy}>{current.workKind === 'task'
+            ? 'The assignment, proof, and household updates stay together.'
+            : 'The plan, proof, bids, and updates stay in one project deck.'}</Text>
         </View>
-        <Text style={styles.deckCount}>{WORK_DETAIL_TABS.findIndex(item => item.value === tab) + 1}/{WORK_DETAIL_TABS.length}</Text>
+        <Text style={styles.deckCount}>{detailTabs.findIndex(item => item.value === tab) + 1}/{detailTabs.length}</Text>
       </View>
-      <WorkDetailTabs selected={tab} onSelect={setTab} />
+      <WorkDetailTabs tabs={detailTabs} selected={tab} onSelect={setTab} />
 
       {tab === 'overview' ? <Card accent>
         <View style={styles.headingRow}>
@@ -288,6 +358,12 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
           <Text style={styles.status}>{statusLabel[current.status]}</Text>
         </View>
         <Detail label="Date" value={displayDate(current.occurredOn)} />
+        {current.workKind === 'task' ? (
+          <>
+            <Detail label="Assigned to" value={assignedMemberLabel(current.assignedMembershipRef, activeMembers)} />
+            <Detail label="Due" value={displayDate(current.dueOn)} />
+          </>
+        ) : null}
         <Detail label="Person or company" value={current.professionalLabel ?? 'Not recorded'} />
         <View style={styles.summaryBlock}>
           <Text style={styles.detailLabel}>What the home remembers</Text>
@@ -306,12 +382,21 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
                 'Help me review this work record. What looks incomplete or worth deciding next?',
               )}
             />
-            <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} quiet />
+            {canChangeWork ? <Button label="Edit details" icon="create-outline" onPress={() => setEditing(true)} quiet /> : null}
+            {canChangeWork && current.workKind === 'task' && current.status !== 'completed'
+              && current.status !== 'cancelled' ? (
+                <Button
+                  label={completing ? 'Finishing…' : 'Mark complete'}
+                  icon="checkmark"
+                  onPress={() => void completeTask()}
+                  disabled={completing}
+                />
+              ) : null}
           </>
         ) : null}
       </Card> : null}
 
-      {tab === 'overview' && editing ? (
+      {tab === 'overview' && editing && canChangeWork ? (
         <Card>
           <SectionTitle title="Edit this record" detail="These changes update the existing entry." />
           <TextField
@@ -327,7 +412,7 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
                 key={value}
                 label={kindLabel[value]}
                 selected={draft.workKind === value}
-                onPress={() => setDraftField('workKind', value)}
+                onPress={() => selectDraftKind(value)}
               />
             ))}
           </View>
@@ -365,6 +450,38 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
               ? 'Use YYYY-MM-DD, or leave it blank if you do not know.'
               : 'Enter a real date as YYYY-MM-DD.'}
           />
+          {draft.workKind === 'task' ? (
+            <>
+              <Text style={styles.label}>Who is responsible?</Text>
+              <View style={styles.chips}>
+                <Chip
+                  label="Unassigned"
+                  selected={draft.assignedMembershipRef === null}
+                  onPress={() => setDraftField('assignedMembershipRef', null)}
+                />
+                {assignableMembers.map(member => (
+                  <Chip
+                    key={member.membershipRef}
+                    label={member.isCurrentPrincipal ? 'Me' : member.displayLabel}
+                    selected={draft.assignedMembershipRef === member.membershipRef}
+                    onPress={() => setDraftField('assignedMembershipRef', member.membershipRef)}
+                  />
+                ))}
+              </View>
+              <TextField
+                label="Due date (optional)"
+                value={draft.dueOn}
+                onChangeText={value => setDraftField('dueOn', value)}
+                placeholder="2026-09-05"
+                keyboardType="numbers-and-punctuation"
+                autoCorrect={false}
+                maxLength={10}
+                hint={validOptionalWorkDate(draft.dueOn)
+                  ? 'Use YYYY-MM-DD, or leave it open.'
+                  : 'Enter a real date as YYYY-MM-DD.'}
+              />
+            </>
+          ) : null}
           <TextField
             label="What should the home remember?"
             value={draft.summary}
@@ -384,7 +501,8 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
             label={saving ? 'Saving…' : 'Save changes'}
             icon="checkmark"
             onPress={() => void save()}
-            disabled={saving || conflicted || !draft.title.trim() || !changed || !validOptionalWorkDate(draft.occurredOn)}
+            disabled={saving || conflicted || !draft.title.trim() || !changed
+              || !validOptionalWorkDate(draft.occurredOn) || !validOptionalWorkDate(draft.dueOn)}
           />
           <Button label="Cancel" onPress={cancelEdit} disabled={saving} quiet />
           {conflicted ? (
@@ -420,7 +538,11 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
                 </View>
                 <View style={styles.timelineCopy}>
                   <Text style={styles.timelineMeta}>
-                    {entry.kind === 'milestone' ? 'Milestone' : 'Note'} · {displayActivityDate(entry.createdAt)}
+                    {[
+                      entry.kind === 'milestone' ? 'Milestone' : 'Note',
+                      entry.actorDisplayLabel,
+                      displayActivityDate(entry.createdAt),
+                    ].filter(Boolean).join(' · ')}
                   </Text>
                   <Text style={styles.timelineBody}>{entry.body}</Text>
                 </View>
@@ -430,23 +552,27 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
         ) : (
           <Text style={styles.emptyActivity}>No updates yet. Add the first decision, visit, or reminder.</Text>
         )}
-        <Divider />
-        <TextField
-          label="Add an update"
-          value={note}
-          onChangeText={changeNote}
-          multiline
-          maxLength={2_000}
-          placeholder="The replacement part is ordered and should arrive Friday."
-        />
-        <Button
-          label={addingNote ? 'Saving…' : 'Save note'}
-          icon="chatbubble-ellipses-outline"
-          onPress={() => void addNote()}
-          disabled={addingNote || !note.trim()}
-        />
-        {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
-        {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
+        {canChangeWork ? (
+          <>
+            <Divider />
+            <TextField
+              label="Add an update"
+              value={note}
+              onChangeText={changeNote}
+              multiline
+              maxLength={2_000}
+              placeholder="The replacement part is ordered and should arrive Friday."
+            />
+            <Button
+              label={addingNote ? 'Saving…' : 'Save note'}
+              icon="chatbubble-ellipses-outline"
+              onPress={() => void addNote()}
+              disabled={addingNote || !note.trim()}
+            />
+            {noteError ? <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text> : null}
+            {noteSuccess ? <Text accessibilityRole="alert" style={styles.success}>{noteSuccess}</Text> : null}
+          </>
+        ) : null}
       </Card> : null}
 
       {tab === 'plan' ? (
@@ -467,7 +593,14 @@ function WorkDetail({ api, homeId, work, initialActivity, initialTab, preselecte
         </>
       ) : null}
 
-      {tab === 'files' ? <ProjectFiles homeId={homeId} projectRef={current.projectRef} projectTitle={current.title} /> : null}
+      {tab === 'files' ? (
+        <ProjectFiles
+          homeId={homeId}
+          projectRef={current.projectRef}
+          projectTitle={current.title}
+          readOnly={!canChangeWork}
+        />
+      ) : null}
 
       {tab === 'bids' ? (
         <>
@@ -502,7 +635,8 @@ function routeWorkDetailTab(value: string | readonly string[] | undefined): Work
   return WORK_DETAIL_TABS.find(tab => tab.value === value)?.value ?? null
 }
 
-function WorkDetailTabs({ selected, onSelect }: {
+function WorkDetailTabs({ tabs, selected, onSelect }: {
+  readonly tabs: typeof WORK_DETAIL_TABS
   readonly selected: WorkDetailTab
   readonly onSelect: (tab: WorkDetailTab) => void
 }) {
@@ -513,7 +647,7 @@ function WorkDetailTabs({ selected, onSelect }: {
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.detailTabs}
     >
-      {WORK_DETAIL_TABS.map(tab => {
+      {tabs.map(tab => {
         const active = selected === tab.value
         return (
           <Pressable
@@ -530,6 +664,11 @@ function WorkDetailTabs({ selected, onSelect }: {
       })}
     </ScrollView>
   )
+}
+
+function currentDetailTabs(work: WorkRecord, canChangeWork: boolean): typeof WORK_DETAIL_TABS {
+  if (!canChangeWork) return VIEW_ONLY_DETAIL_TABS
+  return work.workKind === 'task' ? TASK_DETAIL_TABS : WORK_DETAIL_TABS
 }
 
 function ProjectBack({ onPress }: { readonly onPress: () => void }) {
@@ -561,6 +700,16 @@ function displayDate(value: string | null): string {
   return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
+}
+
+function assignedMemberLabel(
+  membershipRef: string | null,
+  members: readonly HouseholdMember[],
+): string {
+  if (!membershipRef) return 'Unassigned'
+  const member = members.find(item => item.membershipRef === membershipRef)
+  if (!member) return 'Household member'
+  return member.isCurrentPrincipal ? 'You' : member.displayLabel
 }
 
 function displayActivityDate(value: string): string {

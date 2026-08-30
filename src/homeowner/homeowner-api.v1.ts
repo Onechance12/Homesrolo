@@ -235,7 +235,7 @@ export const homeownerApiUpdateProjectInputSchema =
     .superRefine((command, context) => {
       const editableKeys = [
         'title', 'workKind', 'category', 'status', 'occurredOn', 'summary',
-        'professionalLabel', 'archived',
+        'professionalLabel', 'assignedMembershipRef', 'dueOn', 'archived',
       ] as const
       if (!editableKeys.some(key => Object.hasOwn(command, key))) {
         context.addIssue({ code: 'custom', message: 'at least one project field must be supplied' })
@@ -268,6 +268,8 @@ export const homeownerApiProjectViewSchema = z.object({
   occurredOn: homeownerProjectSchema.shape.occurredOn.nullable(),
   summary: z.string().trim().max(2000),
   professionalLabel: z.string().trim().min(1).max(160).nullable(),
+  assignedMembershipRef: homeownerProjectSchema.shape.assignedMembershipRef.nullable(),
+  dueOn: homeownerProjectSchema.shape.dueOn.nullable(),
   revision: z.number().int().min(1),
   archived: z.boolean(),
   archivedAt: homeownerUtcInstantSchema.nullable(),
@@ -290,6 +292,7 @@ export const homeownerApiProjectActivityViewSchema = z.object({
   kind: homeownerProjectActivitySchema.shape.kind,
   body: homeownerProjectActivitySchema.shape.body,
   source: homeownerProjectActivitySchema.shape.source,
+  actorDisplayLabel: z.string().trim().min(1).max(60).nullable(),
   createdAt: homeownerProjectActivitySchema.shape.createdAt,
 }).strict()
 
@@ -550,6 +553,8 @@ function safeProject(project: HomeownerProject): HomeownerApiProjectView {
     occurredOn: project.occurredOn ?? null,
     summary: project.summary ?? '',
     professionalLabel: project.professionalLabel ?? null,
+    assignedMembershipRef: project.assignedMembershipRef ?? null,
+    dueOn: project.dueOn ?? null,
     revision: project.revision,
     archived: project.archivedAt !== undefined,
     archivedAt: project.archivedAt ?? null,
@@ -558,7 +563,10 @@ function safeProject(project: HomeownerProject): HomeownerApiProjectView {
   })
 }
 
-function safeProjectActivity(input: HomeownerProjectActivity): HomeownerApiProjectActivityView {
+function safeProjectActivity(
+  input: HomeownerProjectActivity,
+  actorDisplayLabel: string | null = null,
+): HomeownerApiProjectActivityView {
   const activity = homeownerProjectActivitySchema.parse(input)
   return homeownerApiProjectActivityViewSchema.parse({
     activityRef: activity.activityRef,
@@ -567,6 +575,7 @@ function safeProjectActivity(input: HomeownerProjectActivity): HomeownerApiProje
     kind: activity.kind,
     body: activity.body,
     source: activity.source,
+    actorDisplayLabel,
     createdAt: activity.createdAt,
   })
 }
@@ -868,6 +877,9 @@ export class HomeownerApiService {
     if (current.revision !== parsedInput.data.expectedRevision) {
       throw new HomeownerApiError('conflict')
     }
+    if (parsedInput.data.assignedMembershipRef) {
+      await this.#requireAssignableMembership(grant, parsedInput.data.assignedMembershipRef)
+    }
     const command = updateHomeownerProjectInputSchema.parse({
       ...parsedInput.data,
       projectRef: parsedProjectRef.data,
@@ -886,6 +898,12 @@ export class HomeownerApiService {
     const expectedProfessionalLabel = Object.hasOwn(command, 'professionalLabel')
       ? command.professionalLabel || undefined
       : current.professionalLabel
+    const expectedAssignedMembershipRef = Object.hasOwn(command, 'assignedMembershipRef')
+      ? command.assignedMembershipRef ?? undefined
+      : current.assignedMembershipRef
+    const expectedDueOn = Object.hasOwn(command, 'dueOn')
+      ? command.dueOn ?? undefined
+      : current.dueOn
     const expectedArchivedAt = Object.hasOwn(command, 'archived')
       ? command.archived
         ? current.archivedAt ?? requestedAt
@@ -901,6 +919,8 @@ export class HomeownerApiService {
       && updated.occurredOn === expectedOccurredOn
       && updated.summary === expectedSummary
       && updated.professionalLabel === expectedProfessionalLabel
+      && updated.assignedMembershipRef === expectedAssignedMembershipRef
+      && updated.dueOn === expectedDueOn
       && updated.archivedAt === expectedArchivedAt
       && updated.revision === current.revision + 1
       && updated.createdAt === current.createdAt
@@ -925,13 +945,17 @@ export class HomeownerApiService {
       grant,
       parsedProjectRef.data,
     )
-    return activity.map(input => {
+    return Promise.all(activity.map(async input => {
       const entry = homeownerProjectActivitySchema.parse(input)
       if (entry.homeRef !== grant.homeRef || entry.projectRef !== parsedProjectRef.data) {
         throw new HomeownerApiError('unavailable')
       }
-      return safeProjectActivity(entry)
-    })
+      const actor = await this.#repository.readMembership(
+        entry.actorPrincipalRef,
+        grant.homeRef,
+      )
+      return safeProjectActivity(entry, actor?.displayLabel ?? null)
+    }))
   }
 
   async appendProjectActivity(
@@ -970,7 +994,11 @@ export class HomeownerApiService {
       || activity.createdAt !== command.requestedAt) {
       throw new HomeownerApiError('unavailable')
     }
-    return safeProjectActivity(activity)
+    const actor = await this.#repository.readMembership(
+      activity.actorPrincipalRef,
+      grant.homeRef,
+    )
+    return safeProjectActivity(activity, actor?.displayLabel ?? null)
   }
 
   async listProjectItems(
@@ -1192,7 +1220,7 @@ export class HomeownerApiService {
     if (!this.#capabilities.uploads) throw new HomeownerApiError('unavailable')
     const artifacts = await this.#repository.listArtifactMetadata(grant)
     return artifacts.map(artifact => safeArtifact(artifact, {
-      includePreciseGeo: role === 'workspace_controller',
+      includePreciseGeo: role === 'workspace_controller' || role === 'member',
     }))
   }
 
@@ -1716,6 +1744,9 @@ export class HomeownerApiService {
     }
     const grant = await this.#workspaceGrant(context, requestedHomeRef, 'project.create')
     if (!this.#capabilities.persistence) throw new HomeownerApiError('unavailable')
+    if (parsedInput.data.assignedMembershipRef) {
+      await this.#requireAssignableMembership(grant, parsedInput.data.assignedMembershipRef)
+    }
 
     const { summary, ...stableInput } = parsedInput.data
     const command = createHomeownerProjectInputSchema.parse({
@@ -1735,6 +1766,8 @@ export class HomeownerApiService {
       && created.occurredOn === command.occurredOn
       && created.summary === command.summary
       && created.professionalLabel === command.professionalLabel
+      && created.assignedMembershipRef === command.assignedMembershipRef
+      && created.dueOn === command.dueOn
     if (!coherent) throw new HomeownerApiError('unavailable')
     return safeProject(created)
   }
@@ -1898,6 +1931,32 @@ export class HomeownerApiService {
       throw new HomeownerApiError('unavailable')
     }
     return parsed
+  }
+
+  async #requireAssignableMembership(
+    grant: AuthorizedHomeownerWorkspace,
+    assignedMembershipRef: string,
+  ): Promise<void> {
+    const readMembershipByRef = this.#repository.readMembershipByRef
+    if (!readMembershipByRef) throw new HomeownerApiError('unavailable')
+    const input = await readMembershipByRef.call(
+      this.#repository,
+      grant.homeRef,
+      assignedMembershipRef,
+    )
+    if (!input) throw new HomeownerApiError('not_found')
+    let membership: HomeownerMembership
+    try {
+      membership = parseHomeownerMembership(input)
+    } catch {
+      throw new HomeownerApiError('not_found')
+    }
+    if (membership.membershipRef !== assignedMembershipRef
+      || membership.homeRef !== grant.homeRef
+      || membership.state !== 'active'
+      || !['workspace_controller', 'member'].includes(membership.role)) {
+      throw new HomeownerApiError('not_found')
+    }
   }
 
   async #workspaceGrant<Action extends HomeownerWorkspaceAction>(

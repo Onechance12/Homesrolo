@@ -22,7 +22,7 @@ test('the homeowner app is chat-first with four stable destinations', () => {
   assert.match(tabs, /<HomeRouteProvider key=\{homeId\} homeId=\{homeId\}>/)
   assert.match(tabs, /name="rolo"[\s\S]*?tabPress: event => \{[\s\S]*?event\.preventDefault\(\)[\s\S]*?pathname: '\/home\/\[homeId\]\/rolo'/)
   assert.match(tabs, /frontDoor: String\(Date\.now\(\)\)/)
-  assert.match(read('app/home/[homeId]/rolo.tsx'), /frontDoor[\s\S]*?\[frontDoor, homeId, principalRef/)
+  assert.match(read('app/home/[homeId]/rolo.tsx'), /frontDoor[\s\S]*?\[authorizedHomeScope, frontDoor, homeId,[^\]]*principalRef/)
   assert.doesNotMatch(tabs, /title: 'Today'/)
   assert.doesNotMatch(tabs, /title: 'Pros'/)
   assert.doesNotMatch(tabs, /name="pro"/)
@@ -131,9 +131,10 @@ test('Rolo refreshes home context safely and People behaves like a primary tab',
   const rolo = read('app/home/[homeId]/rolo.tsx')
   const people = read('app/home/[homeId]/people.tsx')
 
-  assert.match(rolo, /useFocusEffect\(useCallback\(\(\) => \{[\s\S]*setHomeSummary\(null\)[\s\S]*setKnownWork\(\[\]\)/)
-  assert.match(rolo, /setHomeSummary\(homeResult\.status === 'fulfilled' \? homeResult\.value : null\)/)
-  assert.match(rolo, /persistenceKey && hydratedScope !== persistenceKey[\s\S]*Opening Rolo…/)
+  assert.match(rolo, /useFocusEffect\(useCallback\(\(\) => \{[\s\S]*setAuthorizedHomeScope\(null\)[\s\S]*setHydratedScope\(null\)[\s\S]*setPersistenceWritableScope\(null\)/)
+  assert.match(rolo, /api\.getHome\(homeId\)[\s\S]*setHomeSummary\(home\)[\s\S]*setAuthorizedHomeScope\(homePersistenceKey\)/)
+  assert.match(rolo, /api\.getHome\(homeId\)[\s\S]*\.catch\(\(\) => \{[\s\S]*roloStorage\.clearHome\(\{[\s\S]*principalRef,[\s\S]*homeRef: homeId/)
+  assert.match(rolo, /roloConversationAccessReady\(\{[\s\S]*authorizedHomeScope,[\s\S]*hydratedScope,[\s\S]*Opening Rolo…/)
   assert.doesNotMatch(people, /accessibilityLabel="Back to Home"/)
 })
 

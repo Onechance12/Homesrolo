@@ -13,13 +13,20 @@ export interface RoloRawStorage {
   read(key: string): Promise<string | null>
   write(key: string, value: string): Promise<void>
   remove(key: string): Promise<void>
+  removeScope(prefix: string): Promise<void>
   clear(): Promise<void>
 }
+
+export type RoloHomeConversationScope = Readonly<Pick<
+  RoloConversationScope,
+  'principalRef' | 'homeRef'
+>>
 
 export interface RoloConversationStorage {
   read(scope: RoloConversationScope): Promise<PersistedRoloConversation | null>
   write(value: PersistedRoloConversation): Promise<void>
   remove(scope: RoloConversationScope): Promise<void>
+  clearHome(scope: RoloHomeConversationScope): Promise<void>
   clearAll(): Promise<void>
 }
 
@@ -74,6 +81,10 @@ export function createRoloConversationStorage(driver: RoloRawStorage): RoloConve
       if (!isRoloConversationScope(scope)) return
       await driver.remove(scopeKey(scope))
     }),
+    clearHome: scope => schedule(async () => {
+      if (!isRoloConversationScope(scope)) return
+      await driver.removeScope(legacyScopeKey(scope))
+    }),
     clearAll: () => schedule(() => driver.clear()),
   }
 }
@@ -87,6 +98,11 @@ export function memoryRoloRawStorage(seed: Readonly<Record<string, string>> = {}
     read: async key => values.get(key) ?? null,
     write: async (key, value) => { values.set(key, value) },
     remove: async key => { values.delete(key) },
+    removeScope: async prefix => {
+      for (const key of values.keys()) {
+        if (key === prefix || key.startsWith(`${prefix}.`)) values.delete(key)
+      }
+    },
     clear: async () => { values.clear() },
   }
 }
@@ -109,6 +125,16 @@ export function webRoloRawStorage(
       storageProvider().setItem(`${WEB_KEY_PREFIX}${key}`, value)
     },
     remove: async key => storageProvider().removeItem(`${WEB_KEY_PREFIX}${key}`),
+    removeScope: async prefix => {
+      const storage = storageProvider()
+      const scopedPrefix = `${WEB_KEY_PREFIX}${prefix}`
+      const keys: string[] = []
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (key === scopedPrefix || key?.startsWith(`${scopedPrefix}.`)) keys.push(key)
+      }
+      for (const key of keys) storage.removeItem(key)
+    },
     clear: async () => {
       const storage = storageProvider()
       const keys: string[] = []

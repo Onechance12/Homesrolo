@@ -86,6 +86,16 @@ import {
   type ProfessionalProposal,
   type ProjectInvitation,
 } from '../../../../src/homeowner/homesrolo-professional.v1.ts'
+import {
+  householdAuthorityMembershipSchema,
+  householdInvitationAcceptanceSchema,
+  householdInvitationSchema,
+  householdMemberSchema,
+  householdRosterSchema,
+  HouseholdServiceError,
+  type HomeownerHouseholdIdentityPort,
+  type HomeownerHouseholdPort,
+} from '../../../../src/homeowner/homeowner-household.v1.ts'
 
 type JsonRecord = Record<string, unknown>
 
@@ -147,6 +157,33 @@ function throwProfessionalMutationError(error: { readonly message: string }): ne
   throw new HomeownerApiError('unavailable')
 }
 
+function throwHouseholdMutationError(error: { readonly message: string }): never {
+  if (error.message.includes('revision_conflict')
+    || error.message.includes('command_digest_mismatch')
+    || error.message.includes('scope_mismatch')
+    || error.message.includes('already_pending')
+    || error.message.includes('already_active')
+    || error.message.includes('member_limit_reached')
+    || error.message.includes('invitation_limit_reached')
+    || error.message.includes('last_household_controller_required')) {
+    throw new HouseholdServiceError('conflict')
+  }
+  if (error.message.includes('not_found')
+    || error.message.includes('not_authorized')
+    || error.message.includes('email_mismatch')) {
+    // Wrong-email and unauthorized invitation attempts deliberately collapse
+    // to not-found so the boundary never confirms private household state.
+    throw new HouseholdServiceError('not_found')
+  }
+  if (error.message.includes('invalid_')
+    || error.message.includes('not_pending')
+    || error.message.includes('expired')
+    || error.message.includes('not_active')) {
+    throw new HouseholdServiceError('invalid_request')
+  }
+  throw new HouseholdServiceError('unavailable')
+}
+
 function nullableString(row: JsonRecord, key: string): string | null {
   const value = row[key]
   if (value === null) return null
@@ -193,6 +230,9 @@ function membershipFromRow(input: unknown): HomeownerMembership {
     membershipRef: requiredString(row, 'membership_ref'),
     principalRef: requiredString(row, 'principal_ref'),
     homeRef: requiredString(row, 'home_ref'),
+    ...(row.display_label === undefined
+      ? {}
+      : { displayLabel: requiredString(row, 'display_label') }),
     role: requiredString(row, 'role'),
     basis: requiredString(row, 'basis'),
     state: requiredString(row, 'state'),
@@ -318,6 +358,10 @@ function projectFromRow(input: unknown): HomeownerProject {
     ...(row.professional_label === null
       ? {}
       : { professionalLabel: requiredString(row, 'professional_label') }),
+    ...(row.assigned_membership_ref == null
+      ? {}
+      : { assignedMembershipRef: requiredString(row, 'assigned_membership_ref') }),
+    ...(row.due_on == null ? {} : { dueOn: requiredString(row, 'due_on') }),
     revision: requiredNumber(row, 'revision'),
     ...(row.archived_at === null ? {} : { archivedAt: canonicalInstant(row, 'archived_at') }),
     createdAt: canonicalInstant(row, 'created_at'),
@@ -622,7 +666,8 @@ export class SupabaseHomeownerProvider implements
   HomeownerPrivateObjectPort, HomeownerArtifactMetadataPort,
   HomeownerProjectQuotePort, HomeownerProjectWorkspacePort,
   HomeownerProjectReviewPersistencePort, HomeownerCheckupPhotoPort,
-  HomeownerHomeRecordProfilePort, HomesroloProfessionalPort {
+  HomeownerHomeRecordProfilePort, HomesroloProfessionalPort,
+  HomeownerHouseholdIdentityPort, HomeownerHouseholdPort {
   readonly #client: SupabaseClient
   readonly #now: () => string
   readonly #supabaseOrigin: string | null
@@ -647,6 +692,27 @@ export class SupabaseHomeownerProvider implements
     try { return principalFromRow(data) } catch { return null }
   }
 
+  async resolveHouseholdIdentity(sessionHandle: string) {
+    const principal = await this.resolvePrincipal(sessionHandle)
+    if (!principal) return null
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_principals')
+      .select('principal_ref,email_canonical,status,email_verified')
+      .eq('principal_ref', principal.principalRef)
+      .maybeSingle()
+    if (error) throw new HouseholdServiceError('unavailable')
+    if (!data || typeof data.email_canonical !== 'string'
+      || data.principal_ref !== principal.principalRef
+      || data.status !== principal.status
+      || data.email_verified !== principal.emailVerified) return null
+    return {
+      principalRef: principal.principalRef,
+      emailCanonical: data.email_canonical,
+      status: principal.status,
+      emailVerified: principal.emailVerified,
+    }
+  }
+
   async listMemberships(authorization: AuthorizedHomeownerPrincipal) {
     const { data, error } = await this.#client
       .from('homesrolo_homeowner_memberships')
@@ -667,6 +733,153 @@ export class SupabaseHomeownerProvider implements
       .maybeSingle()
     if (error) throw new HomeownerApiError('unavailable')
     return data === null ? null : membershipFromRow(data)
+  }
+
+  async readMembershipByRef(homeRef: string, membershipRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_memberships')
+      .select('*')
+      .eq('membership_ref', membershipRef)
+      .eq('home_ref', homeRef)
+      .maybeSingle()
+    if (error) throw new HomeownerApiError('unavailable')
+    return data === null ? null : membershipFromRow(data)
+  }
+
+  async readAuthorityMembership(principalRef: string, homeRef: string) {
+    const { data, error } = await this.#client
+      .from('homesrolo_homeowner_memberships')
+      .select('*')
+      .eq('principal_ref', principalRef)
+      .eq('home_ref', homeRef)
+      .maybeSingle()
+    if (error) throw new HouseholdServiceError('unavailable')
+    if (data === null) return null
+    const membership = membershipFromRow(data)
+    return householdAuthorityMembershipSchema.parse({
+      ...membership,
+      displayLabel: requiredString(record(data), 'display_label'),
+    })
+  }
+
+  async listHousehold(grant: Parameters<HomeownerHouseholdPort['listHousehold']>[0]) {
+    const { data, error } = await this.#client.rpc('homesrolo_list_household', {
+      p_principal_ref: grant.principalRef,
+      p_home_ref: grant.homeRef,
+      p_membership_ref: grant.membershipRef,
+      p_membership_revision: grant.membershipRevision,
+      p_now: this.#now(),
+    })
+    if (error) throwHouseholdMutationError(error)
+    return householdRosterSchema.parse(data)
+  }
+
+  async createHouseholdInvitation(
+    input: Parameters<HomeownerHouseholdPort['createHouseholdInvitation']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_create_household_invitation',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.commandDigest,
+        p_invitation_ref: input.invitationRef,
+        p_invitee_email_hash: input.inviteeEmailHash,
+        p_invitee_display_label: input.command.inviteeDisplayLabel,
+        p_desired_role: input.command.desiredRole,
+        p_expires_at: input.command.expiresAt,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwHouseholdMutationError(error)
+    return householdInvitationSchema.parse(data)
+  }
+
+  async acceptHouseholdInvitation(
+    input: Parameters<HomeownerHouseholdPort['acceptHouseholdInvitation']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_accept_household_invitation',
+      {
+        p_principal_ref: input.principalRef,
+        p_email_canonical: input.emailCanonical,
+        p_invitee_email_hash: input.inviteeEmailHash,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.commandDigest,
+        p_invitation_ref: input.command.invitationRef,
+        p_membership_ref: input.membershipRef,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwHouseholdMutationError(error)
+    return householdInvitationAcceptanceSchema.parse(data)
+  }
+
+  async revokeHouseholdInvitation(
+    input: Parameters<HomeownerHouseholdPort['revokeHouseholdInvitation']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_revoke_household_invitation',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.commandDigest,
+        p_invitation_ref: input.command.invitationRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwHouseholdMutationError(error)
+    return householdInvitationSchema.parse(data)
+  }
+
+  async removeHouseholdMember(
+    input: Parameters<HomeownerHouseholdPort['removeHouseholdMember']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_remove_household_member',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.commandDigest,
+        p_target_membership_ref: input.command.membershipRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwHouseholdMutationError(error)
+    return householdMemberSchema.parse(data)
+  }
+
+  async setHouseholdMemberRole(
+    input: Parameters<HomeownerHouseholdPort['setHouseholdMemberRole']>[0],
+  ) {
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_set_household_member_role',
+      {
+        p_principal_ref: input.grant.principalRef,
+        p_home_ref: input.grant.homeRef,
+        p_membership_ref: input.grant.membershipRef,
+        p_membership_revision: input.grant.membershipRevision,
+        p_command_ref: input.command.commandRef,
+        p_command_digest: input.commandDigest,
+        p_target_membership_ref: input.command.membershipRef,
+        p_expected_revision: input.command.expectedRevision,
+        p_desired_role: input.command.desiredRole,
+        p_requested_at: input.command.requestedAt,
+      },
+    )
+    if (error) throwHouseholdMutationError(error)
+    return householdMemberSchema.parse(data)
   }
 
   async readHome(grant: AuthorizedHomeownerWorkspace) {
@@ -1591,6 +1804,8 @@ export class SupabaseHomeownerProvider implements
       p_occurred_on: input.command.occurredOn ?? null,
       p_summary: input.command.summary ?? '',
       p_professional_label: input.command.professionalLabel ?? null,
+      p_assigned_membership_ref: input.command.assignedMembershipRef ?? null,
+      p_due_on: input.command.dueOn ?? null,
       p_initial_activity_ref: initialActivityRef,
       p_initial_activity_kind: input.command.initialActivity?.kind ?? null,
       p_initial_activity_body: input.command.initialActivity?.body ?? null,
@@ -1599,6 +1814,10 @@ export class SupabaseHomeownerProvider implements
     if (error) {
       if (error.message.includes('command_digest_mismatch')) {
         throw new HomeownerApiError('conflict')
+      }
+      if (error.message.includes('assigned_membership_not_authorized')
+        || error.message.includes('membership_not_authorized')) {
+        throw new HomeownerApiError('not_found')
       }
       throw new HomeownerApiError('unavailable')
     }
@@ -1630,6 +1849,10 @@ export class SupabaseHomeownerProvider implements
       p_summary: command.summary ?? null,
       p_set_professional_label: Object.hasOwn(command, 'professionalLabel'),
       p_professional_label: command.professionalLabel ?? null,
+      p_set_assigned_membership_ref: Object.hasOwn(command, 'assignedMembershipRef'),
+      p_assigned_membership_ref: command.assignedMembershipRef ?? null,
+      p_set_due_on: Object.hasOwn(command, 'dueOn'),
+      p_due_on: command.dueOn ?? null,
       p_set_archived: Object.hasOwn(command, 'archived'),
       p_archived: command.archived ?? false,
       p_requested_at: command.requestedAt,
@@ -1640,7 +1863,8 @@ export class SupabaseHomeownerProvider implements
         throw new HomeownerApiError('conflict')
       }
       if (error.message.includes('project_not_found')
-        || error.message.includes('membership_not_authorized')) {
+        || error.message.includes('membership_not_authorized')
+        || error.message.includes('assigned_membership_not_authorized')) {
         throw new HomeownerApiError('not_found')
       }
       if (error.message.includes('invalid_') || error.message.includes('empty_project_update')) {

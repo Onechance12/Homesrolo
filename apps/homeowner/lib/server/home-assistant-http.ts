@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { HomeownerApiError } from '../../../../src/homeowner/homeowner-api.v1.ts'
+import {
+  HouseholdServiceError,
+  type HouseholdRoster,
+  type HomeownerHouseholdService,
+} from '../../../../src/homeowner/homeowner-household.v1.ts'
 import { classifyRequest } from '../../../../src/constitution/detector.ts'
 import {
   homeownerMutationRequestAllowed,
@@ -103,6 +108,60 @@ const CURRENT_PROJECT_ITEM_LIMIT = 8
 
 function assistantText(value: string, maximum: number): string {
   return value.trim().slice(0, maximum)
+}
+
+function householdLabelKey(label: string): string {
+  return label.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+}
+
+/**
+ * Only exact-home active adults who can own work enter Rolo's context. If two
+ * people have the same human label, both are withheld so the model can never
+ * resolve an ambiguous name by guessing.
+ */
+export function assistantAssignableHouseholdMembers(
+  roster: HouseholdRoster,
+  requestedHomeRef: string,
+): HomeAssistantContext['assignableHouseholdMembers'] {
+  const eligible = roster.members.filter(member =>
+    member.homeRef === requestedHomeRef
+    && member.state === 'active'
+    && (member.role === 'workspace_controller' || member.role === 'member'))
+  const labelCounts = new Map<string, number>()
+  for (const member of eligible) {
+    const key = householdLabelKey(member.displayLabel)
+    labelCounts.set(key, (labelCounts.get(key) ?? 0) + 1)
+  }
+  return Object.freeze(eligible
+    .filter(member => labelCounts.get(householdLabelKey(member.displayLabel)) === 1)
+    .map(member => Object.freeze({
+      membershipRef: member.membershipRef,
+      displayLabel: member.displayLabel,
+    })))
+}
+
+export async function readAssistantAssignableHouseholdMembers(
+  householdService: Pick<HomeownerHouseholdService, 'listHousehold'> | null,
+  sessionHandle: string,
+  requestedHomeRef: string,
+): Promise<HomeAssistantContext['assignableHouseholdMembers']> {
+  if (!householdService) return Object.freeze([])
+  try {
+    return assistantAssignableHouseholdMembers(
+      await householdService.listHousehold(sessionHandle, requestedHomeRef),
+      requestedHomeRef,
+    )
+  } catch (error) {
+    // Household collaboration may be staged off, or its not-found response may
+    // intentionally hide authorization. Neither case should leak or invent an
+    // assignee. Authentication, malformed data, and unexpected failures still
+    // fail the entire request rather than weakening the boundary.
+    if (error instanceof HouseholdServiceError
+      && (error.code === 'unavailable' || error.code === 'not_found')) {
+      return Object.freeze([])
+    }
+    throw error
+  }
 }
 
 /**
@@ -349,11 +408,17 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
     },
     async readContext(sessionHandle, requestedHomeRef, requestedProjectRef) {
       const service = runtime.homeownerApiService()
+      const householdService = runtime.configuredHomeownerHouseholdService()
       const requestContext = { sessionHandle }
       const home = await service.readHome(requestContext, requestedHomeRef)
       const projects = await service.listProjects(requestContext, requestedHomeRef)
       let files: Awaited<ReturnType<typeof service.listArtifacts>> = []
       let systems: HomeAssistantContext['systems'] = []
+      const assignableHouseholdMembers = await readAssistantAssignableHouseholdMembers(
+        householdService,
+        sessionHandle,
+        requestedHomeRef,
+      )
       let locality: string | null = null
       try {
         files = await service.listArtifacts(requestContext, requestedHomeRef)
@@ -425,6 +490,7 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
           projectRef: file.projectRef ?? null,
         })),
         systems,
+        assignableHouseholdMembers,
       }
     },
     rateLimiter: sharedRateLimiter,

@@ -1,5 +1,6 @@
 import type { HomesroloApi } from '../api/contract.ts'
 import type {
+  AcceptHouseholdInvitationInput,
   ArtifactContent,
   ArtifactKind,
   ArtifactRecord,
@@ -7,6 +8,7 @@ import type {
   CreateProjectQuoteInput,
   CreateProfessionalOrganizationInput,
   CreateHomeCheckupPhotoInput,
+  CreateHouseholdInvitationInput,
   CreateWorkInput,
   CreatedProfessionalOrganization,
   DecideProfessionalProposalInput,
@@ -16,6 +18,10 @@ import type {
   HomeRecordProfile,
   HomeSummary,
   HomeView,
+  HouseholdInvitation,
+  HouseholdInvitationAcceptance,
+  HouseholdMember,
+  HouseholdRoster,
   NativeSessionCredential,
   ProfessionalMembership,
   ProfessionalOrganization,
@@ -28,6 +34,8 @@ import type {
   ProjectInvitation,
   ProjectQuote,
   RespondToProjectInvitationInput,
+  RemoveHouseholdMemberInput,
+  RevokeHouseholdInvitationInput,
   RevokeProjectInvitationInput,
   ReviseProfessionalProposalInput,
   RoloConversationState,
@@ -38,6 +46,7 @@ import type {
   SaveProjectItemInput,
   SaveProjectQuoteInput,
   SaveProfessionalProfileInput,
+  SetHouseholdMemberRoleInput,
   SubmitProfessionalProposalInput,
   InviteProfessionalInput,
   UpdateWorkInput,
@@ -45,7 +54,11 @@ import type {
   UpdateArtifactMetadataInput,
   WorkRecord,
 } from '../api/model.ts'
-import { normalizedRoloSelectedPhoto } from '../api/protocol.ts'
+import {
+  isCalendarDate,
+  isHouseholdMembershipRef,
+  normalizedRoloSelectedPhoto,
+} from '../api/protocol.ts'
 import { HOME_SYSTEM_KINDS } from '../api/home-record.ts'
 import {
   homeownerProjectQuoteBody,
@@ -95,7 +108,7 @@ function previewArtifactContent(record: ArtifactRecord): ArtifactContent {
 
 function fixtureRef(
   prefix: 'hhom' | 'hprj' | 'hact' | 'hart' | 'hcmd' | 'hask' | 'hprn'
-    | 'horg' | 'hpmr' | 'hinv' | 'hquo' | 'hpvr' | 'hpho' | 'hpit',
+    | 'horg' | 'hpmr' | 'hinv' | 'hquo' | 'hpvr' | 'hpho' | 'hpit' | 'hmbr' | 'hhiv',
   number: number,
 ): string {
   const serial = Number.isSafeInteger(number) && number >= 0
@@ -106,6 +119,50 @@ function fixtureRef(
 
 export const PREVIEW_PRIMARY_HOME_REF = fixtureRef('hhom', 1)
 const PREVIEW_SECONDARY_HOME_REF = fixtureRef('hhom', 2)
+const PREVIEW_PRIMARY_MEMBERSHIP_REF = fixtureRef('hmbr', 1)
+const PREVIEW_SECONDARY_MEMBERSHIP_REF = fixtureRef('hmbr', 2)
+const PREVIEW_ALEX_MEMBERSHIP_REF = fixtureRef('hmbr', 3)
+
+const PREVIEW_HOUSEHOLD_MEMBERS: Readonly<Record<string, readonly HouseholdMember[]>> = Object.freeze({
+  [PREVIEW_PRIMARY_HOME_REF]: [
+    Object.freeze({
+      recordVersion: 'homeowner-household.v1',
+      membershipRef: PREVIEW_PRIMARY_MEMBERSHIP_REF,
+      homeRef: PREVIEW_PRIMARY_HOME_REF,
+      displayLabel: 'You',
+      role: 'workspace_controller',
+      state: 'active',
+      isCurrentPrincipal: true,
+      revision: 1,
+      joinedAt: FIXTURE_NOW,
+      revokedAt: null,
+    }),
+    Object.freeze({
+      recordVersion: 'homeowner-household.v1',
+      membershipRef: PREVIEW_ALEX_MEMBERSHIP_REF,
+      homeRef: PREVIEW_PRIMARY_HOME_REF,
+      displayLabel: 'Alex',
+      role: 'member',
+      state: 'active',
+      isCurrentPrincipal: false,
+      revision: 1,
+      joinedAt: FIXTURE_NOW,
+      revokedAt: null,
+    }),
+  ],
+  [PREVIEW_SECONDARY_HOME_REF]: [Object.freeze({
+    recordVersion: 'homeowner-household.v1',
+    membershipRef: PREVIEW_SECONDARY_MEMBERSHIP_REF,
+    homeRef: PREVIEW_SECONDARY_HOME_REF,
+    displayLabel: 'You',
+    role: 'member',
+    state: 'active',
+    isCurrentPrincipal: true,
+    revision: 1,
+    joinedAt: FIXTURE_NOW,
+    revokedAt: null,
+  })],
+})
 
 const PREVIEW_CAPABILITIES = Object.freeze({
   emailCodeSignIn: true,
@@ -152,11 +209,14 @@ function work(
   number: number,
   homeRef: string,
   values: Pick<WorkRecord,
-    'title' | 'workKind' | 'category' | 'status' | 'occurredOn' | 'summary' | 'professionalLabel'>,
+    'title' | 'workKind' | 'category' | 'status' | 'occurredOn' | 'summary' | 'professionalLabel'>
+    & Partial<Pick<WorkRecord, 'assignedMembershipRef' | 'dueOn'>>,
 ): WorkRecord {
   return {
     projectRef: fixtureRef('hprj', number),
     homeRef,
+    assignedMembershipRef: null,
+    dueOn: null,
     ...values,
     revision: 1,
     archived: false,
@@ -221,6 +281,17 @@ const PRIMARY_WORK: readonly WorkRecord[] = Object.freeze([
     summary: 'Water lingers near the back step after heavy rain. Compare grading and drain options.',
     professionalLabel: null,
   }),
+  work(7, PREVIEW_PRIMARY_HOME_REF, {
+    title: 'Finish the wall patch',
+    workKind: 'task',
+    category: 'interior',
+    status: 'planned',
+    occurredOn: null,
+    assignedMembershipRef: PREVIEW_PRIMARY_MEMBERSHIP_REF,
+    dueOn: '2026-09-05',
+    summary: 'Sand the patch, match the wall texture, prime it, and touch up the paint.',
+    professionalLabel: null,
+  }),
 ])
 
 const SECONDARY_WORK: readonly WorkRecord[] = Object.freeze([
@@ -259,6 +330,7 @@ function projectActivity(
     kind,
     body,
     source: 'homeowner_entry',
+    actorDisplayLabel: 'You',
     createdAt,
   }
 }
@@ -625,6 +697,8 @@ const PHOTO_URI = `data:image/svg+xml;charset=utf-8,${PHOTO_SVG}`
 
 function cloneHome(home: HomeSummary): HomeSummary { return { ...home } }
 function cloneWork(item: WorkRecord): WorkRecord { return { ...item } }
+function cloneHouseholdMember(item: HouseholdMember): HouseholdMember { return { ...item } }
+function cloneHouseholdInvitation(item: HouseholdInvitation): HouseholdInvitation { return { ...item } }
 function cloneActivity(item: ProjectActivityRecord): ProjectActivityRecord { return { ...item } }
 function cloneProjectItem(item: ProjectItem): ProjectItem { return { ...item } }
 function cloneArtifact(item: ResolvedArtifactRecord): ResolvedArtifactRecord {
@@ -697,6 +771,14 @@ function proposalQuote(item: ProfessionalProposal): ProjectQuote {
 /** A deterministic, memory-only API. It has no transport and cannot upload. */
 export class PreviewHomesroloApi implements HomesroloApi {
   readonly #homes = HOMES.map(cloneHome)
+  readonly #householdMembers = new Map<string, HouseholdMember[]>([
+    [PREVIEW_PRIMARY_HOME_REF, PREVIEW_HOUSEHOLD_MEMBERS[PREVIEW_PRIMARY_HOME_REF]!.map(cloneHouseholdMember)],
+    [PREVIEW_SECONDARY_HOME_REF, PREVIEW_HOUSEHOLD_MEMBERS[PREVIEW_SECONDARY_HOME_REF]!.map(cloneHouseholdMember)],
+  ])
+  readonly #householdInvitations = new Map<string, HouseholdInvitation[]>([
+    [PREVIEW_PRIMARY_HOME_REF, []],
+    [PREVIEW_SECONDARY_HOME_REF, []],
+  ])
   readonly #work = new Map<string, WorkRecord[]>([
     [PREVIEW_PRIMARY_HOME_REF, PRIMARY_WORK.map(cloneWork)],
     [PREVIEW_SECONDARY_HOME_REF, SECONDARY_WORK.map(cloneWork)],
@@ -785,6 +867,19 @@ export class PreviewHomesroloApi implements HomesroloApi {
       relationshipLabel: 'claimed_unverified',
     }
     this.#homes.push(created)
+    this.#householdMembers.set(created.homeRef, [{
+      recordVersion: 'homeowner-household.v1',
+      membershipRef: fixtureRef('hmbr', this.#sequence),
+      homeRef: created.homeRef,
+      displayLabel: 'You',
+      role: 'workspace_controller',
+      state: 'active',
+      isCurrentPrincipal: true,
+      revision: 1,
+      joinedAt: FIXTURE_NOW,
+      revokedAt: null,
+    }])
+    this.#householdInvitations.set(created.homeRef, [])
     this.#work.set(created.homeRef, [])
     this.#artifacts.set(created.homeRef, [])
     this.#checkups.set(created.homeRef, [])
@@ -857,9 +952,160 @@ export class PreviewHomesroloApi implements HomesroloApi {
     return (this.#work.get(homeRef) ?? []).map(cloneWork)
   }
 
+  async getHousehold(homeRef: string): Promise<HouseholdRoster> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    return {
+      recordVersion: 'homeowner-household.v1',
+      homeRef,
+      members: (this.#householdMembers.get(homeRef) ?? []).map(cloneHouseholdMember),
+      invitations: (this.#householdInvitations.get(homeRef) ?? []).map(cloneHouseholdInvitation),
+    }
+  }
+
+  async listHouseholdMembers(homeRef: string): Promise<readonly HouseholdMember[]> {
+    return (await this.getHousehold(homeRef)).members
+  }
+
+  async createHouseholdInvitation(
+    homeRef: string,
+    input: CreateHouseholdInvitationInput,
+  ): Promise<HouseholdInvitation> {
+    this.#assertSignedIn()
+    this.#home(homeRef)
+    if (!input.inviteeEmail.trim().includes('@') || !input.inviteeDisplayLabel.trim()
+      || !['member', 'viewer'].includes(input.desiredRole)
+      || input.expiresInDays < 1 || input.expiresInDays > 14) throw new Error('invalid_request')
+    this.#sequence += 1
+    const createdAt = new Date(FIXTURE_NOW)
+    const expiresAt = new Date(createdAt.getTime() + (input.expiresInDays * 86_400_000)).toISOString()
+    const invitation: HouseholdInvitation = {
+      recordVersion: 'homeowner-household.v1',
+      invitationRef: fixtureRef('hhiv', this.#sequence),
+      homeRef,
+      inviteeDisplayLabel: input.inviteeDisplayLabel.trim(),
+      desiredRole: input.desiredRole,
+      status: 'pending',
+      expiresAt,
+      revision: 1,
+      createdAt: FIXTURE_NOW,
+      acceptedAt: null,
+      revokedAt: null,
+    }
+    this.#householdInvitations.get(homeRef)?.push(invitation)
+    return cloneHouseholdInvitation(invitation)
+  }
+
+  async acceptHouseholdInvitation(
+    invitationRef: string,
+    _input: AcceptHouseholdInvitationInput,
+  ): Promise<HouseholdInvitationAcceptance> {
+    this.#assertSignedIn()
+    const found = [...this.#householdInvitations.entries()].flatMap(([homeRef, invitations]) => (
+      invitations.map((invitation, index) => ({ homeRef, invitation, index }))
+    )).find(item => item.invitation.invitationRef === invitationRef)
+    if (!found || found.invitation.status !== 'pending') throw new Error('not_found')
+    const accepted: HouseholdInvitation = {
+      ...found.invitation,
+      status: 'accepted',
+      acceptedAt: FIXTURE_NOW,
+      revision: found.invitation.revision + 1,
+    }
+    this.#householdInvitations.get(found.homeRef)![found.index] = accepted
+    const members = this.#householdMembers.get(found.homeRef) ?? []
+    members.forEach((member, index) => { members[index] = { ...member, isCurrentPrincipal: false } })
+    this.#sequence += 1
+    const member: HouseholdMember = {
+      recordVersion: 'homeowner-household.v1',
+      membershipRef: fixtureRef('hmbr', this.#sequence),
+      homeRef: found.homeRef,
+      displayLabel: accepted.inviteeDisplayLabel,
+      role: accepted.desiredRole,
+      state: 'active',
+      isCurrentPrincipal: true,
+      revision: 1,
+      joinedAt: FIXTURE_NOW,
+      revokedAt: null,
+    }
+    members.push(member)
+    return { member: cloneHouseholdMember(member), invitation: cloneHouseholdInvitation(accepted) }
+  }
+
+  async revokeHouseholdInvitation(
+    homeRef: string,
+    invitationRef: string,
+    input: RevokeHouseholdInvitationInput,
+  ): Promise<HouseholdInvitation> {
+    this.#assertSignedIn()
+    const invitations = this.#householdInvitations.get(homeRef) ?? []
+    const index = invitations.findIndex(item => item.invitationRef === invitationRef)
+    const current = invitations[index]
+    if (!current) throw new Error('not_found')
+    if (current.revision !== input.expectedRevision || current.status !== 'pending') throw new Error('conflict')
+    const revoked: HouseholdInvitation = {
+      ...current,
+      status: 'revoked',
+      revokedAt: FIXTURE_NOW,
+      revision: current.revision + 1,
+    }
+    invitations[index] = revoked
+    return cloneHouseholdInvitation(revoked)
+  }
+
+  async removeHouseholdMember(
+    homeRef: string,
+    membershipRef: string,
+    input: RemoveHouseholdMemberInput,
+  ): Promise<HouseholdMember> {
+    this.#assertSignedIn()
+    const members = this.#householdMembers.get(homeRef) ?? []
+    const index = members.findIndex(item => item.membershipRef === membershipRef)
+    const current = members[index]
+    if (!current || current.isCurrentPrincipal || current.revision !== input.expectedRevision) {
+      throw new Error('conflict')
+    }
+    const revoked: HouseholdMember = {
+      ...current,
+      state: 'revoked',
+      revision: current.revision + 1,
+      revokedAt: FIXTURE_NOW,
+    }
+    members[index] = revoked
+    return cloneHouseholdMember(revoked)
+  }
+
+  async setHouseholdMemberRole(
+    homeRef: string,
+    membershipRef: string,
+    input: SetHouseholdMemberRoleInput,
+  ): Promise<HouseholdMember> {
+    this.#assertSignedIn()
+    const members = this.#householdMembers.get(homeRef) ?? []
+    const index = members.findIndex(item => item.membershipRef === membershipRef)
+    const current = members[index]
+    if (!current || current.revision !== input.expectedRevision) throw new Error('conflict')
+    const updated: HouseholdMember = {
+      ...current,
+      role: input.desiredRole,
+      revision: current.revision + 1,
+    }
+    members[index] = updated
+    return cloneHouseholdMember(updated)
+  }
+
   async createWork(homeRef: string, input: CreateWorkInput): Promise<WorkRecord> {
     this.#assertSignedIn()
     this.#home(homeRef)
+    const assignedMember = input.assignedMembershipRef === undefined
+      ? null
+      : (this.#householdMembers.get(homeRef) ?? []).find(member => (
+          member.membershipRef === input.assignedMembershipRef && member.state === 'active'
+        )) ?? null
+    if ((input.assignedMembershipRef !== undefined
+        && (!isHouseholdMembershipRef(input.assignedMembershipRef) || !assignedMember))
+      || (input.dueOn !== undefined && !isCalendarDate(input.dueOn))) {
+      throw new Error('preview_work_invalid')
+    }
     this.#sequence += 1
     const created = work(this.#sequence, homeRef, {
       title: input.title.trim(),
@@ -870,21 +1116,26 @@ export class PreviewHomesroloApi implements HomesroloApi {
       summary: input.summary ?? '',
       professionalLabel: input.professionalLabel ?? null,
     })
-    this.#work.get(homeRef)?.unshift(created)
+    const assignedCreated: WorkRecord = {
+      ...created,
+      assignedMembershipRef: input.assignedMembershipRef ?? null,
+      dueOn: input.dueOn ?? null,
+    }
+    this.#work.get(homeRef)?.unshift(assignedCreated)
     const activity: ProjectActivityRecord[] = []
     if (input.initialActivity) {
       this.#sequence += 1
       activity.push(projectActivity(
         this.#sequence,
         homeRef,
-        created.projectRef,
+        assignedCreated.projectRef,
         input.initialActivity.kind,
         input.initialActivity.body.trim(),
       ))
     }
-    this.#activity.set(created.projectRef, activity)
-    this.#items.set(created.projectRef, [])
-    return cloneWork(created)
+    this.#activity.set(assignedCreated.projectRef, activity)
+    this.#items.set(assignedCreated.projectRef, [])
+    return cloneWork(assignedCreated)
   }
 
   async updateWork(homeRef: string, projectRef: string, input: UpdateWorkInput): Promise<WorkRecord> {
@@ -901,6 +1152,9 @@ export class PreviewHomesroloApi implements HomesroloApi {
       ...(input.category === undefined ? {} : { category: input.category }),
       ...(input.status === undefined ? {} : { status: input.status }),
       ...(input.occurredOn === undefined ? {} : { occurredOn: input.occurredOn }),
+      ...(input.assignedMembershipRef === undefined
+        ? {} : { assignedMembershipRef: input.assignedMembershipRef }),
+      ...(input.dueOn === undefined ? {} : { dueOn: input.dueOn }),
       ...(input.summary === undefined ? {} : { summary: input.summary ?? '' }),
       ...(input.professionalLabel === undefined ? {} : { professionalLabel: input.professionalLabel }),
       archived,
@@ -1553,6 +1807,13 @@ export class PreviewHomesroloApi implements HomesroloApi {
       || history.some(turn => /\bpool\b|swimming|hot tub/i.test(turn.text))
     const homeHistory = /home history|home record|what (?:was|is) saved|find something|when was|who (?:installed|worked)|warrant(?:y|ies)/i.test(clean)
       && !conversation.pendingWork
+    const taskRequest = /\b(?:assign|task|to-do|todo|honey[- ]?do)\b/i.test(clean)
+    const requestedAssignee = taskRequest
+      ? (this.#householdMembers.get(homeRef) ?? []).find(member => (
+          member.state === 'active'
+          && clean.toLocaleLowerCase('en-US').includes(member.displayLabel.toLocaleLowerCase('en-US'))
+        )) ?? null
+      : null
     const proposedWork: RoloReply['proposedWork'] = boundaryRefusal
       ? null
       : homeHistory || scopedProject || (selectedArtifact && !conversation.pendingWork)
@@ -1562,6 +1823,19 @@ export class PreviewHomesroloApi implements HomesroloApi {
             ...conversation.pendingWork,
             summary: `${conversation.pendingWork.summary} Follow-up: ${clean.slice(0, 240)}`.trim(),
           }
+      : taskRequest && requestedAssignee
+      ? {
+          kind: 'task',
+          title: /wall|patch/i.test(clean) ? 'Patch the wall' : 'Household to-do',
+          category: /wall|patch/i.test(clean) ? 'interior' : 'other',
+          status: 'planned',
+          occurredOn: null,
+          assignedMembershipRef: requestedAssignee.membershipRef,
+          dueOn: /\bfriday\b/i.test(clean) ? '2026-08-28' : null,
+          summary: `Assigned household task based on: ${clean.slice(0, 240)}`,
+          professionalLabel: null,
+          firstUpdate: 'Created from a private Rolo conversation after homeowner review.',
+        }
       : homeWatch
       ? {
           kind: 'service',
@@ -1569,6 +1843,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
           category: 'other',
           status: 'planned',
           occurredOn: null,
+          assignedMembershipRef: null,
+          dueOn: null,
           summary: 'Walk the exterior, roofline, plumbing fixtures, HVAC filters, safety devices, and visible electrical areas; save comparable photos and observations.',
           professionalLabel: null,
           firstUpdate: 'Started from the Rolo preview checkup guide.',
@@ -1580,6 +1856,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
           category: 'pool',
           status: 'planned',
           occurredOn: null,
+          assignedMembershipRef: null,
+          dueOn: null,
           summary: 'Organize how the pool should be used, the yard constraints, a comfortable budget range, finishes, safety needs, and the details companies should price.',
           professionalLabel: null,
           firstUpdate: 'Started with Rolo and saved only after homeowner review.',
@@ -1590,6 +1868,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
           category: cooling ? 'hvac' : 'other',
           status: 'planned',
           occurredOn: '2026-08-26',
+          assignedMembershipRef: null,
+          dueOn: null,
           summary: cooling
             ? 'Homeowner noticed reduced cooling upstairs. Check the thermostat, filter, vents, and outdoor-unit clearance without opening energized equipment.'
             : `Preview draft based on: ${clean.slice(0, 240)}`,
@@ -1609,6 +1889,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
         ? `I’m looking at “${scopedProject.title}.” ${scopedProject.summary
             ? `The saved summary says: ${scopedProject.summary}`
             : 'It does not have a summary yet.'} We can work through what is missing without creating another copy of this work.`
+        : taskRequest && requestedAssignee
+          ? `I made a household to-do for ${requestedAssignee.displayLabel}${/\bfriday\b/i.test(clean) ? ' due Friday' : ''}. Review it before anything is shared in Work.`
         : homeWatch
           ? 'Start with a calm, repeatable walk-through. Compare the same views each season, note only what you can safely observe, and call a qualified professional for anything energized, leaking, unstable, or unsafe.'
           : poolPlanning
@@ -1629,6 +1911,8 @@ export class PreviewHomesroloApi implements HomesroloApi {
           ? ['What are you trying to find—a date, company, product, warranty, photo, or past repair?']
           : scopedProject
             ? ['Do you want to work through the scope, the next decision, or who needs to be involved?']
+          : taskRequest && requestedAssignee
+            ? ['Anything else should be included before this is shared with the household?']
           : poolPlanning
             ? ['What matters most for this pool: family use, entertaining, exercise, low maintenance, or a particular look?']
             : homeWatch

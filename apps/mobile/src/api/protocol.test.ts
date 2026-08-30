@@ -153,3 +153,32 @@ test('bounds Rolo context to the server contract while preserving newest turns',
     unansweredFollowUpQuestion: null,
   }))
 })
+
+test('accepts exact household task drafts and rejects malformed assignment facts', () => {
+  const task = {
+    kind: 'task' as const,
+    title: 'Patch the wall',
+    category: 'interior' as const,
+    status: 'planned' as const,
+    occurredOn: null,
+    assignedMembershipRef: `hmbr_${'M'.repeat(43)}`,
+    dueOn: '2026-08-28',
+    summary: 'Patch and paint the hallway wall.',
+    professionalLabel: null,
+    firstUpdate: null,
+  }
+  assert.deepEqual(boundedRoloConversation('Assign it.', [], {
+    pendingWork: task,
+    unansweredFollowUpQuestion: null,
+  }).conversation.pendingWork, task)
+
+  for (const pendingWork of [
+    { ...task, assignedMembershipRef: 'hmbr_not-valid' },
+    { ...task, dueOn: '2026-02-31' },
+  ]) {
+    assert.throws(() => boundedRoloConversation('Assign it.', [], {
+      pendingWork,
+      unansweredFollowUpQuestion: null,
+    }))
+  }
+})

@@ -58,6 +58,8 @@ export interface RoloDeckProps extends UseRoloDeckSearchOptions {
   readonly onOpen?: ((card: HomesroloCard) => void) | undefined
   readonly onAskRolo?: ((card: HomesroloCard) => void) | undefined
   readonly canAskRolo?: ((card: HomesroloCard) => boolean) | undefined
+  readonly onQuickComplete?: ((card: HomesroloCard) => void) | undefined
+  readonly canQuickComplete?: ((card: HomesroloCard) => boolean) | undefined
   readonly onActiveCardChange?: ((card: HomesroloCard | null, index: number) => void) | undefined
   readonly searchPlaceholder?: string | undefined
   readonly emptyTitle?: string | undefined
@@ -147,6 +149,8 @@ export function RoloDeck({
   onOpen,
   onAskRolo,
   canAskRolo,
+  onQuickComplete,
+  canQuickComplete,
   onActiveCardChange,
   searchPlaceholder = 'Find a project, photo, file, or detail',
   emptyTitle = 'No cards here yet',
@@ -374,6 +378,8 @@ export function RoloDeck({
                     renderMedia={renderMedia}
                     onOpen={onOpen}
                     onAskRolo={onAskRolo && (!canAskRolo || canAskRolo(item)) ? onAskRolo : undefined}
+                    onQuickComplete={onQuickComplete
+                      && (!canQuickComplete || canQuickComplete(item)) ? onQuickComplete : undefined}
                     onTabPress={!horizontal && !active ? () => openPage(index) : undefined}
                     tabAccessibilityLabel={!horizontal && !active
                       ? `Flip to card ${index + 1} of ${search.visibleCards.length}: ${item.title}`

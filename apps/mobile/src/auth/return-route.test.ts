@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   DEFAULT_POST_SIGN_IN_DESTINATION,
+  householdInvitationReturnPath,
   postSignInDestination,
   workDetailReturnPath,
 } from './return-route.ts'
 
 const homeId = `hhom_${'h'.repeat(43)}`
 const projectRef = `hprj_${'p'.repeat(43)}`
+const invitationRef = `hhiv_${'i'.repeat(43)}`
 
 test('signed-in entry defaults through the workspace startup gate', () => {
   assert.equal(DEFAULT_POST_SIGN_IN_DESTINATION, '/start')
@@ -26,6 +28,20 @@ test('work detail creates a valid return path and restores its typed destination
 test('the exact Pro hub may survive sign-in without opening a general redirect', () => {
   assert.equal(postSignInDestination('/pro'), '/pro')
   assert.equal(postSignInDestination('/pro/anything'), DEFAULT_POST_SIGN_IN_DESTINATION)
+})
+
+test('an exact email-bound household invitation survives code sign-in', () => {
+  const path = householdInvitationReturnPath(invitationRef)
+  assert.equal(path, `/join-household?invitation=${invitationRef}`)
+  assert.deepEqual(postSignInDestination(path), {
+    pathname: '/join-household',
+    params: { invitation: invitationRef },
+  })
+  assert.equal(householdInvitationReturnPath('hhiv_bad'), null)
+  assert.equal(
+    postSignInDestination(`${path}&next=https://example.com`),
+    DEFAULT_POST_SIGN_IN_DESTINATION,
+  )
 })
 
 test('post-sign-in routing rejects external, malformed, ambiguous, and unsupported targets', () => {

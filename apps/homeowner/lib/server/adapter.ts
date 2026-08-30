@@ -17,16 +17,25 @@ import {
   type HomesroloProfessionalHttpResponse,
 } from '../../../../src/homeowner/homesrolo-professional-http.v1.ts'
 import {
+  createHomeownerHouseholdHttpHandler,
+  type HomeownerHouseholdHttpResponse,
+} from '../../../../src/homeowner/homeowner-household-http.v1.ts'
+import {
   homeownerMutationRequestAllowed,
   homeownerRequestAuthentication,
 } from './request-auth.ts'
 import {
   configuredHomesroloProfessionalService,
+  configuredHomeownerHouseholdService,
   homeownerApiService,
   homeownerRuntimeConfiguration,
 } from './runtime.ts'
 
-function toWebResponse(response: HomeownerHttpResponse | HomesroloProfessionalHttpResponse): Response {
+function toWebResponse(
+  response: HomeownerHttpResponse
+    | HomesroloProfessionalHttpResponse
+    | HomeownerHouseholdHttpResponse,
+): Response {
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     headers: response.headers,
@@ -138,6 +147,31 @@ export async function handleProfessionalRequest(request: Request): Promise<Respo
   }
   const handler = createHomesroloProfessionalHttpHandler(
     configuredHomesroloProfessionalService(),
+  )
+  const hasBody = request.body !== null
+  const jsonBody = await boundedJsonBody(request)
+  const response = await handler({
+    method: request.method,
+    pathname: url.pathname,
+    search: url.search,
+    hasBody,
+    jsonBody,
+    sessionHandle: authentication.sessionHandle,
+  })
+  return toWebResponse(response)
+}
+
+export async function handleHouseholdRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const configuration = homeownerRuntimeConfiguration()
+  const authentication = homeownerRequestAuthentication(request)
+  if (authentication.kind === 'invalid') return invalidAuthenticationResponse()
+  if (configuration && request.method === 'POST'
+    && !homeownerMutationRequestAllowed(request, configuration.appOrigin, authentication)) {
+    return forbiddenMutationResponse()
+  }
+  const handler = createHomeownerHouseholdHttpHandler(
+    configuredHomeownerHouseholdService(),
   )
   const hasBody = request.body !== null
   const jsonBody = await boundedJsonBody(request)

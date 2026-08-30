@@ -39,6 +39,8 @@ test('Supabase project create sends one digest-bound atomic project command', as
           occurred_on: input.p_occurred_on,
           summary: input.p_summary,
           professional_label: input.p_professional_label,
+          assigned_membership_ref: input.p_assigned_membership_ref,
+          due_on: input.p_due_on,
           revision: 1,
           archived_at: null,
           created_at: input.p_requested_at,
@@ -58,6 +60,8 @@ test('Supabase project create sends one digest-bound atomic project command', as
     occurredOn: '2026-08-20',
     summary: 'Cabinets and counters completed.',
     professionalLabel: 'Sample Cabinet Company',
+    assignedMembershipRef: ref('hmbr', 'a'),
+    dueOn: '2026-09-05',
     initialActivity: { kind: 'milestone' as const, body: 'Final walkthrough recorded.' },
     requestedAt,
   }
@@ -66,6 +70,8 @@ test('Supabase project create sends one digest-bound atomic project command', as
   assert.equal(created.professionalLabel, 'Sample Cabinet Company')
   assert.equal(calls[0]?.name, 'homesrolo_create_homeowner_project')
   assert.equal(calls[0]?.input.p_professional_label, 'Sample Cabinet Company')
+  assert.equal(calls[0]?.input.p_assigned_membership_ref, ref('hmbr', 'a'))
+  assert.equal(calls[0]?.input.p_due_on, '2026-09-05')
   assert.match(String(calls[0]?.input.p_initial_activity_ref), /^hact_[A-Za-z0-9_-]{43}$/)
   assert.equal(calls[0]?.input.p_initial_activity_kind, 'milestone')
   assert.equal(calls[0]?.input.p_initial_activity_body, 'Final walkthrough recorded.')

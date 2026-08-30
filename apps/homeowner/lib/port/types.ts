@@ -312,6 +312,9 @@ export interface RoloWorkDraft {
   readonly category: ProjectCategory
   readonly status: ProjectStatus
   readonly occurredOn: string | null
+  /** Safe exact-home household membership selected by Rolo, never a principal. */
+  readonly assignedMembershipRef: string | null
+  readonly dueOn: string | null
   readonly summary: string
   readonly professionalLabel: string | null
   readonly firstUpdate: string | null
@@ -368,7 +371,7 @@ export interface AskRoloResult {
 export type ProjectStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
 
 /** One durable work record model, with a homeowner-readable discriminator. */
-export type HomeownerWorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident'
+export type HomeownerWorkKind = 'project' | 'issue' | 'repair' | 'service' | 'incident' | 'task'
 
 export type ProjectCategory =
   | 'roofing'
@@ -395,6 +398,9 @@ export interface ProjectSummary {
   readonly performedOn: string | null
   readonly status: ProjectStatus
   readonly professionalLabel: string
+  /** Exact-home household membership only; no principal or email is projected. */
+  readonly assignedMembershipRef?: string | null
+  readonly dueOn?: string | null
   readonly revision: number
   readonly archived: boolean
   readonly archivedAt: string | null
@@ -442,6 +448,8 @@ export interface CreateProjectInput {
   readonly status: ProjectStatus
   readonly occurredOn?: string
   readonly summary: string
+  readonly assignedMembershipRef?: string
+  readonly dueOn?: string
 }
 
 export interface UpdateProjectInput {
@@ -457,6 +465,10 @@ export interface UpdateProjectInput {
   readonly summary?: string | null
   /** Null clears the homeowner-entered professional/company label. */
   readonly professionalLabel?: string | null
+  /** Null clears the household assignment; omission preserves it. */
+  readonly assignedMembershipRef?: string | null
+  /** Null clears the due date; omission preserves it. */
+  readonly dueOn?: string | null
   readonly archived?: boolean
 }
 
@@ -469,6 +481,8 @@ export interface ProjectActivity {
   readonly kind: ProjectActivityKind
   readonly body: string
   readonly source: 'homeowner_entry'
+  /** Safe exact-home household label; never an email or principal identifier. */
+  readonly actorDisplayLabel: string | null
   readonly createdAt: string
 }
 

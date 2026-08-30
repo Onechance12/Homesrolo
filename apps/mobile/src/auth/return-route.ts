@@ -1,4 +1,5 @@
 import { isHomeRef, isProjectRef } from '../api/protocol.ts'
+import { isHouseholdInvitationRef } from '../api/household.ts'
 
 export const DEFAULT_POST_SIGN_IN_DESTINATION = '/start' as const
 
@@ -9,11 +10,21 @@ export type PostSignInDestination =
       readonly pathname: '/home/[homeId]/work/[projectRef]'
       readonly params: { readonly homeId: string; readonly projectRef: string }
     }
+  | {
+      readonly pathname: '/join-household'
+      readonly params: { readonly invitation: string }
+    }
 
 /** Build the only detail route currently allowed to cross the sign-in boundary. */
 export function workDetailReturnPath(homeId: unknown, projectRef: unknown): string | null {
   if (!isHomeRef(homeId) || !isProjectRef(projectRef)) return null
   return `/home/${homeId}/work/${projectRef}`
+}
+
+export function householdInvitationReturnPath(invitationRef: unknown): string | null {
+  return isHouseholdInvitationRef(invitationRef)
+    ? `/join-household?invitation=${invitationRef}`
+    : null
 }
 
 /**
@@ -26,6 +37,13 @@ export function postSignInDestination(returnTo: unknown): PostSignInDestination 
     return DEFAULT_POST_SIGN_IN_DESTINATION
   }
   if (returnTo === '/pro') return '/pro'
+  const household = /^\/join-household\?invitation=(hhiv_[A-Za-z0-9_-]{43})$/.exec(returnTo)
+  if (household?.[1] && isHouseholdInvitationRef(household[1])) {
+    return {
+      pathname: '/join-household',
+      params: { invitation: household[1] },
+    }
+  }
   const match = /^\/home\/([^/]+)\/work\/([^/]+)$/.exec(returnTo)
   if (!match) return DEFAULT_POST_SIGN_IN_DESTINATION
   const [, homeId, projectRef] = match

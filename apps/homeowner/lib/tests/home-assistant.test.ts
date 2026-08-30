@@ -10,12 +10,18 @@ import {
   type HomeAssistantContext,
 } from '../server/home-assistant.ts'
 import {
+  assistantAssignableHouseholdMembers,
   assistantCurrentProjectContext,
   assistantLocalityFromAddress,
   handleHomeAssistantRequestWithDependencies,
+  readAssistantAssignableHouseholdMembers,
   type HomeAssistantHttpDependencies,
 } from '../server/home-assistant-http.ts'
 import { HomeResearchRateLimiter } from '../server/home-research.ts'
+import {
+  HouseholdServiceError,
+  type HouseholdRoster,
+} from '../../../../src/homeowner/homeowner-household.v1.ts'
 
 const API_KEY = `sk-proj-${'a'.repeat(48)}`
 const ORIGIN = 'https://app.homesrolo.com'
@@ -23,6 +29,8 @@ const HANDLE = 's'.repeat(43)
 const HOME = `hhom_${'h'.repeat(43)}`
 const PROJECT = `hprj_${'p'.repeat(43)}`
 const ARTIFACT = `hart_${'a'.repeat(43)}`
+const MEMBER_CHANCE = `hmbr_${'c'.repeat(43)}`
+const MEMBER_SAM = `hmbr_${'s'.repeat(43)}`
 const VALID_BODY = Object.freeze({
   message: 'My AC stopped cooling yesterday and Cool Air is coming Friday.',
   history: [],
@@ -65,6 +73,10 @@ const CONTEXT: HomeAssistantContext = {
   currentProject: null,
   files: [{ displayName: 'AC invoice.pdf', kind: 'document', projectRef: PROJECT }],
   systems: [{ kind: 'cooling', present: 'yes', installedOrReplacedYear: 2021 }],
+  assignableHouseholdMembers: [
+    { membershipRef: MEMBER_CHANCE, displayLabel: 'Chance' },
+    { membershipRef: MEMBER_SAM, displayLabel: 'Sam' },
+  ],
 }
 
 test('Rolo input is bounded and carries no browser identity or address field', () => {
@@ -199,6 +211,7 @@ test('Rolo rejects image/review mismatches and owns visible-hazard responses', a
     proposedWork: {
       kind: 'repair', title: 'Wet outlet', category: 'electrical', status: 'planned',
       occurredOn: null, summary: '', professionalLabel: null, firstUpdate: null,
+      assignedMembershipRef: null, dueOn: null,
     },
     destination: 'library',
     followUpQuestions: ['Can you touch it?'],
@@ -227,6 +240,8 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
       summary: 'Homeowner reported that the AC stopped cooling.',
       professionalLabel: 'Cool Air',
       firstUpdate: 'Service visit planned for Friday.',
+      assignedMembershipRef: null,
+      dueOn: null,
     },
     destination: 'work',
     projectRef: PROJECT,
@@ -256,6 +271,8 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
     summary: 'Homeowner reported that the AC stopped cooling.',
     professionalLabel: 'Cool Air',
     firstUpdate: 'Service visit planned for Friday.',
+    assignedMembershipRef: null,
+    dueOn: null,
   }
   const result = await client.answer({
     ...VALID_BODY,
@@ -288,6 +305,9 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   assert.match(String(captured.body.instructions), /Visual note:/)
   assert.match(String(captured.body.instructions), /Never invent a work date, photo capture date, storm date, camera location, GPS coordinate/)
   assert.match(String(captured.body.instructions), /Never choose, rank, or recommend a specific professional/)
+  assert.match(String(captured.body.instructions), /household honey-do, chore, or small action/)
+  assert.match(String(captured.body.instructions), /explicitly names exactly one uniquely listed person/)
+  assert.match(String(captured.body.instructions), /Never claim that Homesrolo notified, reminded, texted, or alerted anyone/)
   const providerInput = JSON.parse(String(captured.body.input)) as Record<string, unknown>
   assert.deepEqual(providerInput.pendingWork, pendingWork)
   assert.equal(providerInput.unansweredFollowUpQuestion, 'Which unit is affected?')
@@ -295,6 +315,20 @@ test('Rolo uses stateless structured Responses and returns a reviewable draft on
   assert.equal(
     (providerInput.privateHomeContext as HomeAssistantContext).currentProject?.summary,
     'Seasonal service and filter replacement.',
+  )
+  assert.deepEqual(
+    (providerInput.privateHomeContext as HomeAssistantContext).assignableHouseholdMembers,
+    CONTEXT.assignableHouseholdMembers,
+  )
+  const responseFormat = captured.body.text as {
+    readonly format?: { readonly schema?: { readonly properties?: Record<string, unknown> } }
+  }
+  const proposedWorkSchema = responseFormat.format?.schema?.properties?.proposedWork as {
+    readonly anyOf?: readonly { readonly required?: readonly string[] }[]
+  }
+  assert.deepEqual(
+    proposedWorkSchema.anyOf?.[0]?.required?.slice(-2),
+    ['assignedMembershipRef', 'dueOn'],
   )
   assert.equal(Object.hasOwn(providerInput, 'requiredBoundaries'), false)
   assert.ok(!JSON.stringify(captured.body).includes(API_KEY), 'the key is header-only')
@@ -325,6 +359,136 @@ test('Rolo receives only structured city and state, never the legacy location la
   assert.equal(assistantLocalityFromAddress(null), null)
   assert.equal(assistantLocalityFromAddress({ city: ' Fort Worth ', regionCode: 'tx' }), 'Fort Worth, TX')
   assert.equal(assistantLocalityFromAddress({ city: 'Fort Worth', regionCode: 'Texas' }), null)
+})
+
+test('Rolo sees only exact-home assignable adults with unique human labels', async () => {
+  const member = (
+    membershipRef: string,
+    displayLabel: string,
+    role: 'workspace_controller' | 'member' | 'viewer',
+    state: 'active' | 'revoked' = 'active',
+    isCurrentPrincipal = false,
+  ) => ({
+    recordVersion: 'homeowner-household.v1' as const,
+    membershipRef,
+    homeRef: HOME,
+    displayLabel,
+    role,
+    state,
+    isCurrentPrincipal,
+    revision: 1,
+    joinedAt: '2026-08-01T12:00:00.000Z',
+    ...(state === 'revoked' ? { revokedAt: '2026-08-20T12:00:00.000Z' } : {}),
+  })
+  const roster: HouseholdRoster = {
+    recordVersion: 'homeowner-household.v1',
+    homeRef: HOME,
+    members: [
+      member(MEMBER_CHANCE, 'Chance', 'workspace_controller', 'active', true),
+      member(MEMBER_SAM, 'Alex', 'member'),
+      member(`hmbr_${'d'.repeat(43)}`, ' alex ', 'member'),
+      member(`hmbr_${'v'.repeat(43)}`, 'Taylor', 'viewer'),
+      member(`hmbr_${'r'.repeat(43)}`, 'Robin', 'member', 'revoked'),
+    ],
+    invitations: [],
+  }
+  const safe = assistantAssignableHouseholdMembers(roster, HOME)
+  assert.deepEqual(safe, [{ membershipRef: MEMBER_CHANCE, displayLabel: 'Chance' }])
+  assert.deepEqual(Object.keys(safe[0] ?? {}).sort(), ['displayLabel', 'membershipRef'])
+
+  assert.deepEqual(await readAssistantAssignableHouseholdMembers(null, HANDLE, HOME), [])
+  for (const code of ['unavailable', 'not_found'] as const) {
+    assert.deepEqual(await readAssistantAssignableHouseholdMembers({
+      async listHousehold() { throw new HouseholdServiceError(code) },
+    }, HANDLE, HOME), [])
+  }
+  await assert.rejects(
+    readAssistantAssignableHouseholdMembers({
+      async listHousehold() { throw new HouseholdServiceError('signed_out') },
+    }, HANDLE, HOME),
+    error => error instanceof HouseholdServiceError && error.code === 'signed_out',
+  )
+})
+
+test('Rolo canonicalizes household tasks and rejects stale assignments or invented deadlines', async () => {
+  const configuration = readHomeAssistantConfiguration({
+    HOMESROLO_AI_ENABLED: 'true',
+    OPENAI_API_KEY: API_KEY,
+  })
+  assert.ok(configuration)
+  const answerFor = async (proposedWork: unknown) => new OpenAIHomeAssistantClient({
+    configuration,
+    async fetchImpl() {
+      return new Response(JSON.stringify({
+        output: [{ type: 'message', content: [{
+          type: 'output_text',
+          text: JSON.stringify({
+            answer: 'I prepared that household task for review.',
+            proposedWork,
+            destination: null,
+            projectRef: null,
+            followUpQuestions: [],
+            photoReview: null,
+          }),
+        }] }],
+      }), { headers: { 'content-type': 'application/json' } })
+    },
+  }).answer(VALID_BODY, CONTEXT)
+  const base = {
+    title: 'Change the air filter',
+    category: 'hvac',
+    status: 'planned',
+    summary: 'Homeowner asked Sam to change the upstairs air filter.',
+    professionalLabel: null,
+    firstUpdate: 'Homeowner reported: use the filter in the hall closet.',
+  }
+
+  const valid = await answerFor({
+    ...base,
+    kind: 'task',
+    occurredOn: '2020-01-01',
+    assignedMembershipRef: MEMBER_SAM,
+    dueOn: '2999-09-05',
+  })
+  assert.equal(valid.proposedWork?.occurredOn, null, 'tasks never turn a deadline into an event date')
+  assert.equal(valid.proposedWork?.assignedMembershipRef, MEMBER_SAM)
+  assert.equal(valid.proposedWork?.dueOn, '2999-09-05')
+
+  const stale = await answerFor({
+    ...base,
+    kind: 'task',
+    occurredOn: null,
+    assignedMembershipRef: `hmbr_${'x'.repeat(43)}`,
+    dueOn: '2000-01-01',
+  })
+  assert.equal(stale.proposedWork?.assignedMembershipRef, null)
+  assert.equal(stale.proposedWork?.dueOn, null)
+
+  const impossibleDate = await answerFor({
+    ...base,
+    kind: 'task',
+    occurredOn: null,
+    assignedMembershipRef: MEMBER_SAM,
+    dueOn: '2999-02-31',
+  })
+  assert.equal(impossibleDate.proposedWork?.dueOn, null)
+
+  const nonTask = await answerFor({
+    ...base,
+    kind: 'repair',
+    occurredOn: '2020-01-01',
+    assignedMembershipRef: MEMBER_SAM,
+    dueOn: '2999-09-05',
+  })
+  assert.equal(nonTask.proposedWork?.assignedMembershipRef, null)
+  assert.equal(nonTask.proposedWork?.dueOn, null)
+  assert.equal(nonTask.proposedWork?.occurredOn, '2020-01-01')
+
+  await assert.rejects(
+    answerFor({ ...base, kind: 'task', occurredOn: null }),
+    error => error instanceof HomeAssistantError && error.code === 'invalid_response',
+    'provider output must include both nullable assignment fields',
+  )
 })
 
 test('Rolo receives one bounded project projection from existing activity and Plans & Picks', () => {

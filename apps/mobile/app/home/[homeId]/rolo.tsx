@@ -17,12 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import type {
   ArtifactRecord,
   HomeSummary,
+  HouseholdMember,
   ResolvedArtifactRecord,
   RoloReply,
   RoloTurn,
   WorkRecord,
 } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
+import { assignableHouseholdMembers } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
@@ -49,6 +51,7 @@ import {
   projectRoloConversation,
   type PersistedRoloPhoto,
 } from '../../../src/rolo/conversation-persistence.ts'
+import { roloConversationAccessReady } from '../../../src/rolo/conversation-access.ts'
 import { roloRequestCanCommit } from '../../../src/rolo/request-generation.ts'
 import { workCreateFieldsFromRoloDraft } from '../../../src/rolo/work-draft.ts'
 import {
@@ -157,6 +160,8 @@ export default function RoloScreen() {
   const [persistenceWritableScope, setPersistenceWritableScope] = useState<string | null>(null)
   const [homeSummary, setHomeSummary] = useState<HomeSummary | null>(null)
   const [knownWork, setKnownWork] = useState<readonly WorkRecord[]>([])
+  const [householdMembers, setHouseholdMembers] = useState<readonly HouseholdMember[]>([])
+  const [authorizedHomeScope, setAuthorizedHomeScope] = useState<string | null>(null)
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
   const mounted = useRef(true)
@@ -173,32 +178,75 @@ export default function RoloScreen() {
     && approvedPhotoMessage === currentPhotoConsentKey
   const principalRef = auth.kind === 'signed_in' ? auth.session.principalRef : null
   const persistenceScope = principalRef ? { principalRef, homeRef: homeId } : null
+  const homePersistenceKey = persistenceScope
+    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}`
+    : null
   const persistenceKey = persistenceScope
     ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}.${routeProjectRef ?? 'general'}`
     : null
 
   useFocusEffect(useCallback(() => {
     let active = true
+    hydrationGeneration.current += 1
+    conversationVersion.current += 1
     setHomeSummary(null)
     setKnownWork([])
-    if (auth.kind !== 'signed_in') {
-      return () => { active = false }
+    setHouseholdMembers([])
+    setAuthorizedHomeScope(null)
+    setHydratedScope(null)
+    setPersistenceWritableScope(null)
+    resetConversationState('', routeProjectRef ?? null)
+    const closeAccessFence = () => {
+      active = false
+      hydrationGeneration.current += 1
+      conversationVersion.current += 1
+      setAuthorizedHomeScope(null)
+      setHydratedScope(null)
+      setPersistenceWritableScope(null)
     }
-    void Promise.allSettled([api.getHome(homeId), api.listWork(homeId)]).then(([homeResult, workResult]) => {
+    if (auth.kind !== 'signed_in') {
+      return closeAccessFence
+    }
+    void api.getHome(homeId).then(home => {
       if (!active) return
-      setHomeSummary(homeResult.status === 'fulfilled' ? homeResult.value : null)
-      if (workResult.status === 'fulfilled') {
-        const readableWork = workResult.value.filter(item => !item.archived)
-        setKnownWork(readableWork)
-      } else {
-        setKnownWork([])
+      setHomeSummary(home)
+      if (homePersistenceKey) {
+        setAuthorizedHomeScope(homePersistenceKey)
+      }
+    }).catch(() => {
+      if (!active) return
+      hydrationGeneration.current += 1
+      conversationVersion.current += 1
+      setAuthorizedHomeScope(null)
+      setHydratedScope(null)
+      setPersistenceWritableScope(null)
+      resetConversationState('', routeProjectRef ?? null)
+      if (principalRef) {
+        void roloStorage.clearHome({
+          principalRef,
+          homeRef: homeId,
+        }).catch(() => undefined)
       }
     })
-    return () => { active = false }
-  }, [api, auth.kind, homeId]))
+
+    void api.listWork(homeId).then(work => {
+      if (!active) return
+      setKnownWork(work.filter(item => !item.archived))
+    }).catch(() => {
+      if (active) setKnownWork([])
+    })
+
+    void api.getHousehold(homeId).then(household => {
+      if (!active) return
+      setHouseholdMembers(assignableHouseholdMembers(household.members))
+    }).catch(() => {
+      if (active) setHouseholdMembers([])
+    })
+    return closeAccessFence
+  }, [api, auth.kind, homeId, homePersistenceKey, principalRef, roloStorage, routeProjectRef]))
 
   useEffect(() => {
-    if (!persistenceScope || redirectToPeople) return
+    if (!persistenceScope || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
     const generation = hydrationGeneration.current + 1
     hydrationGeneration.current = generation
     conversationVersion.current += 1
@@ -250,14 +298,14 @@ export default function RoloScreen() {
     // `prompt` is intentionally read only at scope entry. Later prompts are
     // handled below without re-running storage hydration after the URL clears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frontDoor, homeId, principalRef, redirectToPeople, roloStorage, routeProjectRef])
+  }, [authorizedHomeScope, frontDoor, homeId, homePersistenceKey, principalRef, redirectToPeople, roloStorage, routeProjectRef])
 
   useEffect(() => {
     if (prompt === undefined) {
       consumedPrompt.current = null
       return
     }
-    if (!persistenceScope || redirectToPeople) return
+    if (!persistenceScope || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
     const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${routeArtifactRef ?? ''}\u0000${prompt}`
     if (consumedPrompt.current === promptIdentity) return
     consumedPrompt.current = promptIdentity
@@ -306,7 +354,7 @@ export default function RoloScreen() {
       setInput(prompt)
       setHydratedScope(persistenceKey)
     })
-  }, [homeId, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeArtifactRef, routeProjectRef])
+  }, [authorizedHomeScope, homeId, homePersistenceKey, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeArtifactRef, routeProjectRef])
 
   useEffect(() => {
     if (!persistenceScope || !persistenceKey
@@ -424,7 +472,12 @@ export default function RoloScreen() {
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
-  if (persistenceKey && hydratedScope !== persistenceKey) {
+  if (!roloConversationAccessReady({
+    persistenceKey,
+    homePersistenceKey,
+    authorizedHomeScope,
+    hydratedScope,
+  })) {
     return <Page><Loading label="Opening Rolo…" /></Page>
   }
   if (!auth.session.capabilities.homeAssistant) {
@@ -691,6 +744,11 @@ export default function RoloScreen() {
 
   async function saveProposal() {
     if (!proposal) return
+    if (proposal.assignedMembershipRef
+      && !householdMembers.some(member => member.membershipRef === proposal.assignedMembershipRef)) {
+      setError('That household assignment is no longer available. Ask Rolo to assign the task again.')
+      return
+    }
     const photoToFile = reviewedNewPhoto
     setSaving(true)
     setError(null)
@@ -790,6 +848,12 @@ export default function RoloScreen() {
   const suggestedWork = suggestion?.destination === 'work' && suggestion.projectRef
     ? knownWork.find(item => item.projectRef === suggestion.projectRef) ?? null
     : null
+  const proposalAssignee = proposal?.assignedMembershipRef
+    ? householdMembers.find(member => member.membershipRef === proposal.assignedMembershipRef) ?? null
+    : null
+  const proposalAssignmentUnavailable = Boolean(
+    proposal?.assignedMembershipRef && !proposalAssignee,
+  )
 
   return (
     <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -974,9 +1038,27 @@ export default function RoloScreen() {
             </View>
             <Text style={styles.proposalTitle}>{proposal.title}</Text>
             <Text style={styles.proposalMeta}>{categoryLabel[proposal.category]} · {statusLabel[proposal.status]}</Text>
+            {proposalAssignee || proposal.dueOn ? (
+              <View style={styles.assignmentLine}>
+                <Ionicons name="person-circle-outline" size={17} color={colors.lime} />
+                <Text style={styles.assignmentText}>
+                  {[
+                    proposalAssignee ? `Assigned to ${proposalAssignee.displayLabel}` : null,
+                    proposal.dueOn ? `Due ${formatRoloDueDate(proposal.dueOn)}` : null,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
+            ) : null}
+            {proposalAssignmentUnavailable ? (
+              <Notice message="That assignee is no longer part of this home. Ask Rolo to choose someone else." />
+            ) : null}
             {proposal.summary ? <Text style={styles.introCopy}>{proposal.summary}</Text> : null}
             {proposal.professionalLabel ? <Text style={styles.proLabel}>Pro: {proposal.professionalLabel}</Text> : null}
-            <Button label={saving ? 'Saving…' : 'Add to Work'} onPress={() => void saveProposal()} disabled={saving} />
+            <Button
+              label={saving ? 'Saving…' : proposal.kind === 'task' ? 'Share this to-do' : 'Add to Work'}
+              onPress={() => void saveProposal()}
+              disabled={saving || proposalAssignmentUnavailable}
+            />
             <Button label="Leave it in the chat" onPress={() => {
               pendingCreate.current = null
               setProposal(null)
@@ -1199,7 +1281,7 @@ export default function RoloScreen() {
         ) : null}
         {privacyOpen ? (
           <Text style={styles.safety}>
-            Your message and a limited list of what this home has saved may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
+            Your raw Rolo chat stays private to this account and device. Only a to-do, Work record, photo, or update you explicitly approve is shared with this home. Your message and a limited list of what this home has saved may be processed by OpenAI. The saved street address is not sent. File and photo contents stay private unless you approve one exact photo for one exact message.
             {visionEnabled ? ' A new photo is saved privately first; Homesrolo removes details such as its location before sending a fresh copy for that request.' : ''}
             {' '}Rolo can help you think through what is visible, but it is not a licensed professional or emergency service.
           </Text>
@@ -1296,6 +1378,15 @@ function locationRequestFailureNote(caught: unknown): string {
 
 function locationPinSummary(pin: ConfirmedDeviceGeoPin): string {
   return `${pin.latitude.toFixed(4)}, ${pin.longitude.toFixed(4)} · ±${Math.round(pin.accuracyMeters)} m`
+}
+
+function formatRoloDueDate(value: string): string {
+  return new Date(`${value}T12:00:00.000Z`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
 }
 
 function suggestionLabel(suggestion: RoloSuggestion): string {
@@ -1406,6 +1497,8 @@ const styles = StyleSheet.create({
   proposalKind: { color: colors.slate, fontSize: 12, fontWeight: '800' },
   proposalTitle: { color: colors.cream, fontSize: 22, lineHeight: 27, fontWeight: '900' },
   proposalMeta: { color: colors.aqua, fontSize: 13, fontWeight: '800' },
+  assignmentLine: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  assignmentText: { color: colors.lime, flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '800' },
   proLabel: { color: colors.lime, fontSize: 13, fontWeight: '800' },
   disclosure: { color: colors.smoke, fontSize: 11, textAlign: 'center' },
   inlineStatus: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, paddingHorizontal: 3 },

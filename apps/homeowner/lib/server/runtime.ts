@@ -12,6 +12,7 @@ import {
   HomeownerApiService,
   type HomeownerApiRequestContext,
 } from '../../../../src/homeowner/homeowner-api.v1.ts'
+import { createHmac } from 'node:crypto'
 import type {
   HomeownerCommandPort, HomeownerIdentityPort, HomeownerRepositoryPort,
 } from '../../../../src/homeowner/homeowner-runtime.v1.ts'
@@ -49,6 +50,7 @@ import {
   readHomeAssistantConfiguration,
 } from './home-assistant.ts'
 import { HomesroloProfessionalService } from '../../../../src/homeowner/homesrolo-professional-service.v1.ts'
+import { HomeownerHouseholdService } from '../../../../src/homeowner/homeowner-household.v1.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -147,6 +149,7 @@ const homeRecordHandoffSecurity = homeRecordHandoffSecurityConfiguration
   : null
 let homeRecordHandoffService: HomeRecordHandoffService | null = null
 let professionalService: HomesroloProfessionalService | null = null
+let householdService: HomeownerHouseholdService | null = null
 
 export function projectReviewCapabilityEnabled(
   providerConfigured: boolean,
@@ -213,7 +216,7 @@ export function homeownerApiService(): HomeownerApiService {
           && homeRecordHandoffSecurityConfiguration !== null,
         invitations: configuration?.projectQuotesEnabled === true
           && configuration?.professionalInvitationsEnabled === true,
-        sharing: false,
+        sharing: configuration?.emailCodeRateLimitSecret !== null,
       }) : UNCONFIGURED_CAPABILITIES,
     })
   }
@@ -243,6 +246,27 @@ export function configuredHomesroloProfessionalService(): HomesroloProfessionalS
     now: () => new Date().toISOString(),
   })
   return professionalService
+}
+
+function householdEmailHashKey(secret: string): string {
+  return createHmac('sha256', secret)
+    .update('homesrolo-household-email-binding-v1')
+    .digest('hex')
+}
+
+export function configuredHomeownerHouseholdService(): HomeownerHouseholdService | null {
+  if (!provider || !configuration?.emailCodeRateLimitSecret) return null
+  householdService ??= new HomeownerHouseholdService({
+    enabled: true,
+    identity: provider,
+    households: provider,
+    now: () => new Date().toISOString(),
+    // Domain separation lets the already-required server HMAC secret back a
+    // distinct household email binding without adding a paid service or
+    // exposing either key to the browser.
+    emailHashKey: householdEmailHashKey(configuration.emailCodeRateLimitSecret),
+  })
+  return householdService
 }
 
 /**

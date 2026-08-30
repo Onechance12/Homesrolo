@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { HomeCheckupPhoto, ResolvedArtifactRecord, WorkRecord } from '../api/model.ts'
+import type { HomeCheckupPhoto, HouseholdMember, ResolvedArtifactRecord, WorkRecord } from '../api/model.ts'
 import { homeLibraryEntries, homePhotoAlbums } from './library.ts'
 import {
   HOMESROLO_CARD_SCHEMA_VERSION,
@@ -18,7 +18,7 @@ import {
   type HomesroloCard,
 } from './rolodex.ts'
 
-const REF = (prefix: 'hhom' | 'hprj' | 'hart' | 'hpho', fill: string) =>
+const REF = (prefix: 'hhom' | 'hprj' | 'hart' | 'hpho' | 'hmbr', fill: string) =>
   `${prefix}_${fill.repeat(43)}`
 const HOME = REF('hhom', 'h')
 const WORK = REF('hprj', 'w')
@@ -32,6 +32,8 @@ const work: WorkRecord = {
   category: 'interior',
   status: 'in_progress',
   occurredOn: '2026-07-15',
+  assignedMembershipRef: null,
+  dueOn: null,
   summary: 'Replace cabinets and choose a durable countertop.',
   professionalLabel: 'Northwind Remodels',
   revision: 3,
@@ -152,6 +154,41 @@ test('projects one work record without creating a second source of truth', () =>
   assert.equal(workRecordCard(archived).data.archived, true)
   assert.deepEqual(workRecordCards([archived, work]).map(item => item.cardRef), [card.cardRef])
   assert.equal(work.title, 'Kitchen remodel', 'projection does not mutate the record')
+})
+
+test('projects task assignment and due date as safe searchable card metadata', () => {
+  const membershipRef = REF('hmbr', 'm')
+  const member: HouseholdMember = {
+    recordVersion: 'homeowner-household.v1',
+    membershipRef,
+    homeRef: HOME,
+    displayLabel: 'Alex',
+    role: 'member',
+    state: 'active',
+    isCurrentPrincipal: false,
+    revision: 1,
+    joinedAt: '2026-08-29T12:00:00.000Z',
+    revokedAt: null,
+  }
+  const task = {
+    ...work,
+    workKind: 'task',
+    status: 'planned',
+    assignedMembershipRef: membershipRef,
+    dueOn: '2026-09-05',
+  } as const satisfies WorkRecord
+  const card = workRecordCard(task, [member])
+
+  assert.equal(card.data.workKind, 'task')
+  assert.equal(card.data.assignedMembershipRef, membershipRef)
+  assert.equal(card.data.dueOn, '2026-09-05')
+  assert.deepEqual(card.meta.slice(0, 2), ['Assigned to Alex', 'Due Sep 5, 2026'])
+  assert.equal(card.searchText.includes('alex'), true)
+  assert.equal(isHomesroloCard(card), true)
+
+  const foreignRosterCard = workRecordCard(task, [{ ...member, homeRef: REF('hhom', 'o') }])
+  assert.equal(foreignRosterCard.meta[0], 'Assigned to household')
+  assert.equal(foreignRosterCard.searchText.includes('alex'), false)
 })
 
 test('projects uploaded photos and files into exact typed actions and safe contexts', () => {
