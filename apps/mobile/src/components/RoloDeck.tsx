@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -74,6 +75,16 @@ const ALL_DIVIDER = 'all'
 const CARD_GAP = 12
 const COMPACT_CARD_MIN_HEIGHT = 192
 const FULL_CARD_MIN_HEIGHT = 406
+
+type WebSnapStyle = ViewStyle & {
+  readonly scrollSnapAlign?: 'center' | undefined
+  readonly scrollSnapType?: 'y mandatory' | undefined
+}
+
+const WEB_VERTICAL_LIST_SNAP: WebSnapStyle = { scrollSnapType: 'y mandatory' }
+const WEB_VERTICAL_CARD_SNAP: WebSnapStyle = {
+  scrollSnapAlign: 'center',
+}
 
 /**
  * Controlled when `query` / `selectedDivider` are supplied, and stateful when
@@ -183,6 +194,13 @@ export function RoloDeck({
   ))
   const itemInterval = (horizontal ? resolvedCardWidth : resolvedCardHeight) + CARD_GAP
   const viewportHeight = resolvedCardHeight + (horizontal ? 0 : resolvedPeek)
+  const verticalViewportHeight = !horizontal && fillAvailable && deckViewportHeight > 0
+    ? deckViewportHeight
+    : viewportHeight
+  const verticalSnapInset = Math.max(
+    0,
+    Math.round((verticalViewportHeight - itemInterval) / 2),
+  )
   const fixedSlotHeight = search.visibleCards.length === 0
     ? Math.max(300, viewportHeight)
     : viewportHeight
@@ -346,6 +364,7 @@ export function RoloDeck({
                     horizontal
                       ? { width: itemInterval, height: resolvedCardHeight, paddingRight: CARD_GAP }
                       : { height: itemInterval, paddingBottom: CARD_GAP },
+                    !horizontal && Platform.OS === 'web' && WEB_VERTICAL_CARD_SNAP,
                     !active && !motionReduced && styles.deckItemBehind,
                   ]}
                 >
@@ -373,8 +392,11 @@ export function RoloDeck({
             style={[
               styles.list,
               fillAvailable && !horizontal ? styles.listFill : { height: viewportHeight },
+              !horizontal && Platform.OS === 'web' && WEB_VERTICAL_LIST_SNAP,
             ]}
-            contentContainerStyle={horizontal ? { paddingRight: resolvedPeek } : { paddingBottom: resolvedPeek }}
+            contentContainerStyle={horizontal
+              ? { paddingRight: resolvedPeek }
+              : { paddingTop: verticalSnapInset, paddingBottom: verticalSnapInset }}
             horizontal={horizontal}
             scrollEnabled={search.visibleCards.length > 1}
             nestedScrollEnabled

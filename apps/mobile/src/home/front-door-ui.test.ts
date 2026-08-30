@@ -73,6 +73,19 @@ test('vertical Rolodexes flip from the exposed card tab without carousel bubbles
   assert.match(deck, /\{horizontal && search\.visibleCards\.length > 0 \? \([\s\S]*?<PagingIndicator/)
 })
 
+test('vertical Rolodex cards settle into one centered resting position', () => {
+  const deck = read('src/components/RoloDeck.tsx')
+
+  assert.match(deck, /const verticalViewportHeight = !horizontal && fillAvailable && deckViewportHeight > 0[\s\S]*?\? deckViewportHeight[\s\S]*?: viewportHeight/)
+  assert.match(deck, /Math\.round\(\(verticalViewportHeight - itemInterval\) \/ 2\)/)
+  assert.match(deck, /paddingTop: verticalSnapInset, paddingBottom: verticalSnapInset/)
+  assert.match(deck, /WEB_VERTICAL_LIST_SNAP[\s\S]*?scrollSnapType: 'y mandatory'/)
+  assert.match(deck, /WEB_VERTICAL_CARD_SNAP[\s\S]*?scrollSnapAlign: 'center'/)
+  assert.match(deck, /snapToAlignment="start"/)
+  assert.match(deck, /offset: itemInterval \* index/)
+  assert.match(deck, /Math\.round\(offset \/ itemInterval\)/)
+})
+
 test('old home roots resolve to Rolo and Account stays inside the homeowner tab shell', () => {
   const frontDoor = read('app/home/[homeId]/index.tsx')
   const nestedAccount = read('app/home/[homeId]/account.tsx')
