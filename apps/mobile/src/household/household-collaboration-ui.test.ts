@@ -21,6 +21,8 @@ test('People separates household access from the existing home-pro Rolodex', () 
   assert.match(people, /Share invitation again/)
   assert.match(people, /onShare\(invitation\)/)
   assert.match(people, /invitation is still pending/)
+  assert.match(people, /canManageHousehold \? \(/)
+  assert.match(people, /A Home admin manages company invitations/)
 })
 
 test('household invitation acceptance preserves the current browser and exact-home boundary', () => {

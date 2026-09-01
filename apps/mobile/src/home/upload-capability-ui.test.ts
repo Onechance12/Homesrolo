@@ -17,9 +17,26 @@ test('home and project libraries gate upload controls without gating saved files
     assert.match(source, /showUploadActions \? \(/)
     assert.match(source, /api\.listArtifacts\(homeId\)/)
   }
-  assert.match(home, /showUploadActions = uploadsEnabled \|\| previewMode/)
+  assert.match(home, /showUploadActions = canOrganizeLibrary && \(uploadsEnabled \|\| previewMode\)/)
   assert.match(project, /showUploadActions = !readOnly && \(uploadsEnabled \|\| previewMode\)/)
   assert.match(project, /readonly readOnly\?: boolean/)
+})
+
+test('the home library uses the exact household role while every saved item stays readable', () => {
+  const home = read('app/home/[homeId]/care.tsx')
+
+  assert.match(home, /api\.getHousehold\(homeId\)/)
+  assert.match(home, /\.catch\(\(\) => \(\{ members: \[\] as readonly HouseholdMember\[\], unavailable: true as const \}\)\)/)
+  assert.match(home, /canCurrentHouseholdMemberUpdate\(resource\.state\.value\.householdMembers\)/)
+  assert.match(home, /showAdd=\{canOrganizeLibrary\}/)
+  assert.match(home, /tabs\.filter\(tab => tab\.value !== 'add' \|\| showAdd\)/)
+  assert.match(home, /previewPhoto\.source === 'uploads' && canOrganizeLibrary/)
+  assert.match(home, /editingPhoto && canOrganizeLibrary/)
+  assert.match(home, /if \(!canOrganizeLibrary\) return/)
+  assert.match(home, /This household access is view only\./)
+  assert.match(home, /Your saved library and Home Watch history are still available\./)
+  assert.match(home, /api\.listArtifacts\(homeId\)/)
+  assert.match(home, /api\.listHomeCheckups\(homeId\)/)
 })
 
 test('preview keeps its safe upload-stop behavior while unavailable accounts get one clear notice', () => {

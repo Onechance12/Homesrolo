@@ -303,6 +303,7 @@ export interface HomeAssistantHttpDependencies {
     sessionHandle: string,
     homeRef: string,
     selectedPhoto: NonNullable<z.infer<typeof askRoloRequestSchema>['selectedPhoto']>,
+    requestedProjectRef?: string,
   ) => Promise<HomeAssistantSelectedPhoto>
 }
 
@@ -364,6 +365,7 @@ export async function handleHomeAssistantRequestWithDependencies(
         sessionHandle,
         homeRef,
         boundaryDecision.request.selectedPhoto,
+        boundaryDecision.request.projectRef,
       )
     }
     const context = await dependencies.readContext(
@@ -391,12 +393,13 @@ export async function handleHomeAssistantRequest(request: Request, homeRef: stri
     visionEnabled: configuration?.privateUploadsEnabled === true
       && configuration.roloVisionEnabled === true,
     visionRateLimiter: sharedVisionRateLimiter,
-    async readSelectedPhoto(sessionHandle, requestedHomeRef, selection) {
+    async readSelectedPhoto(sessionHandle, requestedHomeRef, selection, requestedProjectRef) {
       const service = runtime.homeownerApiService()
       const result = await service.readArtifactContent(
         { sessionHandle },
         requestedHomeRef,
         selection.artifactRef,
+        requestedProjectRef,
       )
       if (result.artifact.kind !== 'photo'
         || (result.artifact.mediaType !== 'image/jpeg'

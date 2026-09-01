@@ -5,6 +5,7 @@ import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'r
 import type { DeviceFile, HomeCheckupArea, HomeCheckupPhoto } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { HOME_CHECKUP_AREAS } from '../../../src/api/home-checkup.ts'
+import { isCurrentHouseholdController } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { PhotoPreview } from '../../../src/components/PhotoPreview.tsx'
@@ -32,10 +33,17 @@ export default function HomeWatchScreen() {
   const homeId = useHomeId()
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const enabled = auth.kind === 'signed_in' && auth.session.capabilities.photoCheckups
-  const resource = useResource(useCallback(
-    () => enabled ? api.listHomeCheckups(homeId) : Promise.resolve([]),
-    [api, enabled, homeId],
-  ), auth.kind === 'signed_in')
+  const resource = useResource(useCallback(async () => {
+    if (!enabled) return { photos: [], canManage: false }
+    const [photos, household] = await Promise.all([
+      api.listHomeCheckups(homeId),
+      api.getHousehold(homeId).catch(() => null),
+    ])
+    return {
+      photos,
+      canManage: household !== null && isCurrentHouseholdController(household.members),
+    }
+  }, [api, enabled, homeId]), auth.kind === 'signed_in')
   const [formOpen, setFormOpen] = useState(false)
   const [observedOn, setObservedOn] = useState(() => localCalendarDate())
   const [area, setArea] = useState<HomeCheckupArea>('front_exterior')
@@ -50,11 +58,31 @@ export default function HomeWatchScreen() {
   const [managedBusy, setManagedBusy] = useState(false)
   const [managedMessage, setManagedMessage] = useState<string | null>(null)
   const commandRef = useRef<string | null>(null)
+  const actionGeneration = useRef(0)
 
   useEffect(() => () => { if (file) revokeBrowserDeviceFileUrl(file) }, [file])
+  useEffect(() => {
+    actionGeneration.current += 1
+    setFormOpen(false)
+    setObservedOn(localCalendarDate())
+    setArea('front_exterior')
+    setViewLabel('')
+    setCaption('')
+    setFile(null)
+    setBusy(false)
+    setMessage(null)
+    setCompareKey(null)
+    setPreview(null)
+    setDeleteRef(null)
+    setManagedBusy(false)
+    setManagedMessage(null)
+    commandRef.current = null
+    return () => { actionGeneration.current += 1 }
+  }, [homeId])
   const groups = useMemo(() => resource.state.kind === 'ready'
-    ? groupedHomeCheckups(resource.state.value)
+    ? groupedHomeCheckups(resource.state.value.photos)
     : [], [resource.state])
+  const canManageHomeWatch = resource.state.kind === 'ready' && resource.state.value.canManage
 
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'loading') return <Loading />
@@ -76,36 +104,53 @@ export default function HomeWatchScreen() {
 
   const changed = () => { commandRef.current = null; setMessage(null) }
   async function choose(source: 'camera' | 'library') {
+    if (!canManageHomeWatch) return
     if (previewMode) { setMessage(PREVIEW_UPLOAD_NOTICE); return }
+    const generation = actionGeneration.current
     try {
       const selected = await pickPhoto(source)
       if (!selected) return
+      if (generation !== actionGeneration.current) {
+        revokeBrowserDeviceFileUrl(selected)
+        return
+      }
       if (file) revokeBrowserDeviceFileUrl(file)
       setFile(selected)
       changed()
-    } catch (error) { setMessage(friendlyError(error)) }
+    } catch (error) {
+      if (generation === actionGeneration.current) setMessage(friendlyError(error))
+    }
   }
 
   async function save() {
     const normalizedViewLabel = normalizeHomeCheckupViewLabel(viewLabel)
-    if (!file || !normalizedViewLabel || busy) return
+    if (!canManageHomeWatch || !file || !normalizedViewLabel || busy) return
     if (!validHomeCheckupDate(observedOn)) {
       setMessage('Use a real date in YYYY-MM-DD format. Home Watch cannot be dated in the future.')
       return
     }
+    const generation = actionGeneration.current
+    const selectedFile = file
     setBusy(true)
     setMessage(null)
     try {
-      commandRef.current ??= await api.newCommandRef()
+      let nextCommandRef = commandRef.current
+      if (!nextCommandRef) {
+        const mintedCommandRef = await api.newCommandRef()
+        if (generation !== actionGeneration.current) return
+        nextCommandRef = mintedCommandRef
+        commandRef.current = mintedCommandRef
+      }
       await api.uploadHomeCheckup(homeId, {
-        commandRef: commandRef.current,
+        commandRef: nextCommandRef,
         observedOn,
         area,
         viewLabel: normalizedViewLabel,
         caption,
-        file,
+        file: selectedFile,
       })
-      revokeBrowserDeviceFileUrl(file)
+      if (generation !== actionGeneration.current) return
+      revokeBrowserDeviceFileUrl(selectedFile)
       setFile(null)
       setViewLabel('')
       setCaption('')
@@ -113,23 +158,35 @@ export default function HomeWatchScreen() {
       setFormOpen(false)
       setMessage('Photo saved to Home Watch.')
       resource.reload()
-    } catch (error) { setMessage(friendlyError(error)) } finally { setBusy(false) }
+    } catch (error) {
+      if (generation === actionGeneration.current) setMessage(friendlyError(error))
+    } finally {
+      if (generation === actionGeneration.current) setBusy(false)
+    }
   }
 
   async function remove(photoRef: string) {
+    if (!canManageHomeWatch) return
     if (previewMode) { setMessage('Preview photos stay in the local sample. Nothing was deleted.'); setDeleteRef(null); return }
+    const generation = actionGeneration.current
     setBusy(true)
     setMessage(null)
     try {
       await api.deleteHomeCheckup(homeId, photoRef)
+      if (generation !== actionGeneration.current) return
       setDeleteRef(null)
       setMessage('Photo removed from Home Watch.')
       resource.reload()
-    } catch (error) { setMessage(friendlyError(error)) } finally { setBusy(false) }
+    } catch (error) {
+      if (generation === actionGeneration.current) setMessage(friendlyError(error))
+    } finally {
+      if (generation === actionGeneration.current) setBusy(false)
+    }
   }
 
   async function openManagedExteriorHomeWatch() {
-    if (managedBusy) return
+    if (!canManageHomeWatch || managedBusy) return
+    const generation = actionGeneration.current
     setManagedBusy(true)
     setManagedMessage(null)
     let location = ''
@@ -141,13 +198,17 @@ export default function HomeWatchScreen() {
     } catch {
       // The text still opens without a location so the homeowner can add one.
     }
+    if (generation !== actionGeneration.current) return
     try {
       await Linking.openURL(managedExteriorHomeWatchSmsUrl(location))
+      if (generation !== actionGeneration.current) return
       setManagedMessage('Messages is ready with your request. Nothing is sent until you send it, and nothing is scheduled until Homesrolo replies and confirms the details.')
     } catch {
-      setManagedMessage(`This device could not open Messages. You can text HOME WATCH, your city, and ZIP to ${HOME_WATCH_TEXT_NUMBER_DISPLAY}.`)
+      if (generation === actionGeneration.current) {
+        setManagedMessage(`This device could not open Messages. You can text HOME WATCH, your city, and ZIP to ${HOME_WATCH_TEXT_NUMBER_DISPLAY}.`)
+      }
     } finally {
-      setManagedBusy(false)
+      if (generation === actionGeneration.current) setManagedBusy(false)
     }
   }
 
@@ -158,7 +219,7 @@ export default function HomeWatchScreen() {
         <Ionicons name="chevron-back" size={19} color={colors.lime} /><Text style={styles.backText}>My Home</Text>
       </Pressable>
 
-      <Card>
+      {canManageHomeWatch ? <Card>
         <View style={styles.watchHead}>
           <View style={styles.managedIcon}><Ionicons name="home-outline" size={25} color={colors.lime} /></View>
           <View style={styles.flex}><Tag tone="aqua">Managed exterior visit</Tag><Text style={styles.watchTitle}>Want Homesrolo to handle the outside check?</Text></View>
@@ -173,7 +234,7 @@ export default function HomeWatchScreen() {
         />
         <Text style={styles.boundary}>Texts {HOME_WATCH_TEXT_NUMBER_DISPLAY}. Tapping does not book a visit. Nothing is scheduled until you send the message and Homesrolo replies with confirmation.</Text>
         {managedMessage ? <Notice message={managedMessage} /> : null}
-      </Card>
+      </Card> : null}
 
       <Card accent>
         <View style={styles.watchHead}>
@@ -181,10 +242,14 @@ export default function HomeWatchScreen() {
           <View style={styles.flex}><Tag tone="lime">Private photo history</Tag><Text style={styles.watchTitle}>Same view. Different day.</Text></View>
         </View>
         <Text style={styles.copy}>Pick a repeatable spot—like the garage roofline or hall ceiling—then take the same photo again next season.</Text>
-        <Button label={formOpen ? 'Close camera setup' : 'Add a checkup photo'} accessibilityHint={formOpen ? 'Closes the Home Watch photo form' : 'Opens the Home Watch photo form'} icon={formOpen ? 'close' : 'camera-outline'} onPress={() => { setFormOpen(current => !current); setMessage(null) }} />
+        {canManageHomeWatch ? (
+          <Button label={formOpen ? 'Close camera setup' : 'Add a checkup photo'} accessibilityHint={formOpen ? 'Closes the Home Watch photo form' : 'Opens the Home Watch photo form'} icon={formOpen ? 'close' : 'camera-outline'} onPress={() => { setFormOpen(current => !current); setMessage(null) }} />
+        ) : (
+          <Notice message="Only a Home admin can add or remove Home Watch photos. You can still review the shared history." />
+        )}
       </Card>
 
-      {formOpen ? (
+      {formOpen && canManageHomeWatch ? (
         <Card>
           <SectionTitle title="What are you checking?" detail="A clear view name makes the next photo easy to match." />
           <Text style={styles.label}>Area</Text>
@@ -259,7 +324,7 @@ export default function HomeWatchScreen() {
                     <ProtectedImage source={api.homeCheckupPhotoSource(homeId, photo.photoRef, 'thumbnail')} style={styles.photo} resizeMode="cover" accessibilityLabel={`${group.viewLabel} on ${friendlyDate(photo.observedOn)}`} />
                     <View style={styles.photoCopy}><Text style={styles.photoDate}>{friendlyDate(photo.observedOn)}</Text><Text style={styles.photoCaption} numberOfLines={2}>{photo.caption || 'No note'}</Text></View>
                   </Pressable>
-                  {deleteRef === photo.photoRef ? (
+                  {canManageHomeWatch && deleteRef === photo.photoRef ? (
                     <View style={styles.deleteConfirm}>
                       <Text style={styles.deleteText}>Remove this photo?</Text>
                       <View style={styles.deleteActions}>
@@ -267,7 +332,7 @@ export default function HomeWatchScreen() {
                         <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${group.viewLabel} photo from ${friendlyDate(photo.observedOn)}`} accessibilityHint="Permanently removes this private Home Watch photo" accessibilityState={{ disabled: busy }} onPress={() => void remove(photo.photoRef)} disabled={busy} style={[styles.smallAction, styles.dangerAction]}><Text style={styles.dangerText}>{busy ? 'Removing…' : 'Delete'}</Text></Pressable>
                       </View>
                     </View>
-                  ) : (
+                  ) : canManageHomeWatch ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Delete ${group.viewLabel} photo from ${friendlyDate(photo.observedOn)}`}
@@ -277,14 +342,18 @@ export default function HomeWatchScreen() {
                     >
                       <Ionicons name="trash-outline" size={17} color={colors.smoke} /><Text style={styles.deleteButtonText}>Remove</Text>
                     </Pressable>
-                  )}
+                  ) : null}
                 </View>
               ))}
             </ScrollView>
           </Card>
         )
       })}
-      {resource.state.kind === 'ready' && groups.length === 0 ? <Notice message="No Home Watch photos yet. Start with one spot you can photograph the same way again later." /> : null}
+      {resource.state.kind === 'ready' && groups.length === 0 ? (
+        <Notice message={canManageHomeWatch
+          ? 'No Home Watch photos yet. Start with one spot you can photograph the same way again later.'
+          : 'No Home Watch photos have been shared yet.'} />
+      ) : null}
       <Text style={styles.boundary}>Home Watch keeps observations organized. A photo comparison does not diagnose damage or prove when a condition changed.</Text>
 
       {preview ? <PhotoPreview title={`${HOME_CHECKUP_AREA_LABEL[preview.area]} · ${preview.viewLabel}`} source={api.homeCheckupPhotoSource(homeId, preview.photoRef, 'full')} onClose={() => setPreview(null)} /> : null}

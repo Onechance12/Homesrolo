@@ -1112,8 +1112,9 @@ export class HomeownerApiService {
       throw new HomeownerApiError('unavailable')
     }
     const projects = await this.#repository.listProjects(grant)
-    if (!projects.some(project => project.projectRef === parsedProjectRef.data
-      && project.homeRef === grant.homeRef)) {
+    const matchedProject = projects.find(project => project.projectRef === parsedProjectRef.data
+      && project.homeRef === grant.homeRef)
+    if (!matchedProject) {
       throw new HomeownerApiError('not_found')
     }
     if (parsedInput.data.artifactRef) {
@@ -1122,8 +1123,7 @@ export class HomeownerApiService {
         && artifact.homeRef === grant.homeRef
         && artifact.projectRef === parsedProjectRef.data
         && artifact.kind === 'document'
-        && artifact.mediaType === 'application/pdf'
-        && artifact.controllerPrincipalRef === grant.principalRef)) {
+        && artifact.mediaType === 'application/pdf')) {
         throw new HomeownerApiError('not_found')
       }
     }
@@ -1138,7 +1138,7 @@ export class HomeownerApiService {
     if (created.source !== 'homeowner_entry') throw new HomeownerApiError('unavailable')
     const coherent = created.homeRef === grant.homeRef
       && created.projectRef === parsedProjectRef.data
-      && created.controllerPrincipalRef === grant.principalRef
+      && created.controllerPrincipalRef === matchedProject.controllerPrincipalRef
       && created.contractorLabel === command.contractorLabel
       && created.proposalDate === command.proposalDate
       && created.artifactRef === command.artifactRef
@@ -1169,8 +1169,9 @@ export class HomeownerApiService {
       throw new HomeownerApiError('unavailable')
     }
     const projects = await this.#repository.listProjects(grant)
-    if (!projects.some(project => project.projectRef === parsedProjectRef.data
-      && project.homeRef === grant.homeRef)) {
+    const matchedProject = projects.find(project => project.projectRef === parsedProjectRef.data
+      && project.homeRef === grant.homeRef)
+    if (!matchedProject) {
       throw new HomeownerApiError('not_found')
     }
     if (parsedInput.data.artifactRef) {
@@ -1179,8 +1180,7 @@ export class HomeownerApiService {
         && artifact.homeRef === grant.homeRef
         && artifact.projectRef === parsedProjectRef.data
         && artifact.kind === 'document'
-        && artifact.mediaType === 'application/pdf'
-        && artifact.controllerPrincipalRef === grant.principalRef)) {
+        && artifact.mediaType === 'application/pdf')) {
         throw new HomeownerApiError('not_found')
       }
     }
@@ -1197,7 +1197,7 @@ export class HomeownerApiService {
     const coherent = saved.quoteRef === command.quoteRef
       && saved.homeRef === grant.homeRef
       && saved.projectRef === command.projectRef
-      && saved.controllerPrincipalRef === grant.principalRef
+      && saved.controllerPrincipalRef === matchedProject.controllerPrincipalRef
       && saved.contractorLabel === command.contractorLabel
       && saved.proposalDate === command.proposalDate
       && saved.artifactRef === command.artifactRef
@@ -1660,9 +1660,15 @@ export class HomeownerApiService {
     context: HomeownerApiRequestContext,
     requestedHomeRef: string,
     requestedArtifactRef: string,
+    requestedProjectRef?: string,
   ): Promise<{ readonly artifact: HomeownerApiArtifactView; readonly bytes: Uint8Array }> {
     const parsedArtifactRef = opaqueRef('hart').safeParse(requestedArtifactRef)
-    if (!parsedArtifactRef.success) throw new HomeownerApiError('invalid_request')
+    const parsedProjectRef = requestedProjectRef === undefined
+      ? null
+      : opaqueRef('hprj').safeParse(requestedProjectRef)
+    if (!parsedArtifactRef.success || (parsedProjectRef !== null && !parsedProjectRef.success)) {
+      throw new HomeownerApiError('invalid_request')
+    }
     const grant = await this.#workspaceGrant(
       context,
       requestedHomeRef,
@@ -1673,7 +1679,10 @@ export class HomeownerApiService {
     }
     const artifacts = await this.#repository.listArtifactMetadata(grant)
     const artifact = artifacts.find(candidate => candidate.artifactRef === parsedArtifactRef.data)
-    if (!artifact || artifact.homeRef !== grant.homeRef) throw new HomeownerApiError('not_found')
+    if (!artifact || artifact.homeRef !== grant.homeRef
+      || (parsedProjectRef?.data && artifact.projectRef !== parsedProjectRef.data)) {
+      throw new HomeownerApiError('not_found')
+    }
     const bytes = await this.#privateObjects.readExactObject({
       grant,
       storageObjectRef: artifact.storageObjectRef,
@@ -1692,7 +1701,21 @@ export class HomeownerApiService {
       || finalGrant.membershipRevision !== grant.membershipRevision) {
       throw new HomeownerApiError('not_found')
     }
-    return { artifact: safeArtifact(artifact), bytes }
+    const currentArtifacts = await this.#repository.listArtifactMetadata(finalGrant)
+    const current = currentArtifacts.find(candidate =>
+      candidate.artifactRef === parsedArtifactRef.data
+      && candidate.homeRef === finalGrant.homeRef)
+    if (!current
+      || current.storageObjectRef !== artifact.storageObjectRef
+      || current.payloadSha256 !== artifact.payloadSha256
+      || current.byteLength !== artifact.byteLength
+      || current.mediaType !== artifact.mediaType
+      || current.kind !== artifact.kind
+      || current.contentClass !== 'homeowner_private'
+      || (parsedProjectRef?.data && current.projectRef !== parsedProjectRef.data)) {
+      throw new HomeownerApiError('not_found')
+    }
+    return { artifact: safeArtifact(current), bytes }
   }
 
   async startRoofingProject(

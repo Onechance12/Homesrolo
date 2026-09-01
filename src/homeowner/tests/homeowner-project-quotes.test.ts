@@ -27,6 +27,8 @@ import {
 
 const body = (character: string) => character.repeat(43)
 const principalRef = `hprn_${body('p')}`
+const projectCreatorRef = `hprn_${body('j')}`
+const artifactUploaderRef = `hprn_${body('u')}`
 const homeRef = `hhom_${body('h')}`
 const projectRef = `hprj_${body('r')}`
 const quoteRef = `hquo_${body('q')}`
@@ -203,7 +205,7 @@ test('quote contract keeps unreviewed rows absent and cannot represent price sco
   )
 })
 
-test('database quote invariants reject null statuses and tie project and artifact controllers', () => {
+test('database quote invariants reject null statuses and preserve exact project relationships', () => {
   const originalMigration = readFileSync(
     'supabase/migrations/202608210001_homeowner_project_quotes.sql',
     'utf8',
@@ -223,6 +225,15 @@ test('database quote invariants reject null statuses and tie project and artifac
   assert.match(originalMigration, /foreign key \(project_ref, home_ref, controller_principal_ref\)/)
   assert.match(
     originalMigration,
+    /foreign key \(artifact_ref, home_ref, project_ref, controller_principal_ref\)/,
+  )
+  const householdMigration = readFileSync(
+    'supabase/migrations/202609010003_household_proposal_access.sql',
+    'utf8',
+  )
+  assert.match(householdMigration, /foreign key \(artifact_ref, home_ref, project_ref\)/)
+  assert.doesNotMatch(
+    householdMigration,
     /foreign key \(artifact_ref, home_ref, project_ref, controller_principal_ref\)/,
   )
 })
@@ -312,6 +323,34 @@ test('proposal creation rejects cross-project and non-PDF source records but sup
     repository: repository({ async listProjects() { return [nonRoofing] } }),
   }).createProjectQuote(context, homeRef, projectRef, createInput)
   assert.equal(created.projectRef, projectRef)
+})
+
+test('Home admin can create and save a proposal on member work with another member PDF', async () => {
+  const sharedProject = { ...project, controllerPrincipalRef: projectCreatorRef }
+  const sharedArtifact = { ...artifact, controllerPrincipalRef: artifactUploaderRef }
+  const sharedQuote = { ...quote, controllerPrincipalRef: projectCreatorRef }
+  const sharedRepository = repository({
+    async listProjects() { return [sharedProject] },
+    async listArtifactMetadata() { return [sharedArtifact] },
+  })
+
+  const created = await service({
+    repository: sharedRepository,
+    quotes: quotePort({ async createProjectQuote() { return sharedQuote } }),
+  }).createProjectQuote(context, homeRef, projectRef, createInput)
+  assert.equal(created.projectRef, projectRef)
+
+  const saved = await service({
+    repository: sharedRepository,
+    quotes: quotePort({
+      async saveProjectQuote() { return { ...sharedQuote, revision: 2 } },
+    }),
+  }).saveProjectQuote(context, homeRef, projectRef, quoteRef, {
+    ...createInput,
+    commandRef: `hcmd_${body('w')}`,
+    expectedRevision: 1,
+  })
+  assert.equal(saved.revision, 2)
 })
 
 test('revision-backed save forwards one full private replacement and rejects incoherent output', async () => {

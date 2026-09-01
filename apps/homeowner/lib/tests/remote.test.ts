@@ -1210,6 +1210,17 @@ test('professional directory and exact-project invitations use the existing app 
   }
 })
 
+test('professional invitations decode household tasks supported by the shared work contract', async () => {
+  const taskInvitation = {
+    ...INVITATION_VIEW,
+    disclosure: { ...INVITATION_VIEW.disclosure, workKind: 'task' },
+  }
+  const port = createRemotePort(transportReturning(200, { data: [taskInvitation] }))
+  const result = await port.listProjectInvitations(HOME, PROJECT)
+  assert.ok(result.ok)
+  assert.equal(result.ok && result.value[0]?.disclosure.workKind, 'task')
+})
+
 test('a contractor can accept one invitation and submit one structured proposal', async () => {
   const accepted = {
     ...INVITATION_VIEW,

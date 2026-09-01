@@ -25,9 +25,10 @@ type PendingCommand = { readonly intent: string; readonly commandRef: string }
 
 const INITIAL_VISIBLE_ITEMS = 8
 
-export function ProjectChoices({ homeId, projectRef }: {
+export function ProjectChoices({ homeId, projectRef, readOnly = false }: {
   readonly homeId: string
   readonly projectRef: string
+  readonly readOnly?: boolean
 }) {
   const { state: auth, api } = useSession()
   const loader = useCallback(
@@ -87,12 +88,14 @@ export function ProjectChoices({ homeId, projectRef }: {
   }
 
   function startNew() {
+    if (readOnly) return
     resetForm()
     setSuccess(null)
     setFormOpen(true)
   }
 
   function startEditing(item: ProjectItem) {
+    if (readOnly) return
     pending.current = null
     setEditing(item)
     setKind(item.kind)
@@ -107,7 +110,7 @@ export function ProjectChoices({ homeId, projectRef }: {
   async function save() {
     const cleanLabel = label.trim()
     const cleanDetail = detail.trim()
-    if (saveLock.current || !cleanLabel) return
+    if (readOnly || saveLock.current || !cleanLabel) return
     const fields: Omit<SaveProjectItemInput, 'commandRef'> = {
       ...(editing ? {
         itemRef: editing.itemRef,
@@ -182,11 +185,11 @@ export function ProjectChoices({ homeId, projectRef }: {
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {success ? <Text accessibilityRole="alert" style={styles.success}>{success}</Text> : null}
 
-      {resource.state.kind === 'ready' && !formOpen ? (
+      {resource.state.kind === 'ready' && !readOnly && !formOpen ? (
         <Button label="Add a product or decision" icon="add" onPress={startNew} />
       ) : null}
 
-      {resource.state.kind === 'ready' && formOpen ? (
+      {resource.state.kind === 'ready' && !readOnly && formOpen ? (
         <Card accent>
           <View style={styles.formHeading}>
             <View style={styles.flex}>
@@ -261,8 +264,14 @@ export function ProjectChoices({ homeId, projectRef }: {
       {resource.state.kind === 'ready' && items.length === 0 && !formOpen ? (
         <Card>
           <Text style={styles.emptyTitle}>Nothing picked yet</Text>
-          <Text style={styles.emptyDetail}>Save a product, final decision, or idea you want to revisit.</Text>
+          <Text style={styles.emptyDetail}>{readOnly
+            ? 'No products or decisions have been shared with this work yet.'
+            : 'Save a product, final decision, or idea you want to revisit.'}</Text>
         </Card>
+      ) : null}
+
+      {resource.state.kind === 'ready' && readOnly && items.length > 0 ? (
+        <Notice message="You have view-only access to this work. A household member can add or edit its plans and picks." />
       ) : null}
 
       {visibleItems.map(item => (
@@ -275,15 +284,17 @@ export function ProjectChoices({ homeId, projectRef }: {
           </View>
           <Text style={styles.itemLabel}>{item.label}</Text>
           {item.detail ? <Text style={styles.itemDetail}>{item.detail}</Text> : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Edit ${item.label}`}
-            onPress={() => startEditing(item)}
-            style={({ pressed }) => [styles.edit, pressed && styles.pressed]}
-          >
-            <Ionicons name="create-outline" size={18} color={colors.aqua} />
-            <Text style={styles.editText}>Edit</Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${item.label}`}
+              onPress={() => startEditing(item)}
+              style={({ pressed }) => [styles.edit, pressed && styles.pressed]}
+            >
+              <Ionicons name="create-outline" size={18} color={colors.aqua} />
+              <Text style={styles.editText}>Edit</Text>
+            </Pressable>
+          ) : null}
         </Card>
       ))}
 

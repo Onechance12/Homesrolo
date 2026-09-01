@@ -1033,6 +1033,49 @@ test('artifact content rechecks membership after the storage read', async () => 
   assert.equal(membershipReads, 2)
 })
 
+test('project-scoped artifact reads reject cross-project and moved photos', async () => {
+  const projectRef = `hprj_${body('j')}`
+  const otherProjectRef = `hprj_${body('k')}`
+  const projectArtifact = { ...artifact, projectRef }
+  let objectReads = 0
+  const privateObjects: HomeownerPrivateObjectPort = {
+    async storeArtifact() { throw new Error('not used') },
+    async readExactObject() {
+      objectReads += 1
+      return new Uint8Array(projectArtifact.byteLength)
+    },
+  }
+
+  await assert.rejects(
+    service({
+      uploads: true,
+      privateObjects,
+      repository: repository({ async listArtifactMetadata() { return [projectArtifact] } }),
+    }).readArtifactContent(context, homeRef, projectArtifact.artifactRef, otherProjectRef),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+  assert.equal(objectReads, 0, 'a known cross-project selection never reads object bytes')
+
+  let metadataReads = 0
+  await assert.rejects(
+    service({
+      uploads: true,
+      privateObjects,
+      repository: repository({
+        async listArtifactMetadata() {
+          metadataReads += 1
+          return metadataReads === 1
+            ? [projectArtifact]
+            : [{ ...projectArtifact, projectRef: otherProjectRef, revision: 2 }]
+        },
+      }),
+    }).readArtifactContent(context, homeRef, projectArtifact.artifactRef, projectRef),
+    (error: unknown) => error instanceof HomeownerApiError && error.code === 'not_found',
+  )
+  assert.equal(objectReads, 1)
+  assert.equal(metadataReads, 2, 'project scope is rechecked after object storage returns')
+})
+
 test('strict browser projections reject raw URLs, provider ids, and extra authority claims', () => {
   const base = {
     homeRef,

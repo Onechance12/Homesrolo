@@ -659,10 +659,11 @@ test('Rolo photo HTTP requires the dedicated gate, exact reader, and tighter lim
   const enabled = dependencies({
     visionEnabled: true,
     visionRateLimiter: new HomeResearchRateLimiter({ limit: 1, windowMs: 60_000 }),
-    async readSelectedPhoto(_sessionHandle, requestedHomeRef, selection) {
+    async readSelectedPhoto(_sessionHandle, requestedHomeRef, selection, requestedProjectRef) {
       photoReads += 1
       assert.equal(requestedHomeRef, HOME)
       assert.equal(selection.artifactRef, ARTIFACT)
+      assert.equal(requestedProjectRef, PROJECT)
       return { bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/jpeg' }
     },
     client: {
@@ -672,11 +673,15 @@ test('Rolo photo HTTP requires the dedicated gate, exact reader, and tighter lim
       },
     },
   })
-  const first = await handleHomeAssistantRequestWithDependencies(request(body), HOME, enabled)
+  const first = await handleHomeAssistantRequestWithDependencies(
+    request({ ...body, projectRef: PROJECT }), HOME, enabled,
+  )
   assert.equal(first.status, 200)
   assert.equal(photoReads, 1)
   assert.equal(receivedBytes, 3)
-  const second = await handleHomeAssistantRequestWithDependencies(request(body), HOME, enabled)
+  const second = await handleHomeAssistantRequestWithDependencies(
+    request({ ...body, projectRef: PROJECT }), HOME, enabled,
+  )
   assert.equal(second.status, 429)
   assert.equal(photoReads, 1)
 })
