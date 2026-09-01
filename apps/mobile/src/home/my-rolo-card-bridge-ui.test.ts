@@ -16,6 +16,7 @@ function section(source: string, start: string, end: string): string {
 
 const myRolo = read('app/home/[homeId]/care.tsx')
 const roloChat = read('app/home/[homeId]/rolo.tsx')
+const photoLibrary = read('src/rolo/photo-library.ts')
 const cardContract = read('src/home/rolodex.ts')
 
 test('My Rolo projects work and photo albums instead of emitting every photo as a top-level card', () => {
@@ -83,13 +84,15 @@ test('an exact My Rolo photo bridge is revalidated inside Rolo before consent', 
   assert.match(roloChat, /artifactRefValue && isArtifactRef\(artifactRefValue\)/)
 
   const artifactLoad = section(roloChat, 'void api.listArtifacts(homeId).then(artifacts => {', '\n    return () => { active = false }')
-  assert.match(artifactLoad, /const photos = artifacts\.filter\(item => item\.kind === 'photo'\)/)
-  assert.match(artifactLoad, /photos\.find\(item => item\.artifactRef === routeArtifactRef\)/)
+  assert.match(artifactLoad, /roloPhotoLibrary\([\s\S]*artifacts,[\s\S]*homeId,[\s\S]*photoProjectScopeRef,[\s\S]*scopedRouteArtifactRef/)
+  assert.match(artifactLoad, /setAuthorizedPhotos\(library\.authorizedPhotos\)[\s\S]*setSavedPhotos\(library\.pickerPhotos\)/)
+  assert.match(photoLibrary, /const authorizedPhotos = artifacts\.filter\(item => item\.homeRef === homeRef[\s\S]*item\.kind === 'photo'[\s\S]*!projectRef \|\| item\.projectRef === projectRef/)
+  assert.match(photoLibrary, /requestedPhoto[\s\S]*authorizedPhotos\.filter[\s\S]*slice\(0, ROLO_PHOTO_PICKER_LIMIT\)/)
 
-  const routeAttachment = section(roloChat, 'if (!routeArtifactRef) {', '\n  }, [homeId, routeArtifactRef, savedPhotos, visionEnabled])')
+  const routeAttachment = section(roloChat, 'if (!scopedRouteArtifactRef) {', '\n  }, [authorizedPhotos, homeId, photoProjectScopeRef, scopedRouteArtifactRef, visionEnabled])')
   assert.match(routeAttachment, /consumedRoutePhoto\.current = null/)
-  assert.match(routeAttachment, /if \(!visionEnabled \|\| consumedRoutePhoto\.current === routeArtifactRef\) return/)
-  assert.match(routeAttachment, /savedPhotos\.find\(item => item\.homeRef === homeId[\s\S]*item\.kind === 'photo'[\s\S]*item\.artifactRef === routeArtifactRef\)/)
+  assert.match(routeAttachment, /if \(!visionEnabled \|\| consumedRoutePhoto\.current === scopedRouteArtifactRef\) return/)
+  assert.match(routeAttachment, /authorizedPhotos\.find\(item => item\.homeRef === homeId[\s\S]*item\.kind === 'photo'[\s\S]*item\.artifactRef === scopedRouteArtifactRef[\s\S]*!photoProjectScopeRef \|\| item\.projectRef === photoProjectScopeRef\)/)
   assert.match(routeAttachment, /setAttachment\(\{ state: 'saved', artifact \}\)/)
   assert.match(routeAttachment, /setRememberedAttachment\(\{ artifactRef: artifact\.artifactRef, title: artifact\.displayName \}\)/)
   assert.match(routeAttachment, /setApprovedPhotoMessage\(null\)/)

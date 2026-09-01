@@ -6,6 +6,7 @@ import {
   acceptHouseholdInvitationBody,
   createHouseholdInvitationBody,
   currentHouseholdMembershipRef,
+  isCurrentHouseholdController,
   canCurrentHouseholdMemberUpdate,
   householdRevisionBody,
   householdRoleBody,
@@ -185,4 +186,12 @@ test('only active controllers and members can update or receive assigned work', 
   )
   assert.equal(canCurrentHouseholdMemberUpdate([controller, partner, viewer, revoked]), true)
   assert.equal(canCurrentHouseholdMemberUpdate([{ ...viewer, isCurrentPrincipal: true }]), false)
+  assert.equal(isCurrentHouseholdController([controller, partner, viewer, revoked]), true)
+  assert.equal(isCurrentHouseholdController([
+    { ...controller, isCurrentPrincipal: false },
+    { ...partner, isCurrentPrincipal: true },
+  ]), false)
+  assert.equal(isCurrentHouseholdController([
+    { ...controller, state: 'revoked', revokedAt: '2026-08-30T13:00:00.000Z' },
+  ]), false)
 })

@@ -126,8 +126,16 @@ export class HomeownerAuthService {
     return this.#mintHomeownerSession(data.user)
   }
 
-  async #mintHomeownerSession(user: { readonly id: string; readonly email?: string | null }): Promise<string | null> {
-    if (!user.email) return null
+  async #mintHomeownerSession(user: {
+    readonly id: string
+    readonly email?: string | null
+    readonly email_confirmed_at?: string | null
+  }): Promise<string | null> {
+    const email = emailSchema.safeParse(user.email)
+    const confirmedAt = typeof user.email_confirmed_at === 'string'
+      ? Date.parse(user.email_confirmed_at)
+      : Number.NaN
+    if (!email.success || !Number.isFinite(confirmedAt)) return null
 
     const now = this.#now()
     const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_SECONDS * 1000)
@@ -136,7 +144,7 @@ export class HomeownerAuthService {
       'homesrolo_complete_magic_link',
       {
         p_provider_user_id: user.id,
-        p_email_canonical: user.email.trim().toLowerCase(),
+        p_email_canonical: email.data.toLowerCase(),
         p_new_principal_ref: mintOpaqueRef('hprn'),
         p_session_hash: hashSessionHandle(sessionHandle),
         p_now: now.toISOString(),

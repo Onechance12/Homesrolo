@@ -1203,17 +1203,13 @@ export class SupabaseHomeownerProvider implements
 
   async listProfessionalInvitations(principalRef: string) {
     await this.#expireProjectInvitations()
-    const memberships = await this.listProfessionalMemberships(principalRef)
-    const organizationRefs = memberships
-      .filter(membership => membership.state === 'active')
-      .map(membership => membership.organizationRef)
-    if (organizationRefs.length === 0) return []
-    const { data, error } = await this.#client
-      .from('homesrolo_project_invitations')
-      .select('*')
-      .in('professional_organization_ref', organizationRefs)
-      .order('created_at', { ascending: false })
-      .limit(200)
+    const { data, error } = await this.#client.rpc(
+      'homesrolo_list_authorized_professional_invitations',
+      {
+        p_principal_ref: principalRef,
+        p_now: this.#now(),
+      },
+    )
     if (error || !Array.isArray(data)) throw new HomeownerApiError('unavailable')
     return data.map(projectInvitationFromRow)
   }
@@ -1231,7 +1227,18 @@ export class SupabaseHomeownerProvider implements
       .eq('source', 'professional_submission')
       .maybeSingle()
     if (error) throw new HomeownerApiError('unavailable')
+    const currentInvitations = await this.listProfessionalInvitations(input.principalRef)
+    const current = currentInvitations.find(row => row.invitationRef === invitation.invitationRef)
+    if (!current
+      || current.revision !== invitation.revision
+      || current.status !== invitation.status
+      || current.homeRef !== invitation.homeRef
+      || current.projectRef !== invitation.projectRef
+      || current.professionalOrganizationRef !== invitation.professionalOrganizationRef) {
+      throw new HomeownerApiError('not_found')
+    }
     if (data === null) return null
+    if (current.status !== 'accepted') throw new HomeownerApiError('not_found')
     const proposal = professionalProposalFromRow(data)
     if (proposal.professionalOrganizationRef !== invitation.professionalOrganizationRef
       || proposal.homeRef !== invitation.homeRef
@@ -1258,7 +1265,6 @@ export class SupabaseHomeownerProvider implements
       .eq('artifact_ref', input.artifactRef)
       .eq('home_ref', invitation.homeRef)
       .eq('project_ref', invitation.projectRef)
-      .eq('controller_principal_ref', invitation.controllerPrincipalRef)
       .eq('state', 'available')
       .maybeSingle()
     if (error) throw new HomeownerApiError('unavailable')
@@ -1285,14 +1291,40 @@ export class SupabaseHomeownerProvider implements
       && storageBucket !== DEV_PRIVATE_UPLOAD_BUCKET) {
       throw new HomeownerApiError('unavailable')
     }
+    const storageKey = requiredString(row, 'storage_key')
     const download = await this.#client.storage
       .from(storageBucket)
-      .download(requiredString(row, 'storage_key'))
+      .download(storageKey)
     if (download.error || !download.data) throw new HomeownerApiError('unavailable')
     const bytes = new Uint8Array(await download.data.arrayBuffer())
     if (bytes.byteLength !== artifact.byteLength
       || createHash('sha256').update(bytes).digest('hex') !== artifact.payloadSha256) {
       throw new HomeownerApiError('unavailable')
+    }
+    const { data: currentArtifactData, error: currentArtifactError } = await this.#client
+      .from('homesrolo_homeowner_artifacts')
+      .select('*')
+      .eq('artifact_ref', input.artifactRef)
+      .eq('home_ref', invitation.homeRef)
+      .eq('project_ref', invitation.projectRef)
+      .eq('state', 'available')
+      .maybeSingle()
+    if (currentArtifactError) throw new HomeownerApiError('unavailable')
+    if (currentArtifactData === null) throw new HomeownerApiError('not_found')
+    const currentArtifactRow = record(currentArtifactData)
+    const currentArtifact = artifactFromRow(currentArtifactRow)
+    const currentStorageBucket = currentArtifactRow.storage_bucket === undefined
+      ? LEGACY_PRIVATE_STORAGE_BUCKET
+      : requiredString(currentArtifactRow, 'storage_bucket')
+    if (currentArtifact.revision !== artifact.revision
+      || currentArtifact.payloadSha256 !== artifact.payloadSha256
+      || currentArtifact.byteLength !== artifact.byteLength
+      || currentArtifact.mediaType !== artifact.mediaType
+      || currentArtifact.contentClass !== artifact.contentClass
+      || currentArtifact.storageObjectRef !== artifact.storageObjectRef
+      || currentStorageBucket !== storageBucket
+      || requiredString(currentArtifactRow, 'storage_key') !== storageKey) {
+      throw new HomeownerApiError('not_found')
     }
     const currentInvitations = await this.listProfessionalInvitations(input.principalRef)
     const current = currentInvitations.find(row => row.invitationRef === invitation.invitationRef)

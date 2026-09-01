@@ -3,9 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import Ionicons from '@expo/vector-icons/Ionicons'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import type { ArtifactGeoPin, ArtifactKind, DeviceFile, ResolvedArtifactRecord } from '../../../src/api/model.ts'
+import type { ArtifactGeoPin, ArtifactKind, DeviceFile, HouseholdMember, ResolvedArtifactRecord } from '../../../src/api/model.ts'
 import { NativeApiError } from '../../../src/api/client.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
+import { canCurrentHouseholdMemberUpdate } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ArtifactFileCard } from '../../../src/components/ArtifactFileCard.tsx'
@@ -95,9 +96,8 @@ export default function MyHomeScreen() {
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const photoCheckupsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.photoCheckups
   const uploadsEnabled = auth.kind === 'signed_in' && auth.session.capabilities.uploads
-  const showUploadActions = uploadsEnabled || previewMode
   const loader = useCallback(async () => {
-    const [home, work, artifacts, checkupResult] = await Promise.all([
+    const [home, work, artifacts, checkupResult, householdResult] = await Promise.all([
       api.getHome(homeId),
       api.listWork(homeId),
       api.listArtifacts(homeId),
@@ -106,6 +106,9 @@ export default function MyHomeScreen() {
           .then(value => ({ value, unavailable: false as const }))
           .catch(() => ({ value: [], unavailable: true as const }))
         : Promise.resolve({ value: [], unavailable: false as const }),
+      api.getHousehold(homeId)
+        .then(household => ({ members: household.members, unavailable: false as const }))
+        .catch(() => ({ members: [] as readonly HouseholdMember[], unavailable: true as const })),
     ])
     return {
       home,
@@ -113,6 +116,8 @@ export default function MyHomeScreen() {
       artifacts,
       checkups: checkupResult.value,
       checkupsUnavailable: checkupResult.unavailable,
+      householdMembers: householdResult.members,
+      householdUnavailable: householdResult.unavailable,
     }
   }, [api, homeId, photoCheckupsEnabled])
   const resource = useResource(loader, auth.kind === 'signed_in')
@@ -146,6 +151,9 @@ export default function MyHomeScreen() {
   const [focusedPhotoAlbum, setFocusedPhotoAlbum] = useState<string | null>(null)
   const [albumPhotoLimit, setAlbumPhotoLimit] = useState(ALBUM_PHOTO_PAGE_SIZE)
   const [surface, setSurface] = useState<HomeSurface>(requestedLibraryFilter === 'all' ? 'rolo' : 'library')
+  const canOrganizeLibrary = resource.state.kind === 'ready'
+    && canCurrentHouseholdMemberUpdate(resource.state.value.householdMembers)
+  const showUploadActions = canOrganizeLibrary && (uploadsEnabled || previewMode)
 
   useEffect(() => {
     setFileLimit(FILE_PAGE_SIZE)
@@ -172,6 +180,17 @@ export default function MyHomeScreen() {
       setSurface('library')
     }
   }, [requestedLibraryFilter])
+
+  useEffect(() => {
+    if (resource.state.kind !== 'ready' || canOrganizeLibrary) return
+    setPendingPhoto(null)
+    setPendingGeoPin(null)
+    setLocationMessage(null)
+    setEditingPhoto(null)
+    setRemoveEditGeoPin(false)
+    editAttempt.current = null
+    if (surface === 'add') setSurface('library')
+  }, [canOrganizeLibrary, resource.state.kind, surface])
 
   const values = useMemo(() => {
     if (resource.state.kind !== 'ready') return null
@@ -311,6 +330,9 @@ export default function MyHomeScreen() {
     || focusedPhotoAlbum !== null
   const showPhotos = libraryFilter === 'all' || libraryFilter === 'photos' || libraryFilter === 'unfiled'
   const showFiles = libraryFilter !== 'photos'
+  const libraryMutationNotice = resource.state.value.householdUnavailable
+    ? 'We couldn’t verify your household role, so adding and organizing are paused. Your saved library and Home Watch history are still available.'
+    : 'This household access is view only. You can open the saved library and Home Watch history, but only Home admins and members can add or organize photos and files.'
 
   function clearLibraryFilters() {
     setLibraryQuery('')
@@ -323,6 +345,7 @@ export default function MyHomeScreen() {
   }
 
   async function selectPhoto(source: 'camera' | 'library') {
+    if (!canOrganizeLibrary) return
     if (previewMode) {
       setUploadError(PREVIEW_UPLOAD_NOTICE)
       return
@@ -345,7 +368,7 @@ export default function MyHomeScreen() {
   }
 
   async function requestPendingPhotoLocation() {
-    if (!pendingPhoto || pendingPhoto.source !== 'camera' || locationBusy || uploading) return
+    if (!canOrganizeLibrary || !pendingPhoto || pendingPhoto.source !== 'camera' || locationBusy || uploading) return
     setLocationBusy(true)
     setLocationMessage(null)
     try {
@@ -377,6 +400,7 @@ export default function MyHomeScreen() {
   }
 
   async function uploadFile(kind: Exclude<ArtifactKind, 'photo'>, source: 'document' | 'warranty') {
+    if (!canOrganizeLibrary) return
     if (previewMode) {
       setUploadError(PREVIEW_UPLOAD_NOTICE)
       return
@@ -400,7 +424,7 @@ export default function MyHomeScreen() {
   }
 
   async function savePendingPhoto() {
-    if (!pendingPhoto || !uploadsEnabled || uploading) return
+    if (!canOrganizeLibrary || !pendingPhoto || !uploadsEnabled || uploading) return
     let uploaded = false
     try {
       setUploadError(null)
@@ -445,6 +469,7 @@ export default function MyHomeScreen() {
   }
 
   function openPhotoEditor(artifact: ResolvedArtifactRecord) {
+    if (!canOrganizeLibrary) return
     setEditingPhoto(artifact)
     setEditingProject(artifact.projectRef ?? 'whole_home')
     setEditDraft({
@@ -460,7 +485,7 @@ export default function MyHomeScreen() {
   }
 
   async function savePhotoEditor() {
-    if (!editingPhoto || editingBusy) return
+    if (!canOrganizeLibrary || !editingPhoto || editingBusy) return
     let details: ReturnType<typeof normalizeExistingPhotoMetadataDraft>
     try {
       details = normalizeExistingPhotoMetadataDraft(editDraft)
@@ -649,7 +674,7 @@ export default function MyHomeScreen() {
       title={previewPhoto.title}
       detail={photoPreviewDetail(previewPhoto)}
       geoPin={previewPhoto.source === 'uploads' ? previewPhoto.artifact.geoPin : null}
-      {...(previewPhoto.source === 'uploads' ? {
+      {...(previewPhoto.source === 'uploads' && canOrganizeLibrary ? {
         actionLabel: 'Edit details',
         onAction: () => {
           openPhotoEditor(previewPhoto.artifact)
@@ -673,7 +698,8 @@ export default function MyHomeScreen() {
             detail={home.privateLocationLabel}
             onAccount={() => router.push({ pathname: '/home/[homeId]/account', params: { homeId } })}
           />
-          <HomeSurfaceTabs value={surface} onChange={setSurface} />
+          <HomeSurfaceTabs value={surface} showAdd={canOrganizeLibrary} onChange={setSurface} />
+          {!canOrganizeLibrary ? <Notice message={libraryMutationNotice} /> : null}
           <RoloDeck
             cards={rolo.cards}
             variant={compactDeck ? 'compact' : 'full'}
@@ -681,7 +707,9 @@ export default function MyHomeScreen() {
             renderMedia={renderRoloMedia}
             searchPlaceholder="Find anything your home remembers"
             emptyTitle="No matching cards"
-            emptyDetail="Try another divider or add something for this home to remember."
+            emptyDetail={canOrganizeLibrary
+              ? 'Try another divider or add something for this home to remember.'
+              : 'Try another divider or search this home’s saved history.'}
             fillAvailable
             peekSize={compactDeck ? 24 : 38}
             onOpen={card => void openRoloCard(card)}
@@ -707,7 +735,8 @@ export default function MyHomeScreen() {
         <Ionicons name="lock-closed" size={15} color={colors.mint} />
         <Text style={styles.privateLine}>Private to this home. You decide what leaves it.</Text>
       </View>
-      <HomeSurfaceTabs value={surface} onChange={setSurface} />
+      <HomeSurfaceTabs value={surface} showAdd={canOrganizeLibrary} onChange={setSurface} />
+      {!canOrganizeLibrary ? <Notice message={libraryMutationNotice} /> : null}
 
       {surface === 'add' && showUploadActions ? (
         <>
@@ -770,7 +799,7 @@ export default function MyHomeScreen() {
           {uploadError ? <Notice message={uploadError} /> : null}
           {uploadNotice ? <Text style={styles.savedLine}>{uploadNotice}</Text> : null}
         </>
-      ) : surface === 'add' ? (
+      ) : surface === 'add' && canOrganizeLibrary ? (
         <Notice message="Adding photos and files isn’t available right now. Your saved library is still here." />
       ) : null}
 
@@ -896,7 +925,7 @@ export default function MyHomeScreen() {
 
       {showPhotos ? (
         <>
-          {editingPhoto ? (
+          {editingPhoto && canOrganizeLibrary ? (
             <SavedPhotoDetailsEditor
               artifact={editingPhoto}
               work={values.historyNewest}
@@ -1098,8 +1127,9 @@ function MyRoloHeader({ title, detail, onAccount }: {
   )
 }
 
-function HomeSurfaceTabs({ value, onChange }: {
+function HomeSurfaceTabs({ value, showAdd, onChange }: {
   readonly value: HomeSurface
+  readonly showAdd: boolean
   readonly onChange: (value: HomeSurface) => void
 }) {
   const tabs: readonly { readonly value: HomeSurface; readonly label: string; readonly icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -1109,7 +1139,7 @@ function HomeSurfaceTabs({ value, onChange }: {
   ]
   return (
     <View accessibilityRole="tablist" style={styles.surfaceTabs}>
-      {tabs.map(tab => {
+      {tabs.filter(tab => tab.value !== 'add' || showAdd).map(tab => {
         const selected = tab.value === value
         return (
           <Pressable

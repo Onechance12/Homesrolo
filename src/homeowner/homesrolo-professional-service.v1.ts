@@ -294,6 +294,7 @@ export class HomesroloProfessionalService {
     )
     if (created.homeRef !== grant.homeRef
       || created.projectRef !== project.projectRef
+      || created.controllerPrincipalRef !== project.controllerPrincipalRef
       || created.professionalOrganizationRef !== command.professionalOrganizationRef
       || created.invitedByPrincipalRef !== grant.principalRef
       || created.disclosureDigest !== digest(disclosure)

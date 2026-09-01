@@ -48,9 +48,17 @@ const STATUS_OPTIONS = Object.freeze([
   'unreviewed', 'included', 'excluded', 'allowance', 'not_stated',
 ] as const satisfies readonly QuoteDraftStatus[])
 
-export function ProjectOutsideProposalWorkspace({ homeId, work, onVisitSaved }: {
+export function ProjectOutsideProposalWorkspace({
+  homeId,
+  work,
+  canManageProposals,
+  canScheduleVisits,
+  onVisitSaved,
+}: {
   readonly homeId: string
   readonly work: WorkRecord
+  readonly canManageProposals: boolean
+  readonly canScheduleVisits: boolean
   readonly onVisitSaved?: (entry: ProjectActivityRecord) => void
 }) {
   const { state: auth, api } = useSession()
@@ -167,14 +175,17 @@ export function ProjectOutsideProposalWorkspace({ homeId, work, onVisitSaved }: 
             work={work}
             quotes={entered}
             pdfs={pdfs}
+            canManage={canManageProposals}
             onReload={resource.reload}
           />
-          <EstimateVisit
-            api={api}
-            homeId={homeId}
-            work={work}
-            {...(onVisitSaved ? { onVisitSaved } : {})}
-          />
+          {canScheduleVisits ? (
+            <EstimateVisit
+              api={api}
+              homeId={homeId}
+              work={work}
+              {...(onVisitSaved ? { onVisitSaved } : {})}
+            />
+          ) : null}
         </>
       ) : null}
     </View>
@@ -343,12 +354,13 @@ function EstimateVisit({ api, homeId, work, onVisitSaved }: {
   )
 }
 
-function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, onReload }: {
+function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, canManage, onReload }: {
   readonly api: ReturnType<typeof useSession>['api']
   readonly homeId: string
   readonly work: WorkRecord
   readonly quotes: readonly ProjectQuote[]
   readonly pdfs: readonly ArtifactRecord[]
+  readonly canManage: boolean
   readonly onReload: () => void
 }) {
   const rows = scopeRowsFor(work.category)
@@ -386,13 +398,14 @@ function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, onReload }:
   }
 
   function startNew() {
+    if (!canManage) return
     resetForm(false)
     setNotice(null)
     setOpen(true)
   }
 
   function startEdit(quote: ProjectQuote) {
-    if (quote.source !== 'homeowner_entry') return
+    if (!canManage || quote.source !== 'homeowner_entry') return
     pending.current = null
     setEditing(quote)
     setContractorLabel(quote.contractorLabel)
@@ -418,7 +431,7 @@ function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, onReload }:
     const cleanLabel = contractorLabel.trim()
     const cleanNotes = notes.trim()
     const scopePayload = scopeFromDraft(scope, rows, preservedScope)
-    if (saveLock.current || !cleanLabel || scopePayload === null
+    if (!canManage || saveLock.current || !cleanLabel || scopePayload === null
       || (proposalDate && !isCalendarDate(proposalDate))) return
     const fields = {
       contractorLabel: cleanLabel,
@@ -496,7 +509,7 @@ function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, onReload }:
               loadLinkedPdf: () => api.readArtifactContent(homeId, linkedPdf),
             } : {})}
             rows={rows}
-            onEdit={() => startEdit(quote)}
+            {...(canManage ? { onEdit: () => startEdit(quote) } : {})}
           />
         )
       })}
@@ -504,7 +517,9 @@ function HomeownerProposalRecords({ api, homeId, work, quotes, pdfs, onReload }:
         <Notice message="No outside proposals saved yet. Company proposals submitted through an invitation appear in the comparison above." />
       ) : null}
 
-      {!open ? (
+      {!canManage ? (
+        <Notice message="A Home admin manages saved proposal records and contractor selections. You can review the proposals shared with this work." />
+      ) : !open ? (
         <Button label="Save an outside proposal" icon="document-attach-outline" onPress={startNew} />
       ) : (
         <Card>
@@ -605,7 +620,7 @@ function ManualProposalCard({ quote, linkedPdf, loadLinkedPdf, rows, onEdit }: {
   readonly linkedPdf?: ArtifactRecord
   readonly loadLinkedPdf?: () => Promise<ArtifactContent>
   readonly rows: readonly QuoteScopeRow[]
-  readonly onEdit: () => void
+  readonly onEdit?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const reviewed = reviewedScopeCount(quote.scope)
@@ -656,7 +671,7 @@ function ManualProposalCard({ quote, linkedPdf, loadLinkedPdf, rows, onEdit }: {
             onPress={() => setExpanded(value => !value)}
           />
         ) : null}
-        <Button label="Edit record" quiet icon="create-outline" onPress={onEdit} />
+        {onEdit ? <Button label="Edit record" quiet icon="create-outline" onPress={onEdit} /> : null}
       </View>
     </Card>
   )

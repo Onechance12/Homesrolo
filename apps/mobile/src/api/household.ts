@@ -134,6 +134,13 @@ export function canCurrentHouseholdMemberUpdate(
   return current?.role === 'workspace_controller' || current?.role === 'member'
 }
 
+export function isCurrentHouseholdController(
+  members: readonly HouseholdMember[],
+): boolean {
+  const current = members.find(member => member.state === 'active' && member.isCurrentPrincipal)
+  return current?.role === 'workspace_controller'
+}
+
 export function createHouseholdInvitationBody(
   input: CreateHouseholdInvitationInput,
 ): CreateHouseholdInvitationInput | null {

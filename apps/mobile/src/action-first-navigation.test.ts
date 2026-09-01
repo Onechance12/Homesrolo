@@ -10,12 +10,12 @@ const roloScreen = readFileSync(
 test('fresh Start intents open cleanly while project intents preserve their exact thread', () => {
   assert.match(
     roloScreen,
-    /if \(prompt === undefined\) \{[\s\S]*consumedPrompt\.current = null[\s\S]*promptIdentity[\s\S]*if \(!routeProjectRef\) \{[\s\S]*planRoloHydration\(prompt, null\)[\s\S]*projectRef: null/,
+    /if \(prompt === undefined\) \{[\s\S]*consumedPrompt\.current = null[\s\S]*promptIdentity[\s\S]*if \(!scopedRouteProjectRef\) \{[\s\S]*planRoloHydration\(prompt, null\)[\s\S]*projectRef: null/,
     'a fresh general prompt is consumed once and starts from the blank Rolo front door',
   )
   assert.match(
     roloScreen,
-    /const projectScope = \{ \.\.\.persistenceScope, projectRef: routeProjectRef \}[\s\S]*roloStorage\.read\(projectScope\)[\s\S]*planRoloHydration\(prompt, stored, routeProjectRef\)/,
+    /const projectScope = \{ \.\.\.persistenceScope, projectRef: scopedRouteProjectRef \}[\s\S]*roloStorage\.read\(projectScope\)[\s\S]*planRoloHydration\(prompt, stored, scopedRouteProjectRef\)/,
     'an exact work route reads its saved project thread before using a fallback prompt',
   )
   assert.match(roloScreen, /persistenceWritableScope !== persistenceKey/)
@@ -35,6 +35,64 @@ test('fresh Start intents open cleanly while project intents preserve their exac
     /const version = conversationVersion\.current[\s\S]*roloRequestCanCommit\(version, conversationVersion\.current, mounted\.current\)/,
     'an older request cannot write its reply into the newly-started conversation',
   )
+})
+
+test('Rolo validates the exact active Work route before using any project-scoped state', () => {
+  assert.match(
+    roloScreen,
+    /const visibleWork = work\.filter\(item => !item\.archived\)[\s\S]*visibleWork\.some\(item => item\.projectRef === routeProjectRef\)[\s\S]*\? 'authorized'[\s\S]*: 'rejected'/,
+    'only an exact active Work item can authorize the requested project scope',
+  )
+  assert.match(
+    roloScreen,
+    /routeProjectValidation\.requestedProjectRef[\s\S]*=== \(routeProjectRef \?\? null\)[\s\S]*routeProjectValidation\.status !== 'pending'[\s\S]*routeProjectValidation\.status !== 'unavailable'/,
+    'a stale validation result from another route cannot release the hydration fence',
+  )
+  assert.match(
+    roloScreen,
+    /persistenceScope\.principalRef[\s\S]*persistenceScope\.homeRef[\s\S]*scopedRouteProjectRef \?\? 'general'/,
+    'the local key uses only the project ref that survived exact-route validation',
+  )
+  assert.match(
+    roloScreen,
+    /const scopedRouteArtifactRef = \(!routeProjectRef \|\| scopedRouteProjectRef\)[\s\S]*\? routeArtifactRef[\s\S]*: undefined/,
+    'a project deep link cannot attach its routed photo until that project is authorized',
+  )
+  assert.match(
+    roloScreen,
+    /const photoProjectScopeRef = conversationProjectRef \?\? scopedRouteProjectRef[\s\S]*const availableSavedPhotos = savedPhotos\.filter\(item => item\.homeRef === homeId[\s\S]*item\.projectRef === photoProjectScopeRef/,
+    'the entire saved-photo picker follows the active conversation, not only the route parameter',
+  )
+  assert.ok(
+    (roloScreen.match(/!photoProjectScopeRef \|\| item\.projectRef === photoProjectScopeRef/g) ?? []).length >= 3,
+    'every saved-photo lookup path binds an active project conversation to that exact Work item',
+  )
+  assert.match(
+    roloScreen,
+    /function chooseSavedPhoto[\s\S]*artifact\.homeRef !== homeId[\s\S]*artifact\.projectRef !== photoProjectScopeRef/,
+    'the picker handler independently rejects a stale or foreign photo object',
+  )
+  assert.match(
+    roloScreen,
+    /attachment\?\.state === 'saved'[\s\S]*attachment\.artifact\.homeRef !== homeId[\s\S]*attachment\.artifact\.projectRef !== photoProjectScopeRef[\s\S]*That saved photo is not part of this Work item/,
+    'Send rechecks the selected saved photo at the last client-side boundary',
+  )
+  assert.match(
+    roloScreen,
+    /loadedPhotoScope !== photoLibraryScopeKey[\s\S]*item\.projectRef === photoProjectScopeRef[\s\S]*setPhotoReview\(null\)/,
+    'a restored photo review is removed if fresh exact-project metadata no longer authorizes it',
+  )
+  assert.match(
+    roloScreen,
+    /setAuthorizedPhotos\(library\.authorizedPhotos\)[\s\S]*setSavedPhotos\(library\.pickerPhotos\)[\s\S]*authorizedPhotos\.find\(item => item\.homeRef === homeId/,
+    'the full fresh authorization set, rather than the capped picker, restores an exact routed photo',
+  )
+  assert.match(
+    roloScreen,
+    /const displayedPhotoReview = photoReview[\s\S]*authorizedPhotos\.some\(photo => photo\.homeRef === homeId[\s\S]*photo\.projectRef === photoProjectScopeRef/,
+    'an older persisted review stays visible when it remains in the full exact-project authorization set',
+  )
+  assert.match(roloScreen, /No project conversation was loaded\./)
 })
 
 test('a stale Rolo request cannot release the active request guard', () => {

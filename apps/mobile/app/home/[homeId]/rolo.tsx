@@ -24,7 +24,10 @@ import type {
   WorkRecord,
 } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
-import { assignableHouseholdMembers } from '../../../src/api/household.ts'
+import {
+  assignableHouseholdMembers,
+  canCurrentHouseholdMemberUpdate,
+} from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
@@ -52,6 +55,7 @@ import {
   type PersistedRoloPhoto,
 } from '../../../src/rolo/conversation-persistence.ts'
 import { roloConversationAccessReady } from '../../../src/rolo/conversation-access.ts'
+import { roloPhotoLibrary } from '../../../src/rolo/photo-library.ts'
 import { roloRequestCanCommit } from '../../../src/rolo/request-generation.ts'
 import { workCreateFieldsFromRoloDraft } from '../../../src/rolo/work-draft.ts'
 import {
@@ -96,6 +100,11 @@ type ScreenTurn = RoloTurn & {
 }
 
 type RoloSuggestion = Readonly<Pick<RoloReply, 'destination' | 'projectRef'>>
+
+type RouteProjectValidation = Readonly<{
+  readonly requestedProjectRef: string | null
+  readonly status: 'not_requested' | 'pending' | 'authorized' | 'rejected' | 'unavailable'
+}>
 
 export default function RoloScreen() {
   const homeId = useHomeId()
@@ -146,9 +155,11 @@ export default function RoloScreen() {
   const [inlineNote, setInlineNote] = useState<string | null>(null)
   const [rememberedAttachment, setRememberedAttachment] = useState<PersistedRoloPhoto | null>(null)
   const [approvedPhotoMessage, setApprovedPhotoMessage] = useState<string | null>(null)
+  const [authorizedPhotos, setAuthorizedPhotos] = useState<readonly ArtifactRecord[]>([])
   const [savedPhotos, setSavedPhotos] = useState<readonly ArtifactRecord[]>([])
   const [photosLoading, setPhotosLoading] = useState(false)
   const [photosError, setPhotosError] = useState(false)
+  const [loadedPhotoScope, setLoadedPhotoScope] = useState<string | null>(null)
   const [photoReview, setPhotoReview] = useState<RoloReply['photoReview']>(null)
   const [reviewExpanded, setReviewExpanded] = useState(false)
   const [photoReviewTitle, setPhotoReviewTitle] = useState<string | null>(null)
@@ -161,6 +172,12 @@ export default function RoloScreen() {
   const [homeSummary, setHomeSummary] = useState<HomeSummary | null>(null)
   const [knownWork, setKnownWork] = useState<readonly WorkRecord[]>([])
   const [householdMembers, setHouseholdMembers] = useState<readonly HouseholdMember[]>([])
+  const [canUpdateSharedHome, setCanUpdateSharedHome] = useState(false)
+  const [routeProjectValidation, setRouteProjectValidation] = useState<RouteProjectValidation>(() => ({
+    requestedProjectRef: routeProjectRef ?? null,
+    status: routeProjectRef ? 'pending' : 'not_requested',
+  }))
+  const [routeProjectValidationAttempt, setRouteProjectValidationAttempt] = useState(0)
   const [authorizedHomeScope, setAuthorizedHomeScope] = useState<string | null>(null)
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
@@ -181,9 +198,30 @@ export default function RoloScreen() {
   const homePersistenceKey = persistenceScope
     ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}`
     : null
-  const persistenceKey = persistenceScope
-    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}.${routeProjectRef ?? 'general'}`
+  const routeProjectValidationMatches = routeProjectValidation.requestedProjectRef
+    === (routeProjectRef ?? null)
+  const projectScopeUnavailable = routeProjectValidationMatches
+    && routeProjectValidation.status === 'unavailable'
+  const projectScopeReady = routeProjectValidationMatches
+    && routeProjectValidation.status !== 'pending'
+    && routeProjectValidation.status !== 'unavailable'
+  const scopedRouteProjectRef = routeProjectRef
+    && routeProjectValidationMatches
+    && routeProjectValidation.status === 'authorized'
+    ? routeProjectRef
     : null
+  const scopedRouteArtifactRef = (!routeProjectRef || scopedRouteProjectRef)
+    ? routeArtifactRef
+    : undefined
+  const persistenceKey = persistenceScope
+    ? `${persistenceScope.principalRef}.${persistenceScope.homeRef}.${scopedRouteProjectRef ?? 'general'}`
+    : null
+  const photoProjectScopeRef = conversationProjectRef ?? scopedRouteProjectRef
+  const photoLibraryScopeKey = projectScopeReady && homePersistenceKey
+    ? `${homePersistenceKey}.${photoProjectScopeRef ?? 'general'}`
+    : null
+  const availableSavedPhotos = savedPhotos.filter(item => item.homeRef === homeId
+    && (!photoProjectScopeRef || item.projectRef === photoProjectScopeRef))
 
   useFocusEffect(useCallback(() => {
     let active = true
@@ -192,10 +230,15 @@ export default function RoloScreen() {
     setHomeSummary(null)
     setKnownWork([])
     setHouseholdMembers([])
+    setCanUpdateSharedHome(false)
+    setRouteProjectValidation({
+      requestedProjectRef: routeProjectRef ?? null,
+      status: routeProjectRef ? 'pending' : 'not_requested',
+    })
     setAuthorizedHomeScope(null)
     setHydratedScope(null)
     setPersistenceWritableScope(null)
-    resetConversationState('', routeProjectRef ?? null)
+    resetConversationState()
     const closeAccessFence = () => {
       active = false
       hydrationGeneration.current += 1
@@ -220,7 +263,7 @@ export default function RoloScreen() {
       setAuthorizedHomeScope(null)
       setHydratedScope(null)
       setPersistenceWritableScope(null)
-      resetConversationState('', routeProjectRef ?? null)
+      resetConversationState()
       if (principalRef) {
         void roloStorage.clearHome({
           principalRef,
@@ -231,41 +274,62 @@ export default function RoloScreen() {
 
     void api.listWork(homeId).then(work => {
       if (!active) return
-      setKnownWork(work.filter(item => !item.archived))
+      const visibleWork = work.filter(item => !item.archived)
+      setKnownWork(visibleWork)
+      setRouteProjectValidation({
+        requestedProjectRef: routeProjectRef ?? null,
+        status: routeProjectRef
+          ? visibleWork.some(item => item.projectRef === routeProjectRef)
+            ? 'authorized'
+            : 'rejected'
+          : 'not_requested',
+      })
     }).catch(() => {
-      if (active) setKnownWork([])
+      if (!active) return
+      setKnownWork([])
+      setRouteProjectValidation({
+        requestedProjectRef: routeProjectRef ?? null,
+        status: routeProjectRef ? 'unavailable' : 'not_requested',
+      })
     })
 
     void api.getHousehold(homeId).then(household => {
       if (!active) return
       setHouseholdMembers(assignableHouseholdMembers(household.members))
+      setCanUpdateSharedHome(canCurrentHouseholdMemberUpdate(household.members))
     }).catch(() => {
-      if (active) setHouseholdMembers([])
+      if (!active) return
+      setHouseholdMembers([])
+      setCanUpdateSharedHome(false)
     })
     return closeAccessFence
-  }, [api, auth.kind, homeId, homePersistenceKey, principalRef, roloStorage, routeProjectRef]))
+  }, [
+    api, auth.kind, homeId, homePersistenceKey, principalRef, roloStorage,
+    routeProjectRef, routeProjectValidationAttempt,
+  ]))
 
   useEffect(() => {
-    if (!persistenceScope || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
+    if (!projectScopeReady || !persistenceScope
+      || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
     const generation = hydrationGeneration.current + 1
     hydrationGeneration.current = generation
     conversationVersion.current += 1
-    resetConversationState('', routeProjectRef ?? null)
+    resetConversationState('', scopedRouteProjectRef)
     setHydratedScope(null)
     setPersistenceWritableScope(null)
     // The prompt effect below owns an explicit incoming conversation. Starting
     // a read here would let old state briefly win that race.
     if (prompt !== undefined) return
-    if (!routeProjectRef) {
+    if (!scopedRouteProjectRef) {
       setPersistenceWritableScope(persistenceKey)
       setHydratedScope(persistenceKey)
       void roloStorage.remove({ ...persistenceScope, projectRef: null }).catch(() => undefined)
       return
     }
-    const projectScope = { ...persistenceScope, projectRef: routeProjectRef }
+    const projectScope = { ...persistenceScope, projectRef: scopedRouteProjectRef }
     void roloStorage.read(projectScope).then(stored => {
       if (generation !== hydrationGeneration.current || !mounted.current) return
-      const plan = planRoloHydration(undefined, stored, routeProjectRef)
+      const plan = planRoloHydration(undefined, stored, scopedRouteProjectRef)
       if (plan.kind === 'stored') {
         const conversation = plan.conversation
         setConversationProjectRef(conversation.projectRef)
@@ -285,7 +349,7 @@ export default function RoloScreen() {
         setPhotoReviewTitle(conversation.photoReview?.photo.title ?? null)
         setPhotoReviewRef(conversation.photoReview?.photo.artifactRef ?? null)
       } else {
-        setConversationProjectRef(routeProjectRef ?? null)
+        setConversationProjectRef(scopedRouteProjectRef)
       }
       setPersistenceWritableScope(persistenceKey)
       setHydratedScope(persistenceKey)
@@ -298,15 +362,16 @@ export default function RoloScreen() {
     // `prompt` is intentionally read only at scope entry. Later prompts are
     // handled below without re-running storage hydration after the URL clears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorizedHomeScope, frontDoor, homeId, homePersistenceKey, principalRef, redirectToPeople, roloStorage, routeProjectRef])
+  }, [authorizedHomeScope, frontDoor, homeId, homePersistenceKey, principalRef, projectScopeReady, redirectToPeople, roloStorage, scopedRouteProjectRef])
 
   useEffect(() => {
     if (prompt === undefined) {
       consumedPrompt.current = null
       return
     }
-    if (!persistenceScope || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
-    const promptIdentity = `${homeId}\u0000${routeProjectRef ?? ''}\u0000${routeArtifactRef ?? ''}\u0000${prompt}`
+    if (!projectScopeReady || !persistenceScope
+      || authorizedHomeScope !== homePersistenceKey || redirectToPeople) return
+    const promptIdentity = `${homeId}\u0000${scopedRouteProjectRef ?? ''}\u0000${scopedRouteArtifactRef ?? ''}\u0000${prompt}`
     if (consumedPrompt.current === promptIdentity) return
     consumedPrompt.current = promptIdentity
     const generation = hydrationGeneration.current + 1
@@ -314,7 +379,7 @@ export default function RoloScreen() {
     conversationVersion.current += 1
     setHydratedScope(null)
     setPersistenceWritableScope(null)
-    if (!routeProjectRef) {
+    if (!scopedRouteProjectRef) {
       const plan = planRoloHydration(prompt, null)
       resetConversationState(plan.kind === 'prompt' ? plan.input : '')
       setPersistenceWritableScope(persistenceKey)
@@ -322,11 +387,11 @@ export default function RoloScreen() {
       void roloStorage.remove({ ...persistenceScope, projectRef: null }).catch(() => undefined)
       return
     }
-    resetConversationState('', routeProjectRef)
-    const projectScope = { ...persistenceScope, projectRef: routeProjectRef }
+    resetConversationState('', scopedRouteProjectRef)
+    const projectScope = { ...persistenceScope, projectRef: scopedRouteProjectRef }
     void roloStorage.read(projectScope).then(stored => {
       if (generation !== hydrationGeneration.current || !mounted.current) return
-      const plan = planRoloHydration(prompt, stored, routeProjectRef)
+      const plan = planRoloHydration(prompt, stored, scopedRouteProjectRef)
       if (plan.kind === 'stored') {
         const conversation = plan.conversation
         setTurns(conversation.turns.map(turn => ({
@@ -354,7 +419,7 @@ export default function RoloScreen() {
       setInput(prompt)
       setHydratedScope(persistenceKey)
     })
-  }, [authorizedHomeScope, homeId, homePersistenceKey, persistenceKey, principalRef, prompt, redirectToPeople, roloStorage, routeArtifactRef, routeProjectRef])
+  }, [authorizedHomeScope, homeId, homePersistenceKey, persistenceKey, principalRef, projectScopeReady, prompt, redirectToPeople, roloStorage, scopedRouteArtifactRef, scopedRouteProjectRef])
 
   useEffect(() => {
     if (!persistenceScope || !persistenceKey
@@ -384,9 +449,11 @@ export default function RoloScreen() {
   useEffect(() => {
     let active = true
     if (!visionEnabled) {
+      setAuthorizedPhotos([])
       setSavedPhotos([])
       setPhotosLoading(false)
       setPhotosError(false)
+      setLoadedPhotoScope(null)
       setAttachment(null)
       setPendingPhotoSource(null)
       setCameraPhotoDraft(null)
@@ -401,51 +468,92 @@ export default function RoloScreen() {
       setPhotoReviewRef(null)
       return () => { active = false }
     }
+    if (!photoLibraryScopeKey) {
+      setAuthorizedPhotos([])
+      setSavedPhotos([])
+      setPhotosLoading(false)
+      setPhotosError(false)
+      setLoadedPhotoScope(null)
+      return () => { active = false }
+    }
+    const loadingScope = photoLibraryScopeKey
     setPhotosLoading(true)
     setPhotosError(false)
+    setLoadedPhotoScope(null)
     void api.listArtifacts(homeId).then(artifacts => {
       if (!active) return
-      const photos = artifacts.filter(item => item.kind === 'photo')
-      const requestedPhoto = routeArtifactRef
-        ? photos.find(item => item.artifactRef === routeArtifactRef)
-        : undefined
-      setSavedPhotos(requestedPhoto
-        ? [requestedPhoto, ...photos.filter(item => item.artifactRef !== requestedPhoto.artifactRef)].slice(0, 12)
-        : photos.slice(0, 12))
+      const library = roloPhotoLibrary(
+        artifacts,
+        homeId,
+        photoProjectScopeRef,
+        scopedRouteArtifactRef,
+      )
+      setAuthorizedPhotos(library.authorizedPhotos)
+      setSavedPhotos(library.pickerPhotos)
       setPhotosLoading(false)
+      setLoadedPhotoScope(loadingScope)
     }).catch(() => {
       if (!active) return
+      setAuthorizedPhotos([])
+      setSavedPhotos([])
       setPhotosLoading(false)
       setPhotosError(true)
+      setLoadedPhotoScope(null)
     })
     return () => { active = false }
-  }, [api, homeId, routeArtifactRef, visionEnabled])
+  }, [api, homeId, photoLibraryScopeKey, photoProjectScopeRef, scopedRouteArtifactRef, visionEnabled])
 
   useEffect(() => {
-    if (!routeArtifactRef) {
+    if (!scopedRouteArtifactRef) {
       consumedRoutePhoto.current = null
       return
     }
-    if (!visionEnabled || consumedRoutePhoto.current === routeArtifactRef) return
-    const artifact = savedPhotos.find(item => item.homeRef === homeId
+    if (!visionEnabled || consumedRoutePhoto.current === scopedRouteArtifactRef) return
+    const artifact = authorizedPhotos.find(item => item.homeRef === homeId
       && item.kind === 'photo'
-      && item.artifactRef === routeArtifactRef)
+      && item.artifactRef === scopedRouteArtifactRef
+      && (!photoProjectScopeRef || item.projectRef === photoProjectScopeRef))
     if (!artifact) return
-    consumedRoutePhoto.current = routeArtifactRef
+    consumedRoutePhoto.current = scopedRouteArtifactRef
     setAttachment({ state: 'saved', artifact })
     setRememberedAttachment({ artifactRef: artifact.artifactRef, title: artifact.displayName })
     setApprovedPhotoMessage(null)
     setPhotoPickerOpen(true)
     setError(null)
-  }, [homeId, routeArtifactRef, savedPhotos, visionEnabled])
+  }, [authorizedPhotos, homeId, photoProjectScopeRef, scopedRouteArtifactRef, visionEnabled])
 
   useEffect(() => {
     if (!rememberedAttachment || attachment || !visionEnabled) return
-    const artifact = savedPhotos.find(item => item.homeRef === homeId
+    const artifact = authorizedPhotos.find(item => item.homeRef === homeId
       && item.kind === 'photo'
+      && (!photoProjectScopeRef || item.projectRef === photoProjectScopeRef)
       && item.artifactRef === rememberedAttachment.artifactRef)
     if (artifact) setAttachment({ state: 'saved', artifact })
-  }, [attachment, homeId, rememberedAttachment, savedPhotos, visionEnabled])
+  }, [attachment, authorizedPhotos, homeId, photoProjectScopeRef, rememberedAttachment, visionEnabled])
+
+  useEffect(() => {
+    if (!photoProjectScopeRef || !photoLibraryScopeKey
+      || loadedPhotoScope !== photoLibraryScopeKey) return
+    const allowed = (artifactRef: string) => authorizedPhotos.some(item => item.homeRef === homeId
+      && item.kind === 'photo'
+      && item.projectRef === photoProjectScopeRef
+      && item.artifactRef === artifactRef)
+    if (photoReview && (!photoReviewRef || !allowed(photoReviewRef))) {
+      setPhotoReview(null)
+      setReviewExpanded(false)
+      setPhotoReviewTitle(null)
+      setPhotoReviewRef(null)
+    }
+    if (rememberedAttachment && !allowed(rememberedAttachment.artifactRef)) {
+      setRememberedAttachment(null)
+      setApprovedPhotoMessage(null)
+    }
+    setAttachment(current => current?.state === 'saved'
+      && !allowed(current.artifact.artifactRef) ? null : current)
+  }, [
+    homeId, loadedPhotoScope, photoLibraryScopeKey, photoProjectScopeRef, photoReview,
+    authorizedPhotos, photoReviewRef, rememberedAttachment,
+  ])
 
   useEffect(() => {
     if (turns.length === 0 && !busy && !photoPickerOpen && !attachment) return
@@ -472,7 +580,23 @@ export default function RoloScreen() {
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
   }
-  if (!roloConversationAccessReady({
+  if (projectScopeUnavailable) {
+    return (
+      <Page>
+        <HomeHeader section="Rolo" title="This Work conversation could not open." showAccount={false} />
+        <Notice
+          message="Rolo could not verify that this Work item is active in your home. No project conversation was loaded."
+          actionLabel="Try again"
+          onAction={() => setRouteProjectValidationAttempt(value => value + 1)}
+        />
+        <Button
+          label="Open a private Rolo chat"
+          onPress={() => router.replace({ pathname: '/home/[homeId]/rolo', params: { homeId } })}
+        />
+      </Page>
+    )
+  }
+  if (!projectScopeReady || !roloConversationAccessReady({
     persistenceKey,
     homePersistenceKey,
     authorizedHomeScope,
@@ -494,7 +618,8 @@ export default function RoloScreen() {
   }
 
   async function chooseNewPhoto(source: 'camera' | 'library') {
-    if (previewMode || !uploadsEnabled || busy || photoBusy || locationBusy) return
+    if (!canUpdateSharedHome || previewMode || !uploadsEnabled
+      || busy || photoBusy || locationBusy) return
     const version = conversationVersion.current
     setPhotoBusy(true)
     setError(null)
@@ -530,7 +655,9 @@ export default function RoloScreen() {
   }
 
   function chooseSavedPhoto(artifact: ArtifactRecord) {
-    if (busy || photoBusy || locationBusy || artifact.kind !== 'photo') return
+    if (busy || photoBusy || locationBusy || artifact.kind !== 'photo'
+      || artifact.homeRef !== homeId
+      || (photoProjectScopeRef && artifact.projectRef !== photoProjectScopeRef)) return
     setAttachment({ state: 'saved', artifact })
     setPendingPhotoSource(null)
     setCameraPhotoDraft(null)
@@ -554,7 +681,7 @@ export default function RoloScreen() {
   }
 
   async function toggleCurrentPhotoLocation() {
-    if (busy || locationBusy || attachment?.state !== 'pending'
+    if (!canUpdateSharedHome || busy || locationBusy || attachment?.state !== 'pending'
       || pendingPhotoSource !== 'camera' || !cameraPhotoDraft) return
     if (cameraPhotoDraft.pinCurrentLocation) {
       setCameraPhotoDraft({ ...cameraPhotoDraft, pinCurrentLocation: false })
@@ -586,6 +713,17 @@ export default function RoloScreen() {
   async function send(message = input) {
     const clean = message.trim()
     if (!clean || busy || locationBusy || sendInFlight.current) return
+    if (attachment?.state === 'pending' && !canUpdateSharedHome) {
+      setError('Only an adult household member can save a new photo. Remove it or use a photo already shared with this home.')
+      return
+    }
+    if (attachment?.state === 'saved'
+      && (attachment.artifact.homeRef !== homeId
+        || (photoProjectScopeRef
+          && attachment.artifact.projectRef !== photoProjectScopeRef))) {
+      setError('That saved photo is not part of this Work item. Remove it or choose a photo from this conversation.')
+      return
+    }
     if (attachment && approvedPhotoMessage !== roloPhotoConsentKey(attachment, clean)) {
       setError('Approve this photo for this message, or remove it before sending.')
       return
@@ -664,6 +802,10 @@ export default function RoloScreen() {
         setCameraPhotoDraft(null)
         setPendingGeoPin(null)
         setLocationNote(null)
+        setAuthorizedPhotos(current => [
+          organizedPhoto,
+          ...current.filter(photo => photo.artifactRef !== organizedPhoto.artifactRef),
+        ])
         setSavedPhotos(current => [
           organizedPhoto,
           ...current.filter(photo => photo.artifactRef !== organizedPhoto.artifactRef),
@@ -743,47 +885,59 @@ export default function RoloScreen() {
   }
 
   async function saveProposal() {
-    if (!proposal) return
+    if (!proposal || !canUpdateSharedHome || saving) return
     if (proposal.assignedMembershipRef
       && !householdMembers.some(member => member.membershipRef === proposal.assignedMembershipRef)) {
       setError('That household assignment is no longer available. Ask Rolo to assign the task again.')
       return
     }
+    const version = conversationVersion.current
     const photoToFile = reviewedNewPhoto
     setSaving(true)
     setError(null)
     try {
       const createFields = workCreateFieldsFromRoloDraft(proposal, localCalendarDate())
       const intent = JSON.stringify(createFields)
-      if (!pendingCreate.current || pendingCreate.current.intent !== intent) {
-        pendingCreate.current = { intent, commandRef: await api.newCommandRef() }
+      let command = pendingCreate.current
+      if (!command || command.intent !== intent) {
+        const commandRef = await api.newCommandRef()
+        if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
+        command = { intent, commandRef }
+        pendingCreate.current = command
       }
       const work = await api.createWork(homeId, {
-        commandRef: pendingCreate.current.commandRef,
+        commandRef: command.commandRef,
         ...createFields,
       })
-      pendingCreate.current = null
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
+      if (pendingCreate.current?.commandRef === command.commandRef) pendingCreate.current = null
       if (photoToFile && photoToFile.projectRef === null) {
         try {
+          const commandRef = await api.newCommandRef()
+          if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
           const filedPhoto = await api.updateArtifactMetadata(
             homeId,
             photoToFile.artifactRef,
             {
-              commandRef: await api.newCommandRef(),
+              commandRef,
               expectedRevision: photoToFile.revision,
               ...artifactMetadataReplacement(photoToFile, { projectRef: work.projectRef }),
             },
           )
+          if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
           setSavedPhotos(current => current.map(photo => (
             photo.artifactRef === filedPhoto.artifactRef ? filedPhoto : photo
           )))
         } catch {
-          setInlineNote(current => [
-            current,
-            'Work saved, but the reviewed photo stayed with the whole home. You can file it from Home later.',
-          ].filter(Boolean).join(' '))
+          if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+            setInlineNote(current => [
+              current,
+              'Work saved, but the reviewed photo stayed with the whole home. You can file it from Home later.',
+            ].filter(Boolean).join(' '))
+          }
         }
       }
+      if (!roloRequestCanCommit(version, conversationVersion.current, mounted.current)) return
       setReviewedNewPhoto(null)
       setSaved(work)
       setConversationProjectRef(work.projectRef)
@@ -791,7 +945,15 @@ export default function RoloScreen() {
       setProposal(null)
       setSuggestion({ destination: 'work', projectRef: work.projectRef })
       setFollowUpQuestions([])
-    } catch (caught) { setError(friendlyError(caught)) } finally { setSaving(false) }
+    } catch (caught) {
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        setError(friendlyError(caught))
+      }
+    } finally {
+      if (roloRequestCanCommit(version, conversationVersion.current, mounted.current)) {
+        setSaving(false)
+      }
+    }
   }
 
   function startFreshConversation() {
@@ -814,6 +976,7 @@ export default function RoloScreen() {
     setError(null)
     setBusy(false)
     setPhotoBusy(false)
+    setSaving(false)
     setAttachment(null)
     setPendingPhotoSource(null)
     setCameraPhotoDraft(null)
@@ -834,14 +997,26 @@ export default function RoloScreen() {
     pendingCreate.current = null
   }
 
-  const visibleReviewObservations = photoReview
-    ? (reviewExpanded ? photoReview.visibleObservations : photoReview.visibleObservations.slice(0, 2))
+  const displayedPhotoReview = photoReview && (!photoProjectScopeRef
+    || (photoReviewRef !== null
+      && authorizedPhotos.some(photo => photo.homeRef === homeId
+        && photo.projectRef === photoProjectScopeRef
+        && photo.artifactRef === photoReviewRef)))
+    ? photoReview
+    : null
+  const visibleReviewObservations = displayedPhotoReview
+    ? (reviewExpanded
+        ? displayedPhotoReview.visibleObservations
+        : displayedPhotoReview.visibleObservations.slice(0, 2))
     : []
-  const visibleReviewLimitations = photoReview
-    ? (reviewExpanded ? photoReview.cannotConfirm : photoReview.cannotConfirm.slice(0, 1))
+  const visibleReviewLimitations = displayedPhotoReview
+    ? (reviewExpanded
+        ? displayedPhotoReview.cannotConfirm
+        : displayedPhotoReview.cannotConfirm.slice(0, 1))
     : []
-  const hasMoreReviewDetails = Boolean(photoReview
-    && (photoReview.visibleObservations.length > 2 || photoReview.cannotConfirm.length > 1))
+  const hasMoreReviewDetails = Boolean(displayedPhotoReview
+    && (displayedPhotoReview.visibleObservations.length > 2
+      || displayedPhotoReview.cannotConfirm.length > 1))
   const focusedWork = conversationProjectRef
     ? knownWork.find(item => item.projectRef === conversationProjectRef) ?? null
     : null
@@ -871,6 +1046,10 @@ export default function RoloScreen() {
           detail={homeSummary?.privateLocationLabel ?? 'Talk it through, ask about this home, or add a photo.'}
           showAccount={false}
         />
+        {routeProjectRef && routeProjectValidationMatches
+          && routeProjectValidation.status === 'rejected' ? (
+          <Notice message="That Work item is no longer active in this home, so Rolo opened a fresh private conversation instead." />
+        ) : null}
 
         {turns.length > 0 ? (
           <Pressable
@@ -967,17 +1146,17 @@ export default function RoloScreen() {
           </View>
         ) : null}
 
-        {photoReview ? (
+        {displayedPhotoReview ? (
           <Card accent style={styles.reviewCard}>
             <View style={styles.reviewTop}>
               <View style={styles.reviewHeading}>
                 <Text style={styles.reviewEyebrow}>What I can see</Text>
                 <Text style={styles.reviewTitle} numberOfLines={2}>{photoReviewTitle ?? 'Selected photo'}</Text>
               </View>
-              <Tag tone={photoReview.urgency === 'urgent' ? 'warning' : 'aqua'}>
-                {photoReview.urgency === 'urgent'
+              <Tag tone={displayedPhotoReview.urgency === 'urgent' ? 'warning' : 'aqua'}>
+                {displayedPhotoReview.urgency === 'urgent'
                   ? 'Urgent'
-                  : photoReview.urgency === 'prompt_attention'
+                  : displayedPhotoReview.urgency === 'prompt_attention'
                     ? 'Check soon'
                     : 'Routine'}
               </Tag>
@@ -1016,8 +1195,8 @@ export default function RoloScreen() {
                 <Ionicons name={reviewExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.aqua} />
               </Pressable>
             ) : null}
-            {photoReview.suggestedTrade ? (
-              <Text style={styles.reviewTrade}>If you want it checked in person, start with someone who handles {categoryLabel[photoReview.suggestedTrade].toLowerCase()}.</Text>
+            {displayedPhotoReview.suggestedTrade ? (
+              <Text style={styles.reviewTrade}>If you want it checked in person, start with someone who handles {categoryLabel[displayedPhotoReview.suggestedTrade].toLowerCase()}.</Text>
             ) : null}
             <Text style={styles.disclosure}>Visual guidance only—not a diagnosis, measurement, quote, or safety clearance.</Text>
           </Card>
@@ -1054,11 +1233,15 @@ export default function RoloScreen() {
             ) : null}
             {proposal.summary ? <Text style={styles.introCopy}>{proposal.summary}</Text> : null}
             {proposal.professionalLabel ? <Text style={styles.proLabel}>Pro: {proposal.professionalLabel}</Text> : null}
-            <Button
-              label={saving ? 'Saving…' : proposal.kind === 'task' ? 'Share this to-do' : 'Add to Work'}
-              onPress={() => void saveProposal()}
-              disabled={saving || proposalAssignmentUnavailable}
-            />
+            {canUpdateSharedHome ? (
+              <Button
+                label={saving ? 'Saving…' : proposal.kind === 'task' ? 'Share this to-do' : 'Add to Work'}
+                onPress={() => void saveProposal()}
+                disabled={saving || proposalAssignmentUnavailable}
+              />
+            ) : (
+              <Notice message="Only an adult household member can share this draft to Work. It can stay in your private chat." />
+            )}
             <Button label="Leave it in the chat" onPress={() => {
               pendingCreate.current = null
               setProposal(null)
@@ -1153,7 +1336,7 @@ export default function RoloScreen() {
                 </View>
               ) : (
                 <>
-                  {!previewMode && uploadsEnabled ? (
+                  {!previewMode && uploadsEnabled && canUpdateSharedHome ? (
                     <View style={styles.photoActions}>
                       <PhotoAction
                         icon="camera-outline"
@@ -1170,8 +1353,14 @@ export default function RoloScreen() {
                     </View>
                   ) : null}
                   {photosLoading ? <Text style={styles.photoAttachHint}>Loading saved photos…</Text> : null}
-                  {photosError ? <Text style={styles.photoAttachHint}>Saved photos could not load. You can still take or choose a new one.</Text> : null}
-                  {savedPhotos.length > 0 ? (
+                  {photosError ? (
+                    <Text style={styles.photoAttachHint}>
+                      {canUpdateSharedHome && uploadsEnabled
+                        ? 'Saved photos could not load. You can still take or choose a new one.'
+                        : 'Saved photos could not load right now.'}
+                    </Text>
+                  ) : null}
+                  {availableSavedPhotos.length > 0 ? (
                     <View style={styles.savedPhotoChoices}>
                       <Text style={styles.savedPhotoLabel}>
                         {previewMode ? 'Preview photo' : 'From this home'}
@@ -1181,7 +1370,7 @@ export default function RoloScreen() {
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.savedPhotoStrip}
                       >
-                        {savedPhotos.slice(0, previewMode ? 1 : 6).map(photo => (
+                        {availableSavedPhotos.slice(0, previewMode ? 1 : 6).map(photo => (
                           <Pressable
                             key={photo.artifactRef}
                             accessibilityRole="button"
@@ -1202,7 +1391,11 @@ export default function RoloScreen() {
                       </ScrollView>
                     </View>
                   ) : !photosLoading && !photosError ? (
-                    <Text style={styles.photoAttachHint}>No saved photos yet. Take one or choose one from your phone.</Text>
+                    <Text style={styles.photoAttachHint}>
+                      {canUpdateSharedHome && uploadsEnabled
+                        ? 'No saved photos yet. Take one or choose one from your phone.'
+                        : 'No saved photos have been shared with this home yet.'}
+                    </Text>
                   ) : null}
                 </>
               )}

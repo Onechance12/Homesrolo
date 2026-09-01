@@ -527,25 +527,31 @@ export default function PeopleScreen() {
                       </View>
                     ) : null}
                     {contactError ? <Notice message={contactError} /> : null}
-                    <SectionTitle title={`Invite ${organization.displayName}`} detail="Choose one job. The company will not see the rest of your home." />
-                    {matchingWork.map(work => (
-                      <Button
-                        key={work.projectRef}
-                        label={work.title}
-                        icon="arrow-forward"
-                        onPress={() => openInvitation(work.projectRef, organization.organizationRef)}
-                      />
-                    ))}
-                    {matchingWork.length === 0 ? (
+                    {canManageHousehold ? (
                       <>
-                        <Text style={styles.copy}>You don’t have open work that matches what this company does yet.</Text>
-                        <Button
-                          label="Add the work first"
-                          icon="add"
-                          onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
-                        />
+                        <SectionTitle title={`Invite ${organization.displayName}`} detail="Choose one job. The company will not see the rest of your home." />
+                        {matchingWork.map(work => (
+                          <Button
+                            key={work.projectRef}
+                            label={work.title}
+                            icon="arrow-forward"
+                            onPress={() => openInvitation(work.projectRef, organization.organizationRef)}
+                          />
+                        ))}
+                        {matchingWork.length === 0 ? (
+                          <>
+                            <Text style={styles.copy}>You don’t have open work that matches what this company does yet.</Text>
+                            <Button
+                              label="Add the work first"
+                              icon="add"
+                              onPress={() => router.push({ pathname: '/home/[homeId]/work', params: { homeId } })}
+                            />
+                          </>
+                        ) : null}
                       </>
-                    ) : null}
+                    ) : (
+                      <Notice message="A Home admin manages company invitations. You can still review this public profile and its contact details." />
+                    )}
                     <Button label="Close" quiet onPress={() => setSelectedRef(null)} />
                   </Card>
                 ) : null}

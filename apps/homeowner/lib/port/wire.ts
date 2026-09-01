@@ -980,7 +980,7 @@ export const decodeCreatedProfessionalOrganization: Decoder<CreatedProfessionalO
 const decodeProjectInvitationDisclosure: Decoder<ProjectInvitationDisclosure> =
   object<ProjectInvitationDisclosure>({
     title: boundedLabel(120),
-    workKind: oneOf(['project', 'issue', 'repair', 'service', 'incident'] as const),
+    workKind: oneOf(['project', 'issue', 'repair', 'service', 'incident', 'task'] as const),
     category: oneOf(PROFESSIONAL_TRADES),
     trade: boundedLabel(80),
     status: oneOf(['planned', 'in_progress', 'completed', 'cancelled'] as const),

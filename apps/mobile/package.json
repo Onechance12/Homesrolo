@@ -17,6 +17,7 @@
   "dependencies": {
     "@expo/metro-runtime": "~57.0.13",
     "@expo/vector-icons": "^15.1.1",
+    "decode-uri-component": "file:vendor/decode-uri-component-cjs",
     "expo": "~57.0.18",
     "expo-constants": "~57.0.16",
     "expo-crypto": "~57.0.1",
@@ -46,6 +47,12 @@
     "babel-preset-expo": "~57.0.8",
     "expo-doctor": "1.20.3",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "decode-uri-component": "$decode-uri-component",
+    "xcode": {
+      "uuid": "11.1.1"
+    }
   },
   "engines": {
     "node": ">=22.13"

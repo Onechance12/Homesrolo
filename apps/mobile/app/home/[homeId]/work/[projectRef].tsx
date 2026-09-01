@@ -9,6 +9,7 @@ import {
   activeHouseholdMembers,
   assignableHouseholdMembers,
   canCurrentHouseholdMemberUpdate,
+  isCurrentHouseholdController,
 } from '../../../../src/api/household.ts'
 import type { HouseholdMember, ProjectActivityRecord, WorkRecord } from '../../../../src/api/model.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
@@ -176,6 +177,10 @@ function WorkDetail({ api, homeId, work, initialActivity, householdMembers, init
   const [activity, setActivity] = useState<readonly ProjectActivityRecord[]>(initialActivity)
   const canChangeWork = useMemo(
     () => canCurrentHouseholdMemberUpdate(householdMembers),
+    [householdMembers],
+  )
+  const canManageProfessionals = useMemo(
+    () => isCurrentHouseholdController(householdMembers),
     [householdMembers],
   )
   const detailTabs = currentDetailTabs(current, canChangeWork)
@@ -589,7 +594,11 @@ function WorkDetail({ api, homeId, work, initialActivity, householdMembers, init
               )}
             />
           </Card>
-          <ProjectChoices homeId={homeId} projectRef={current.projectRef} />
+          <ProjectChoices
+            homeId={homeId}
+            projectRef={current.projectRef}
+            readOnly={!canChangeWork}
+          />
         </>
       ) : null}
 
@@ -612,12 +621,15 @@ function WorkDetail({ api, homeId, work, initialActivity, householdMembers, init
           <ProjectProfessionalWorkspace
             homeId={homeId}
             work={current}
+            canManage={canManageProfessionals}
             {...(preselectedOrganizationRef ? { preselectedOrganizationRef } : {})}
           />
 
           <ProjectOutsideProposalWorkspace
             homeId={homeId}
             work={current}
+            canManageProposals={canManageProfessionals}
+            canScheduleVisits={canChangeWork}
             onVisitSaved={created => setActivity(entries => [
               ...entries.filter(entry => entry.activityRef !== created.activityRef),
               created,

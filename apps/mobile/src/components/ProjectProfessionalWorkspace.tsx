@@ -30,10 +30,12 @@ type PendingAttempt = { readonly intent: string; readonly commandRef: string }
 export function ProjectProfessionalWorkspace({
   homeId,
   work,
+  canManage,
   preselectedOrganizationRef,
 }: {
   readonly homeId: string
   readonly work: WorkRecord
+  readonly canManage: boolean
   readonly preselectedOrganizationRef?: string
 }) {
   const { state: auth, api } = useSession()
@@ -55,8 +57,10 @@ export function ProjectProfessionalWorkspace({
     }
   }, [api, homeId, work.category, work.projectRef])
   const resource = useResource(loader, enabled)
-  const [composing, setComposing] = useState(Boolean(preselectedOrganizationRef))
-  const [selectedOrganizationRef, setSelectedOrganizationRef] = useState(preselectedOrganizationRef ?? '')
+  const [composing, setComposing] = useState(canManage && Boolean(preselectedOrganizationRef))
+  const [selectedOrganizationRef, setSelectedOrganizationRef] = useState(
+    canManage ? preselectedOrganizationRef ?? '' : '',
+  )
   const [message, setMessage] = useState('')
   const [selectedArtifactRefs, setSelectedArtifactRefs] = useState<readonly string[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -108,7 +112,7 @@ export function ProjectProfessionalWorkspace({
   }
 
   async function sendInvitation() {
-    if (resource.state.kind !== 'ready' || busy || !selectedOrganizationRef) return
+    if (!canManage || resource.state.kind !== 'ready' || busy || !selectedOrganizationRef) return
     const organization = resource.state.value.organizations.find(item => item.organizationRef === selectedOrganizationRef)
     if (!organization || activeOrganizations.has(organization.organizationRef)) return
     const input = {
@@ -147,7 +151,7 @@ export function ProjectProfessionalWorkspace({
   }
 
   async function shareInvitationNotification() {
-    if (notificationBusy) return
+    if (!canManage || notificationBusy) return
     setNotificationBusy(true)
     setError(null)
     try {
@@ -166,7 +170,7 @@ export function ProjectProfessionalWorkspace({
   }
 
   async function textInvitationNotification(organization: ProfessionalOrganization) {
-    if (notificationBusy || !organization.publicPhone) return
+    if (!canManage || notificationBusy || !organization.publicPhone) return
     const url = professionalInvitationTextUrl(organization.publicPhone)
     if (!url) {
       setNotice('That company-provided phone number cannot receive a text from this device. You can still share the secure sign-in notice another way.')
@@ -185,7 +189,7 @@ export function ProjectProfessionalWorkspace({
   }
 
   async function revoke(invitation: ProjectInvitation) {
-    if (busy) return
+    if (!canManage || busy) return
     setBusy(invitation.invitationRef)
     clearFeedback()
     try {
@@ -209,7 +213,7 @@ export function ProjectProfessionalWorkspace({
   }
 
   async function decide(quote: ProjectQuote, decision: 'shortlisted' | 'selected' | 'declined') {
-    if (busy || quote.decisionRevision === null) return
+    if (!canManage || busy || quote.decisionRevision === null) return
     const key = `${quote.quoteRef}:${quote.decisionRevision}:${decision}`
     setBusy(key)
     clearFeedback()
@@ -238,7 +242,12 @@ export function ProjectProfessionalWorkspace({
 
   return (
     <View style={styles.wrap}>
-      <SectionTitle title="Invite through Homesrolo" detail="Choose a company and exactly which files it may review." />
+      <SectionTitle
+        title="Invite through Homesrolo"
+        detail={canManage
+          ? 'Choose a company and exactly which files it may review.'
+          : 'Review the companies and proposals shared with this work.'}
+      />
       {resource.state.kind === 'loading' ? <Loading label="Opening private invitations…" /> : null}
       {resource.state.kind === 'error' ? (
         <Notice message="Invitations and proposals could not load." actionLabel="Try again" onAction={resource.reload} />
@@ -246,7 +255,7 @@ export function ProjectProfessionalWorkspace({
       {notice ? <Notice message={notice} /> : null}
       {error ? <Notice message={error} actionLabel="Reload current details" onAction={resource.reload} /> : null}
 
-      {notificationTarget ? (
+      {canManage && notificationTarget ? (
         <Card accent>
           <SectionTitle
             title={`Let ${notificationTarget.displayName} know`}
@@ -287,13 +296,16 @@ export function ProjectProfessionalWorkspace({
                 {...(organization ? { organization } : {})}
                 busy={busy === invitation.invitationRef}
                 notifying={notificationBusy}
+                canManage={canManage}
                 onShare={() => void shareInvitationNotification()}
                 onRevoke={() => void revoke(invitation)}
               />
             )
           })}
 
-          {!composing ? (
+          {!canManage ? (
+            <Notice message="A Home admin manages company invitations, access, and proposal decisions. You can review what is shared with this work." />
+          ) : !composing ? (
             <Button label="Invite a company" icon="person-add-outline" onPress={() => setComposing(true)} />
           ) : (
             <Card accent>
@@ -359,7 +371,13 @@ export function ProjectProfessionalWorkspace({
 
           <SectionTitle title="Company proposals" detail="Compare the written scope first. A total without details is not the whole proposal." />
           {submittedQuotes.map(quote => (
-            <ProposalCard key={quote.quoteRef} quote={quote} busy={busy} onDecision={decision => void decide(quote, decision)} />
+            <ProposalCard
+              key={quote.quoteRef}
+              quote={quote}
+              busy={busy}
+              canDecide={canManage}
+              onDecision={decision => void decide(quote, decision)}
+            />
           ))}
           {submittedQuotes.length === 0 ? (
             <Notice message="No proposals have been submitted for this work yet." />
@@ -370,11 +388,12 @@ export function ProjectProfessionalWorkspace({
   )
 }
 
-function InvitationCard({ invitation, organization, busy, notifying, onShare, onRevoke }: {
+function InvitationCard({ invitation, organization, busy, notifying, canManage, onShare, onRevoke }: {
   readonly invitation: ProjectInvitation
   readonly organization?: ProfessionalOrganization
   readonly busy: boolean
   readonly notifying: boolean
+  readonly canManage: boolean
   readonly onShare: () => void
   readonly onRevoke: () => void
 }) {
@@ -389,7 +408,7 @@ function InvitationCard({ invitation, organization, busy, notifying, onShare, on
         <Tag tone={invitation.status === 'accepted' ? 'mint' : 'plain'}>{invitation.status}</Tag>
       </View>
       <Text style={styles.meta}>{invitation.disclosure.selectedArtifactRefs.length} selected {invitation.disclosure.selectedArtifactRefs.length === 1 ? 'file' : 'files'} shared.</Text>
-      {active ? (
+      {active && canManage ? (
         <>
           <Button
             label={notifying ? 'Opening share sheet…' : 'Notify company'}
@@ -419,9 +438,10 @@ function ArtifactChoice({ artifact, selected, onPress }: {
   )
 }
 
-function ProposalCard({ quote, busy, onDecision }: {
+function ProposalCard({ quote, busy, canDecide, onDecision }: {
   readonly quote: ProjectQuote
   readonly busy: string | null
+  readonly canDecide: boolean
   readonly onDecision: (decision: 'shortlisted' | 'selected' | 'declined') => void
 }) {
   const professional = quote.source === 'professional_submission'
@@ -442,7 +462,7 @@ function ProposalCard({ quote, busy, onDecision }: {
           return <View key={key}><Text style={styles.label}>{label}</Text><Text style={styles.scopeDetail}>{item.detail}</Text></View>
         })}
       </View>
-      {professional && quote.decisionRevision !== null && quote.proposalState === 'submitted' ? (
+      {canDecide && professional && quote.decisionRevision !== null && quote.proposalState === 'submitted' ? (
         <View style={styles.decisionRow}>
           <Button label="Consider" quiet disabled={busy !== null || quote.homeownerDecision === 'shortlisted'} onPress={() => onDecision('shortlisted')} />
           <Button label="Select" disabled={busy !== null || quote.homeownerDecision === 'selected'} onPress={() => onDecision('selected')} />

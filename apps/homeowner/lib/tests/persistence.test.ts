@@ -162,11 +162,19 @@ test('email link and code completion mint only opaque hashed Homesrolo sessions'
       async signInWithOtp(input: unknown) { authCalls.push(input); return { error: null } },
       async verifyOtp(input: unknown) {
         authCalls.push(input)
-        return { data: { user: { id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2', email: 'Person@Example.com' } }, error: null }
+        return { data: { user: {
+          id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2',
+          email: 'Person@Example.com',
+          email_confirmed_at: '2026-08-12T09:59:00.000Z',
+        } }, error: null }
       },
       async getUser(input: unknown) {
         authCalls.push({ getUser: input })
-        return { data: { user: { id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2', email: 'Person@Example.com' } }, error: null }
+        return { data: { user: {
+          id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2',
+          email: 'Person@Example.com',
+          email_confirmed_at: '2026-08-12T09:59:00.000Z',
+        } }, error: null }
       },
     },
   } as unknown as SupabaseClient
@@ -231,6 +239,45 @@ test('email link and code completion mint only opaque hashed Homesrolo sessions'
   const revocation = rpcCalls[3] as { name: string; input: Record<string, unknown> }
   assert.equal(revocation.name, 'homesrolo_revoke_homeowner_session')
   assert.equal(revocation.input.p_session_hash, hashSessionHandle(handle))
+})
+
+test('provider sessions require a confirmed email before Homesrolo persistence', async () => {
+  const rpcCalls: unknown[] = []
+  const user = {
+    id: '8aa09ae2-64f8-4bbb-81ac-e5f3515001a2',
+    email: 'person@example.com',
+    email_confirmed_at: null,
+  }
+  const authClient = {
+    auth: {
+      async verifyOtp() { return { data: { user }, error: null } },
+      async getUser() { return { data: { user }, error: null } },
+    },
+  } as unknown as SupabaseClient
+  const serviceClient = {
+    async rpc(name: string, input: unknown) {
+      rpcCalls.push({ name, input })
+      return { data: null, error: null }
+    },
+  } as unknown as SupabaseClient
+  const configuration = readHomeownerRuntimeConfiguration(CONFIG)
+  assert.ok(configuration)
+  const service = new HomeownerAuthService({
+    auth: authClient,
+    service: serviceClient,
+    configuration,
+  })
+
+  assert.equal(await service.completeMagicLink('t'.repeat(43)), null)
+  assert.equal(
+    await service.completeProviderAccessToken(`header.${'x'.repeat(40)}.signature`),
+    null,
+  )
+  assert.deepEqual(
+    await service.completeEmailCode('person@example.com', '012345'),
+    { kind: 'unavailable' },
+  )
+  assert.deepEqual(rpcCalls, [])
 })
 
 test('session revocation fails closed when persistence does not confirm it', async () => {

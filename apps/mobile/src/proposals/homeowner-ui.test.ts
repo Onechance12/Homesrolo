@@ -32,6 +32,19 @@ test('outside proposal UI calls the existing manual quote contract without repla
   assert.doesNotMatch(component, /totalAmountCents|priceScore|recommended proposal|best price/i)
 })
 
+test('shared bid views hide every Home-admin-only mutation from household members', () => {
+  assert.match(workDetail, /isCurrentHouseholdController/)
+  assert.match(workDetail, /canManage=\{canManageProfessionals\}/)
+  assert.match(workDetail, /canManageProposals=\{canManageProfessionals\}/)
+  assert.match(workDetail, /canScheduleVisits=\{canChangeWork\}/)
+  assert.match(professionalWorkspace, /if \(!canManage \|\| resource\.state\.kind !== 'ready'/)
+  assert.match(professionalWorkspace, /if \(!canManage \|\| busy\)/)
+  assert.match(professionalWorkspace, /active && canManage/)
+  assert.match(professionalWorkspace, /canDecide && professional/)
+  assert.match(component, /if \(!canManage \|\| saveLock\.current/)
+  assert.match(component, /A Home admin manages saved proposal records/)
+})
+
 test('outside proposal controls are accessible and phone-sized', () => {
   assert.match(component, /accessibilityRole="radio"/)
   assert.match(component, /accessibilityState=\{\{ checked: selected \}\}/)
@@ -41,6 +54,7 @@ test('outside proposal controls are accessible and phone-sized', () => {
 })
 
 test('saving a visit preserves the calendar handoff while updating the visible timeline', () => {
+  assert.match(component, /\{canScheduleVisits \? \(/)
   assert.match(component, /const created = await api\.addWorkMilestone/)
   assert.match(component, /onVisitSaved\?\.\(created\)/)
   assert.match(workDetail, /onVisitSaved=\{created => setActivity/)
