@@ -53,6 +53,11 @@ changes to a house and are informational references, not verified conditions.
   stale responses cannot cross that boundary. No draft address is persisted by
   the lookup endpoint. Government services necessarily receive the lookup
   address and apply their own operational logging policies.
+- Unavailable upstream calls emit a server-only diagnostic with a closed
+  provider-stage/reason vocabulary, bounded duration, HTTP status, MIME
+  category and allowlisted network error code. Diagnostics never include an
+  address, URL/query, parcel, principal, receipt, response body or raw error.
+  The client still receives a generic unavailable result and a manual/skip path.
 - A server HMAC attests the matched source facts and binds them to the principal
   and exact address. The key is domain-separated from the existing server HMAC
   root. A receipt is not a login, ownership proof, or sharing grant. It is not
@@ -89,6 +94,13 @@ Supabase configuration and the server HMAC root are required; no new paid
 provider or API key is needed. Missing configuration fails closed. Turning the
 flag off stops lookup/snapshot routes without changing sign-in or core home
 creation. New clients must tolerate unavailable lookup and saved details.
+
+On Netlify, set this nonsecret flag through the UI, CLI or API for the production
+deploy context, with Functions scope (or All scopes), then create a new deploy.
+Values declared only in `netlify.toml` are build-time values, not Functions
+runtime variables. Check the live authenticated lookup/read endpoint after
+deployment; a successful build alone does not verify runtime activation.
+See [Netlify Functions environment variables](https://docs.netlify.com/build/functions/environment-variables/).
 
 Broader county adapters and any licensed nationwide data source need their own
 matching, provenance, privacy, licensing and coverage review before activation.

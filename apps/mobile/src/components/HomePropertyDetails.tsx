@@ -4,7 +4,7 @@ import type { HomeRecordAddress } from '../api/model.ts'
 import { useSession } from '../auth/SessionProvider.tsx'
 import { friendlyError } from '../api/errors.ts'
 import { sameHomeRecordAddress } from '../home/onboarding.ts'
-import { PROPERTY_NUMBERS, initialPropertySnapshotAttempt, type PropertyReviewSelection } from '../home/property-review.ts'
+import { PROPERTY_NUMBERS, formatPropertyNumber, initialPropertySnapshotAttempt, type PropertyReviewSelection } from '../home/property-review.ts'
 import { useResource } from '../hooks/useResource.ts'
 import { Button, Card, Eyebrow, Notice } from './ui.tsx'
 import { PropertyDetailsReview } from './PropertyDetailsReview.tsx'
@@ -97,7 +97,7 @@ function ScopedHomePropertyDetails({ principalRef, homeRef, currentAddress, canE
       <Text style={styles.detail}>Reviewed {new Date(snapshot.reviewedAt).toLocaleDateString()}. Unknown means no fact was supplied; it is not a zero.</Text>
       <Text style={styles.detail}>Details reviewed for {snapshot.address.line1}{snapshot.address.line2 ? `, ${snapshot.address.line2}` : ''} · {snapshot.address.city}, {snapshot.address.regionCode} {snapshot.address.postalCode}.</Text>
       <View style={styles.facts}>
-        {PROPERTY_NUMBERS.map(([key, label]) => <View key={key} style={styles.fact}><Text style={styles.label}>{label}</Text><Text style={styles.value}>{snapshot.facts[key] === null ? 'Unknown' : snapshot.facts[key]!.toLocaleString()}</Text></View>)}
+        {PROPERTY_NUMBERS.map(([key, label]) => <View key={key} style={styles.fact}><Text style={styles.label}>{label}</Text><Text style={styles.value}>{formatPropertyNumber(key, snapshot.facts[key])}</Text></View>)}
         {(['centralHeat', 'centralAir'] as const).map(key => <View key={key} style={styles.fact}><Text style={styles.label}>{key === 'centralHeat' ? 'Central heat' : 'Central air'}</Text><Text style={styles.value}>{snapshot.facts[key] === null ? 'Unknown' : snapshot.facts[key] ? 'Yes' : 'No'}</Text></View>)}
         <View style={styles.fact}><Text style={styles.label}>Subdivision</Text><Text style={styles.value}>{snapshot.facts.subdivision ?? 'Unknown'}</Text></View>
       </View>
