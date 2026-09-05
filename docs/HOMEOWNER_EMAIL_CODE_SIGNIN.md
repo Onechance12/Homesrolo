@@ -87,6 +87,15 @@ The code is selectable text, not an image or six separate cells. The hidden
 preheader describes the next step without repeating the code. The visible
 10-minute expiry must match the provider's 600-second email OTP setting.
 
+Copying uses the mail app's native selection menu: the message explicitly says
+to press and hold the code, choose Copy, and paste it into Homesrolo. The digits
+remain one uninterrupted text node (including leading zeros); their spacing is
+visual CSS only. Select-all styling is best-effort and may be ignored by a mail
+client. Do not add a fake Copy button or a credential-bearing link: most inboxes
+block the JavaScript a custom clipboard button would require. The PWA already
+marks its input as a one-time code; system AutoFill availability and email-code
+detection depend on the user's device and mail client, and are not guaranteed.
+
 Run the deterministic content, layout, and contrast checks from the repository
 root with:
 

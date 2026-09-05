@@ -51,6 +51,11 @@ for (const template of Object.values(manifest)) {
       'inbox preview must not duplicate or disclose the sign-in code')
     // Rendering must keep the code textual, including a leading zero.
     assert.match(body!.replace('{{ .Token }}', '012345'), />012345<\/p>/)
+    assert.match(body!, /class="code-text"[^>]*letter-spacing: 2px;/)
+    assert.match(body!, /Press and hold the code, then choose Copy\./)
+    assert.match(body!, /Paste it into Homesrolo to continue\./)
+    assert.doesNotMatch(body!, /Tap to copy|Click to copy|Copied!|role="button"/i,
+      'static email instructions must not pretend to be a working clipboard button')
   })
 
   test(`${template.providerTemplate}: self-contained HTML with no links, tracking or active content`, () => {
