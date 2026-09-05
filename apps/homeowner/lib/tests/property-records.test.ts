@@ -36,6 +36,17 @@ function attributes(): Record<string, unknown> {
   }
 }
 function parcel(row = attributes()) { return { features: [{ attributes: row }] } }
+function streetAttributes(): Record<string, unknown> {
+  return {
+    LEFT_FROM: 12301, LEFT_TO: 12399, RIGHT_FROM: 12300, RIGHT_TO: 12398,
+    Parity_L: 'O', Parity_R: 'E', PRE_DIR: null, ST_NAME: 'EXAMPLE GROVE', ST_TYPE: 'DR', POST_DIR: null,
+    ZIP_L: '76244', ZIP_R: '76244', CITY_L: 'FORT WORTH', CITY_R: 'FORT WORTH',
+    STATE_L: 'TX', STATE_R: 'TX', CNTYNAME_L: 'TARRANT', CNTYNAME_R: 'TARRANT',
+    CNTYFIPS_L: '48439', CNTYFIPS_R: '48439',
+  }
+}
+function streetParcel(row = streetAttributes()) { return { features: [{ attributes: row }] } }
+function transportFailure() { return new TypeError('synthetic network failure', { cause: { code: 'ECONNRESET' } }) }
 function json(value: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(value), { ...init, headers: { 'Content-Type': 'application/json', ...init.headers } })
 }
@@ -45,6 +56,7 @@ function fakeFetch(responses: Array<unknown | Response>) {
     calls.push({ url: new URL(String(input)), init })
     assert.ok(responses.length, 'no unexpected provider requests')
     const response = responses.shift()
+    if (response instanceof Error) throw response
     return response instanceof Response ? response : json(response)
   }
   return { fetcher, calls }
@@ -290,7 +302,7 @@ test('timeout is bounded even when a fetch implementation ignores cancellation',
   context.mock.timers.enable({ apis: ['setTimeout'] })
   let signal: AbortSignal | null | undefined
   const diagnostics: PropertyRecordsDiagnostic[] = []
-  const pending = lookupPropertyRecords(ADDRESS, {
+  const pending = lookupPropertyRecords({ ...ADDRESS, regionCode: 'OK' }, {
     fetch: async (_input, init) => {
       signal = init?.signal
       return new Promise<Response>(() => {})
@@ -311,7 +323,7 @@ test('timeout also bounds a stalled response body and cancels the reader', async
   const response = new Response(new ReadableStream({ cancel() { cancelled = true } }), {
     headers: { 'Content-Type': 'application/json' },
   })
-  const pending = lookupPropertyRecords(ADDRESS, { fetch: async () => response, now: () => NOW })
+  const pending = lookupPropertyRecords({ ...ADDRESS, regionCode: 'OK' }, { fetch: async () => response, now: () => NOW })
   await Promise.resolve()
   await Promise.resolve()
   context.mock.timers.tick(6_000)
@@ -382,7 +394,7 @@ test('network failures record only allowlisted cause codes and static error kind
     [Object.defineProperty({}, 'name', { get() { throw new Error('private getter') } }), 'other', undefined],
   ] as const) {
     const diagnostics: PropertyRecordsDiagnostic[] = []
-    const lookup = await lookupPropertyRecords(ADDRESS, {
+    const lookup = await lookupPropertyRecords({ ...ADDRESS, regionCode: 'OK' }, {
       fetch: async () => { throw thrown }, now: () => NOW,
       onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
     })
@@ -428,5 +440,204 @@ test('configured adapter logs only enumerated diagnostic fields, not full object
   assert.doesNotMatch(callback, /\.\.\.diagnostic|JSON\.stringify\(diagnostic\)|diagnostic\.(?:message|stack|cause|url|address|body)/)
   for (const field of ['phase', 'reason', 'elapsedMs', 'httpStatus', 'mimeCategory', 'errorKind', 'networkCode']) {
     assert.match(callback, new RegExp(`${field}: diagnostic\\.${field}`))
+  }
+})
+
+test('Census transport failure can use one exact TC911 side plus one separate exact TAD parcel', async () => {
+  const diagnostics: PropertyRecordsDiagnostic[] = []
+  const { fetcher, calls } = fakeFetch([transportFailure(), streetParcel(), parcel()])
+  const lookup = await lookupPropertyRecords(ADDRESS, { fetch: fetcher, now: () => NOW,
+    onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+  })
+  assert.equal(propertyLookupSchema.safeParse(lookup).success, true)
+  assert.equal(lookup.status, 'matched')
+  assert.deepEqual(lookup.address, ADDRESS)
+  assert.deepEqual(lookup.county, { name: 'Tarrant County', fips: '48439' })
+  assert.equal(lookup.source?.parcelId, '12345678')
+  assert.equal(lookup.facts.squareFeet, 3500)
+  assert.equal(lookup.facts.bedrooms, null)
+  assert.equal(lookup.facts.bathrooms, null)
+  assert.ok(lookup.notes.some(note => note.includes('not an individual address-point or roof verification')))
+  assert.deepEqual(diagnostics, [], 'a recovered successful lookup stays silent')
+  assert.equal(calls.length, 3)
+  assert.equal(calls[1]?.url.pathname, '/arcgis/rest/services/Dynamic/TC911_Streets/MapServer/0/query')
+  assert.equal(calls[1]?.url.hostname, 'mapit.tarrantcounty.com')
+  assert.match(calls[1]?.url.searchParams.get('where') ?? '', /^UPPER\(ST_NAME\) = 'EXAMPLE GROVE' AND /)
+  assert.match(calls[1]?.url.searchParams.get('where') ?? '', /LEFT_FROM <= 12345/)
+  assert.doesNotMatch(calls[1]?.url.searchParams.get('outFields') ?? '', /OWNER|RATE|TELCO|ESN|\*/)
+  assert.equal(calls[1]?.url.searchParams.get('returnGeometry'), 'false')
+  assert.equal(calls[1]?.url.searchParams.get('resultRecordCount'), '10')
+  assert.equal(calls[2]?.url.searchParams.get('where'), "STREET_NO = 12345 AND UPPER(STREET_NAM) = 'EXAMPLE GROVE'")
+  assert.ok(calls.every(call => call.init?.redirect === 'error' && call.init.signal instanceof AbortSignal))
+})
+
+test('only transport failures and HTTP 429 or 5xx allow fallback', async () => {
+  for (const status of [429, 500, 503]) {
+    const { lookup, calls } = await run([json({}, { status }), streetParcel(), parcel()])
+    assert.equal(lookup.status, 'matched')
+    assert.equal(calls.length, 3)
+  }
+  for (const response of [
+    ...[400, 401, 403, 404].map(status => json({}, { status })),
+    json({}, { status: 302, headers: { Location: 'https://other.example' } }),
+    new Response('<html>challenge</html>', { headers: { 'Content-Type': 'text/html' } }),
+    new Response('{broken', { headers: { 'Content-Type': 'application/json' } }),
+    json(census(), { headers: { 'Content-Length': '100000' } }),
+    new TypeError('unknown failure or blocked redirect'),
+    new TypeError('TLS verification failure', { cause: { code: 'CERT_HAS_EXPIRED' } }),
+    new TypeError('programming error', { cause: { code: 'ERR_INVALID_URL' } }),
+    {}, { errors: ['semantic failure'] }, { result: { addressMatches: null } },
+  ]) {
+    const { lookup, calls } = await run([response])
+    assertUnmatched(lookup, 'unavailable')
+    assert.equal(calls.length, 1)
+  }
+})
+
+test('parsed Census no-match, ambiguity, mismatch and unsupported/malformed county never fall back', async () => {
+  const mismatch = censusMatch()
+  mismatch.matchedAddress = '12346 EXAMPLE GROVE DR, FORT WORTH, TX, 76244'
+  const otherCounty = censusMatch()
+  otherCounty.geographies.Counties = [{ GEOID: '48121', NAME: 'Denton County' }]
+  const malformedCounty = censusMatch()
+  malformedCounty.geographies.Counties = [{ GEOID: '48439', NAME: 'Denton County' }]
+  const missingCounty = censusMatch()
+  missingCounty.geographies.Counties = []
+  for (const matches of [[], [censusMatch(), censusMatch()], [mismatch], [otherCounty], [malformedCounty], [missingCounty]]) {
+    const { lookup, calls } = await run([{ result: { addressMatches: matches } }])
+    assert.notEqual(lookup.status, 'matched')
+    assert.equal(calls.length, 1)
+  }
+})
+
+test('fallback requires exactly one untruncated street record and one qualifying side', async () => {
+  for (const [response, status] of [
+    [{ features: [] }, 'no_match'],
+    [{ features: [streetParcel().features[0], streetParcel().features[0]] }, 'ambiguous'],
+    [{ ...streetParcel(), exceededTransferLimit: true }, 'ambiguous'],
+    [streetParcel({ ...streetAttributes(), RIGHT_FROM: 12301, RIGHT_TO: 12399, Parity_R: 'O' }), 'ambiguous'],
+    [streetParcel({ ...streetAttributes(), RIGHT_FROM: 12301, RIGHT_TO: 12399, Parity_R: 'O', ZIP_R: '76111', CNTYFIPS_R: '48121' }), 'ambiguous'],
+    [{ ...streetParcel(), exceededTransferLimit: 'true' }, 'unavailable'],
+    [{ ...streetParcel(), exceededTransferLimit: 1 }, 'unavailable'],
+    [{ features: null }, 'unavailable'], [{ features: [{}] }, 'unavailable'],
+  ] as const) {
+    const { lookup, calls } = await run([transportFailure(), response])
+    assertUnmatched(lookup, status)
+    assert.equal(calls.length, 2)
+  }
+})
+
+test('street range requires nonzero integer endpoints, explicit matching parity and inclusive bounds', async () => {
+  for (const change of [
+    { LEFT_FROM: 0 }, { LEFT_FROM: null }, { LEFT_TO: -1 }, { LEFT_TO: 12399.5 },
+    { LEFT_FROM: '12301' }, { LEFT_FROM: 12300 }, { LEFT_TO: 12398 },
+    { LEFT_FROM: 12347 }, { LEFT_TO: 12343 }, { Parity_L: '' }, { Parity_L: 'B' }, { Parity_L: 'E' },
+  ]) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel({ ...streetAttributes(), ...change })])
+    assertUnmatched(lookup, 'no_match')
+    assert.equal(calls.length, 2)
+  }
+  const { lookup } = await run([transportFailure(),
+    streetParcel({ ...streetAttributes(), LEFT_FROM: 12399, LEFT_TO: 12301 }), parcel()])
+  assert.equal(lookup.status, 'matched', 'descending ranges with exact parity remain valid')
+})
+
+test('street corroboration never mixes sides or accepts blank/conflicting ZIP or jurisdiction', async () => {
+  for (const change of [
+    { ZIP_L: '' }, { ZIP_L: null }, { ZIP_L: '76111' }, { ZIP_L: '76244-' },
+    { CITY_L: '' }, { CITY_L: 'KELLER' }, { STATE_L: '' }, { STATE_L: 'OK' },
+    { CNTYNAME_L: '' }, { CNTYNAME_L: 'DENTON' }, { CNTYFIPS_L: '' }, { CNTYFIPS_L: '48121' },
+    { CNTYFIPS_L: 48439 }, { ZIP_L: '', ZIP_R: '76244', CNTYFIPS_L: '48439', CNTYFIPS_R: '' },
+  ]) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel({ ...streetAttributes(), ...change })])
+    assertUnmatched(lookup, 'no_match')
+    assert.equal(calls.length, 2)
+  }
+})
+
+test('TC911 full street and TAD component address must both remain exact', async () => {
+  for (const change of [{ PRE_DIR: 'N' }, { POST_DIR: 'W' }, { ST_TYPE: 'LN' }, { ST_NAME: 'OTHER GROVE' },
+    { PRE_DIR: undefined }, { POST_DIR: undefined }, { PRE_DIR: 0 }, { ST_NAME: null }]) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel({ ...streetAttributes(), ...change })])
+    assertUnmatched(lookup, 'no_match')
+    assert.equal(calls.length, 2)
+  }
+  for (const response of [
+    parcel({ ...attributes(), ZIPCODE: '76111' }), parcel({ ...attributes(), PREDIR: 'N' }),
+    parcel({ ...attributes(), ADDENDUM_T: 'UNIT', ADDENDUM: '2' }),
+    parcel({ ...attributes(), SITUS_ADDR: '12346 EXAMPLE GROVE DR' }),
+  ]) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel(), response])
+    assertUnmatched(lookup, 'no_match')
+    assert.equal(calls.length, 3)
+  }
+})
+
+test('explicit null TC911 directions mean absence, never a match for a directed request', async () => {
+  for (const line1 of ['12345 North Example Grove Drive', '12345 Example Grove Drive West']) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel()], { ...ADDRESS, line1 })
+    assertUnmatched(lookup, 'no_match')
+    assert.equal(calls.length, 2)
+  }
+})
+
+test('fallback keeps unit gate before any external request and never queries Tarrant for other states', async () => {
+  const unit = await run([], { ...ADDRESS, line2: 'Unit 4' })
+  assertUnmatched(unit.lookup, 'no_match')
+  assert.equal(unit.calls.length, 0)
+  const otherState = await run([transportFailure()], { ...ADDRESS, regionCode: 'OK' })
+  assertUnmatched(otherState.lookup, 'unavailable')
+  assert.equal(otherState.calls.length, 1)
+})
+
+test('fallback diagnostics use a closed street phase and preserve response limits', async () => {
+  const diagnostics: PropertyRecordsDiagnostic[] = []
+  const { fetcher, calls } = fakeFetch([transportFailure(),
+    json(streetParcel(), { headers: { 'Content-Length': '100000' } })])
+  const lookup = await lookupPropertyRecords(ADDRESS, { fetch: fetcher, now: () => NOW,
+    onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+  })
+  assertUnmatched(lookup, 'unavailable')
+  assert.equal(calls.length, 2)
+  assert.equal(diagnostics.length, 1)
+  assert.equal(diagnostics[0]?.phase, 'tarrant_street')
+  assert.equal(diagnostics[0]?.reason, 'response_too_large')
+  assert.doesNotMatch(JSON.stringify(diagnostics), /Example|76244|https:|12345|synthetic/i)
+})
+
+test('a six-second Census deadline recovers through exactly two bounded county requests', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const { fetcher: countyFetch, calls } = fakeFetch([streetParcel(), parcel()])
+  let totalCalls = 0
+  let censusSignal: AbortSignal | null | undefined
+  const diagnostics: PropertyRecordsDiagnostic[] = []
+  const pending = lookupPropertyRecords(ADDRESS, { now: () => NOW,
+    fetch: async (input, init) => {
+      totalCalls++
+      if (totalCalls === 1) {
+        censusSignal = init?.signal
+        return new Promise<Response>(() => {})
+      }
+      return countyFetch(input, init)
+    }, onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+  })
+  context.mock.timers.tick(6_000)
+  const lookup = await pending
+  assert.equal(lookup.status, 'matched')
+  assert.equal((censusSignal as AbortSignal | undefined)?.aborted, true)
+  assert.equal(totalCalls, 3)
+  assert.equal(calls.length, 2)
+  assert.deepEqual(diagnostics, [])
+})
+
+test('fallback still rejects duplicate, truncated or malformed-limit TAD parcel responses', async () => {
+  for (const [response, status] of [
+    [{ features: [parcel().features[0], parcel().features[0]] }, 'ambiguous'],
+    [{ ...parcel(), exceededTransferLimit: true }, 'ambiguous'],
+    [{ ...parcel(), exceededTransferLimit: 'true' }, 'unavailable'],
+  ] as const) {
+    const { lookup, calls } = await run([transportFailure(), streetParcel(), response])
+    assertUnmatched(lookup, status)
+    assert.equal(calls.length, 3)
   }
 })

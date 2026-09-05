@@ -11,7 +11,7 @@ home details**. The adjacent notice explains that the address will be sent to
 the US Census Geocoder and the supported county service. Nothing is looked up
 until that explicit action. Nothing is saved until **Create my home**.
 
-The Census match determines the county, rather than guessing from the city.
+Normally the Census match determines the county, rather than guessing from the city.
 The first connected county is **Tarrant County, Texas (48439)**. Its official
 parcel feed can supply living area, year built, land area, garage capacity,
 central heat/air indicators, subdivision and parcel/reference date. Coverage
@@ -19,6 +19,19 @@ is not nationwide. Tarrant's retired bedroom/bathroom fields are not used;
 bedrooms, bathrooms and rooms remain Unknown unless entered by the homeowner.
 Unknown does not mean zero. We do not infer roof age, condition, dimensions,
 occupancy, repair needs, ownership, value, taxes, insurance or permit compliance.
+
+For a Census deadline, allowlisted connection failure, or HTTP 429/5xx, a
+Tarrant-only backup may independently corroborate the address using the county's
+public TC911 street ranges and a separate exact TAD parcel. It requires exactly
+one complete canonical street segment and one physical number/parity side,
+then a nonblank exact ZIP/city/state/county/FIPS on that same side. Both-side
+ambiguity cannot be resolved by choosing the side with a convenient ZIP.
+The parcel must independently pass every existing exact-address check. Street
+ranges alone are not individual-address or rooftop proof; a successful backup
+result explicitly explains its evidence. This backup does not override a Census
+mismatch, ambiguity, unsupported county, malformed semantic response, denied
+access, redirect or TLS error. At most three fixed official requests occur,
+each retaining the existing response-size and six-second deadline limits.
 
 An exact corroborated address match is required. Ambiguous results are never
 selected automatically. Units are currently unsupported and cannot be attached
@@ -30,6 +43,7 @@ public facts.
 
 - [US Census Geocoder API](https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html)
 - [Tarrant County production parcel layer](https://mapit.tarrantcounty.com/arcgis/rest/services/Dynamic/TADParcels/FeatureServer/0)
+- [Tarrant County 9-1-1 street-range layer](https://mapit.tarrantcounty.com/arcgis/rest/services/Dynamic/TC911_Streets/MapServer/0)
 - [TAD data distribution dictionary](https://www.tad.org/content/forms/PropertyData%26PropertyLocationLayouts.pdf)
 - [County appraisal information and disclaimer](https://www.tarrantcountytx.gov/en/tax/property-tax/appraisal-district-contact-information.html)
 
