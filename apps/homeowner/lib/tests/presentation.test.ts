@@ -1344,7 +1344,7 @@ test('one opaque handoff context survives auth and home selection without auto-c
     'only one opaque share reference is accepted')
   assert.match(signin, /port\.requestMagicLink\(email\.trim\(\), context\.intent, context\.handoff\)/)
   assert.match(signin, /port\.verifyEmailCode\([\s\S]*context\.intent, context\.handoff/)
-  assert.match(authComplete, /withHomeownerEntryContext\('\/homes', context\)/)
+  assert.match(authComplete, /homeownerPostSignInPath\(context\)/)
   assert.match(authHttp, /signInPathForEntryContext\(rawIntent, rawHandoff\)/,
     'a valid handoff survives an expired provider token so the homeowner can sign in again')
   assert.match(homes, /homeownerEntryDestination\(home\.homeRef, context\)/)

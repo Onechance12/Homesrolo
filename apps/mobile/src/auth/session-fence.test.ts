@@ -143,7 +143,7 @@ test('provider keeps cookie descendants mounted behind an inaccessible curtain d
   assert.match(provider, /if \(!cookieSession\) setState\(\{ kind: 'loading' \}\)/)
   assert.match(provider, /const identityVersion = cookieSession \? fence\.identityVersion : 0/)
   assert.match(provider, /\[cookieSession, fence, identityVersion, principalRef, rawApi\]/)
-  assert.ok(provider.includes("key={cookieSession ? `${principalRef ?? 'signed-out'}:${identityVersion}` : 'native-session'}"))
+  assert.ok(provider.includes('key={sessionPresentationKey(cookieSession, principalRef, identityVersion)}'))
   assert.match(provider, /hidden: \{ display: 'none' \}/)
   assert.match(provider, /pointerEvents=\{curtain \? 'none' : 'auto'\}/)
   assert.match(provider, /importantForAccessibility=\{curtain \? 'no-hide-descendants' : 'auto'\}/)

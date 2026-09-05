@@ -13,10 +13,14 @@ legacy `magicLinkSignIn` capability remains mutually exclusive during the
 migration. Old callback routes stay deployed long enough to consume links that
 were already issued, but the new UI does not depend on them.
 
-Supabase OTP user creation has a separate `HOMESROLO_SELF_SIGNUP_ENABLED` gate
-that defaults to `false`. With that gate off, existing principals can sign in,
-but an arbitrary new email address cannot create an account. Keep it off for
-the private upload development lane.
+Supabase OTP user creation through the app has a separate
+`HOMESROLO_SELF_SIGNUP_ENABLED` gate that defaults to `false`. With that gate
+off, the app requests codes with `shouldCreateUser: false`. An existing
+Supabase Auth user can still sign in and receive a first Homesrolo principal
+after verified email completion. This flag does not restrict direct Supabase
+registration or independently gate app-principal creation; do not describe it
+as a provider-wide allowlist. Keep it off for the private upload development
+lane.
 
 ## Default-off release gate
 
@@ -38,10 +42,9 @@ raw email addresses are never stored as limiter keys.
    unique `HOMESROLO_EMAIL_CODE_RATE_LIMIT_SECRET` to the server environment.
 2. Configure production SMTP. Supabase's shared development mailer is not a
    production delivery service.
-3. Update both the **Magic Link** and **Confirm signup** templates to include
-   `{{ .Token }}` and identify it as the six-digit Homesrolo sign-in code.
-   Existing confirmed users and first-time users can receive different
-   templates, so changing only one is incomplete.
+3. Install both branded templates and subjects below. Existing confirmed
+   users and first-time users can receive different templates, so changing
+   only one is incomplete.
 4. Configure the OTP lifetime to 10 minutes and retain the provider's 60-second
    resend interval.
 5. Smoke-test a first-time address and an existing address. Confirm delivery,
@@ -54,6 +57,52 @@ raw email addresses are never stored as limiter keys.
 Do not enable the gate before the two templates and production SMTP are
 verified. Do not put the email or code in a URL, local storage, logs, analytics,
 or error output.
+
+## Branded production templates
+
+The complete, paste-ready HTML lives in `apps/homeowner/email-templates/`.
+`manifest.json` records the exact subjects, preview text, and provider targets.
+These files are deployment inputs: committing or deploying the application
+does **not** update the templates saved in Supabase.
+
+| Supabase email template | Subject | HTML body file |
+| --- | --- | --- |
+| Magic Link | Your Homesrolo sign-in code | `apps/homeowner/email-templates/magic-link.html` |
+| Confirm signup | Your Homesrolo sign-in code | `apps/homeowner/email-templates/confirm-signup.html` |
+
+In the correct Supabase project's Authentication email-template settings,
+open each named template, set its subject exactly as above, replace the entire
+HTML body with the matching file, and save. Read back both saved subjects and
+bodies. Do not paste the filename, Markdown fences, or the manifest into the
+HTML editor. Both bodies deliberately contain `{{ .Token }}` exactly once;
+keep that placeholder intact. There is no magic-link URL, secondary sign-in
+button, external image, tracking resource, or password in either template.
+Do not add click tracking or a second sign-in mechanism during installation.
+This template update does not require changing signup flags, SMTP credentials,
+redirect URLs, or access rules.
+
+The message uses a 100%-width, 480px-max presentation table, inline light-mode
+styles, a fixed-width Outlook fallback, and optional paired dark-mode colors.
+The code is selectable text, not an image or six separate cells. The hidden
+preheader describes the next step without repeating the code. The visible
+10-minute expiry must match the provider's 600-second email OTP setting.
+
+Run the deterministic content, layout, and contrast checks from the repository
+root with:
+
+```sh
+node --experimental-strip-types --test apps/homeowner/lib/tests/email-templates.test.ts
+```
+
+These checks do not establish inbox delivery or pixel-perfect rendering in
+every mail client. After installation, send to an approved test mailbox and
+verify the **received** subject, one six-digit code, preview text, narrow-screen
+layout, light/dark readability, and successful entry in the already-open PWA.
+Also exercise the Confirm signup template with an explicitly approved first-time
+account when that flow is in scope; a returning-user email alone cannot prove
+both templates. A provider editor preview or the app's generic accepted response
+is not proof that an email was delivered. Do not copy a live code into a QA
+report or commit it as a test fixture.
 
 ## Rollback
 

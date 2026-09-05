@@ -6,6 +6,7 @@ import { HouseMark } from '../../../components/icons.tsx'
 import { exchangeHomeownerProviderCredential } from '../../../lib/port/transport.ts'
 import {
   homeownerEntryContext,
+  homeownerPostSignInPath,
   withHomeownerEntryContext,
 } from '../../../lib/entry-context.ts'
 
@@ -33,7 +34,10 @@ export default function CompleteSignInPage() {
       }
       try {
         if (!await exchangeHomeownerProviderCredential(accessToken)) throw new Error('exchange_failed')
-        window.location.replace(withHomeownerEntryContext('/homes', context))
+        // This alternate callback can complete without mounting the PWA form.
+        // Remove only its non-secret, tab-local pending email state.
+        try { window.sessionStorage.removeItem('homesrolo.email-code-challenge.v1') } catch { /* storage may be unavailable */ }
+        window.location.replace(homeownerPostSignInPath(context))
       } catch {
         if (active) setFailed(true)
       }
