@@ -63,7 +63,27 @@ nondiscovery, revoked-invitation exclusion, and unchanged browser grants.
 
 The fixture uses relevant historical objects and minimal supporting tables,
 then executes both actual forward migration files. It is not a full historical
-migration replay or proof of production integration. The CI **Verify contracts**
-job runs this test using PostgreSQL binaries located by `pg_config --bindir`;
-the runner must provide `pg_config` and those server/client binaries. Missing
-binaries fail the test rather than silently skipping database coverage.
+migration replay or proof of production integration. Missing binaries fail the
+test rather than silently skipping database coverage.
+
+## Pending CI integration
+
+The saved GitHub OAuth sign-in cannot update workflow files. The proposed CI
+step was therefore left out of the repair PR; no alternate credential or
+indirect execution path was used. The migration regression is locally verified
+but is not currently part of the hosted CI checks. It must be run explicitly
+before release until an authorized workflow maintainer adds the following step
+to the existing **Verify contracts** job after the directory tests:
+
+```yaml
+- name: Invitation database regressions
+  run: |
+    set -euo pipefail
+    invitation_pg_bindir="$(pg_config --bindir)"
+    export PATH="$invitation_pg_bindir:$PATH"
+    npm run test:invitation-db
+```
+
+The runner must provide `pg_config` and the PostgreSQL server/client binaries.
+The existing hosted checks still cover contracts, directory, both application
+test suites, web builds, and native JavaScript exports.

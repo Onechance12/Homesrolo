@@ -55,6 +55,8 @@ Final local gates passed: root contracts **207**, homeowner **320**, mobile
 mobile typechecks and homeowner lint passed. The production-configured Expo
 PWA export and Next production build passed. Native exports and public web
 builds are additionally exercised by the pull request's CI gates.
+The database regression is local-only until an authorized maintainer adds its
+documented CI step; the current GitHub sign-in cannot edit workflow files.
 
 Regression coverage includes both previously reproduced account-transition
 races, actual API-client methods with fake native IO and fetch, upload-stage
