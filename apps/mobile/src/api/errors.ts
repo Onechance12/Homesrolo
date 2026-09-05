@@ -8,6 +8,7 @@ const messages: Readonly<Record<string, string>> = Object.freeze({
   forbidden: 'Homesrolo could not confirm access to this home.',
   conflict: 'This record changed on another screen. Refresh it and try once more.',
   invalid_request: 'Something in that entry needs another look.',
+  property_save_unavailable: 'Saving these extra home details is not available on this version. Your reviewed details have not been discarded.',
   network_unavailable: 'Homesrolo could not reach the server. Check your connection and try again.',
   unsupported_file: 'Choose a PDF, JPEG, or PNG file under 10 MB.',
   invalid_file: 'That file could not be read completely. Try selecting it again.',

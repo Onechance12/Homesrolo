@@ -51,6 +51,8 @@ import {
 } from './home-assistant.ts'
 import { HomesroloProfessionalService } from '../../../../src/homeowner/homesrolo-professional-service.v1.ts'
 import { HomeownerHouseholdService } from '../../../../src/homeowner/homeowner-household.v1.ts'
+import { SupabasePropertyRecordsStore } from './property-records-store.ts'
+import { PropertyRecordsReceipt } from './property-records-receipt.ts'
 
 const unconfiguredIdentity: HomeownerIdentityPort = {
   async resolvePrincipal() { return null },
@@ -107,6 +109,13 @@ const auth = configuration && clients
 const emailCodeRateLimiter = configuration?.emailCodeRateLimitSecret
   ? new EmailCodeRateLimiter({ secret: configuration.emailCodeRateLimitSecret })
   : null
+const propertyRecords = clients && configuration?.emailCodeRateLimitSecret
+  && environment.HOMESROLO_PROPERTY_RECORDS_ENABLED === 'true'
+  ? { store: new SupabasePropertyRecordsStore(clients.service),
+      receipts: new PropertyRecordsReceipt(configuration.emailCodeRateLimitSecret) }
+  : null
+
+export function configuredPropertyRecords() { return propertyRecords }
 
 let service: HomeownerApiService | null = null
 const jobroloIntakeConfiguration = readJobroloIntakeClientConfiguration(environment)

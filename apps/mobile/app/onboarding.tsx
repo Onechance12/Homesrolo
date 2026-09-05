@@ -11,8 +11,10 @@ import { publicRoofingIntent, type PublicRoofingIntent } from '../src/auth/entry
 import { useSession } from '../src/auth/SessionProvider.tsx'
 import { Body, Brand, Button, Card, Chip, Eyebrow, Loading, Notice, Page, TextField } from '../src/components/ui.tsx'
 import { useResource } from '../src/hooks/useResource.ts'
+import { PropertyDetailsReview } from '../src/components/PropertyDetailsReview.tsx'
+import type { PropertyReviewSelection } from '../src/home/property-review.ts'
 import {
-  FirstCompanyNameConflict, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
+  FirstCompanyNameConflict, FirstHomePropertySaveFailed, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
   firstRunProgress, firstRunRoloPrompt, firstRunUsesWideLayout, initialHomeIntent, previousFirstRunStep,
   reviewFirstCompany, reviewFirstHome,
   type FirstRunAttempt, type FirstRunStep, type FirstRunWorkspace, type HomeIntent,
@@ -142,6 +144,8 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
   const [trade, setTrade] = useState<ProfessionalTrade>('roofing')
   const [serviceArea, setServiceArea] = useState('')
   const [homeReview, setHomeReview] = useState<ReviewedFirstHome | null>(null)
+  const [propertySelection, setPropertySelection] = useState<PropertyReviewSelection>({ kind: 'none' })
+  const [propertySaveFailed, setPropertySaveFailed] = useState(false)
   const [companyReview, setCompanyReview] = useState<ReviewedFirstCompany | null>(null)
   const [createdHome, setCreatedHome] = useState<HomeSummary | null>(null)
   const [createdCompany, setCreatedCompany] = useState<ProfessionalOrganization | null>(null)
@@ -189,6 +193,7 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
     if (locked) return
     const reviewed = reviewFirstHome(homeLabel, address)
     if (!reviewed.ok) { setError(reviewed.message); return }
+    setPropertySelection({ kind: 'none' })
     setHomeReview(reviewed.value)
     go('home-review')
   }
@@ -202,10 +207,12 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
 
   async function finishHome() {
     if (step !== 'home-review' || !homeReview || !visible.current || actionBusy.current) return
+    if (propertySelection.kind === 'pending' || propertySelection.kind === 'invalid') return
     actionBusy.current = true
     setBusy(true)
     setError(null)
-    homeAttempt.current ??= firstHomeAttempt(homeReview)
+    setPropertySaveFailed(false)
+    homeAttempt.current ??= firstHomeAttempt(homeReview, propertySelection.kind === 'reviewed' ? propertySelection.value : undefined)
     try {
       const home = await homeAttempt.current.run(api)
       if (!active.current) return
@@ -216,7 +223,10 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
       setHomeReview(null)
       setStep('home-ready')
     } catch (caught) {
-      if (active.current) setError(friendlyError(caught))
+      if (active.current) {
+        setPropertySaveFailed(caught instanceof FirstHomePropertySaveFailed)
+        setError(caught instanceof FirstHomePropertySaveFailed ? caught.message : friendlyError(caught))
+      }
     } finally {
       actionBusy.current = false
       if (active.current) setBusy(false)
@@ -325,13 +335,15 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
               </View>
               {intentLabel ? <Text style={styles.smallPrint}>Starting with: {intentLabel}</Text> : null}
             </Card>
+            <PropertyDetailsReview principalRef={principalRef} address={homeReview.address.address}
+              disabled={locked || busy} onChange={setPropertySelection} />
             <Card style={styles.privacyCard}>
               <PrivacyPoint icon="lock-closed-outline" title="Private, not public">Your home and address are not a public listing.</PrivacyPoint>
               <PrivacyPoint icon="people-outline" title="Sharing is your choice">Invite an adult to your household later. Companies receive only the project access you choose to share.</PrivacyPoint>
               <PrivacyPoint icon="chatbubble-ellipses-outline" title="A conversation, not an order">Starting Rolo doesn’t contact a company, hire anyone, or send a message on your behalf.</PrivacyPoint>
             </Card>
             {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-            <Button label={busy ? 'Creating your home…' : locked ? 'Retry this home setup' : 'Create my home'} icon="checkmark" disabled={busy} onPress={() => void finishHome()} />
+            <Button label={busy ? 'Creating your home…' : locked ? 'Retry this home setup' : 'Create my home'} icon="checkmark" disabled={busy || propertySelection.kind === 'pending' || propertySelection.kind === 'invalid'} onPress={() => void finishHome()} />
           </>
         ) : null}
         {step === 'home-ready' && createdHome ? (
@@ -386,7 +398,9 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
         ) : null}
         {workspace === 'pro' && !professionalEnabled && step !== 'welcome' ? <Notice message="Company setup is no longer available for this account." actionLabel="Open account" onAction={() => router.replace('/account')} /> : null}
         {locked && !busy && !ready ? (
-          <Card><Text style={styles.choiceDetail}>Your reviewed details are held for this attempt. Retry finishes the same setup. If you leave, check your saved spaces before starting another.</Text><Button label="Check my saved spaces" quiet onPress={() => router.replace('/start')} /></Card>
+          <Card><Text style={styles.choiceDetail}>{propertySaveFailed
+            ? 'Leaving or reloading discards this unsaved property review. Retry here to keep it. You can also look up and review missing property details later from Home details.'
+            : 'Your reviewed details are held for this attempt. Retry finishes the same setup. If you leave, check your saved spaces before starting another.'}</Text><Button label={propertySaveFailed ? 'Leave review and check saved spaces' : 'Check my saved spaces'} quiet onPress={() => router.replace('/start')} /></Card>
         ) : null}
       </>
     )

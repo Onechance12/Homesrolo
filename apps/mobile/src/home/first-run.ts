@@ -4,6 +4,7 @@ import { publicRoofingPrompt, type PublicRoofingIntent } from '../auth/entry-int
 import { PROFESSIONAL_TRADES, slugFor } from '../professional/presentation.ts'
 import { createReviewedHome } from './create-home.ts'
 import { reviewNewHomeAddress, type NewHomeAddressDraft, type ReviewedNewHomeAddress } from './onboarding.ts'
+import type { ReviewedPropertyDetails } from './property-review.ts'
 
 export type FirstRunWorkspace = 'home' | 'pro'
 export type HomeIntent = 'attention' | 'plan' | 'care' | 'organize'
@@ -112,6 +113,12 @@ export class FirstCompanyNameConflict extends Error {
   }
 }
 
+export class FirstHomePropertySaveFailed extends Error {
+  constructor(cause: unknown) {
+    super('Your home may already be created, but these property details are not confirmed saved. Retry here to keep them. Leaving or reloading discards this unsaved review.', { cause })
+  }
+}
+
 function firstRunAttempt<T>(save: (api: HomesroloApi, refs: readonly [string, string]) => Promise<T>): FirstRunAttempt<T> {
   let commandRefs: readonly [string, string] | null = null
   let pending: Promise<T> | null = null
@@ -133,13 +140,26 @@ function firstRunAttempt<T>(save: (api: HomesroloApi, refs: readonly [string, st
   }
 }
 
-export function firstHomeAttempt(review: ReviewedFirstHome): FirstRunAttempt<HomeSummary> {
+export function firstHomeAttempt(review: ReviewedFirstHome, property?: ReviewedPropertyDetails): FirstRunAttempt<HomeSummary> {
   // Copy the reviewed values so an input object can never alter a retry.
   const label = review.label
   const reviewedAddress = { ...review.address, address: { ...review.address.address } }
-  return firstRunAttempt((api, [createCommandRef, recordCommandRef]) => createReviewedHome(api, {
-    label, reviewedAddress, createCommandRef, recordCommandRef,
-  }))
+  const reviewedProperty = property ? { facts: { ...property.facts }, receipt: property.receipt } : null
+  let propertyCommandRef: string | null = null
+  return firstRunAttempt(async (api, [createCommandRef, recordCommandRef]) => {
+    if (reviewedProperty && !api.saveHomeProperty) throw new Error('property_save_unavailable')
+    const home = await createReviewedHome(api, { label, reviewedAddress, createCommandRef, recordCommandRef })
+    if (reviewedProperty) {
+      try {
+        propertyCommandRef ??= await api.newCommandRef()
+        await api.saveHomeProperty!(home.homeRef, {
+          commandRef: propertyCommandRef, address: reviewedAddress.address,
+          facts: reviewedProperty.facts, receipt: reviewedProperty.receipt,
+        })
+      } catch (error) { throw new FirstHomePropertySaveFailed(error) }
+    }
+    return home
+  })
 }
 
 export function firstCompanyAttempt(review: ReviewedFirstCompany): FirstRunAttempt<ProfessionalOrganization> {

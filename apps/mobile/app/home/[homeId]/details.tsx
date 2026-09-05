@@ -10,6 +10,7 @@ import { isCurrentHouseholdController } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
 import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
+import { HomePropertyDetails } from '../../../src/components/HomePropertyDetails.tsx'
 import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../src/components/ui.tsx'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
 import {
@@ -130,6 +131,7 @@ export default function HomeDetailsScreen() {
       <HomeHeader section="My Home" title="The basics" detail="Private facts that help this home remember what it is." />
       <BackButton label="My Home" onPress={() => router.replace({ pathname: '/home/[homeId]/care', params: { homeId } })} />
       {!canEdit ? <Notice message="Only a Home admin can change these details. You can still review the shared Home Record." /> : null}
+      <HomePropertyDetails key={homeId} homeRef={homeId} currentAddress={profile.address} canEdit={canEdit} />
 
       <SectionTitle title="Address" detail="This stays private unless you deliberately share it." />
       <Card>

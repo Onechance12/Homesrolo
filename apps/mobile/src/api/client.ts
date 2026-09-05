@@ -69,6 +69,9 @@ import {
   parseHomeCheckupPhoto,
 } from './home-checkup.ts'
 import { homeRecordUpdateBody, parseHomeRecordProfile } from './home-record.ts'
+import { reviewedHomeRecordAddress } from './home-record.ts'
+import type { HomeRecordAddress, HomePropertySnapshot, PropertyLookupResult } from './model.ts'
+import { parseHomePropertySnapshot, parsePropertyLookupResult, saveHomePropertyBody, type SaveHomePropertyInput } from './property.ts'
 import {
   acceptHouseholdInvitationBody,
   createHouseholdInvitationBody,
@@ -516,6 +519,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     readonly method?: 'GET' | 'POST' | 'DELETE'
     readonly body?: unknown
     readonly authentication?: 'required' | 'bootstrap'
+    readonly timeoutMs?: number
   } = {}): Promise<unknown> {
     const authentication = options.authentication ?? 'required'
     const privateRequest = authentication === 'required'
@@ -523,6 +527,8 @@ export class HomesroloNativeApi implements HomesroloApi {
     const confirmCurrent = privateRequest ? this.#privateRequestGuard?.() : undefined
     const token = authentication === 'required' ? this.#authenticatedToken() : null
     let response: Response
+    const controller = options.timeoutMs ? new AbortController() : null
+    const timeout = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : null
     try {
       const serialized = options.body === undefined ? null : JSON.stringify(options.body)
       response = await fetch(`${this.#origin}${path}`, {
@@ -531,6 +537,7 @@ export class HomesroloNativeApi implements HomesroloApi {
         cache: 'no-store',
         redirect: 'error',
         referrerPolicy: 'no-referrer',
+        ...(controller ? { signal: controller.signal } : {}),
         headers: this.#authenticatedHeaders(
           token,
           options.body === undefined ? 'none' : 'json',
@@ -538,11 +545,14 @@ export class HomesroloNativeApi implements HomesroloApi {
         ...(serialized === null ? {} : { body: serialized }),
       })
     } catch {
+      if (timeout) clearTimeout(timeout)
+      confirmCurrent?.()
       throw new NativeApiError(0, 'network_unavailable')
     }
     let payload: unknown
-    try { payload = await response.json() } catch { payload = null }
+    try { payload = await response.json() } catch { payload = null } finally { if (timeout) clearTimeout(timeout) }
     confirmCurrent?.()
+    if (controller?.signal.aborted) throw new NativeApiError(0, 'network_unavailable')
     if (!response.ok) {
       const problem = problemCode(payload)
       if (response.status === 401 && (privateRequest || !this.#usesCookieSession())) this.#onSignedOut()
@@ -725,6 +735,33 @@ export class HomesroloNativeApi implements HomesroloApi {
       throw new NativeApiError(200, 'invalid_response')
     }
     return profile
+  }
+
+  async lookupProperty(address: HomeRecordAddress): Promise<PropertyLookupResult> {
+    const reviewed = reviewedHomeRecordAddress(address)
+    if (!reviewed) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(apiPath('property-research'), {
+      method: 'POST', body: { address: reviewed, consentToLookup: true }, timeoutMs: 28_000,
+    })
+    try { return parsePropertyLookupResult(data, reviewed) } catch { throw new NativeApiError(200, 'invalid_response') }
+  }
+
+  async getHomeProperty(homeRef: string): Promise<HomePropertySnapshot | null> {
+    if (!isHomeRef(homeRef)) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(apiPath('homes', homeRef, 'property'))
+    try { return parseHomePropertySnapshot(data, homeRef) } catch { throw new NativeApiError(200, 'invalid_response') }
+  }
+
+  async saveHomeProperty(homeRef: string, input: SaveHomePropertyInput): Promise<HomePropertySnapshot> {
+    const body = saveHomePropertyBody(input)
+    if (!isHomeRef(homeRef) || !body) throw new NativeApiError(400, 'invalid_request')
+    const data = await this.#request(apiPath('homes', homeRef, 'property'), { method: 'POST', body })
+    try {
+      const snapshot = parseHomePropertySnapshot(data, homeRef)
+      if (!snapshot || JSON.stringify(snapshot.address) !== JSON.stringify(body.address)
+        || JSON.stringify(snapshot.facts) !== JSON.stringify(body.facts)) throw new Error('invalid_wire_data')
+      return snapshot
+    } catch { throw new NativeApiError(200, 'invalid_response') }
   }
 
   async listWork(homeRef: string): Promise<readonly WorkRecord[]> {

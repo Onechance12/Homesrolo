@@ -52,6 +52,8 @@ import type {
   WorkRecord,
 } from './model.ts'
 import type { ProtectedImageSource } from './image-source.ts'
+import type { HomeRecordAddress, HomePropertySnapshot, PropertyLookupResult } from './model.ts'
+import type { SaveHomePropertyInput } from './property.ts'
 
 /** The platform-neutral API surface consumed by the mobile views and session layer. */
 export interface HomesroloApi {
@@ -95,6 +97,9 @@ export interface HomesroloApi {
   ): Promise<HouseholdMember>
   getHomeRecord(homeRef: string): Promise<HomeRecordProfile>
   updateHomeRecord(homeRef: string, input: UpdateHomeRecordInput): Promise<HomeRecordProfile>
+  lookupProperty?(address: HomeRecordAddress): Promise<PropertyLookupResult>
+  getHomeProperty?(homeRef: string): Promise<HomePropertySnapshot | null>
+  saveHomeProperty?(homeRef: string, input: SaveHomePropertyInput): Promise<HomePropertySnapshot>
   listWork(homeRef: string): Promise<readonly WorkRecord[]>
   createWork(homeRef: string, input: CreateWorkInput): Promise<WorkRecord>
   updateWork(homeRef: string, projectRef: string, input: UpdateWorkInput): Promise<WorkRecord>

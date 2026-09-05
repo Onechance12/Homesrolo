@@ -696,3 +696,49 @@ export interface ApiProblem {
   readonly code: string
   readonly retryAfterSeconds?: number
 }
+
+/** Plain wire types: mobile builds install independently of the server's schema dependencies. */
+export interface PropertyFacts {
+  squareFeet: number | null
+  yearBuilt: number | null
+  lotSquareFeet: number | null
+  bedrooms: number | null
+  bathrooms: number | null
+  rooms: number | null
+  garageSpaces: number | null
+  centralHeat: boolean | null
+  centralAir: boolean | null
+  subdivision: string | null
+}
+
+export interface PropertyLookup {
+  readonly version: 'property-lookup.v1'
+  readonly status: 'matched' | 'no_match' | 'ambiguous' | 'unsupported' | 'unavailable'
+  readonly address: HomeRecordAddress
+  readonly matchedAddress: string | null
+  readonly county: { readonly name: string; readonly fips: string } | null
+  readonly retrievedAt: string
+  readonly source: {
+    readonly id: 'tarrant_county'
+    readonly title: string
+    readonly url: 'https://mapit.tarrantcounty.com/arcgis/rest/services/Dynamic/TADParcels/FeatureServer/0'
+    readonly parcelId: string
+    readonly recordDate: string | null
+  } | null
+  readonly facts: PropertyFacts
+  readonly notes: readonly string[]
+}
+
+export interface PropertyLookupResult {
+  readonly lookup: PropertyLookup
+  readonly receipt: string | null
+}
+
+export interface HomePropertySnapshot {
+  readonly version: 'home-property-snapshot.v1'
+  readonly homeRef: string
+  readonly address: HomeRecordAddress
+  readonly facts: PropertyFacts
+  readonly lookup: PropertyLookup | null
+  readonly reviewedAt: string
+}

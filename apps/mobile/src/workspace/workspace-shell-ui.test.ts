@@ -13,7 +13,7 @@ test('first-run setup chooses a real Home or Pro workspace before entering the a
   assert.match(start, /decideStartupDestination/)
   assert.match(onboarding, /title="My home"/)
   assert.match(onboarding, /title="My company"/)
-  assert.match(onboarding, /step !== 'home-review'[\s\S]*firstHomeAttempt\(homeReview\)/)
+  assert.match(onboarding, /step !== 'home-review'[\s\S]*firstHomeAttempt\(homeReview,/)
   assert.match(onboarding, /step !== 'pro-review'[\s\S]*firstCompanyAttempt\(companyReview\)/)
   assert.match(firstRun, /createReviewedHome\(api/)
   assert.match(firstRun, /createProfessionalOrganization/)
