@@ -311,6 +311,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'app/api/v1/homes/route.ts',
     'app/api/v1/homes/[homeRef]/route.ts',
     'app/api/v1/homes/[homeRef]/record/route.ts',
+    'app/api/v1/homes/[homeRef]/property/route.ts',
+    'app/api/v1/property-research/route.ts',
     'app/api/v1/homes/[homeRef]/intake/route.ts',
     'app/api/v1/homes/[homeRef]/projects/route.ts',
     'app/api/v1/homes/[homeRef]/projects/[projectRef]/route.ts',
@@ -394,7 +396,17 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     'the route inventory must remain exactly the allowlisted paths')
   for (const rel of ROUTE_ALLOWLIST) {
     const content = read(rel)
-    if (HOUSEHOLD_GET_ONLY_ROUTES.includes(rel)) {
+    if (rel === 'app/api/v1/property-research/route.ts') {
+      assert.match(content, /export const POST = handlePropertyLookup/,
+        'pre-save lookup delegates only to the authenticated consented property boundary')
+      assert.doesNotMatch(content, /export (async function|const) (GET|PUT|PATCH|DELETE)/)
+    } else if (rel === 'app/api/v1/homes/[homeRef]/property/route.ts') {
+      assert.match(content, /export async function GET/)
+      assert.match(content, /export async function POST/)
+      assert.match(content, /handleHomeProperty/,
+        'private initial snapshot delegates to its exact-home store boundary')
+      assert.doesNotMatch(content, /export (async function|const) (PUT|PATCH|DELETE)/)
+    } else if (HOUSEHOLD_GET_ONLY_ROUTES.includes(rel)) {
       assert.match(content, /export async function GET/, `${rel} serves one exact-home household roster`)
       assert.doesNotMatch(content, /export (async function|const) POST/, `${rel} exposes no household mutation`)
       assert.match(content, /handleHouseholdRequest/, `${rel} delegates to the household boundary`)
@@ -556,6 +568,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
     } else if (rel === 'app/api/v1/homes/route.ts') {
       assert.match(content, /export async function POST/, `${rel} serves the create command`)
     } else if (rel !== 'app/api/v1/homes/[homeRef]/record/route.ts'
+      && rel !== 'app/api/v1/homes/[homeRef]/property/route.ts'
+      && rel !== 'app/api/v1/property-research/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/intake/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/roofing-projects/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/projects/route.ts'
@@ -588,6 +602,8 @@ test('only the allowlisted homeowner-http.v1 routes and methods exist', () => {
         `${rel} must export no generic mutation method`)
     }
     if (!rel.startsWith('app/api/v1/auth/')
+      && rel !== 'app/api/v1/homes/[homeRef]/property/route.ts'
+      && rel !== 'app/api/v1/property-research/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/content/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/preview/route.ts'
       && rel !== 'app/api/v1/homes/[homeRef]/artifacts/[artifactRef]/complete/route.ts'

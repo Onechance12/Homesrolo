@@ -8,10 +8,12 @@ import ts from 'typescript'
 import type { HomesroloApi } from '../api/contract.ts'
 import type { DeviceFile, ServerSession } from '../api/model.ts'
 import { SessionFence, sessionBoundApi } from './session-fence.ts'
+import { emptyPropertyFacts } from '../home/property-review.ts'
 
 const HOME = `hhom_${'h'.repeat(43)}`
 const PROJECT = `hprj_${'p'.repeat(43)}`
 const COMMAND = `hcmd_${'c'.repeat(43)}`
+const PROPERTY_ADDRESS = { line1: '123 Synthetic Street', line2: null, city: 'Fort Worth', regionCode: 'TX', postalCode: '76102', countryCode: 'US' as const }
 const SESSION_A: Extract<ServerSession, { kind: 'signed_in' }> = {
   apiVersion: 'homeowner-api.v1-draft', kind: 'signed_in', principalRef: `hprn_${'a'.repeat(43)}`,
   capabilities: {
@@ -61,6 +63,7 @@ function realClient(options: {
   }
   const context = createContext({
     URL, URLSearchParams, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Response, Headers,
+    AbortController, setTimeout, clearTimeout,
     fetch: async (url: string, init: RequestInit) => {
       const call = { url, init }
       calls.push(call)
@@ -119,6 +122,58 @@ function mutationReply(call: FetchCall): Response {
   }
   return Response.json({ data })
 }
+
+test('actual property lookup sends only explicit address consent, uses cookie auth and has a bounded abort signal', async () => {
+  const result = {
+    lookup: { version: 'property-lookup.v1', status: 'unsupported', address: PROPERTY_ADDRESS,
+      matchedAddress: null, county: null, retrievedAt: '2026-09-05T12:00:00.000Z', source: null,
+      facts: emptyPropertyFacts(), notes: [] }, receipt: null,
+  }
+  const client = realClient({ reply: async () => Response.json({ data: result }) })
+  const returned = await client.bound.lookupProperty!(PROPERTY_ADDRESS)
+  assert.equal(returned.lookup.status, 'unsupported')
+  assert.equal(client.calls.length, 1)
+  const call = client.calls[0]!
+  assert.equal(call.url, 'https://homesrolo.invalid/api/v1/property-research')
+  assert.equal(call.init.method, 'POST')
+  assert.equal(call.init.credentials, 'same-origin')
+  assert.equal(new Headers(call.init.headers).has('authorization'), false)
+  assert.ok(call.init.signal instanceof AbortSignal)
+  assert.deepEqual(JSON.parse(String(call.init.body)), { address: PROPERTY_ADDRESS, consentToLookup: true })
+  const source = readFileSync(path.join(sourceDirectory, 'api/client.ts'), 'utf8')
+  assert.match(source, /apiPath\('property-research'\)[\s\S]*timeoutMs: 28_000/)
+})
+
+test('actual property lookup discards a late response after the cookie principal changes', async () => {
+  const response = deferred<Response>()
+  const entered = deferred<void>()
+  const client = realClient({ reply: async () => { entered.resolve(); return response.promise } })
+  const pending = client.bound.lookupProperty!(PROPERTY_ADDRESS)
+  const rejected = assert.rejects(pending, /session_check_required/)
+  await entered.promise
+  client.changePrincipal()
+  response.resolve(Response.json({ data: { lookup: {}, receipt: null } }))
+  await rejected
+  assert.equal(client.calls.length, 1)
+  assert.equal(client.signedOutCount(), 0)
+})
+
+test('actual reviewed property save/read are exact-home and preserve manual unknowns', async () => {
+  const facts = { ...emptyPropertyFacts(), squareFeet: 1850, bedrooms: 3, rooms: null }
+  const snapshot = { version: 'home-property-snapshot.v1', homeRef: HOME, address: PROPERTY_ADDRESS,
+    facts, lookup: null, reviewedAt: '2026-09-05T12:00:00.000Z' }
+  const client = realClient({ reply: async () => Response.json({ data: snapshot }) })
+  const saved = await client.bound.saveHomeProperty!(HOME, { commandRef: COMMAND, address: PROPERTY_ADDRESS, facts, receipt: null })
+  assert.equal(saved.facts.rooms, null)
+  await client.bound.getHomeProperty!(HOME)
+  assert.deepEqual(client.calls.map(call => [call.url, call.init.method]), [
+    [`https://homesrolo.invalid/api/v1/homes/${HOME}/property`, 'POST'],
+    [`https://homesrolo.invalid/api/v1/homes/${HOME}/property`, 'GET'],
+  ])
+  assert.deepEqual(JSON.parse(String(client.calls[0]!.init.body)), { commandRef: COMMAND, address: PROPERTY_ADDRESS, facts, receipt: null })
+  const other = realClient({ reply: async () => Response.json({ data: { ...snapshot, homeRef: `hhom_${'z'.repeat(43)}` } }) })
+  await assert.rejects(other.bound.getHomeProperty!(HOME), /invalid_response/)
+})
 
 const mutations: readonly {
   readonly name: string

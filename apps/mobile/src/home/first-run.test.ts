@@ -4,8 +4,9 @@ import test from 'node:test'
 import type { HomesroloApi } from '../api/contract.ts'
 import type { HomeSummary, ProfessionalOrganization } from '../api/model.ts'
 import { publicRoofingIntent, publicRoofingPrompt } from '../auth/entry-intent.ts'
+import { emptyPropertyFacts } from './property-review.ts'
 import {
-  FirstCompanyNameConflict, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
+  FirstCompanyNameConflict, FirstHomePropertySaveFailed, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
   firstRunProgress, firstRunRoloPrompt, firstRunUsesWideLayout, initialHomeIntent, previousFirstRunStep,
   reviewFirstCompany, reviewFirstHome,
 } from './first-run.ts'
@@ -259,4 +260,42 @@ test('route wiring binds drafts to the principal and only explicit reviewed crea
   assert.match(route, /edges=\{\['top', 'left', 'right', 'bottom'\]\}/)
   assert.match(route, /maxWidth: 1080/)
   assert.doesNotMatch(route, /localStorage|sessionStorage|sendHomeAssistant|publicationState: 'published'/)
+})
+
+test('public facts remain unsaved until explicit creation and retry as the same third command', async () => {
+  const harness = homeApi()
+  const saves: unknown[] = []
+  const property = { facts: { ...emptyPropertyFacts(), squareFeet: 1850, bedrooms: 3, rooms: null }, receipt: `opaque_test_payload.${'r'.repeat(43)}` }
+  const api: HomesroloApi = { ...harness.api, async saveHomeProperty(homeRef, input) {
+    saves.push(structuredClone(input))
+    if (saves.length === 1) throw new Error('network_unavailable')
+    return { version: 'home-property-snapshot.v1', homeRef, address: input.address, facts: input.facts, lookup: null, reviewedAt: '2026-09-05T12:00:00.000Z' }
+  } }
+  const attempt = firstHomeAttempt(reviewedHome(), property)
+  assert.equal(harness.minted(), 0)
+  assert.equal(harness.creates.length, 0)
+  assert.equal(saves.length, 0, 'reviewing/looking up property is not a save')
+  await assert.rejects(attempt.run(api), error => error instanceof FirstHomePropertySaveFailed
+    && error.cause instanceof Error && error.cause.message === 'network_unavailable')
+  property.facts.squareFeet = 9999
+  property.receipt = `different_payload.${'x'.repeat(43)}`
+  await attempt.run(api)
+  assert.equal(harness.homes.size, 1)
+  assert.equal(harness.minted(), 3)
+  assert.equal(harness.updates.length, 1, 'the home address was already saved')
+  assert.deepEqual(saves[0], saves[1], 'facts, receipt, address and third command ref are frozen across retry')
+  assert.equal((saves[0] as { facts: { squareFeet: number } }).facts.squareFeet, 1850)
+  await attempt.run(api)
+  assert.equal(saves.length, 2, 'a completed attempt never writes the snapshot again')
+})
+
+test('skip/manual unknown facts need no lookup or third command; missing snapshot API fails before creation', async () => {
+  const skipped = homeApi()
+  await firstHomeAttempt(reviewedHome()).run(skipped.api)
+  assert.equal(skipped.minted(), 2)
+  assert.equal(skipped.homes.size, 1)
+  const unavailable = homeApi()
+  const attempt = firstHomeAttempt(reviewedHome(), { facts: { ...emptyPropertyFacts(), yearBuilt: 1990 }, receipt: null })
+  await assert.rejects(attempt.run(unavailable.api), /property_save_unavailable/)
+  assert.equal(unavailable.homes.size, 0)
 })

@@ -696,3 +696,6 @@ export interface ApiProblem {
   readonly code: string
   readonly retryAfterSeconds?: number
 }
+export type {
+  PropertyFacts, PropertyLookup, PropertyLookupResult, HomePropertySnapshot,
+} from '../../../../src/homeowner/property-research.v1.ts'
