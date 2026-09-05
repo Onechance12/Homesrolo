@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { lookupPropertyRecords } from '../server/property-records.ts'
+import { readFileSync } from 'node:fs'
+import { lookupPropertyRecords, type PropertyRecordsDiagnostic } from '../server/property-records.ts'
 import { propertyLookupSchema, type PropertyAddress } from '../../../../src/homeowner/property-research.v1.ts'
 
 // Synthetic address; fixture shape is from the public Census and Tarrant feeds.
@@ -288,16 +289,20 @@ test('declared or streamed oversize responses stop without returning partial pro
 test('timeout is bounded even when a fetch implementation ignores cancellation', async context => {
   context.mock.timers.enable({ apis: ['setTimeout'] })
   let signal: AbortSignal | null | undefined
+  const diagnostics: PropertyRecordsDiagnostic[] = []
   const pending = lookupPropertyRecords(ADDRESS, {
     fetch: async (_input, init) => {
       signal = init?.signal
       return new Promise<Response>(() => {})
-    }, now: () => NOW,
+    }, now: () => NOW, onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
   })
   context.mock.timers.tick(6_000)
   const lookup = await pending
   assertUnmatched(lookup, 'unavailable')
   assert.equal((signal as AbortSignal | undefined)?.aborted, true)
+  assert.equal(diagnostics.length, 1)
+  assert.equal(diagnostics[0]?.phase, 'census')
+  assert.equal(diagnostics[0]?.reason, 'timeout')
 })
 
 test('timeout also bounds a stalled response body and cancels the reader', async context => {
@@ -312,4 +317,114 @@ test('timeout also bounds a stalled response body and cancels the reader', async
   context.mock.timers.tick(6_000)
   assertUnmatched(await pending, 'unavailable')
   assert.equal(cancelled, true)
+})
+
+test('successful and ordinary no-match lookups emit no diagnostics', async () => {
+  for (const responses of [[census(), parcel()], [{ result: { addressMatches: [] } }]]) {
+    const { fetcher } = fakeFetch(responses)
+    const diagnostics: PropertyRecordsDiagnostic[] = []
+    const lookup = await lookupPropertyRecords(ADDRESS, { fetch: fetcher, now: () => NOW,
+      onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+    })
+    assert.notEqual(lookup.status, 'unavailable')
+    assert.deepEqual(diagnostics, [])
+  }
+})
+
+test('HTTP, MIME, size and JSON failures have closed safe diagnostic categories', async () => {
+  const cases: [Response | unknown, PropertyRecordsDiagnostic['reason'], PropertyRecordsDiagnostic['mimeCategory']][] = [
+    [json({ message: 'private-upstream-body' }, { status: 403 }), 'http_error', 'json'],
+    [new Response('private-upstream-body', { headers: { 'Content-Type': 'text/html' } }), 'unsupported_content_type', 'html'],
+    [new Response('private-upstream-body', { headers: { 'Content-Type': 'application/private-address-value' } }), 'unsupported_content_type', 'other'],
+    [json(census(), { headers: { 'Content-Length': 'private-length' } }), 'invalid_content_length', 'json'],
+    [json(census(), { headers: { 'Content-Length': '100000' } }), 'response_too_large', 'json'],
+    [new Response('{private-invalid-json', { headers: { 'Content-Type': 'application/json' } }), 'invalid_json', 'json'],
+    [json({ privateField: 'private-shape-detail' }), 'invalid_response_shape', undefined],
+  ]
+  for (const [response, reason, mimeCategory] of cases) {
+    const { fetcher } = fakeFetch([response])
+    const diagnostics: PropertyRecordsDiagnostic[] = []
+    const lookup = await lookupPropertyRecords(ADDRESS, { fetch: fetcher, now: () => NOW,
+      onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+    })
+    assertUnmatched(lookup, 'unavailable')
+    assert.equal(diagnostics.length, 1)
+    assert.equal(diagnostics[0]?.phase, 'census')
+    assert.equal(diagnostics[0]?.reason, reason)
+    assert.equal(diagnostics[0]?.mimeCategory, mimeCategory)
+    assert.ok(Number.isInteger(diagnostics[0]?.elapsedMs))
+    assert.doesNotMatch(JSON.stringify(diagnostics), /private-|Example|76244|https:|12345|receipt|principal|Token/i)
+    assert.doesNotMatch(JSON.stringify(lookup.notes), /http_error|unsupported_content_type|invalid_json|403/)
+  }
+})
+
+test('a Tarrant-only failure is distinct from Census without recording address or parcel', async () => {
+  const { fetcher } = fakeFetch([census(), json({ error: 'private-county-body' }, { status: 503 })])
+  const diagnostics: PropertyRecordsDiagnostic[] = []
+  const lookup = await lookupPropertyRecords(ADDRESS, { fetch: fetcher, now: () => NOW,
+    onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+  })
+  assertUnmatched(lookup, 'unavailable')
+  assert.equal(lookup.county?.fips, '48439')
+  assert.equal(diagnostics[0]?.phase, 'tarrant')
+  assert.equal(diagnostics[0]?.reason, 'http_error')
+  assert.equal(diagnostics[0]?.httpStatus, 503)
+  assert.deepEqual(Object.keys(diagnostics[0]!).sort(), ['elapsedMs', 'httpStatus', 'mimeCategory', 'phase', 'reason'].sort())
+})
+
+test('network failures record only allowlisted cause codes and static error kinds', async () => {
+  for (const [thrown, expectedKind, expectedCode] of [
+    [new TypeError('private URL and address', { cause: { code: 'ENOTFOUND', hostname: 'private-host' } }), 'TypeError', 'ENOTFOUND'],
+    [new TypeError('private URL and address'), 'TypeError', undefined],
+    [{ name: 'private-error-name', message: 'private-address', cause: { code: 'private-network-code' } }, 'other', undefined],
+    [Object.defineProperty({}, 'name', { get() { throw new Error('private getter') } }), 'other', undefined],
+  ] as const) {
+    const diagnostics: PropertyRecordsDiagnostic[] = []
+    const lookup = await lookupPropertyRecords(ADDRESS, {
+      fetch: async () => { throw thrown }, now: () => NOW,
+      onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+    })
+    assertUnmatched(lookup, 'unavailable')
+    assert.equal(diagnostics[0]?.reason, 'network_error')
+    assert.equal(diagnostics[0]?.errorKind, expectedKind)
+    assert.equal(diagnostics[0]?.networkCode, expectedCode)
+    assert.doesNotMatch(JSON.stringify(diagnostics), /private|Example|76244|https:|12345/i)
+  }
+})
+
+test('response reader failures are separated from fetch failures without raw error text', async () => {
+  const broken = new Response(new ReadableStream({
+    start(controller) { controller.error(new TypeError('private-stream-error')) },
+  }), { headers: { 'Content-Type': 'application/json' } })
+  const diagnostics: PropertyRecordsDiagnostic[] = []
+  const lookup = await lookupPropertyRecords(ADDRESS, { fetch: async () => broken, now: () => NOW,
+    onDiagnostic: diagnostic => { diagnostics.push(diagnostic) },
+  })
+  assertUnmatched(lookup, 'unavailable')
+  assert.equal(diagnostics[0]?.reason, 'response_read_error')
+  assert.equal(diagnostics[0]?.errorKind, 'TypeError')
+  assert.doesNotMatch(JSON.stringify(diagnostics), /private-stream-error/)
+})
+
+test('a throwing diagnostic callback cannot alter the generic unavailable result', async () => {
+  for (const onDiagnostic of [
+    () => { throw new Error('private-logging-error') },
+    async () => { throw new Error('private-async-logging-error') },
+  ]) {
+    const lookup = await lookupPropertyRecords(ADDRESS, {
+      fetch: async () => { throw new TypeError('private-provider-error') }, now: () => NOW, onDiagnostic,
+    })
+    assertUnmatched(lookup, 'unavailable')
+    assert.deepEqual(lookup.notes, ['Public property records are temporarily unavailable. You can continue without them.'])
+  }
+})
+
+test('configured adapter logs only enumerated diagnostic fields, not full objects or inputs', () => {
+  const source = readFileSync(new URL('../server/property-records-http.ts', import.meta.url), 'utf8')
+  const callback = source.slice(source.indexOf('onDiagnostic: diagnostic =>'), source.indexOf('async requirePrincipal(sessionHandle)'))
+  assert.match(callback, /console\.warn\(JSON\.stringify\(\{ event: 'homesrolo_property_lookup_unavailable'/)
+  assert.doesNotMatch(callback, /\.\.\.diagnostic|JSON\.stringify\(diagnostic\)|diagnostic\.(?:message|stack|cause|url|address|body)/)
+  for (const field of ['phase', 'reason', 'elapsedMs', 'httpStatus', 'mimeCategory', 'errorKind', 'networkCode']) {
+    assert.match(callback, new RegExp(`${field}: diagnostic\\.${field}`))
+  }
 })

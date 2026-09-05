@@ -3,6 +3,65 @@ import type { PropertyLookup } from '../../../../src/homeowner/property-research
 type Address = PropertyLookup['address']
 type JsonRecord = Record<string, unknown>
 
+const NETWORK_CODES = [
+  'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+] as const
+type NetworkCode = typeof NETWORK_CODES[number]
+type FailureReason = 'network_error' | 'http_error' | 'unexpected_redirect'
+  | 'unsupported_content_type' | 'missing_body' | 'invalid_content_length'
+  | 'response_too_large' | 'invalid_json' | 'invalid_response_shape'
+  | 'response_read_error' | 'timeout'
+type MimeCategory = 'json' | 'html' | 'other' | 'missing'
+type ErrorKind = 'TypeError' | 'AbortError' | 'TimeoutError' | 'Error' | 'other'
+
+/** Closed diagnostic vocabulary: never includes input, URLs, response text or raw errors. */
+export interface PropertyRecordsDiagnostic {
+  readonly phase: 'census' | 'tarrant'
+  readonly reason: FailureReason
+  readonly elapsedMs: number
+  readonly httpStatus?: number
+  readonly mimeCategory?: MimeCategory
+  readonly errorKind?: ErrorKind
+  readonly networkCode?: NetworkCode
+}
+
+type FailureMetadata = Pick<PropertyRecordsDiagnostic, 'httpStatus' | 'mimeCategory' | 'errorKind' | 'networkCode'>
+class PropertyRecordsFailure extends Error {
+  readonly reason: FailureReason
+  readonly metadata: FailureMetadata
+  constructor(reason: FailureReason, metadata: FailureMetadata = {}) {
+    super('Property records unavailable')
+    this.reason = reason
+    this.metadata = metadata
+  }
+}
+
+function safeErrorMetadata(error: unknown): FailureMetadata {
+  // Even thrown objects with hostile getters cannot change the public failure result.
+  try {
+    if (!isRecord(error)) return { errorKind: 'other' }
+    const name = error.name
+    const errorKind: ErrorKind = name === 'TypeError' || name === 'AbortError'
+      || name === 'TimeoutError' || name === 'Error' ? name : 'other'
+    const cause = isRecord(error.cause) ? error.cause : null
+    const code = cause?.code ?? error.code
+    return { errorKind, ...(NETWORK_CODES.some(allowed => allowed === code) ? { networkCode: code as NetworkCode } : {}) }
+  } catch { return { errorKind: 'other' } }
+}
+
+function responseMetadata(response: Response): FailureMetadata {
+  const mime = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  const mimeCategory: MimeCategory = !mime ? 'missing' : mime === 'application/json'
+    ? 'json' : mime === 'text/html' ? 'html' : 'other'
+  return { mimeCategory,
+    ...(Number.isInteger(response.status) && response.status >= 100 && response.status <= 599
+      ? { httpStatus: response.status } : {}),
+  }
+}
+
 const CENSUS_URL = 'https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress'
 const TARRANT_LAYER = 'https://mapit.tarrantcounty.com/arcgis/rest/services/Dynamic/TADParcels/FeatureServer/0'
 const MAX_RESPONSE_BYTES = 96 * 1024
@@ -78,14 +137,15 @@ function yesNo(value: unknown): boolean | null {
 }
 
 async function readJson(response: Response, signal: AbortSignal): Promise<JsonRecord> {
-  if (!response.ok || response.redirected || !response.body ||
-      response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
-    throw new Error('Property records unavailable')
-  }
+  const metadata = responseMetadata(response)
+  if (!response.ok) throw new PropertyRecordsFailure('http_error', metadata)
+  if (response.redirected) throw new PropertyRecordsFailure('unexpected_redirect', metadata)
+  if (!response.body) throw new PropertyRecordsFailure('missing_body', metadata)
+  if (metadata.mimeCategory !== 'json') throw new PropertyRecordsFailure('unsupported_content_type', metadata)
   const declared = response.headers.get('content-length')
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)) {
     void response.body.cancel().catch(() => {})
-    throw new Error('Property records unavailable')
+    throw new PropertyRecordsFailure(/^\d+$/.test(declared) ? 'response_too_large' : 'invalid_content_length', metadata)
   }
   const reader = response.body.getReader()
   const cancel = () => { void reader.cancel().catch(() => {}) }
@@ -96,12 +156,12 @@ async function readJson(response: Response, signal: AbortSignal): Promise<JsonRe
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (signal.aborted) throw new Error('Property records unavailable')
+      if (signal.aborted) throw new PropertyRecordsFailure('timeout', metadata)
       if (done) break
       size += value.byteLength
       if (size > MAX_RESPONSE_BYTES) {
         cancel()
-        throw new Error('Property records unavailable')
+        throw new PropertyRecordsFailure('response_too_large', metadata)
       }
       chunks.push(value)
     }
@@ -111,9 +171,15 @@ async function readJson(response: Response, signal: AbortSignal): Promise<JsonRe
       bytes.set(chunk, offset)
       offset += chunk.byteLength
     }
-    const result: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
-    if (!isRecord(result)) throw new Error('Property records unavailable')
+    let result: unknown
+    try { result = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) }
+    catch { throw new PropertyRecordsFailure('invalid_json', metadata) }
+    if (!isRecord(result)) throw new PropertyRecordsFailure('invalid_response_shape', metadata)
     return result
+  } catch (error) {
+    if (error instanceof PropertyRecordsFailure) throw error
+    throw new PropertyRecordsFailure(signal.aborted ? 'timeout' : 'response_read_error',
+      { ...metadata, ...safeErrorMetadata(error) })
   } finally {
     signal.removeEventListener('abort', cancel)
     reader.releaseLock()
@@ -126,15 +192,23 @@ async function requestJson(url: URL, fetcher: typeof fetch): Promise<JsonRecord>
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort()
-      reject(new Error('Property records unavailable'))
+      reject(new PropertyRecordsFailure('timeout'))
     }, REQUEST_TIMEOUT_MS)
   })
   try {
     return await Promise.race([
-      (async () => readJson(await fetcher(url, {
-        method: 'GET', headers: { Accept: 'application/json' }, redirect: 'error',
-        cache: 'no-store', signal: controller.signal,
-      }), controller.signal))(),
+      (async () => {
+        let response: Response
+        try {
+          response = await fetcher(url, {
+            method: 'GET', headers: { Accept: 'application/json' }, redirect: 'error',
+            cache: 'no-store', signal: controller.signal,
+          })
+        } catch (error) {
+          throw new PropertyRecordsFailure(controller.signal.aborted ? 'timeout' : 'network_error', safeErrorMetadata(error))
+        }
+        return readJson(response, controller.signal)
+      })(),
       deadline,
     ])
   } finally {
@@ -171,7 +245,7 @@ function countyAddressMatches(row: JsonRecord, address: Address, canonicalStreet
 /** Public property facts only. This does not verify occupancy/ownership or authorize home access. */
 export async function lookupPropertyRecords(
   address: Address,
-  options: { fetch?: typeof fetch; now?: () => string } = {},
+  options: { fetch?: typeof fetch; now?: () => string; onDiagnostic?: (diagnostic: PropertyRecordsDiagnostic) => void | Promise<void> } = {},
 ): Promise<PropertyLookup> {
   const requestedAddress = { ...address }
   const retrievedAt = (options.now ?? (() => new Date().toISOString()))()
@@ -189,6 +263,8 @@ export async function lookupPropertyRecords(
     return result('no_match', ['We could not verify an exact address match. You can enter the home details yourself.'])
   }
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis)
+  let phase: PropertyRecordsDiagnostic['phase'] = 'census'
+  let phaseStartedAt = Date.now()
   try {
     const censusUrl = new URL(CENSUS_URL)
     censusUrl.search = new URLSearchParams({
@@ -221,6 +297,8 @@ export async function lookupPropertyRecords(
       where: `STREET_NO = ${requestedStreet.number} AND UPPER(STREET_NAM) = '${streetName.replace(/'/g, "''")}'`,
       outFields: PARCEL_FIELDS, returnGeometry: 'false', resultRecordCount: '10', f: 'json',
     }).toString()
+    phase = 'tarrant'
+    phaseStartedAt = Date.now()
     const parcel = await requestJson(parcelUrl, fetcher)
     if (parcel.error || !Array.isArray(parcel.features)) throw new Error('Property records unavailable')
     if (parcel.exceededTransferLimit === true || parcel.features.length > 1) {
@@ -256,7 +334,16 @@ export async function lookupPropertyRecords(
         centralAir: yesNo(row.CENTRAL_AI), subdivision: subdivision && subdivision.length <= 100 ? subdivision : null,
       },
     }
-  } catch {
+  } catch (error) {
+    // Diagnostics are opt-in and never reach the client, even if their sink throws.
+    // The fields here come only from closed enums, bounded numbers and fixed metadata.
+    try {
+      const failure = error instanceof PropertyRecordsFailure ? error : null
+      void Promise.resolve(options.onDiagnostic?.({ phase, reason: failure?.reason ?? 'invalid_response_shape',
+        elapsedMs: Math.max(0, Math.min(60_000, Math.round(Date.now() - phaseStartedAt))),
+        ...(failure?.metadata ?? safeErrorMetadata(error)),
+      })).catch(() => {})
+    } catch { /* An unavailable diagnostic sink must never change the safe result. */ }
     return result('unavailable', ['Public property records are temporarily unavailable. You can continue without them.'])
   }
 }

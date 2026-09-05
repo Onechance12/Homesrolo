@@ -7,6 +7,12 @@ export const PROPERTY_NUMBERS = [
   ['lotSquareFeet', 'Lot size (sq ft)'], ['bedrooms', 'Bedrooms'],
   ['bathrooms', 'Bathrooms'], ['rooms', 'Total rooms'], ['garageSpaces', 'Garage spaces'],
 ] as const
+
+export function formatPropertyNumber(key: typeof PROPERTY_NUMBERS[number][0], value: number | null, locale?: string): string {
+  if (value === null) return 'Unknown'
+  return key === 'yearBuilt' ? String(value) : value.toLocaleString(locale)
+}
+
 export type PropertyDraft = Record<keyof PropertyFacts, string>
 export interface ReviewedPropertyDetails { readonly facts: PropertyFacts; readonly receipt: string | null }
 export type PropertyReviewSelection =

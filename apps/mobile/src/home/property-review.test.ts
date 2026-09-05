@@ -3,9 +3,22 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import type { HomeRecordAddress } from '../api/model.ts'
 import type { HomesroloApi } from '../api/contract.ts'
-import { emptyPropertyFacts, initialPropertySnapshotAttempt, PropertyLookupDraftGate, propertyDraft, reviewPropertyDraft } from './property-review.ts'
+import { emptyPropertyFacts, formatPropertyNumber, initialPropertySnapshotAttempt, PropertyLookupDraftGate, propertyDraft, reviewPropertyDraft } from './property-review.ts'
 
 const ADDRESS: HomeRecordAddress = { line1: '123 Synthetic Street', line2: null, city: 'Fort Worth', regionCode: 'TX', postalCode: '76102', countryCode: 'US' }
+
+test('saved property years are ungrouped while measurements retain locale formatting and explicit unknowns', () => {
+  assert.equal(formatPropertyNumber('yearBuilt', 2004, 'en-US'), '2004')
+  assert.equal(formatPropertyNumber('yearBuilt', 2004, 'de-DE'), '2004')
+  assert.equal(formatPropertyNumber('squareFeet', 2004, 'en-US'), '2,004')
+  assert.equal(formatPropertyNumber('lotSquareFeet', 12000, 'en-US'), '12,000')
+  assert.equal(formatPropertyNumber('bathrooms', 2.75, 'en-US'), '2.75')
+  assert.equal(formatPropertyNumber('bedrooms', 0, 'en-US'), '0')
+  assert.equal(formatPropertyNumber('yearBuilt', null, 'en-US'), 'Unknown')
+  assert.equal(formatPropertyNumber('squareFeet', null, 'en-US'), 'Unknown')
+  const saved = readFileSync(new URL('../components/HomePropertyDetails.tsx', import.meta.url), 'utf8')
+  assert.match(saved, /formatPropertyNumber\(key, snapshot\.facts\[key\]\)/)
+})
 
 test('unknown property fields remain null; bedrooms never generate a total-room count', () => {
   const draft = propertyDraft({ ...emptyPropertyFacts(), bedrooms: 3, bathrooms: 2.5, centralAir: false })

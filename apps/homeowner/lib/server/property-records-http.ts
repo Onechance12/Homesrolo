@@ -152,7 +152,14 @@ async function configuredDependencies(): Promise<PropertyRecordsHttpDependencies
     receipts: records?.receipts ?? null,
     lookup: async address => {
       const { lookupPropertyRecords } = await import('./property-records.ts')
-      return lookupPropertyRecords(address)
+      return lookupPropertyRecords(address, { onDiagnostic: diagnostic => {
+        // Closed provider enums/numbers only; no address, query, principal or raw error.
+        console.warn(JSON.stringify({ event: 'homesrolo_property_lookup_unavailable',
+          phase: diagnostic.phase, reason: diagnostic.reason, elapsedMs: diagnostic.elapsedMs,
+          httpStatus: diagnostic.httpStatus, mimeCategory: diagnostic.mimeCategory,
+          errorKind: diagnostic.errorKind, networkCode: diagnostic.networkCode,
+        }))
+      } })
     },
     async requirePrincipal(sessionHandle) {
       const session = await runtime.homeownerApiService().readSession({ sessionHandle })
