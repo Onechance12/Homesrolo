@@ -9,6 +9,7 @@ import { isHomesroloPreviewEnabled, type PreviewEnvironment } from '../preview/m
 import { createRoloStorageForPlatform } from '../rolo/conversation-runtime.ts'
 import type { RoloConversationStorage } from '../rolo/conversation-storage.ts'
 import { webCredentialStorage, type CredentialStorage } from './credential-storage.ts'
+import { browserSessionEvents, type BrowserSessionEvents } from './browser-session-sync.ts'
 
 export type { CredentialStorage } from './credential-storage.ts'
 
@@ -21,11 +22,13 @@ export interface SessionRuntime {
   readonly sessionTransport: 'bearer' | 'cookie'
   readonly previewMode: boolean
   readonly initialSession: Extract<ServerSession, { kind: 'signed_in' }> | null
+  readonly browserEvents?: BrowserSessionEvents | null
 }
 
 interface RuntimeOptions {
   readonly tokenProvider: () => string | null
   readonly onSignedOut: () => void
+  readonly privateRequestGuard?: () => () => void
   readonly environment?: PreviewEnvironment
 }
 
@@ -68,11 +71,14 @@ export function createSessionRuntime(options: RuntimeOptions): SessionRuntime {
     api: new HomesroloNativeApi(options.tokenProvider, {
       onSignedOut: options.onSignedOut,
       clientContract: clientContractForPlatform(environment.platform),
+      ...(environment.platform === 'web' && options.privateRequestGuard
+        ? { privateRequestGuard: options.privateRequestGuard } : {}),
     }),
     storage: environment.platform === 'web' ? webCredentialStorage() : nativeCredentialStorage(),
     roloStorage: createRoloStorageForPlatform(environment.platform, false),
     sessionTransport: environment.platform === 'web' ? 'cookie' : 'bearer',
     previewMode: false,
     initialSession: null,
+    browserEvents: environment.platform === 'web' ? browserSessionEvents() : null,
   }
 }

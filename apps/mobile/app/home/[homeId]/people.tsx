@@ -13,6 +13,7 @@ import type {
 } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import {
   Button, Card, Chip, Loading, Notice, Page, SectionTitle, Tag, TextField,
@@ -66,13 +67,19 @@ export default function PeopleScreen() {
       householdSharingEnabled
         ? api.getHousehold(homeId).then(
             household => ({ household, failed: false as const }),
-            () => ({ household: null, failed: true as const }),
+            error => {
+              if (error instanceof SessionCheckRequired) throw error
+              return { household: null, failed: true as const }
+            },
           )
         : Promise.resolve({ household: null, failed: false as const }),
     ])
     const invitationResults = professionalFeaturesEnabled
       ? await Promise.allSettled(work.map(item => api.listProjectInvitations(homeId, item.projectRef)))
       : []
+    for (const result of invitationResults) {
+      if (result.status === 'rejected' && result.reason instanceof SessionCheckRequired) throw result.reason
+    }
     const invitations = invitationResults.flatMap(result => (
       result.status === 'fulfilled' ? result.value : []
     ))

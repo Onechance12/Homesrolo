@@ -10,7 +10,7 @@ test('Home details stays readable while every edit path requires the current Hom
   const details = read('app/home/[homeId]/details.tsx')
 
   assert.match(details, /api\.getHomeRecord\(homeId\)/)
-  assert.match(details, /api\.getHousehold\(homeId\)\.catch\(\(\) => null\)/)
+  assert.match(details, /api\.getHousehold\(homeId\)\.catch\(error => \{\s*if \(error instanceof SessionCheckRequired\) throw error\s*return null\s*\}\)/)
   assert.match(details, /household !== null && isCurrentHouseholdController\(household\.members\)/)
   assert.match(details, /if \(!canEdit\) return/)
   assert.match(details, /if \(!canEdit \|\| saving\) return/)
@@ -26,7 +26,7 @@ test('Home Watch preserves shared history but limits service, upload, and delete
   const checkups = read('app/home/[homeId]/checkups.tsx')
 
   assert.match(checkups, /api\.listHomeCheckups\(homeId\)/)
-  assert.match(checkups, /api\.getHousehold\(homeId\)\.catch\(\(\) => null\)/)
+  assert.match(checkups, /api\.getHousehold\(homeId\)\.catch\(error => \{\s*if \(error instanceof SessionCheckRequired\) throw error\s*return null\s*\}\)/)
   assert.match(checkups, /household !== null && isCurrentHouseholdController\(household\.members\)/)
   assert.match(checkups, /async function choose[\s\S]*if \(!canManageHomeWatch\) return/)
   assert.match(checkups, /async function save[\s\S]*if \(!canManageHomeWatch/)

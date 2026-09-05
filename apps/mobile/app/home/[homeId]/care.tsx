@@ -8,6 +8,7 @@ import { NativeApiError } from '../../../src/api/client.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { canCurrentHouseholdMemberUpdate } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { ArtifactFileCard } from '../../../src/components/ArtifactFileCard.tsx'
 import { RoloDeck, type RoloDeckDivider } from '../../../src/components/RoloDeck.tsx'
@@ -104,11 +105,17 @@ export default function MyHomeScreen() {
       photoCheckupsEnabled
         ? api.listHomeCheckups(homeId)
           .then(value => ({ value, unavailable: false as const }))
-          .catch(() => ({ value: [], unavailable: true as const }))
+          .catch(error => {
+            if (error instanceof SessionCheckRequired) throw error
+            return { value: [], unavailable: true as const }
+          })
         : Promise.resolve({ value: [], unavailable: false as const }),
       api.getHousehold(homeId)
         .then(household => ({ members: household.members, unavailable: false as const }))
-        .catch(() => ({ members: [] as readonly HouseholdMember[], unavailable: true as const })),
+        .catch(error => {
+          if (error instanceof SessionCheckRequired) throw error
+          return { members: [] as readonly HouseholdMember[], unavailable: true as const }
+        }),
     ])
     return {
       home,

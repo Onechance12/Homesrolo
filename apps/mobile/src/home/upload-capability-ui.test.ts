@@ -26,7 +26,7 @@ test('the home library uses the exact household role while every saved item stay
   const home = read('app/home/[homeId]/care.tsx')
 
   assert.match(home, /api\.getHousehold\(homeId\)/)
-  assert.match(home, /\.catch\(\(\) => \(\{ members: \[\] as readonly HouseholdMember\[\], unavailable: true as const \}\)\)/)
+  assert.match(home, /\.catch\(error => \{\s*if \(error instanceof SessionCheckRequired\) throw error\s*return \{ members: \[\] as readonly HouseholdMember\[\], unavailable: true as const \}\s*\}\)/)
   assert.match(home, /canCurrentHouseholdMemberUpdate\(resource\.state\.value\.householdMembers\)/)
   assert.match(home, /showAdd=\{canOrganizeLibrary\}/)
   assert.match(home, /tabs\.filter\(tab => tab\.value !== 'add' \|\| showAdd\)/)

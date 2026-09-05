@@ -16,13 +16,14 @@ The application repairs two private access-management problems:
    bounds, and both browser clients accept the optional private invitation
    `professionalDisplayLabel`. Older databases and prior command receipts
    remain readable while this field is absent.
-2. Before applying the label migration, refresh every supported PWA/browser
+2. Before applying either migration, refresh every supported PWA/browser
    client and update any supported installed native client to this compatible
-   decoder. Old strict decoders reject the newly added response field even
-   though it is additive. This is a release gate, not backward compatibility:
-   if old clients must keep working, hold the label migration until a separate
-   versioned-response strategy exists. Receipt compatibility in step 1 only
-   means the new application can still read old responses.
+   decoder. Old strict decoders reject the newly added response field and
+   cannot accept a roster exceeding their old 24-total-row bound. This is a
+   release gate, not backward compatibility: if old clients must keep working,
+   hold the migrations until a separate versioned-response strategy exists.
+   Receipt compatibility in step 1 only means the new application can still
+   read old responses.
 3. Apply `202609050001_household_pending_invitation_visibility.sql`, then
    `202609050002_private_invitation_company_labels.sql`, after the existing
    migrations through `202609010004`. Do not edit or rerun historical migrations.

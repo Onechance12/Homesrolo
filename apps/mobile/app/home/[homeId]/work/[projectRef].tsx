@@ -13,6 +13,7 @@ import {
 } from '../../../../src/api/household.ts'
 import type { HouseholdMember, ProjectActivityRecord, WorkRecord } from '../../../../src/api/model.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../../src/auth/session-fence.ts'
 import { workDetailReturnPath } from '../../../../src/auth/return-route.ts'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
 import { ProjectFiles } from '../../../../src/components/ProjectFiles.tsx'
@@ -94,7 +95,10 @@ export default function WorkDetailScreen() {
       api.listProjectActivity(homeId, projectRef),
       api.getHousehold(homeId)
         .then(household => household.members)
-        .catch(() => [] as readonly HouseholdMember[]),
+        .catch(error => {
+          if (error instanceof SessionCheckRequired) throw error
+          return [] as readonly HouseholdMember[]
+        }),
     ])
     return { work: current, activity, members }
   }, [api, homeId, projectRef])

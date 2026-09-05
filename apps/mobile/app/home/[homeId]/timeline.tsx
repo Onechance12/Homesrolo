@@ -3,6 +3,7 @@ import { Redirect, router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { Button, Chip, Loading, Notice, Page, SectionTitle } from '../../../src/components/ui.tsx'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
@@ -43,11 +44,17 @@ export default function HomeTimelineScreen() {
       api.listWork(homeId),
       api.listArtifacts(homeId)
         .then(value => ({ value, unavailable: false as const }))
-        .catch(() => ({ value: [], unavailable: true as const })),
+        .catch(error => {
+          if (error instanceof SessionCheckRequired) throw error
+          return { value: [], unavailable: true as const }
+        }),
       checkupsEnabled
         ? api.listHomeCheckups(homeId)
           .then(value => ({ value, unavailable: false as const }))
-          .catch(() => ({ value: [], unavailable: true as const }))
+          .catch(error => {
+            if (error instanceof SessionCheckRequired) throw error
+            return { value: [], unavailable: true as const }
+          })
         : Promise.resolve({ value: [], unavailable: false as const }),
     ])
     return {

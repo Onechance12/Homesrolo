@@ -4,6 +4,7 @@ const messages: Readonly<Record<string, string>> = Object.freeze({
   invalid_code: 'That code did not match. Check the six digits and try again.',
   rate_limited: 'Too many attempts. Give it a minute, then try again.',
   signed_out: 'Your session ended. Sign in again to keep going.',
+  session_check_required: 'Your sign-in changed or is being checked. Try again once it finishes.',
   forbidden: 'Homesrolo could not confirm access to this home.',
   conflict: 'This record changed on another screen. Refresh it and try once more.',
   invalid_request: 'Something in that entry needs another look.',

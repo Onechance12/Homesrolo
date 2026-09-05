@@ -10,6 +10,7 @@ export async function bootstrapSessionToken(
   api: Pick<HomesroloApi, 'upgradeLegacyPwaSession'>,
   storage: CredentialStorage,
   transport: 'bearer' | 'cookie',
+  beginCookieChange?: () => () => void,
 ): Promise<string | null> {
   const storedToken = await storage.read()
   if (transport === 'bearer') return storedToken
@@ -20,6 +21,7 @@ export async function bootstrapSessionToken(
   // Calling the legacy bridge without a legacy bearer adds a second identity
   // read and can turn a harmless proxy/startup hiccup into a fatal launch.
   if (storedToken === null) return null
+  const finishChange = beginCookieChange?.()
   try {
     await api.upgradeLegacyPwaSession(storedToken)
   } catch {
@@ -34,6 +36,6 @@ export async function bootstrapSessionToken(
       // erased. The ordinary session request can still validate a newer
       // HttpOnly cookie or safely resolve the browser as signed out.
     }
-  }
+  } finally { finishChange?.() }
   return null
 }

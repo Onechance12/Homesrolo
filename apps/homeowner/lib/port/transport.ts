@@ -11,6 +11,8 @@
  * no provider id, no authority claim, and no hand-carried credentials.
  */
 
+import { beginBrowserSessionChange } from '../../../../shared/browser-session-signal.ts'
+
 export interface TransportRequest {
   readonly method: 'GET' | 'POST' | 'DELETE'
   /** App-relative path starting /api/v1 — never an absolute URL. */
@@ -52,6 +54,14 @@ export type PhotoCheckupUploadTransport = (
 ) => Promise<TransportReply>
 
 export const fetchJsonTransport: JsonTransport = async request => {
+  const changesCookie = request.method === 'POST' && (
+    request.path === '/api/v1/auth/email-code/verify'
+    || request.path === '/api/v1/auth/exchange'
+    || request.path === '/api/v1/auth/signout'
+  )
+  const finishChange = changesCookie && typeof window !== 'undefined'
+    ? beginBrowserSessionChange((key, value) => window.localStorage.setItem(key, value))
+    : () => undefined
   try {
     /* eslint-disable no-restricted-globals -- the one sanctioned call site */
     const response = await fetch(request.path, {
@@ -72,6 +82,8 @@ export const fetchJsonTransport: JsonTransport = async request => {
     return { kind: 'reply', status: response.status, body }
   } catch {
     return { kind: 'network_failure' }
+  } finally {
+    finishChange()
   }
 }
 

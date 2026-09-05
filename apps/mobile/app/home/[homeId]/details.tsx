@@ -8,6 +8,7 @@ import { friendlyError } from '../../../src/api/errors.ts'
 import { HOME_SYSTEM_KINDS, HOME_TYPES } from '../../../src/api/home-record.ts'
 import { isCurrentHouseholdController } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { Button, Card, Chip, Loading, Notice, Page, SectionTitle, TextField } from '../../../src/components/ui.tsx'
 import { useHomeId } from '../../../src/home/HomeRouteProvider.tsx'
@@ -34,7 +35,10 @@ export default function HomeDetailsScreen() {
   const resource = useResource(useCallback(async () => {
     const [profile, household] = await Promise.all([
       api.getHomeRecord(homeId),
-      api.getHousehold(homeId).catch(() => null),
+      api.getHousehold(homeId).catch(error => {
+        if (error instanceof SessionCheckRequired) throw error
+        return null
+      }),
     ])
     return {
       profile,
