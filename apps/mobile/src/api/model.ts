@@ -438,6 +438,7 @@ export interface ProjectInvitation {
   readonly homeRef: string
   readonly projectRef: string
   readonly professionalOrganizationRef: string
+  readonly professionalDisplayLabel?: string
   readonly status: 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired'
   readonly message?: string
   readonly disclosure: ProjectInvitationDisclosure

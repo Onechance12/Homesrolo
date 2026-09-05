@@ -431,12 +431,14 @@ export class HomesroloNativeApi implements HomesroloApi {
   readonly #origin: string
   readonly #token: TokenProvider
   readonly #onSignedOut: () => void
+  readonly #privateRequestGuard: (() => () => void) | undefined
   readonly #clientContract: HomesroloClientContract
   readonly #uploadAttempts = new ActiveArtifactUploadAttempts()
 
   constructor(token: TokenProvider, options: {
     readonly origin?: string
     readonly onSignedOut?: () => void
+    readonly privateRequestGuard?: () => () => void
     readonly clientContract?: HomesroloClientContract
   } = {}) {
     const clientContract = options.clientContract ?? 'native.v1'
@@ -444,6 +446,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     this.#origin = normalizeApiOrigin(options.origin ?? configuredOrigin())
     this.#token = token
     this.#onSignedOut = options.onSignedOut ?? (() => undefined)
+    this.#privateRequestGuard = options.privateRequestGuard
     this.#clientContract = clientContract
   }
 
@@ -515,6 +518,9 @@ export class HomesroloNativeApi implements HomesroloApi {
     readonly authentication?: 'required' | 'bootstrap'
   } = {}): Promise<unknown> {
     const authentication = options.authentication ?? 'required'
+    const privateRequest = authentication === 'required'
+      && path !== apiPath('session') && path !== apiPath('auth', 'signout')
+    const confirmCurrent = privateRequest ? this.#privateRequestGuard?.() : undefined
     const token = authentication === 'required' ? this.#authenticatedToken() : null
     let response: Response
     try {
@@ -536,9 +542,10 @@ export class HomesroloNativeApi implements HomesroloApi {
     }
     let payload: unknown
     try { payload = await response.json() } catch { payload = null }
+    confirmCurrent?.()
     if (!response.ok) {
       const problem = problemCode(payload)
-      if (response.status === 401) this.#onSignedOut()
+      if (response.status === 401 && (privateRequest || !this.#usesCookieSession())) this.#onSignedOut()
       throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
     }
     try { return envelopeData(payload) } catch { throw new NativeApiError(response.status, 'invalid_response') }
@@ -563,7 +570,8 @@ export class HomesroloNativeApi implements HomesroloApi {
     try { payload = await response.json() } catch { payload = null }
     if (!response.ok) {
       const problem = problemCode(payload)
-      if (response.status === 401) this.#onSignedOut()
+      // Bootstrap validates the current cookie afterward; a failed legacy
+      // credential cannot sign out a newer browser principal.
       throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
     }
     try { return envelopeData(payload) } catch {
@@ -576,6 +584,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     artifactRef: string,
     fallbackDisplayName?: string,
   ): Promise<ArtifactContent> {
+    const confirmCurrent = this.#privateRequestGuard?.()
     const token = this.#authenticatedToken()
     let response: Response
     try {
@@ -597,14 +606,18 @@ export class HomesroloNativeApi implements HomesroloApi {
       let payload: unknown = null
       try { payload = await response.json() } catch { /* Binary errors may have no JSON body. */ }
       const problem = problemCode(payload)
+      confirmCurrent?.()
       if (response.status === 401) this.#onSignedOut()
       throw new NativeApiError(response.status, problem.code, problem.retryAfterSeconds)
     }
+    let content: ArtifactContent
     try {
-      return await artifactContentFromResponse(response, artifactRef, fallbackDisplayName)
+      content = await artifactContentFromResponse(response, artifactRef, fallbackDisplayName)
     } catch {
       throw new NativeApiError(response.status, 'invalid_response')
     }
+    confirmCurrent?.()
+    return content
   }
 
   async requestEmailCode(email: string): Promise<void> {
@@ -672,10 +685,13 @@ export class HomesroloNativeApi implements HomesroloApi {
     privateLocationLabel: string,
     createCommandRef?: string,
   ): Promise<HomeSummary> {
+    const confirmOperation = this.#privateRequestGuard?.()
+    const command = createCommandRef ?? await this.newCommandRef()
+    confirmOperation?.()
     return parseHomeSummary(await this.#request(apiPath('homes'), {
       method: 'POST',
       body: {
-        commandRef: createCommandRef ?? await this.newCommandRef(),
+        commandRef: command,
         displayLabel: displayLabel.trim(),
         privateLocationLabel: privateLocationLabel.trim(),
       },
@@ -851,16 +867,19 @@ export class HomesroloNativeApi implements HomesroloApi {
     body: string,
     noteCommandRef?: string,
   ): Promise<ProjectActivityRecord> {
+    const confirmOperation = this.#privateRequestGuard?.()
     const cleanBody = body.trim()
     if (!isHomeRef(homeRef) || !isProjectRef(projectRef)
       || cleanBody.length < 1 || cleanBody.length > 2_000) {
       throw new NativeApiError(400, 'invalid_request')
     }
+    const command = noteCommandRef ?? await this.newCommandRef()
+    confirmOperation?.()
     const activity = parseProjectActivity(await this.#request(
       apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
       method: 'POST',
       body: {
-        commandRef: noteCommandRef ?? await this.newCommandRef(),
+        commandRef: command,
         kind: 'note',
         body: cleanBody,
       },
@@ -878,16 +897,19 @@ export class HomesroloNativeApi implements HomesroloApi {
     body: string,
     milestoneCommandRef?: string,
   ): Promise<ProjectActivityRecord> {
+    const confirmOperation = this.#privateRequestGuard?.()
     const cleanBody = body.trim()
     if (!isHomeRef(homeRef) || !isProjectRef(projectRef)
       || cleanBody.length < 1 || cleanBody.length > 2_000) {
       throw new NativeApiError(400, 'invalid_request')
     }
+    const command = milestoneCommandRef ?? await this.newCommandRef()
+    confirmOperation?.()
     const activity = parseProjectActivity(await this.#request(
       apiPath('homes', homeRef, 'projects', projectRef, 'activity'), {
       method: 'POST',
       body: {
-        commandRef: milestoneCommandRef ?? await this.newCommandRef(),
+        commandRef: command,
         kind: 'milestone',
         body: cleanBody,
       },
@@ -1310,6 +1332,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     deviceFile: DeviceFile,
     projectRef?: string,
   ): Promise<ResolvedArtifactRecord> {
+    const confirmOperation = this.#privateRequestGuard?.()
     this.#cleanupConfirmedUploadFiles()
     if (!isHomeRef(homeRef) || (projectRef !== undefined && !isProjectRef(projectRef))
       || deviceFile.byteLength < 1 || deviceFile.byteLength > 10 * 1024 * 1024) {
@@ -1350,6 +1373,7 @@ export class HomesroloNativeApi implements HomesroloApi {
       uri: deviceFile.uri,
       ...(deviceFile.lifecycle ? { lifecycle: deviceFile.lifecycle } : {}),
     }, () => this.newCommandRef())
+    confirmOperation?.()
     if (attempt.artifactRef) {
       try {
         const artifact = await this.#completeArtifactUpload(homeRef, {
@@ -1366,6 +1390,7 @@ export class HomesroloNativeApi implements HomesroloApi {
           && (error.status === 409 || error.status === 503))) throw error
       }
     }
+    confirmOperation?.()
     const reservation = parseReservation(await this.#request(apiPath('homes', homeRef, 'artifacts'), {
       method: 'POST',
       body: {
@@ -1384,6 +1409,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     }
     assertSignedUpload(reservation)
     attempt = this.#uploadAttempts.rememberReservation(attempt, reservation.artifactRef)
+    confirmOperation?.()
     try {
       await fetch(reservation.upload.signedUrl, {
         method: 'PUT', credentials: 'omit',
@@ -1400,6 +1426,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     // A non-2xx PUT can also mean an earlier ambiguous PUT already stored the
     // object. Completion verifies the exact bytes and is authoritative either
     // way, so it is always attempted before this retry is considered failed.
+    confirmOperation?.()
     const artifact = await this.#completeArtifactUpload(homeRef, {
       ...attempt,
       artifactRef: reservation.artifactRef,
@@ -1470,6 +1497,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     homeRef: string,
     input: CreateHomeCheckupPhotoInput,
   ): Promise<HomeCheckupPhoto> {
+    const confirmOperation = this.#privateRequestGuard?.()
     const extraHeaders = homeCheckupUploadHeaders(input)
     if (!isHomeRef(homeRef) || !extraHeaders || input.file.byteLength < 1
       || input.file.byteLength > 10 * 1024 * 1024) {
@@ -1498,7 +1526,9 @@ export class HomesroloNativeApi implements HomesroloApi {
         : 'unsupported_file'
       throw new NativeApiError(400, code)
     }
+    confirmOperation?.()
     const token = this.#authenticatedToken()
+    const confirmCurrent = this.#privateRequestGuard?.()
     let response: Response
     try {
       response = await fetch(`${this.#origin}${apiPath('homes', homeRef, 'photo-checkups')}`, {
@@ -1519,6 +1549,7 @@ export class HomesroloNativeApi implements HomesroloApi {
     }
     let responseBody: unknown
     try { responseBody = await response.json() } catch { responseBody = null }
+    confirmCurrent?.()
     if (!response.ok) {
       const problem = problemCode(responseBody)
       if (response.status === 401) this.#onSignedOut()

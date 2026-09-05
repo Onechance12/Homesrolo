@@ -13,6 +13,7 @@ import type {
 } from '../../../src/api/model.ts'
 import { friendlyError } from '../../../src/api/errors.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import {
   Button, Card, Chip, Loading, Notice, Page, SectionTitle, Tag, TextField,
@@ -66,13 +67,19 @@ export default function PeopleScreen() {
       householdSharingEnabled
         ? api.getHousehold(homeId).then(
             household => ({ household, failed: false as const }),
-            () => ({ household: null, failed: true as const }),
+            error => {
+              if (error instanceof SessionCheckRequired) throw error
+              return { household: null, failed: true as const }
+            },
           )
         : Promise.resolve({ household: null, failed: false as const }),
     ])
     const invitationResults = professionalFeaturesEnabled
       ? await Promise.allSettled(work.map(item => api.listProjectInvitations(homeId, item.projectRef)))
       : []
+    for (const result of invitationResults) {
+      if (result.status === 'rejected' && result.reason instanceof SessionCheckRequired) throw result.reason
+    }
     const invitations = invitationResults.flatMap(result => (
       result.status === 'fulfilled' ? result.value : []
     ))
@@ -580,7 +587,7 @@ export default function PeopleScreen() {
                 <Pressable
                   key={invitation.invitationRef}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${invitation.disclosure.title} invitation for ${organization?.displayName ?? 'invited company'}`}
+                  accessibilityLabel={`Open ${invitation.disclosure.title} invitation for ${invitation.professionalDisplayLabel ?? organization?.displayName ?? 'invited company'}`}
                   accessibilityHint="Opens the work room where you can review or change this invitation"
                   onPress={() => router.push({
                     pathname: '/home/[homeId]/work/[projectRef]',
@@ -591,7 +598,7 @@ export default function PeopleScreen() {
                   <View style={styles.profileTop}>
                     <View style={styles.invitationIcon}><Ionicons name="paper-plane" size={20} color={colors.ink} /></View>
                     <View style={styles.flex}>
-                      <Text style={styles.profileName}>{organization?.displayName ?? 'Invited company'}</Text>
+                      <Text style={styles.profileName}>{invitation.professionalDisplayLabel ?? organization?.displayName ?? 'Invited company'}</Text>
                       <Text style={styles.profileMeta} numberOfLines={1}>{invitation.disclosure.title}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={19} color={colors.slate} />

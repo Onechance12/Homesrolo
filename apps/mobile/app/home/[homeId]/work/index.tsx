@@ -12,6 +12,7 @@ import {
   currentHouseholdMembershipRef,
 } from '../../../../src/api/household.ts'
 import { useSession } from '../../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../../src/components/HomeHeader.tsx'
 import { RoloDeck, type RoloDeckDivider } from '../../../../src/components/RoloDeck.tsx'
 import { Button, Card, Chip, Loading, Notice, Page, TextField } from '../../../../src/components/ui.tsx'
@@ -67,11 +68,14 @@ export default function WorkScreen() {
   const { state: auth, api, previewMode, refreshSession } = useSession()
   const loader = useCallback(async () => {
     const work = await api.listWork(homeId)
-    // Assignment labels enhance Work but never block it. Older or restricted
-    // household routes therefore fail closed to an empty presentation roster.
+    // Older or restricted household routes fail closed to an empty roster.
+    // Session checks must reach the read-recovery hook before showing a fallback.
     const members = await api.getHousehold(homeId)
       .then(household => household.members)
-      .catch(() => [] as readonly HouseholdMember[])
+      .catch(error => {
+        if (error instanceof SessionCheckRequired) throw error
+        return [] as readonly HouseholdMember[]
+      })
     return { work, members }
   }, [api, homeId])
   const resource = useResource(loader, auth.kind === 'signed_in')

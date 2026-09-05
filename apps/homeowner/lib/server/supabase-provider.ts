@@ -587,6 +587,8 @@ function projectInvitationFromRow(input: unknown): ProjectInvitation {
     controllerPrincipalRef: requiredString(row, 'project_controller_principal_ref'),
     invitedByPrincipalRef: requiredString(row, 'invited_by_principal_ref'),
     professionalOrganizationRef: requiredString(row, 'professional_organization_ref'),
+    ...(row.professional_display_label === undefined || row.professional_display_label === null
+      ? {} : { professionalDisplayLabel: requiredString(row, 'professional_display_label') }),
     status,
     ...(row.message === null ? {} : { message: requiredString(row, 'message') }),
     disclosure: row.disclosure,

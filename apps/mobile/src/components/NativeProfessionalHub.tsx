@@ -44,7 +44,7 @@ import {
   TextField,
 } from './ui.tsx'
 
-type HubTab = 'today' | 'invitations' | 'jobs' | 'company'
+type HubTab = 'today' | 'invitations' | 'workspaces' | 'company'
 type CommandAttempt = { readonly intent: string; readonly commandRef: string }
 
 function isConflict(error: unknown): boolean {
@@ -136,14 +136,14 @@ const HUB_TABS: readonly {
 }[] = [
   { value: 'today', label: 'Today', icon: 'today-outline' },
   { value: 'invitations', label: 'Invites', icon: 'mail-outline' },
-  { value: 'jobs', label: 'Jobs', icon: 'briefcase-outline' },
+  { value: 'workspaces', label: 'Workspaces', icon: 'briefcase-outline' },
   { value: 'company', label: 'Company', icon: 'business-outline' },
 ]
 
-function HubTabs({ selected, invitationCount, jobCount, onSelect }: {
+function HubTabs({ selected, invitationCount, workspaceCount, onSelect }: {
   readonly selected: HubTab
   readonly invitationCount: number
-  readonly jobCount: number
+  readonly workspaceCount: number
   readonly onSelect: (tab: HubTab) => void
 }) {
   return (
@@ -152,7 +152,7 @@ function HubTabs({ selected, invitationCount, jobCount, onSelect }: {
         const active = selected === item.value
         const count = item.value === 'invitations'
           ? invitationCount
-          : item.value === 'jobs' ? jobCount : 0
+          : item.value === 'workspaces' ? workspaceCount : 0
         return (
           <Pressable
             key={item.value}
@@ -774,14 +774,14 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
       <View style={styles.cardHeadingRow}>
         <View style={styles.flexCopy}>
           <Eyebrow>{`${tradeLabel(invitation.disclosure.category)} · ${invitation.status === 'accepted'
-            ? 'Job workspace'
+            ? 'Project workspace'
             : 'Homeowner invitation'}`}</Eyebrow>
           <Text style={styles.cardTitle}>{invitation.disclosure.title}</Text>
           <Text style={styles.meta}>
             {organization?.displayName ?? 'Your company'} · {invitationStatus(invitation)}
           </Text>
         </View>
-        <Tag tone={invitationTone(invitation.status)}>{invitation.status}</Tag>
+        <Tag tone={invitationTone(invitation.status)}>{invitationStatus(invitation)}</Tag>
       </View>
       <Body>{invitation.disclosure.summary || 'The homeowner did not add a written summary.'}</Body>
       {invitation.message ? (
@@ -826,8 +826,8 @@ function ProfessionalInvitationCard({ api, invitation, organization, onInvitatio
       {invitation.status === 'pending' ? (
         <View style={styles.responseBlock}>
           <Body muted>
-            Accept to review this job and submit a proposal. Accepting does not expand
-            what the homeowner shared.
+            Accept to review the shared project and submit a proposal. Accepting does
+            not expand what the homeowner shared. The homeowner chooses a proposal separately.
           </Body>
           {responseError ? <Text style={styles.error}>{responseError}</Text> : null}
           <Button
@@ -912,7 +912,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
       || b.createdAt.localeCompare(a.createdAt))
   }, [invitations.state])
   const pendingInvitations = sortedInvitations.filter(invitation => invitation.status === 'pending')
-  const acceptedJobs = sortedInvitations.filter(invitation => invitation.status === 'accepted')
+  const acceptedInvitations = sortedInvitations.filter(invitation => invitation.status === 'accepted')
   const closedInvitations = sortedInvitations.filter(invitation =>
     invitation.status !== 'pending' && invitation.status !== 'accepted')
 
@@ -943,7 +943,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
           <HubTabs
             selected={tab}
             invitationCount={pendingInvitations.length}
-            jobCount={acceptedJobs.length}
+            workspaceCount={acceptedInvitations.length}
             onSelect={setTab}
           />
 
@@ -953,7 +953,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
                 title="Today"
                 detail={pendingInvitations.length > 0
                   ? `${pendingInvitations.length} ${pendingInvitations.length === 1 ? 'invitation needs' : 'invitations need'} a response.`
-                  : 'Your invitations, accepted jobs, and company status at a glance.'}
+                  : 'Your invitations, project workspaces, and company status at a glance.'}
               />
               <View style={styles.countGrid}>
                 <CountTile
@@ -965,9 +965,9 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
                 />
                 <CountTile
                   icon="briefcase-outline"
-                  value={acceptedJobs.length}
-                  label={acceptedJobs.length === 1 ? 'accepted job' : 'accepted jobs'}
-                  onPress={() => setTab('jobs')}
+                  value={acceptedInvitations.length}
+                  label={acceptedInvitations.length === 1 ? 'accepted invitation' : 'accepted invitations'}
+                  onPress={() => setTab('workspaces')}
                 />
               </View>
 
@@ -989,7 +989,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
               {invitations.state.kind === 'loading' ? <Loading label="Checking today…" /> : null}
               {invitations.state.kind === 'error' ? (
                 <Notice
-                  message="Homesrolo could not load your invitations and jobs."
+                  message="Homesrolo could not load your invitations and project workspaces."
                   actionLabel="Try again"
                   onAction={invitations.reload}
                 />
@@ -1016,22 +1016,22 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
                   </Card>
                 </>
               ) : null}
-              {invitations.state.kind === 'ready' && acceptedJobs.length > 0 ? (
+              {invitations.state.kind === 'ready' && acceptedInvitations.length > 0 ? (
                 <>
-                  <SectionTitle title="Accepted jobs" />
+                  <SectionTitle title="Accepted invitations" />
                   <Card style={styles.previewList}>
-                    {acceptedJobs.slice(0, 3).map(invitation => (
+                    {acceptedInvitations.slice(0, 3).map(invitation => (
                       <InvitationPreview
                         key={invitation.invitationRef}
                         invitation={invitation}
-                        action="Open job"
-                        onPress={() => setTab('jobs')}
+                        action="Open workspace"
+                        onPress={() => setTab('workspaces')}
                       />
                     ))}
-                    {acceptedJobs.length > 3 ? (
+                    {acceptedInvitations.length > 3 ? (
                       <Button
-                        label={`View all ${acceptedJobs.length} jobs`}
-                        onPress={() => setTab('jobs')}
+                        label={`View all ${acceptedInvitations.length} workspaces`}
+                        onPress={() => setTab('workspaces')}
                         quiet
                       />
                     ) : null}
@@ -1040,7 +1040,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
               ) : null}
               {invitations.state.kind === 'ready'
                 && pendingInvitations.length === 0
-                && acceptedJobs.length === 0 ? (
+                && acceptedInvitations.length === 0 ? (
                   <Card style={styles.emptyCompact}>
                     <View style={styles.emptyIcon}>
                       <Ionicons name="checkmark-outline" size={28} color={colors.lime} />
@@ -1058,7 +1058,7 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
             <>
               <WorkspaceHeading
                 title="Invitations"
-                detail="Review the job and homeowner-selected files, then accept or decline."
+                detail="Review the project invitation, then accept or decline. Acceptance opens the shared files and proposal workspace."
               />
               {invitations.state.kind === 'loading' ? <Loading label="Checking invitations…" /> : null}
               {invitations.state.kind === 'error' ? (
@@ -1101,32 +1101,32 @@ export function NativeProfessionalHub({ api }: { readonly api: HomesroloApi }) {
             </>
           ) : null}
 
-          {tab === 'jobs' ? (
+          {tab === 'workspaces' ? (
             <>
               <WorkspaceHeading
-                title="Jobs"
-                detail="Accepted invitations stay here with their shared files and written proposals."
+                title="Project workspaces"
+                detail="Accepted invitations stay here with their shared files and written proposals. The homeowner selects a proposal separately."
               />
-              {invitations.state.kind === 'loading' ? <Loading label="Opening jobs…" /> : null}
+              {invitations.state.kind === 'loading' ? <Loading label="Opening project workspaces…" /> : null}
               {invitations.state.kind === 'error' ? (
                 <Notice
-                  message="Homesrolo could not load your jobs."
+                  message="Homesrolo could not load your project workspaces."
                   actionLabel="Try again"
                   onAction={invitations.reload}
                 />
               ) : null}
-              {invitations.state.kind === 'ready' && acceptedJobs.length === 0 ? (
+              {invitations.state.kind === 'ready' && acceptedInvitations.length === 0 ? (
                 <Card style={styles.emptyCompact}>
                   <View style={styles.emptyIcon}>
                     <Ionicons name="briefcase-outline" size={28} color={colors.lime} />
                   </View>
                   <View style={styles.flexCopy}>
-                    <Text style={styles.cardTitle}>No jobs yet.</Text>
-                    <Body muted>Accept a homeowner invitation to start a job workspace.</Body>
+                    <Text style={styles.cardTitle}>No accepted invitations yet.</Text>
+                    <Body muted>Accept an invitation to review the shared project and prepare a proposal.</Body>
                   </View>
                 </Card>
               ) : null}
-              {invitations.state.kind === 'ready' ? acceptedJobs.map(invitation => (
+              {invitations.state.kind === 'ready' ? acceptedInvitations.map(invitation => (
                 <ProfessionalInvitationCard
                   key={`${invitation.invitationRef}:${invitation.revision}`}
                   api={api}

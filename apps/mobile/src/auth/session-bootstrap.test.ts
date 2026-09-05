@@ -67,3 +67,25 @@ test('cookie bootstrap falls back to an unambiguous HttpOnly cookie after creden
   assert.equal(token, null)
   assert.deepEqual(calls, [TOKEN, null])
 })
+
+test('legacy cookie upgrade brackets the complete exchange, including fallback failure, in one change signal', async () => {
+  const calls: string[] = []
+  await bootstrapSessionToken({ async upgradeLegacyPwaSession() {
+    calls.push('upgrade')
+    throw new Error('unavailable')
+  } }, storage(TOKEN, calls), 'cookie', () => {
+    calls.push('changing')
+    return () => { calls.push('changed') }
+  })
+  assert.deepEqual(calls, ['read', 'remove', 'changing', 'upgrade', 'upgrade', 'changed'])
+})
+
+test('modern cookie and native bootstrap do not announce an identity change', async () => {
+  for (const transport of ['cookie', 'bearer'] as const) {
+    const calls: string[] = []
+    await bootstrapSessionToken({ async upgradeLegacyPwaSession() { calls.push('upgrade') } },
+      storage(transport === 'cookie' ? null : TOKEN, calls), transport,
+      () => { calls.push('changing'); return () => { calls.push('changed') } })
+    assert.deepEqual(calls, transport === 'cookie' ? ['read', 'remove'] : ['read'])
+  }
+})

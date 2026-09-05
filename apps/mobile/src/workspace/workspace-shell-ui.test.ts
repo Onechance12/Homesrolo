@@ -54,13 +54,13 @@ test('work and Pro detail use operational app sections instead of one long landi
   for (const label of ['Overview', 'Plan', 'Photos & files', 'Bids', 'Updates']) {
     assert.match(work, new RegExp(`label: '${label}'`))
   }
-  for (const label of ['Today', 'Invites', 'Jobs', 'Company']) {
+  for (const label of ['Today', 'Invites', 'Workspaces', 'Company']) {
     assert.match(pro, new RegExp(`label: '${label}'`))
   }
   const hubTabs = pro.match(/const HUB_TABS[\s\S]*?\n\]/)?.[0] ?? ''
   assert.deepEqual(
     [...hubTabs.matchAll(/label: '([^']+)'/g)].map(match => match[1]),
-    ['Today', 'Invites', 'Jobs', 'Company'],
+    ['Today', 'Invites', 'Workspaces', 'Company'],
   )
   assert.match(pro, /useState<HubTab>\('today'\)/)
   assert.doesNotMatch(pro, /HomeHeader|HomeRouteProvider|\/home\/\[homeId\]/)

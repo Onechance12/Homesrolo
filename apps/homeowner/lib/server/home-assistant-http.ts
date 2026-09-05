@@ -38,24 +38,79 @@ const JSON_HEADERS = Object.freeze({
 const sharedRateLimiter = new HomeResearchRateLimiter({ limit: 16, windowMs: 10 * 60 * 1_000 })
 const sharedVisionRateLimiter = new HomeResearchRateLimiter({ limit: 4, windowMs: 10 * 60 * 1_000 })
 
+/**
+ * A reported hazard can be a new subject even beside "explain that later".
+ * These explicit reports only release an old refusal; they do not diagnose a
+ * condition, bypass a current constitutional refusal, or supply safety advice.
+ */
+function hasIndependentUrgentReport(message: string): boolean {
+  const sentences = message.toLocaleLowerCase('en-US')
+    .replace(/[‘’]/g, "'")
+    .split(/[.!?;\n]+/)
+  return sentences.some(sentence =>
+    /\b(?:i|we) (?:can )?smell (?:natural )?gas\b/.test(sentence)
+    || /\b(?:my|our|the)\b[^]{0,60}\b(?:smells? (?:like |of )?(?:natural )?gas|gas\b[^]{0,30}\bleaking)\b/.test(sentence)
+    || /\b(?:there(?:'s| is| are)|i (?:can )?see)\b[^]{0,35}\b(?:smoke|fire|flames|sparks)\b/.test(sentence)
+    || /\b(?:smoke|fire|flames)\b[^]{0,45}\b(?:filling|coming|pouring|spreading)\b/.test(sentence)
+    || /\b(?:my|our|the)\b[^]{0,60}\b(?:sparking|on fire|collapsing)\b/.test(sentence)
+    || /\b(?:carbon monoxide|co|smoke|fire) (?:alarm|detector)\b[^]{0,30}\b(?:going off|sounding|beeping)\b/.test(sentence)
+    || (/\b(?:mixed|combined|poured|used)\b/.test(sentence)
+      && /\bbleach\b/.test(sentence)
+      && /\b(?:vinegar|ammonia)\b/.test(sentence))
+    || /\bwater\b[^]{0,50}\b(?:electrical (?:outlet|panel)|breaker panel|power socket|exposed wires)\b/.test(sentence))
+}
+
+/**
+ * Carry a refusal only when the next message still depends on that request.
+ * A new self-contained message must reach the ordinary assistant, including
+ * urgent reports; the previous refusal is not a topic-wide conversation lock.
+ * This supplements (never replaces) the current-message constitution check.
+ */
+function continuesRefusedRequest(message: string): boolean {
+  const text = message.toLocaleLowerCase('en-US')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+  const withoutLeadIn = text.replace(/^(?:(?:okay|ok|fine|well|but|and|so|then|please|just)\b[, —-]*\s*)+/, '')
+  return /^(?:yes|no|why(?: not)?|how come|go on|continue|try again|i (?:don't|do not) care|what (?:now|next)|what should i do|which (?:one|is (?:best|better))|who (?:then|would you (?:use|choose))|(?:the )?(?:first|second|other|same) one)[.!?]*$/.test(withoutLeadIn)
+    || /\b(?:do|answer|write|draft|rewrite|edit|fix|finish|continue|repeat|explain|summarize|translate|rephrase|handle) (?:it|that|this|them|those|these)(?:[.!?]|$| (?:anyway|again|instead|for me|in (?:plain|simple)|as (?:a|an))\b)/.test(text)
+    || /\b(?:(?:the|my|your) (?:same|previous|original|earlier|last) (?:question|request|answer)|what i (?:just )?(?:asked|said)|you (?:already |just )?refused)\b/.test(text)
+    || /\b(?:give|tell|show) me (?:the|a|your|his|her|their) (?:name|answer|choice|recommendation|verdict|opinion)(?:[.!?]|$| (?:then|anyway|already|now|please)\b)/.test(text)
+    || /\b(?:name|choice|recommendation) of (?:a |the )?(?:(?:good|best|better) )?(?:one|them|those|these)\b/.test(text)
+    || /\b(?:pick|choose|select|rank|recommend|judge|evaluate) (?:one|them|those|these|him|her|someone|anyone|(?:the best|a winner)(?: (?:roofer|contractor|company|professional))?)(?:[.!?]|$| (?:then|anyway|for me|now|please)\b)/.test(text)
+    || /\b(?:just tell me what you(?:'d| would) do|do (?:it |that )?(?:anyway|regardless)|ignore (?:your |the )?(?:rules|restrictions|boundary))\b/.test(text)
+}
+
 function boundaryAwareRequest(request: z.infer<typeof askRoloRequestSchema>) {
   const current = classifyRequest(request.message)
   const cleanHistory: typeof request.history[number][] = []
   let dropReplyToRefusedTurn = false
-  let latestHistoricalRefusals: typeof current.refusals = []
-  let safeUserTurnAfterLatestRefusal = false
+  let activeBoundary: Readonly<typeof current.refusals> = []
   for (const turn of request.history) {
     if (turn.role === 'user') {
       const historical = classifyRequest(turn.text)
-      if (historical.refusals.length > 0) {
-        latestHistoricalRefusals = historical.refusals
-        safeUserTurnAfterLatestRefusal = false
+      if (historical.refusals.length > 0
+        || (activeBoundary.length > 0
+          && !hasIndependentUrgentReport(turn.text)
+          && continuesRefusedRequest(turn.text))) {
+        if (historical.refusals.length > 0) activeBoundary = historical.refusals
+        cleanHistory.length = 0
         dropReplyToRefusedTurn = true
         continue
       }
-      if (latestHistoricalRefusals.length > 0) safeUserTurnAfterLatestRefusal = true
+      activeBoundary = []
       dropReplyToRefusedTurn = false
       cleanHistory.push(turn)
+      continue
+    }
+    const replyBoundary = homeAssistantBoundaryIdsFromAnswer(turn.text)
+    if (replyBoundary.length > 0) {
+      // A short pressure follow-up may not classify on its own. The app-owned
+      // reply proves that exchange was refused, so neither half becomes safe
+      // history merely because a later message changes the subject.
+      activeBoundary = replyBoundary
+      cleanHistory.length = 0
+      dropReplyToRefusedTurn = false
       continue
     }
     if (dropReplyToRefusedTurn) {
@@ -66,32 +121,16 @@ function boundaryAwareRequest(request: z.infer<typeof askRoloRequestSchema>) {
   }
   const sanitizedRequest = { ...request, history: cleanHistory }
   if (current.refusals.length > 0) return { request: sanitizedRequest, refusals: current.refusals }
-
-  const last = request.history.at(-1)
-  const replyBoundary = last?.role === 'assistant'
-    ? homeAssistantBoundaryIdsFromAnswer(last.text)
-    : []
-  const activeBoundary = replyBoundary.length > 0
-    ? replyBoundary
-    : safeUserTurnAfterLatestRefusal ? [] : latestHistoricalRefusals
   if (activeBoundary.length === 0) return { request: sanitizedRequest, refusals: [] }
 
   const explicitTopic = request.message.match(/^\s*(?:new (?:question|topic)|different question)\s*:\s*(.+)$/is)?.[1]?.trim()
-  if (explicitTopic) {
-    const explicitClassification = classifyRequest(explicitTopic)
-    return {
-      request: { ...request, message: explicitTopic, history: [] },
-      refusals: explicitClassification.refusals,
-    }
+  const message = explicitTopic ?? request.message
+  if (!hasIndependentUrgentReport(message) && continuesRefusedRequest(message)) {
+    return { request: sanitizedRequest, refusals: activeBoundary }
   }
-  if (current.educational) {
-    // General education is permitted, but the prohibited exchange is removed
-    // before a model sees the new standalone question.
-    return { request: { ...sanitizedRequest, history: [] }, refusals: [] }
-  }
-  // Ambiguous pressure after a boundary is still the same refused request.
-  // This is state-based rather than phrase-based, so wording cannot bypass it.
-  return { request: sanitizedRequest, refusals: activeBoundary }
+  // Ordinary questions and urgent reports do not require a magic prefix.
+  // Their answer cannot inherit a prohibited premise from earlier exchanges.
+  return { request: { ...sanitizedRequest, message, history: [] }, refusals: [] }
 }
 
 export function assistantLocalityFromAddress(

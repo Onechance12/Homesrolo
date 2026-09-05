@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { retryResourceAfterSessionCheck } from './session-resource-retry.ts'
 
 export type ResourceState<T> =
   | { readonly kind: 'loading' }
@@ -20,6 +21,8 @@ export function useResource<T>(loader: () => Promise<T>, enabled = true) {
           kind: 'error',
           message: error instanceof Error ? error.message : 'unavailable',
         })
+        void retryResourceAfterSessionCheck(error, () => active,
+          () => setRevision(value => value + 1))
       },
     )
     return () => { active = false }

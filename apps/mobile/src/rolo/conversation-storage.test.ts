@@ -200,5 +200,5 @@ test('every local sign-out path clears credentials and all Rolo continuity data'
   )
   assert.match(provider, /if \(!tokenRef\.current && !runtime\.previewMode\) \{\s*await clearLocalSession\(\)/)
   assert.match(provider, /if \(!token\) \{\s*await clearLocalSession\(\)/)
-  assert.match(provider, /finally \{ await clearLocalSession\(\) \}/)
+  assert.match(provider, /finally \{\s*await clearLocalSession\(\)/)
 })

@@ -133,7 +133,9 @@ test('Rolo refreshes home context safely and People behaves like a primary tab',
 
   assert.match(rolo, /useFocusEffect\(useCallback\(\(\) => \{[\s\S]*setAuthorizedHomeScope\(null\)[\s\S]*setHydratedScope\(null\)[\s\S]*setPersistenceWritableScope\(null\)/)
   assert.match(rolo, /api\.getHome\(homeId\)[\s\S]*setHomeSummary\(home\)[\s\S]*setAuthorizedHomeScope\(homePersistenceKey\)/)
-  assert.match(rolo, /api\.getHome\(homeId\)[\s\S]*\.catch\(\(\) => \{[\s\S]*roloStorage\.clearHome\(\{[\s\S]*principalRef,[\s\S]*homeRef: homeId/)
+  assert.match(rolo, /api\.getHome\(homeId\)[\s\S]*\.catch\(caught => \{[\s\S]*if \(!active\) return[\s\S]*clearRoloHomeAfterConfirmedDenial\(caught, \{[\s\S]*principalRef,[\s\S]*homeRef: homeId/)
+  assert.doesNotMatch(rolo, /roloStorage\.clearHome\(/)
+  assert.match(rolo, /if \(homeAccessFailure\)[\s\S]*saved project conversations have not been deleted[\s\S]*actionLabel="Try again"/)
   assert.match(rolo, /roloConversationAccessReady\(\{[\s\S]*authorizedHomeScope,[\s\S]*hydratedScope,[\s\S]*Opening Rolo…/)
   assert.doesNotMatch(people, /accessibilityLabel="Back to Home"/)
 })

@@ -7,6 +7,7 @@ import { friendlyError } from '../../../src/api/errors.ts'
 import { HOME_CHECKUP_AREAS } from '../../../src/api/home-checkup.ts'
 import { isCurrentHouseholdController } from '../../../src/api/household.ts'
 import { useSession } from '../../../src/auth/SessionProvider.tsx'
+import { SessionCheckRequired } from '../../../src/auth/session-fence.ts'
 import { HomeHeader } from '../../../src/components/HomeHeader.tsx'
 import { PhotoPreview } from '../../../src/components/PhotoPreview.tsx'
 import { ProtectedImage } from '../../../src/components/ProtectedImage.tsx'
@@ -37,7 +38,10 @@ export default function HomeWatchScreen() {
     if (!enabled) return { photos: [], canManage: false }
     const [photos, household] = await Promise.all([
       api.listHomeCheckups(homeId),
-      api.getHousehold(homeId).catch(() => null),
+      api.getHousehold(homeId).catch(error => {
+        if (error instanceof SessionCheckRequired) throw error
+        return null
+      }),
     ])
     return {
       photos,

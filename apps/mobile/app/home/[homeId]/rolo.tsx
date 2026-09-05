@@ -55,6 +55,11 @@ import {
   type PersistedRoloPhoto,
 } from '../../../src/rolo/conversation-persistence.ts'
 import { roloConversationAccessReady } from '../../../src/rolo/conversation-access.ts'
+import {
+  clearRoloHomeAfterConfirmedDenial,
+  roloHomeAccessFailureKind,
+  type RoloHomeAccessFailure,
+} from '../../../src/rolo/home-access.ts'
 import { roloPhotoLibrary } from '../../../src/rolo/photo-library.ts'
 import { roloRequestCanCommit } from '../../../src/rolo/request-generation.ts'
 import { workCreateFieldsFromRoloDraft } from '../../../src/rolo/work-draft.ts'
@@ -179,6 +184,7 @@ export default function RoloScreen() {
   }))
   const [routeProjectValidationAttempt, setRouteProjectValidationAttempt] = useState(0)
   const [authorizedHomeScope, setAuthorizedHomeScope] = useState<string | null>(null)
+  const [homeAccessFailure, setHomeAccessFailure] = useState<RoloHomeAccessFailure | null>(null)
   const pendingCreate = useRef<{ readonly intent: string; readonly commandRef: string } | null>(null)
   const sendInFlight = useRef(false)
   const mounted = useRef(true)
@@ -236,6 +242,7 @@ export default function RoloScreen() {
       status: routeProjectRef ? 'pending' : 'not_requested',
     })
     setAuthorizedHomeScope(null)
+    setHomeAccessFailure(null)
     setHydratedScope(null)
     setPersistenceWritableScope(null)
     resetConversationState()
@@ -256,7 +263,7 @@ export default function RoloScreen() {
       if (homePersistenceKey) {
         setAuthorizedHomeScope(homePersistenceKey)
       }
-    }).catch(() => {
+    }).catch(caught => {
       if (!active) return
       hydrationGeneration.current += 1
       conversationVersion.current += 1
@@ -264,11 +271,12 @@ export default function RoloScreen() {
       setHydratedScope(null)
       setPersistenceWritableScope(null)
       resetConversationState()
+      setHomeAccessFailure(roloHomeAccessFailureKind(caught))
       if (principalRef) {
-        void roloStorage.clearHome({
+        void clearRoloHomeAfterConfirmedDenial(caught, {
           principalRef,
           homeRef: homeId,
-        }).catch(() => undefined)
+        }, roloStorage)
       }
     })
 
@@ -579,6 +587,21 @@ export default function RoloScreen() {
   if (auth.kind === 'loading') return <Page><Loading /></Page>
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
+  }
+  if (homeAccessFailure) {
+    return (
+      <Page>
+        <HomeHeader section="Rolo" title="This conversation could not open." showAccount={false} />
+        <Notice
+          message={homeAccessFailure === 'unavailable'
+            ? 'Rolo could not verify access right now. Your saved project conversations have not been deleted. Check your connection and try again.'
+            : 'Access to this home could not be confirmed. No private conversation is displayed.'}
+          actionLabel="Try again"
+          onAction={() => setRouteProjectValidationAttempt(value => value + 1)}
+        />
+        <Button label="Choose a home" onPress={() => router.replace('/homes')} />
+      </Page>
+    )
   }
   if (projectScopeUnavailable) {
     return (

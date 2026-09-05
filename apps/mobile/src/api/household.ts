@@ -43,7 +43,9 @@ export function parseHouseholdRosterEnvelope(
   }
   const members = roster.members.map(parseHouseholdMember)
   const invitations = roster.invitations.map(parseHouseholdInvitation)
-  if (members.some(member => member.homeRef !== expectedHomeRef)
+  const pendingCount = invitations.filter(invitation => invitation.status === 'pending').length
+  if (members.length > 24 || pendingCount > 24 || invitations.length - pendingCount > 24
+    || members.some(member => member.homeRef !== expectedHomeRef)
     || invitations.some(invitation => invitation.homeRef !== expectedHomeRef)
     || new Set(members.map(member => member.membershipRef)).size !== members.length
     || new Set(invitations.map(invitation => invitation.invitationRef)).size !== invitations.length

@@ -12,6 +12,7 @@ import { colors, space } from '../theme.ts'
 import type { ProtectedImageSource } from '../api/image-source.ts'
 import type { ArtifactGeoPin } from '../api/model.ts'
 import { ProtectedImage } from './ProtectedImage.tsx'
+import { useSession } from '../auth/SessionProvider.tsx'
 
 export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLabel, actionIcon = 'create-outline', onAction }: {
   readonly onClose: () => void
@@ -23,6 +24,11 @@ export function PhotoPreview({ onClose, source, title, detail, geoPin, actionLab
   readonly actionIcon?: keyof typeof Ionicons.glyphMap
   readonly onAction?: () => void
 }) {
+  const { privateContentVisible } = useSession()
+  // RN Modal renders outside the ancestor View on web. Hiding that View alone
+  // cannot conceal its portal; preserve the parent's preview choice, not the
+  // private portal, until the cookie identity has been authoritatively checked.
+  if (!privateContentVisible) return null
   return (
     <Modal visible animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView style={styles.safe}>

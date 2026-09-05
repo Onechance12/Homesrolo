@@ -995,6 +995,7 @@ export const decodeProjectInvitation: Decoder<ProjectInvitation> = (value, at) =
     projectRef: opaqueRef('hprj'),
     professionalOrganizationRef: opaqueRef('horg'),
     status: oneOf(['pending', 'accepted', 'declined', 'revoked', 'expired'] as const),
+    professionalDisplayLabel: optional(boundedLabel(120)),
     message: optional(boundedLabel(1_000)),
     disclosure: decodeProjectInvitationDisclosure,
     expiresAt: utcInstant,
