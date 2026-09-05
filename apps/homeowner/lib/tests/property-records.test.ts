@@ -375,6 +375,8 @@ test('a Tarrant-only failure is distinct from Census without recording address o
 test('network failures record only allowlisted cause codes and static error kinds', async () => {
   for (const [thrown, expectedKind, expectedCode] of [
     [new TypeError('private URL and address', { cause: { code: 'ENOTFOUND', hostname: 'private-host' } }), 'TypeError', 'ENOTFOUND'],
+    [new TypeError('private certificate detail', { cause: { code: 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' } }), 'TypeError', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'],
+    [new TypeError('private network detail', { cause: { code: 'ENETUNREACH' } }), 'TypeError', 'ENETUNREACH'],
     [new TypeError('private URL and address'), 'TypeError', undefined],
     [{ name: 'private-error-name', message: 'private-address', cause: { code: 'private-network-code' } }, 'other', undefined],
     [Object.defineProperty({}, 'name', { get() { throw new Error('private getter') } }), 'other', undefined],
