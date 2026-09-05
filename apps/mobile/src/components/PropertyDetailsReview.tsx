@@ -81,7 +81,9 @@ export function PropertyDetailsReview({ principalRef, address, disabled, onChang
     setEditing(false)
     setResult(null)
     setDraft(propertyDraft())
-    setMessage('Skipped. Your home can be created without public-record details.')
+    setMessage(context === 'new-home'
+      ? 'Skipped. Your home can be created without public-record details.'
+      : 'Skipped. Your saved home details are unchanged.')
     onChange({ kind: 'none' })
   }
   function enterManually() {

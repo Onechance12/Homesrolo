@@ -4,6 +4,7 @@ import type { HomesroloApi } from '../api/contract.ts'
 import type { HomeRecordAddress, HomeRecordProfile, HomeSummary, ServerSession } from '../api/model.ts'
 import type { SaveHomePropertyInput } from '../api/property.ts'
 import { SessionCheckRequired, SessionFence, sessionBoundApi } from '../auth/session-fence.ts'
+import { PreviewHomesroloApi } from '../preview/api.ts'
 import { FirstHomePropertySaveFailed, firstHomeAttempt, reviewFirstHome } from './first-run.ts'
 import { emptyPropertyFacts, initialPropertySnapshotAttempt } from './property-review.ts'
 
@@ -48,7 +49,7 @@ function harness(flow: Flow) {
     homeRef: HOME, revision: 1, address: null, homeType: 'unknown', yearBuilt: null,
     systems: [], source: 'homeowner_recollection', updatedAt: '2026-09-05T12:00:00.000Z',
   }
-  const raw = {
+  const operations = {
     async newCommandRef() {
       minted += 1
       if (minted === heldCommand) { entered.resolve(); return release.promise }
@@ -76,7 +77,10 @@ function harness(flow: Flow) {
         facts: input.facts, lookup: null, reviewedAt: '2026-09-05T12:00:00.000Z' }
     },
   } satisfies Partial<HomesroloApi>
-  const api = sessionBoundApi(raw as HomesroloApi, fence, SESSION_A.principalRef, true)
+  // The memory-only preview supplies the full contract without asserting that
+  // these five focused overrides implement every HomesroloApi method.
+  const raw: HomesroloApi = Object.assign(new PreviewHomesroloApi(), operations)
+  const api = sessionBoundApi(raw, fence, SESSION_A.principalRef, true)
   const property = { facts: { ...emptyPropertyFacts(), squareFeet: 1850, rooms: null }, receipt: null }
   const reviewed = reviewFirstHome('Synthetic home', { ...ADDRESS, line2: '' })
   assert.ok(reviewed.ok)
