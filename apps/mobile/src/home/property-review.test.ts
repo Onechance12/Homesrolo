@@ -37,6 +37,17 @@ test('reviewed corrections retain the opaque source receipt and reject invalid d
   assert.equal(reviewPropertyDraft({ ...draft, bathrooms: '2.3' }, receipt).kind, 'invalid')
 })
 
+test('property review rejects future year-built values before explicit creation', () => {
+  const latestYearBuilt = new Date().getUTCFullYear() + 1
+  const draft = propertyDraft()
+  const invalid = reviewPropertyDraft({ ...draft, yearBuilt: String(latestYearBuilt + 1) }, null)
+  assert.deepEqual(invalid, {
+    kind: 'invalid', message: `Year built: enter ${latestYearBuilt} or earlier, or leave it unknown.`,
+  })
+  assert.equal(reviewPropertyDraft({ ...draft, yearBuilt: String(latestYearBuilt) }, null).kind, 'reviewed')
+  assert.equal(reviewPropertyDraft(draft, null).kind, 'none')
+})
+
 test('late lookup responses cannot replace newer results or cross address/principal drafts', async () => {
   const gate = new PropertyLookupDraftGate('principal-A', ADDRESS)
   const first = gate.begin()

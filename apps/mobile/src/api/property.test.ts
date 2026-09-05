@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { parseHomePropertySnapshot, parsePropertyFacts, parsePropertyLookupResult, PROPERTY_SOURCE_URL, saveHomePropertyBody } from './property.ts'
 import type { HomeRecordAddress, PropertyLookupResult } from './model.ts'
@@ -17,6 +18,17 @@ const RESULT: PropertyLookupResult = {
   },
   receipt: `opaque_test_payload.${'r'.repeat(43)}`,
 }
+
+test('mobile property wire types and parser remain independent of server schema dependencies', () => {
+  const model = readFileSync(new URL('./model.ts', import.meta.url), 'utf8')
+  const parser = readFileSync(new URL('./property.ts', import.meta.url), 'utf8')
+  for (const name of ['PropertyFacts', 'PropertyLookup', 'PropertyLookupResult', 'HomePropertySnapshot']) {
+    assert.match(model, new RegExp(`export interface ${name}\\b`))
+  }
+  for (const source of [model, parser]) {
+    assert.doesNotMatch(source, /(?:from\s+|import\s*\()['"][^'"]*(?:property-research\.v1|zod|\/src\/homeowner\/)/)
+  }
+})
 
 test('property lookup strictly preserves exact source, address, explicit unknowns and booleans', () => {
   assert.deepEqual(parsePropertyLookupResult(RESULT, ADDRESS), RESULT)

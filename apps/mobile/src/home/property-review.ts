@@ -30,6 +30,10 @@ export function reviewPropertyDraft(draft: PropertyDraft, receipt: string | null
     if (value && !/^\d+(?:\.\d+)?$/.test(value)) return { kind: 'invalid', message: `${label}: enter a number or leave it unknown.` }
     facts[key] = value ? Number(value) : null
   }
+  const latestYearBuilt = new Date().getUTCFullYear() + 1
+  if (facts.yearBuilt !== null && facts.yearBuilt > latestYearBuilt) {
+    return { kind: 'invalid', message: `Year built: enter ${latestYearBuilt} or earlier, or leave it unknown.` }
+  }
   for (const key of ['centralHeat', 'centralAir'] as const) {
     if (!['', 'yes', 'no'].includes(draft[key])) return { kind: 'invalid', message: 'Choose Yes, No, or Unknown for heating and air.' }
     facts[key] = draft[key] === '' ? null : draft[key] === 'yes'
