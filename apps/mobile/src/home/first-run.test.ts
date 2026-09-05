@@ -6,7 +6,7 @@ import type { HomeSummary, ProfessionalOrganization } from '../api/model.ts'
 import { publicRoofingIntent, publicRoofingPrompt } from '../auth/entry-intent.ts'
 import {
   FirstCompanyNameConflict, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
-  firstRunProgress, firstRunRoloPrompt, initialHomeIntent, previousFirstRunStep,
+  firstRunProgress, firstRunRoloPrompt, firstRunUsesWideLayout, initialHomeIntent, previousFirstRunStep,
   reviewFirstCompany, reviewFirstHome,
 } from './first-run.ts'
 
@@ -92,6 +92,28 @@ test('home and company progress/back paths include review and stop at success', 
       assert.equal(previousFirstRunStep(step), index === 0 || index === steps.length - 1 ? null : steps[index - 1])
     })
   }
+})
+
+test('onboarding columns follow measured content space, not the desktop browser viewport', () => {
+  const layouts = [
+    { browserWidth: 1280, contentWidth: 480, wide: false }, // Hosted 520px app shell minus padding.
+    { browserWidth: 1440, contentWidth: 520, wide: false },
+    { browserWidth: 390, contentWidth: 350, wide: false },
+    { browserWidth: 1280, contentWidth: 1080, wide: true }, // Unconstrained native/web layout.
+  ]
+  for (const layout of layouts) {
+    assert.equal(firstRunUsesWideLayout(layout.contentWidth), layout.wide,
+      `${layout.browserWidth}px browser with ${layout.contentWidth}px available content`)
+  }
+  for (const width of [0, -1, 899, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(firstRunUsesWideLayout(width), false, 'unknown or narrow space stays single-column')
+  }
+  assert.equal(firstRunUsesWideLayout(900), true)
+  const route = readFileSync(new URL('../../app/onboarding.tsx', import.meta.url), 'utf8')
+  assert.match(route, /const \[availableWidth, setAvailableWidth\] = useState\(0\)/)
+  assert.match(route, /const wide = firstRunUsesWideLayout\(availableWidth\)/)
+  assert.match(route, /style=\{styles\.shell\} onLayout=\{event => setAvailableWidth\(event\.nativeEvent\.layout\.width\)\}/)
+  assert.doesNotMatch(route, /useWindowDimensions|Dimensions\.get|window\.innerWidth/)
 })
 
 test('validated public roofing intent only seeds an unsent fixed starter and can be changed', () => {

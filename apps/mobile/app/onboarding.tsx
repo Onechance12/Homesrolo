@@ -1,7 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
-  useWindowDimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Ionicons from '@expo/vector-icons/Ionicons'
@@ -14,7 +13,7 @@ import { Body, Brand, Button, Card, Chip, Eyebrow, Loading, Notice, Page, TextFi
 import { useResource } from '../src/hooks/useResource.ts'
 import {
   FirstCompanyNameConflict, HOME_INTENTS, firstCompanyAttempt, firstHomeAttempt,
-  firstRunProgress, firstRunRoloPrompt, initialHomeIntent, previousFirstRunStep,
+  firstRunProgress, firstRunRoloPrompt, firstRunUsesWideLayout, initialHomeIntent, previousFirstRunStep,
   reviewFirstCompany, reviewFirstHome,
   type FirstRunAttempt, type FirstRunStep, type FirstRunWorkspace, type HomeIntent,
   type ReviewedFirstCompany, type ReviewedFirstHome,
@@ -125,8 +124,8 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
   readonly assistantEnabled: boolean
 }) {
   const { api, privateContentVisible } = useSession()
-  const { width } = useWindowDimensions()
-  const wide = width >= 900
+  const [availableWidth, setAvailableWidth] = useState(0)
+  const wide = firstRunUsesWideLayout(availableWidth)
   const scroll = useRef<ScrollView>(null)
   const active = useRef(true)
   const actionBusy = useRef(false)
@@ -396,7 +395,7 @@ function FirstRunFlow({ principalRef, initialWorkspace, entryIntent, professiona
     <SafeAreaView style={styles.fill} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}>
         <ScrollView ref={scroll} style={styles.fill} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}>
-          <View style={styles.shell}>
+          <View style={styles.shell} onLayout={event => setAvailableWidth(event.nativeEvent.layout.width)}>
             <View style={styles.topRow}><Brand compact /><Text style={styles.setupLabel}>{ready ? 'READY WHEN YOU ARE' : 'LET’S GET STARTED'}</Text></View>
             <View style={styles.progressRow}>
               {previousStep && !locked ? <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => go(previousStep)} style={styles.back}><Ionicons name="arrow-back" size={18} color={colors.cream} /><Text style={styles.backText}>Back</Text></Pressable>
