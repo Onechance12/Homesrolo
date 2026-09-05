@@ -4,11 +4,20 @@ import {
   handoffShareRef,
   homeownerEntryContext,
   homeownerEntryDestination,
+  homeownerPostSignInPath,
   withHomeownerEntryContext,
 } from '../entry-context.ts'
 
 const shareId = `hshr_${'s'.repeat(43)}`
 const homeRef = `hhom_${'h'.repeat(43)}`
+
+test('ordinary sign-in reaches first-run workspace routing without dropping explicit entry context', () => {
+  assert.equal(homeownerPostSignInPath(homeownerEntryContext({})), '/start')
+  assert.equal(homeownerPostSignInPath(homeownerEntryContext({ intent: 'not-an-intent' })), '/start')
+  assert.equal(homeownerPostSignInPath(homeownerEntryContext({ intent: 'repair' })), '/homes?intent=repair')
+  assert.equal(homeownerPostSignInPath(homeownerEntryContext({ handoff: shareId })), `/homes?handoff=${shareId}`)
+  assert.equal(homeownerPostSignInPath(homeownerEntryContext({ intent: 'inspection', handoff: shareId })), `/homes?intent=inspection&handoff=${shareId}`)
+})
 
 test('entry context accepts one exact opaque handoff ref and rejects ambiguous input', () => {
   assert.equal(handoffShareRef(shareId), shareId)

@@ -35,6 +35,13 @@ export function withHomeownerEntryContext(
   return encoded ? `${pathname}?${encoded}` : pathname
 }
 
+/** First-time accounts need workspace setup; explicit entry context still needs home selection. */
+export function homeownerPostSignInPath(context: HomeownerEntryContext): string {
+  return context.intent || context.handoff
+    ? withHomeownerEntryContext('/homes', context)
+    : '/start'
+}
+
 /** An exact completion-record handoff opens that home's private documents page. */
 export function homeownerEntryDestination(
   homeRef: string,

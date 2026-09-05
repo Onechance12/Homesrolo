@@ -1,0 +1,14 @@
+{
+  "magicLink": {
+    "providerTemplate": "Magic Link",
+    "subject": "Your Homesrolo sign-in code",
+    "preheader": "Your six-digit code is ready. Enter it in Homesrolo to continue.",
+    "file": "magic-link.html"
+  },
+  "confirmSignup": {
+    "providerTemplate": "Confirm signup",
+    "subject": "Your Homesrolo sign-in code",
+    "preheader": "Your six-digit code is ready. Verify your email to get started.",
+    "file": "confirm-signup.html"
+  }
+}

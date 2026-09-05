@@ -7,6 +7,7 @@ import { SESSION_LIFETIME_SECONDS } from './cookie.ts'
 import {
   handoffShareRef,
   homeownerEntryContext,
+  homeownerPostSignInPath,
   withHomeownerEntryContext,
 } from '../entry-context.ts'
 import { roofingIntent } from '../roofing-intent.ts'
@@ -172,7 +173,7 @@ export function homesPathForRoofingIntent(rawIntent: unknown): string {
 }
 
 export function homesPathForEntryContext(rawIntent: unknown, rawHandoff: unknown): string {
-  return withHomeownerEntryContext('/homes', homeownerEntryContext({
+  return homeownerPostSignInPath(homeownerEntryContext({
     intent: rawIntent,
     handoff: rawHandoff,
   }))

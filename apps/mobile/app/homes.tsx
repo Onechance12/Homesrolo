@@ -13,6 +13,7 @@ import {
   type ReviewedNewHomeAddress,
 } from '../src/home/onboarding.ts'
 import { createReviewedHome } from '../src/home/create-home.ts'
+import { needsFirstRunOnboarding } from '../src/home/first-run-entry.ts'
 import { publicRoofingIntent, publicRoofingPrompt } from '../src/auth/entry-intent.ts'
 import { legacyProjectRef, oneRouteParam } from '../src/home/legacy-route.ts'
 import {
@@ -23,10 +24,11 @@ import { writeWorkspacePreference } from '../src/workspace/preference.ts'
 import { colors, radius, space } from '../src/theme.ts'
 
 export default function HomesScreen() {
-  const { intent: rawIntent, add: rawAdd, project: rawProject } = useLocalSearchParams<{
+  const { intent: rawIntent, add: rawAdd, project: rawProject, handoff: rawHandoff } = useLocalSearchParams<{
     intent?: string | string[]
     add?: string | string[]
     project?: string | string[]
+    handoff?: string | string[]
   }>()
   const entryIntent = publicRoofingIntent(rawIntent)
   const requestedAdd = oneRouteParam(rawAdd) === '1'
@@ -77,6 +79,16 @@ export default function HomesScreen() {
   if (auth.kind === 'signed_out') return <Redirect href="/sign-in" />
   if (auth.kind === 'error') {
     return <Page><Notice message={auth.message} actionLabel="Try again" onAction={() => void refreshSession()} /></Page>
+  }
+  if (homes.state.kind === 'ready' && needsFirstRunOnboarding({
+    homeCount: homes.state.value.length,
+    explicitAdd: requestedAdd,
+    hasProjectContext: requestedProject !== null,
+    hasHandoffContext: rawHandoff !== undefined,
+  })) {
+    return <Redirect href={entryIntent
+      ? { pathname: '/onboarding', params: { intent: entryIntent } }
+      : '/onboarding'} />
   }
 
   async function addHome() {

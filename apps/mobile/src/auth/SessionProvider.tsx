@@ -19,6 +19,7 @@ import { bootstrapSessionToken } from './session-bootstrap.ts'
 import { readSessionWithRetry } from './session-read.ts'
 import { subscribeBrowserSessionSync } from './browser-session-sync.ts'
 import { revalidateSession, SessionFence, sessionBoundApi } from './session-fence.ts'
+import { sessionPresentationKey } from './presentation-key.ts'
 
 type AuthState =
   | { readonly kind: 'loading' }
@@ -273,7 +274,7 @@ export function SessionProvider({ children, runtime: injectedRuntime }: {
     }}>
       <View style={styles.container}>
         <View
-          key={cookieSession ? `${principalRef ?? 'signed-out'}:${identityVersion}` : 'native-session'}
+          key={sessionPresentationKey(cookieSession, principalRef, identityVersion)}
           style={[styles.container, curtain && styles.hidden]}
           pointerEvents={curtain ? 'none' : 'auto'}
           accessibilityElementsHidden={curtain}

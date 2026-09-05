@@ -8,14 +8,21 @@ function read(relative: string) {
 
 test('first-run setup chooses a real Home or Pro workspace before entering the app', () => {
   const onboarding = read('app/onboarding.tsx')
+  const firstRun = read('src/home/first-run.ts')
   const start = read('app/start.tsx')
   assert.match(start, /decideStartupDestination/)
   assert.match(onboarding, /title="My home"/)
   assert.match(onboarding, /title="My company"/)
-  assert.match(onboarding, /createReviewedHome/)
-  assert.match(onboarding, /createProfessionalOrganization/)
-  assert.match(onboarding, /saveProfessionalProfile/)
-  assert.match(onboarding, /company page name is already in use/)
+  assert.match(onboarding, /step !== 'home-review'[\s\S]*firstHomeAttempt\(homeReview\)/)
+  assert.match(onboarding, /step !== 'pro-review'[\s\S]*firstCompanyAttempt\(companyReview\)/)
+  assert.match(firstRun, /createReviewedHome\(api/)
+  assert.match(firstRun, /createProfessionalOrganization/)
+  assert.match(firstRun, /saveProfessionalProfile/)
+  assert.match(firstRun, /publicationState: 'draft'/)
+  assert.match(firstRun, /company page name is already in use/)
+  assert.match(onboarding, /caught instanceof FirstCompanyNameConflict/)
+  assert.match(onboarding, /setStep\('home-ready'\)/)
+  assert.match(onboarding, /setStep\('pro-ready'\)/)
 })
 
 test('validated workspace entry persists the choice and sends new Pros through Rolo setup', () => {
