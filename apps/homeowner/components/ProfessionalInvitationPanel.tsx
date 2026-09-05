@@ -179,7 +179,7 @@ export function ProfessionalInvitationPanel({
             return (
               <article key={invitation.invitationRef} className="pro-invite__status-card">
                 <div>
-                  <strong>{organization?.displayName ?? 'Invited professional'}</strong>
+                  <strong>{invitation.professionalDisplayLabel ?? organization?.displayName ?? 'Invited professional'}</strong>
                   <span>{invitationStatus(invitation)} · expires {new Date(invitation.expiresAt).toLocaleDateString()}</span>
                 </div>
                 {(invitation.status === 'pending' || invitation.status === 'accepted') ? (

@@ -57,7 +57,7 @@ export function matchesProfessional(
 export function cleanServiceAreas(value: string): readonly string[] {
   const seen = new Set<string>()
   return value
-    .split(/[\n,]+/)
+    .split(/[\r\n]+/)
     .map(item => item.trim())
     .filter(item => {
       const key = item.toLocaleLowerCase('en-US')
@@ -79,7 +79,7 @@ export function slugFor(value: string): string {
 export function invitationStatus(invitation: ProjectInvitation): string {
   return ({
     pending: 'Waiting for response',
-    accepted: 'Accepted',
+    accepted: 'Invitation accepted',
     declined: 'Passed',
     revoked: 'Access removed',
     expired: 'Expired',

@@ -33,7 +33,25 @@ test('professional search covers name, service area, and trade without changing 
 
 test('profile helpers normalize only user-provided public fields', () => {
   assert.equal(slugFor('  Pearson Home Services, LLC  '), 'pearson-home-services-llc')
-  assert.deepEqual(cleanServiceAreas('Fort Worth\nTulsa, fort worth\n'), ['Fort Worth', 'Tulsa'])
+  assert.deepEqual(cleanServiceAreas('Fort Worth\nTulsa\n fort worth\n'), ['Fort Worth', 'Tulsa'])
+})
+
+test('service areas preserve city-state commas through profile edit and save', () => {
+  const savedAreas = ['Fort Worth, Texas', 'Tulsa, Oklahoma', 'Dallas–Fort Worth, TX']
+  for (const lineEnding of ['\n', '\r\n', '\r']) {
+    assert.deepEqual(cleanServiceAreas(savedAreas.join(lineEnding)), savedAreas)
+  }
+  assert.deepEqual(
+    cleanServiceAreas(' Fort Worth, Texas \r\n\nTulsa, Oklahoma\rfort worth, texas\n'),
+    ['Fort Worth, Texas', 'Tulsa, Oklahoma'],
+  )
+  assert.deepEqual(cleanServiceAreas('Dallas, Fort Worth, Texas'), ['Dallas, Fort Worth, Texas'])
+})
+
+test('service-area cleanup retains its bounded nonempty case-insensitive list', () => {
+  assert.deepEqual(cleanServiceAreas(' \nA\nTX\ntx\n'), ['TX'])
+  const areas = Array.from({ length: 42 }, (_, index) => `Area ${index}, Texas`)
+  assert.deepEqual(cleanServiceAreas(areas.join('\n')), areas.slice(0, 40))
 })
 
 test('proposal helpers keep written scope primary and money optional', () => {

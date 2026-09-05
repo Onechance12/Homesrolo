@@ -580,7 +580,7 @@ export default function PeopleScreen() {
                 <Pressable
                   key={invitation.invitationRef}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${invitation.disclosure.title} invitation for ${organization?.displayName ?? 'invited company'}`}
+                  accessibilityLabel={`Open ${invitation.disclosure.title} invitation for ${invitation.professionalDisplayLabel ?? organization?.displayName ?? 'invited company'}`}
                   accessibilityHint="Opens the work room where you can review or change this invitation"
                   onPress={() => router.push({
                     pathname: '/home/[homeId]/work/[projectRef]',
@@ -591,7 +591,7 @@ export default function PeopleScreen() {
                   <View style={styles.profileTop}>
                     <View style={styles.invitationIcon}><Ionicons name="paper-plane" size={20} color={colors.ink} /></View>
                     <View style={styles.flex}>
-                      <Text style={styles.profileName}>{organization?.displayName ?? 'Invited company'}</Text>
+                      <Text style={styles.profileName}>{invitation.professionalDisplayLabel ?? organization?.displayName ?? 'Invited company'}</Text>
                       <Text style={styles.profileMeta} numberOfLines={1}>{invitation.disclosure.title}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={19} color={colors.slate} />

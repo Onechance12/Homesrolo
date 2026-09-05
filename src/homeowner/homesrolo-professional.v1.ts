@@ -199,6 +199,8 @@ export const projectInvitationSchema = z.object({
   controllerPrincipalRef: opaqueRef('hprn'),
   invitedByPrincipalRef: opaqueRef('hprn'),
   professionalOrganizationRef: opaqueRef('horg'),
+  /** Retained invitation label, independent of current public discovery. */
+  professionalDisplayLabel: z.string().trim().min(1).max(120).optional(),
   status: projectInvitationStatusSchema,
   message: z.string().trim().min(1).max(1_000).optional(),
   disclosure: projectInvitationDisclosureSchema,

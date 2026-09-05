@@ -27,6 +27,29 @@ const CURRENT = `hmbr_${'c'.repeat(43)}`
 const PARTNER = `hmbr_${'p'.repeat(43)}`
 const VERSION = 'homeowner-household.v1'
 
+test('mobile accepts 24 pending household invitations without discarding 24 history rows', () => {
+  const invitations = Array.from({ length: 48 }, (_, index) => ({
+    recordVersion: VERSION,
+    invitationRef: `hhiv_${index.toString().padStart(43, '0')}`,
+    homeRef: HOME,
+    inviteeDisplayLabel: `Synthetic guest ${index}`,
+    desiredRole: 'member',
+    status: index < 24 ? 'pending' : 'revoked',
+    createdAt: '2026-09-05T12:00:00.000Z',
+    expiresAt: '2026-09-12T12:00:00.000Z',
+    revision: 1,
+    ...(index < 24 ? {} : { revokedAt: '2026-09-05T13:00:00.000Z' }),
+  }))
+  const household = { recordVersion: VERSION, homeRef: HOME, members: [member()], invitations }
+  const result = parseHouseholdRosterEnvelope({ household }, HOME)
+  assert.equal(result.invitations.filter(row => row.status === 'pending').length, 24)
+  assert.equal(result.invitations.filter(row => row.status === 'revoked').length, 24)
+  assert.throws(() => parseHouseholdRosterEnvelope({ household: {
+    ...household,
+    invitations: [...invitations, { ...invitations[0], invitationRef: `hhiv_${'z'.repeat(43)}` }],
+  } }, HOME))
+})
+
 function member(overrides: Record<string, unknown> = {}) {
   return {
     recordVersion: 'homeowner-household.v1',

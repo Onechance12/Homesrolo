@@ -402,7 +402,7 @@ function InvitationCard({ invitation, organization, busy, notifying, canManage, 
     <Card>
       <View style={styles.row}>
         <View style={styles.flex}>
-          <Text style={styles.choiceName}>{organization?.displayName ?? 'Invited company'}</Text>
+          <Text style={styles.choiceName}>{invitation.professionalDisplayLabel ?? organization?.displayName ?? 'Invited company'}</Text>
           <Text style={styles.meta}>{invitationStatus(invitation)} · expires {new Date(invitation.expiresAt).toLocaleDateString()}</Text>
         </View>
         <Tag tone={invitation.status === 'accepted' ? 'mint' : 'plain'}>{invitation.status}</Tag>

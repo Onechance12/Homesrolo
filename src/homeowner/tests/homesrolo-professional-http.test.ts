@@ -42,6 +42,7 @@ const invitation = {
   controllerPrincipalRef: refs.controller,
   invitedByPrincipalRef: refs.controller,
   professionalOrganizationRef: refs.organization,
+  professionalDisplayLabel: organization.displayName,
   status: 'pending' as const,
   disclosure: {
     title: 'Upstairs cooling problem',
@@ -129,6 +130,7 @@ test('a professional invitation view cannot expose homeowner principal authority
   assert.equal(response.status, 200)
   const encoded = JSON.stringify(response.body)
   assert.match(encoded, /Upstairs cooling problem/)
+  assert.match(encoded, /"professionalDisplayLabel":"Northside Home Services"/)
   assert.match(encoded, new RegExp(refs.artifact))
   assert.doesNotMatch(encoded, /controllerPrincipalRef|invitedByPrincipalRef|disclosureDigest/)
   assert.doesNotMatch(encoded, new RegExp(refs.controller))

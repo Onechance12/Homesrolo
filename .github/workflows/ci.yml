@@ -23,6 +23,12 @@ jobs:
         run: npm test
       - name: Public directory model tests
         run: npm run test:directory
+      - name: Invitation database regressions
+        run: |
+          set -euo pipefail
+          invitation_pg_bindir="$(pg_config --bindir)"
+          export PATH="$invitation_pg_bindir:$PATH"
+          npm run test:invitation-db
 
   web:
     name: Public web experience

@@ -291,7 +291,7 @@ function parseDisclosure(value: unknown): ProjectInvitation['disclosure'] {
 
 export function parseProjectInvitation(value: unknown): ProjectInvitation {
   const source = object(value, [
-    'invitationRef', 'homeRef', 'projectRef', 'professionalOrganizationRef', 'status',
+    'invitationRef', 'homeRef', 'projectRef', 'professionalOrganizationRef', 'professionalDisplayLabel', 'status',
     'message', 'disclosure', 'expiresAt', 'revision', 'createdAt', 'respondedAt', 'revokedAt',
   ])
   if (!isInvitationRef(source.invitationRef) || !isHomeRef(source.homeRef)
@@ -300,6 +300,7 @@ export function parseProjectInvitation(value: unknown): ProjectInvitation {
       && source.status !== 'declined' && source.status !== 'revoked'
       && source.status !== 'expired')) return fail()
   const message = optionalText(source.message, 1_000)
+  const professionalDisplayLabel = optionalText(source.professionalDisplayLabel, 120)
   const createdAt = utcInstant(source.createdAt)
   const expiresAt = utcInstant(source.expiresAt)
   const respondedAt = source.respondedAt === undefined ? undefined : utcInstant(source.respondedAt)
@@ -313,6 +314,7 @@ export function parseProjectInvitation(value: unknown): ProjectInvitation {
     homeRef: source.homeRef,
     projectRef: source.projectRef,
     professionalOrganizationRef: source.professionalOrganizationRef,
+    ...(professionalDisplayLabel === undefined ? {} : { professionalDisplayLabel }),
     status: source.status,
     ...(message === undefined ? {} : { message }),
     disclosure: parseDisclosure(source.disclosure),

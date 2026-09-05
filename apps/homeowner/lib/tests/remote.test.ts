@@ -160,6 +160,7 @@ const INVITATION_VIEW = {
   homeRef: HOME,
   projectRef: PROJECT,
   professionalOrganizationRef: ORGANIZATION,
+  professionalDisplayLabel: 'Northside Home Services',
   status: 'pending',
   message: 'Please review this cooling issue.',
   disclosure: {

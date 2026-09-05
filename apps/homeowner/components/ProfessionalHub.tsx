@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, type FormEvent } from 'react'
+import { cleanServiceAreas } from '../lib/professional-profile.ts'
 import { mintCommandRef } from '../lib/port/command-ref.ts'
 import { usePortCall } from '../lib/port/hooks.ts'
 import { usePort } from '../lib/port/provider.tsx'
@@ -42,16 +43,6 @@ function today(): string {
   return local.toISOString().slice(0, 10)
 }
 
-function cleanList(value: string): readonly string[] {
-  const seen = new Set<string>()
-  return value.split(/[\n,]+/).map(item => item.trim()).filter(item => {
-    const key = item.toLocaleLowerCase('en-US')
-    if (item.length < 2 || seen.has(key)) return false
-    seen.add(key)
-    return true
-  }).slice(0, 40)
-}
-
 function slugFor(value: string): string {
   return value.toLocaleLowerCase('en-US')
     .replace(/[^a-z0-9]+/g, '-')
@@ -77,7 +68,7 @@ function scopePayload(text: ScopeText): QuoteScope {
 function invitationState(invitation: ProjectInvitation) {
   return ({
     pending: 'Needs your response',
-    accepted: 'Accepted',
+    accepted: 'Invitation accepted',
     declined: 'Declined',
     revoked: 'Access revoked',
     expired: 'Expired',
@@ -204,7 +195,7 @@ function ProfessionalInvitationCard({
           <span>{organization?.displayName ?? 'Your professional organization'} · {invitationState(invitation)}</span>
         </div>
         <span className={invitation.status === 'accepted' ? 'pill pill--recorded' : 'pill pill--muted'}>
-          {invitation.status}
+          {invitationState(invitation)}
         </span>
       </header>
       <div className="pro-inbox-card__brief">
@@ -364,7 +355,7 @@ function OrganizationProfileForm({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const areas = cleanList(serviceAreas)
+    const areas = cleanServiceAreas(serviceAreas)
     if (published && (trades.length === 0 || areas.length === 0)) {
       setError('Choose at least one service and service area before publishing.')
       return

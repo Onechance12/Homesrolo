@@ -72,6 +72,29 @@ const invitation: HouseholdInvitation = {
   createdAt: now,
 }
 
+test('rosters retain a full set of live invitations alongside separately bounded history', () => {
+  const invitations = Array.from({ length: 48 }, (_, index) => ({
+    ...invitation,
+    invitationRef: `hhiv_${index.toString().padStart(43, '0')}`,
+    ...(index < 24 ? {} : { status: 'revoked' as const, revokedAt: now }),
+  }))
+  const roster = {
+    recordVersion: HOMEOWNER_HOUSEHOLD_VERSION,
+    homeRef,
+    members: [publicMember('workspace_controller', true)],
+    invitations,
+  }
+  assert.equal(householdRosterSchema.parse(roster).invitations.length, 48)
+  assert.equal(householdRosterSchema.safeParse({
+    ...roster, invitations: invitations.map((row, index) => index === 24
+      ? { ...row, status: 'pending', revokedAt: undefined } : row),
+  }).success, false, 'a 25th pending invitation is rejected')
+  assert.equal(householdRosterSchema.safeParse({
+    ...roster, invitations: invitations.map((row, index) => index === 23
+      ? { ...row, status: 'revoked', revokedAt: now } : row),
+  }).success, false, 'history has its own 24-row bound')
+})
+
 test('public household rows are strict and never expose private identity material', () => {
   assert.equal(householdMemberSchema.safeParse(publicMember('member', true)).success, true)
   assert.equal(householdInvitationSchema.safeParse(invitation).success, true)

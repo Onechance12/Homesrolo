@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run test && npm run test:directory && npm run web:build && npm run guard:web",
     "test:directory": "node --experimental-strip-types --test 'apps/web/lib/directory/tests/*.test.ts'",
+    "test:invitation-db": "node --test scripts/invitation-reliability-postgres.test.mjs",
     "test:web-content": "node --experimental-strip-types --test 'apps/web/lib/content/tests/*.test.ts'",
     "test:indexnow": "node --test scripts/indexnow-submit.test.mjs",
     "web:lint": "npm --prefix apps/web run lint",

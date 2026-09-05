@@ -104,8 +104,17 @@ export const householdRosterSchema = z.object({
   recordVersion: z.literal(HOMEOWNER_HOUSEHOLD_VERSION),
   homeRef: opaqueRef('hhom'),
   members: z.array(householdMemberSchema).max(24),
-  invitations: z.array(householdInvitationSchema).max(24),
+  // Live invitations and recent history have independent bounds. History may
+  // never crowd an actionable invitation out of the access-management UI.
+  invitations: z.array(householdInvitationSchema).max(48),
 }).strict().superRefine((roster, context) => {
+  const pendingCount = roster.invitations.filter(invitation => invitation.status === 'pending').length
+  if (pendingCount > 24 || roster.invitations.length - pendingCount > 24) {
+    context.addIssue({
+      code: 'custom', path: ['invitations'],
+      message: 'live invitations and recent history are each bounded to 24',
+    })
+  }
   if (new Set(roster.members.map(member => member.membershipRef)).size !== roster.members.length) {
     context.addIssue({ code: 'custom', path: ['members'], message: 'members must be unique' })
   }

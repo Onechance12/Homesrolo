@@ -156,6 +156,12 @@ test('builds bounded directory and profile requests without inventing profile fa
 
 test('keeps invitations scoped to one project and exact selected artifacts', () => {
   assert.deepEqual(parseProjectInvitation(invitation), invitation)
+  const retained = { ...invitation, professionalDisplayLabel: 'Clear Water Pools' }
+  assert.deepEqual(parseProjectInvitation(retained), retained,
+    'a private invitation retains its label without a public-directory response')
+  for (const professionalDisplayLabel of ['', null, 'x'.repeat(121)]) {
+    assert.throws(() => parseProjectInvitation({ ...invitation, professionalDisplayLabel }))
+  }
   assert.throws(() => parseProjectInvitation({
     ...invitation,
     disclosure: { ...disclosure, selectedArtifactRefs: [artifactRef, artifactRef] },
