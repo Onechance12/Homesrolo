@@ -35,6 +35,11 @@ export function firstRunRoloPrompt(intent: HomeIntent, roofingIntent: PublicRoof
     : ROLO_PROMPTS[intent]
 }
 
+/** The hosted PWA can constrain a desktop window to a phone-width app shell. */
+export function firstRunUsesWideLayout(availableWidth: number): boolean {
+  return Number.isFinite(availableWidth) && availableWidth >= 900
+}
+
 export function firstRunProgress(step: FirstRunStep, workspace: FirstRunWorkspace | null) {
   const steps: readonly FirstRunStep[] = workspace === 'pro'
     ? ['welcome', 'pro-details', 'pro-review', 'pro-ready']
