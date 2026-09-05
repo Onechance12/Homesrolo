@@ -12,15 +12,15 @@ The application repairs two private access-management problems:
 ## Release order
 
 1. Deploy the compatible application before the database migrations. Its
-   roster contract accepts up to 48 rows with separate 24-row live/history
+   server roster contract accepts up to 48 rows with separate 24-row live/history
    bounds, and both browser clients accept the optional private invitation
    `professionalDisplayLabel`. Older databases and prior command receipts
    remain readable while this field is absent.
 2. Before applying either migration, refresh every supported PWA/browser
    client and update any supported installed native client to this compatible
-   decoder. Old strict decoders reject the newly added response field and
-   cannot accept a roster exceeding their old 24-total-row bound. This is a
-   release gate, not backward compatibility: if old clients must keep working,
+   decoder. Old strict invitation decoders reject the newly added label field.
+   This remains the conservative gate for the ordered release, not a claim
+   that old clients are forward-compatible: if old clients must keep working,
    hold the migrations until a separate versioned-response strategy exists.
    Receipt compatibility in step 1 only means the new application can still
    read old responses.
@@ -33,6 +33,14 @@ The application repairs two private access-management problems:
    draft, while the company is still absent from public discovery. Confirm
    revocation still removes that exact invitation from the contractor's reads.
 
+The two compatibility concerns are distinct. At the pre-repair revision
+`9ef9e7e`, the 24-total-invitation limit was in the **server**
+`householdRosterSchema`; the Expo mobile/PWA `parseHouseholdRosterEnvelope`
+validated arrays without a length cap. The roster migration therefore requires
+the compatible server; that old Expo decoder did not enforce a 24-row limit. The
+label migration adds a response field rejected by both old Expo and legacy
+browser invitation decoders. The ordered client-refresh gate above is retained.
+
 The label migration backfills each old invitation using its exact company's
 current display name once. It cannot reconstruct a name that was changed
 before this release. New labels are populated by a database trigger from the
@@ -40,9 +48,17 @@ exact organization and cannot be changed along with invitation lifecycle
 updates. This does not publish draft company information or grant new access.
 
 Keep these forward migrations when rolling back application behavior. An old
-application with the 24-total-row roster contract is not a safe rollback
+server application with the 24-total-row roster contract is not a safe rollback
 target for a household containing both 24 live invitations and history. The
 compatible contract/decoder must remain deployed.
+
+## Client inventory checkpoint
+
+On September 5, 2026, Chance confirmed that nobody was using Homesrolo and the
+app had not been published. This is owner-reported inventory context, not a
+device/build inventory or proof that every previously opened client refreshed.
+Refresh the known synthetic browser sessions after the compatible deployment
+and verify their loaded shell before applying the ordered migrations.
 
 ## Local database regression
 

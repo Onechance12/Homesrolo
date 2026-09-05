@@ -78,8 +78,16 @@ The compatible server application and supported clients must be updated
 before applying the forward migrations. Old strict response decoders cannot
 consume the newly added invitation-label field. Prior receipts without the
 field remain readable by the new application; this does not make old clients
-forward-compatible. Do not roll back to the old 24-total-invitation contract
-after applying the roster migration.
+forward-compatible. The historical 24-total-invitation cap was in the server
+roster contract; the old Expo mobile/PWA roster decoder accepted arrays without
+a length cap. Do not roll back the server to that old 24-total-invitation
+contract after applying the roster migration. Keep the conservative ordered
+client-refresh and migration gate in the rollout runbook.
+
+On September 5, 2026, Chance confirmed that nobody was using Homesrolo and the
+app had not been published. This owner-reported inventory context does not
+prove that all previous clients refreshed. Known synthetic browser sessions
+must still reload the compatible shell after deployment and before migrations.
 
 The database regression uses actual forward migrations with the relevant
 historical objects and synthetic fixtures in a newly created local cluster.
